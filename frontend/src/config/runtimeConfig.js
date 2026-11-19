@@ -25,9 +25,9 @@ export const DEFAULT_MORPHEUS_TOPOLOGY = { ...MORPHEUS_RUNTIME_TOPOLOGY };
 export const DEFAULT_MORPHEUS_RISK_ACTIONS = [...MORPHEUS_RISK_ACTIONS];
 export const DEFAULT_MORPHEUS_AUTOMATION_TRIGGER_KINDS = [...MORPHEUS_AUTOMATION_TRIGGER_KINDS];
 
-// Neo N3 network magic per network. The V3 UserOperation verifier bakes this
-// value into the EIP-712 domain chainId it checks on-chain, so signing must use
-// the magic of the *connected* network rather than a single hardcoded constant.
+// Neo N3 network magic per network. The v4 operation digest commits this value
+// through the EIP-712 domain chainId the validators check on-chain, so signing
+// must use the magic of the *connected* network rather than a hardcoded constant.
 export const DEFAULT_NETWORK_MAGIC = MAINNET_REGISTRY.networkMagic;
 export const DEFAULT_NETWORK_MAGIC_TESTNET = TESTNET_REGISTRY.networkMagic;
 

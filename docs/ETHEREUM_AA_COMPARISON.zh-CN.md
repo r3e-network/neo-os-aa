@@ -25,10 +25,10 @@
 | **WalletContract** | 不适用 | Neo 使用原生的 `CheckWitness` 配合 `VerifyContext`，而不是独立的 wallet 合约。 |
 | **Paymaster** | `SAPaymaster` 合约 + 链下 Morpheus | 链上 Paymaster 合约提供存款/策略/结算的无信任赞助，另有可选的链下 Morpheus 集成。 |
 | **Bundler** | 中继服务器 | 把 `UserOperation` 打包进 Neo 交易。 |
-| **Aggregator** | MultiHook | 把多个校验/策略模块（hooks）合并为一个。 |
+| **Aggregator** | 核心阈值策略 + `hookOrder` | v4 用核心阈值策略与有序 hook 链替代了 `MultiHook`；`MultiHook` 仅作为迁移取证工件存在，其 `onInstall` 拒绝新安装。 |
 | **Validator** | Verifier 插件 | 签名校验逻辑（ECDSA、WebAuthn、TEE 等）。 |
 | **Executor** | 不适用 | 核心合约直接执行；不需要独立的 executor。 |
-| **Fallback Handler** | `BackupOwner` 原生 witness | 当 verifier 失效时的 L1 逃生口。 |
+| **Fallback Handler** | 托管权 / 恢复授权方 witness | 无回调的 `beginRecovery` → `executeRecovery` 轮换托管权并在不调用任何插件的情况下清扫全部模块。 |
 | **UserOperation** | `UserOperation` 结构体 | 几乎相同：target、method、args、nonce、deadline、signature。 |
 
 ---
@@ -101,11 +101,11 @@ flowchart TD
 flowchart TD
     Relay[Relay / Client] --> Core[SmartAccount]
     Core --> Execute[executeUserOp]
-    Execute --> Auth{Verifier or BackupOwner?}
+    Execute --> Auth{Validator agrees or custody witness?}
     Auth -- Yes --> Nonce[Consume Nonce]
-    Nonce --> Pre[preExecute Hook]
+    Nonce --> Pre[preCheck Hook]
     Pre --> Call[Contract.Call Target]
-    Call --> Post[postExecute Hook]
+    Call --> Post[postCheck Hook]
     Post --> Return[Return Result]
     Auth -- No --> Reject[Reject]
 ```
@@ -207,22 +207,22 @@ interface IFallback {
 ```csharp
 // Verifier (Validator equivalent)
 interface IVerifier {
-    bool validateSignature(UInt160 accountId, UserOperation op);
-    ByteString getPayload(...);
+    bool validateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation);
+    void onUserOpComplete(UInt160 accountId, object[] operation, object result);
 }
 
 // Hook (Policy module equivalent)
 interface IHook {
-    void preExecute(UInt160 accountId, object[] opParams);
-    void postExecute(UInt160 accountId, object[] opParams, object result);
+    ByteString preCheck(UInt160 accountId, object[] operation);
+    void postCheck(UInt160 accountId, object[] operation, object result, ByteString hookData);
 }
 ```
 
 **映射：**
-- `IVerifier.validateSignature` ≈ `IValidator.validateUserOp`
-- `IHook.preExecute` ≈ 执行前校验 hook
-- `IHook.postExecute` ≈ 执行后清理
-- `MultiHook` ≈ ERC-7579 Aggregator
+- `IValidator.validateUserOp` ≈ ERC-7579 模块的 `onInstall/validateUserOp` 授权
+- `IHook.preCheck` ≈ 执行前校验 hook
+- `IHook.postCheck` ≈ 带 hookData 的执行后清理
+- 核心持有的 `thresholdPolicy` ≈ ERC-7579 Aggregator（模块之间从不互相调用）
 
 ---
 
@@ -290,26 +290,24 @@ object result = executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbu
 3. **预言机恢复：** 链上预言机批准丢失的密钥
 4. **EIP-4337 EntryPoint：** 没有原生恢复（依钱包而异）
 
-### Neo N3 L1 逃生口
+### Neo N3 L1 恢复
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Configured: BackupOwner set
-    Configured --> EscapeInitiated: initiateEscape(accountId) called
-    EscapeInitiated --> [*]: Normal op cancels escape
-    EscapeInitiated --> EscapeFinalized: Timelock expires + finalizeEscape(accountId, newVerifier)
-    EscapeFinalized --> [*]: Verifier reset to BackupOwner
+    [*] --> Configured: createAccount 固定 recoveryTimelockMs
+    Configured --> RecoveryInitiated: beginRecovery(accountId, newCustody)
+    RecoveryInitiated --> Configured: cancelRecovery(accountId)
+    RecoveryInitiated --> RecoveryExecuted: 时间锁到期 + executeRecovery(accountId)
+    RecoveryExecuted --> [*]: 托管权轮换，全部模块被清扫
 ```
 
-两个已部署入口都接受账户 id，`finalizeEscape` 还接受账户回退到的
-verifier（`contracts/build/SmartAccount.manifest.json`；实现在
-`contracts/custom/SmartAccount.Escape.cs`，其中 C# 方法以大写字母开头——
-那种写法不命名任何导出的方法，因此这里没有按代码格式化）。
+入口都接收账户 id；`beginRecovery` 还接收将要轮换到的托管权，`getRecoveryStatus`
+回读待处理记录（`contracts/custom/SmartAccount.Escape.cs`）。
 
 **特性：**
-- **时间锁：** 可配置 7-90 天
-- **使用时取消：** 任何正常操作都会取消进行中的逃生
-- **无预言机依赖：** 纯链上状态机
+- **时间锁：** 7-90 天，创建时按账户固定
+- **显式取消：** `cancelRecovery` 由托管权或恢复授权方触发
+- **无回调执行：** `executeRecovery` 不调用任何 validator、hook、Market 或 Oracle
 - **无按账户部署：** 适用于虚拟账户
 
 **对比：** 比典型的以太坊 AA 恢复更健壮（后者往往依赖钱包专属的链下机制或复杂的社交恢复合约）。
@@ -338,13 +336,13 @@ verifier（`contracts/build/SmartAccount.manifest.json`；实现在
 
 | 概念 | 如何适配 |
 | --- | --- |
-| **部署新账户** | 使用 `registerAccount()` 而不是部署代理。账户地址是确定性的。 |
+| **部署新账户** | 使用 `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` 而不是部署代理。身份由 custody+salt 决定，账户地址是确定性的。 |
 | **发送 UserOperation** | 调用 `executeUserOp(accountId, op)` 而不是 `handleUserOps()`。 |
 | **Paymaster 集成** | 使用 `SAPaymaster` 合约（链上存款/策略/结算）或链下 Morpheus 端点。链上用 `executeSponsoredUserOp()`，Morpheus 则实现链下授权。 |
-| **Aggregator 模式** | 用 `MultiHook` 组合策略模块。 |
+| **Aggregator 模式** | 用核心阈值策略加 `hookOrder` 组合策略 hook；`MultiHook` 拒绝新安装，仅保留供迁移使用。 |
 | **Bundler 集成** | 实现中继服务器，先调用 `simulateMetaInvocation()`，再调用 `relayMetaInvocation()`。 |
-| **签名方案** | EVM 签名用 `Web3AuthVerifier`，passkey 用 `WebAuthnVerifier`。 |
-| **恢复** | 用 `initiateEscape()` / `finalizeEscape()` 作为 L1 备份。 |
+| **签名方案** | EVM 签名用 `Web3AuthValidator`，passkey 用 `P256Validator`。 |
+| **恢复** | 用 `beginRecovery()` / `executeRecovery()` 作为 L1 备份。 |
 
 ### 代码模式：以太坊 AA → Neo SA
 
@@ -371,7 +369,7 @@ relayMetaInvocation({ scriptHash: aaContract, operation: "executeUserOps", args:
    `CallWithGasLimit`；参见 `docs/reports/sa-platform-gas-cap-20260921.json`。
 2. **更简单的费用模型：** 没有按操作的 gas 估算 hook（Neo 交易是固定费用）。
 3. **没有质押机制：** 链上 Paymaster 使用直接的 GAS 存款，而不是质押。
-4. **聚合能力有限：** `MultiHook` 不像以太坊聚合器那样聚合签名。
+4. **聚合能力有限：** 核心阈值策略与有序 hook 不像以太坊聚合器那样聚合签名。
 
 ---
 
@@ -393,7 +391,7 @@ custom 源码候选缩小了与以太坊 AA 工具面的实际互操作差距。
 - **ERC-7715 会话权限 ≈ `buildSessionKeyPermission`：** SDK
   在规范的链上工件旁生成 7715 形式的授权（签名者 + 合约调用权限 + unix 秒
   过期）；注册期的 version-0x01 blob 立即安装第一把会话密钥
-  （`SessionKeyVerifier.setPublicKey`），在不为后续变更削弱 24h 轮换
+  （`SessionKeyValidator` 的 `onInstall` 初始化数据），在不为后续变更削弱 24h 意图时间锁
   冷却期的前提下，闭合首日可用性缺口。
 - **4337 工具形态 ≈ `toErc4337UserOperation`：** sender = 账户 id，
   `callData` = Neo VM 调用脚本，gas 字段置零（Neo 按

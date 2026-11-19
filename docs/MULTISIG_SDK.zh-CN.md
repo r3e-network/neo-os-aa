@@ -1,48 +1,55 @@
-# MultiSig SDK 与前端会话
+# 阈值 SDK 与前端会话
 
 > 中文版本与 `docs/MULTISIG_SDK.md` 同构。若两者冲突，以英文版本为准。
 
-JS SDK 中的 `createMultiSigClient` 与前端中的 `createMultiSigDraftSession` 共用同一份 `shared/multiSigCore.mjs`。它们构造 `MultiSigVerifier` 所期望的 `StdLib.Serialize(object[])` 证明。这是一套显式的会话 API；通用的协作者记录与名单计数永远不会被推断为验证器子项。
+v4 没有 MultiSig 根，也没有验证器子项。阈值是安装在账户上的验证器模块之上的一层策略：成员就是同一个账户的模块 id，每个成员各自持有自己的凭证代数，而操作只携带一个装配好的签名字段。`shared/multiSigCore.mjs` 是唯一实现；JS SDK（`createThresholdClient`）与前端（`createThresholdSession`）只是把它绑定到某个客户端与某个 RPC。
 
-1. `fetchContext({ coreContractHash, accountIdHash })` 读取 RPC 网络 magic、账户绑定的根验证器、其授权核心，以及有序的 `getConfig` 结果。它把账户、核心、网络、根、子顺序与阈值固定进 `configDigest`。
-2. `prepareOperation({ context, operation })` 固定通道 nonce、截止时间与核心计算的参数哈希。请把这份完全相同的操作上下文分享给每个子签名方。截止时间以毫秒计，由调用方显式选择。
-3. `buildChildTypedData({ context, operation, childVerifierHash })` 为该子验证器创建 EVM 签名域，**而不是为 MultiSig 根创建**。`fetchChildPayload({ context, operation, childVerifierHash })` 读取 SessionKey / WebAuthn 风格适配器各自的 `getPayload`，返回那些确切的字节及其子 / 操作上下文；把密码学载荷绑定到子身份的那些适配器会拒绝在另一个子域中复用。这并不是不透明证明字节或原生见证子项的通用属性，后者可能使用空的证明字节，并从交易见证推导授权。
-4. 收集显式的 `{ childVerifierHash, kind, operation, signatureHex }` 证明。EVM 证明还会携带 `typedData`、`signatureFullHex` 与可选的 `signerAddress`。不透明证明要使用针对该子验证器真实签名格式的适配器；仅有操作元数据不构成有效性证明。
-5. `validateBundle` 重新读取网络、根 / 配置、nonce 与参数哈希，拒绝漂移，构造精确的有序槽位，并针对绑定的根模拟 `validateSignature`。它在模拟之后会再次读取配置。被拒绝或出错的验证器都会失败关闭。
+1. 成员来自核心。`prepareMembers` 读取每个成员的模块描述符——是否已安装、`thresholdMemberEligible`，以及当前的 `credentialGeneration`——并返回每个成员必须签名的 §5 成员摘要。调用方自报的代数从不被信任：过期的代数会产出一个被核心以 `SA_CREDENTIAL_STALE` 拒绝的摘要。
+2. 装配是显式的。`assembleSignature({ members })` 序列化 `[moduleId, 64 字节签名]` 对，`assembleOperationSignature({ operationDigest, members })` 返回 `{ signatureHex, members }`，其中 `signatureHex` 就是 13 字段操作的字段 11。
+3. 策略本身就是配置。成员与阈值由配置意图中的 `setThresholdPolicy` 动作设定——`[7, policyId, threshold, memberIds[], active]`——因此生效前有 24 小时成熟期。`policyId = 0` 从与模块实例相同的单调分配器取一个新 id，所以策略 id 永远不会与模块 id 冲突。停用策略不携带成员，并释放这些成员以便卸载。
 
 ```js
-const { createMultiSigClient } = require('smart-account');
-const multisig = createMultiSigClient({ rpcUrl });
-const context = await multisig.fetchContext({ coreContractHash, accountIdHash });
-const operation = await multisig.prepareOperation({
-  context,
-  operation: { targetContract, method: 'symbol', args: [], deadline: String(Date.now() + 600_000) },
+const { createThresholdClient } = require('smart-account');
+
+const threshold = createThresholdClient({ client });
+const prepared = await threshold.prepareMembers({
+  accountId,
+  operationDigest,
+  memberIds: [1, 2, 3],
 });
-// 按第 4 步的显式 `{ childVerifierHash, kind, operation, signatureHex }` 记录，
-// 为每个子验证器各构造一份证明。SDK 不提供这些证明的收集器：只有调用方知道
-// 哪些子项签名、以及使用何种真实签名格式，因此数组在这里组装，而不是被拉取。
-const childProofs = [
-  { childVerifierHash, kind: 'evm', operation, signatureHex, typedData, signatureFullHex },
-];
-const bundle = await multisig.validateBundle({ context, operation, childProofs });
-// bundle.invocation 是常规交易路径所需的完整 executeUserOp 载荷。
-// 请审阅 / 模拟这笔完整交易，包括其费用支付方与任何所需的代理见证。
+// 每个成员用自己的验证器密钥签名 prepared[i].digest。
+const signatureHex = threshold.assembleSignature({
+  members: [{ moduleId: 1, signature }, { moduleId: 2, signature }],
+});
 ```
 
-`buildBundle` 是离线的结构化构造器；其结果带有 `chainValidated: false`。只有在读取状态下签名模拟成功时，`validateBundle` 才会把该字段置为 true。这两个值都不是交易终局性，也不是对 nonce / 配置的预留。完整的执行预览与常规链上授权仍然必需。对于需要交易见证的子验证器，可以把签名方见证传给 `createMultiSigClient` / `createMultiSigDraftSession`；最终交易必须携带相同的必需授权。
+前端会话（`frontend/src/features/operations/multiSig.js`）只通过调用方指定的那一个核心读取，因此一个会话不可能混用两个网络的值：
 
-序列化器上限为 10 个槽位与 65,535 字节总量。缺失的子项使用其原始索引上的 null 槽位，且只有在提供了足以满足阈值的显式证明之后才允许。空十六进制是 ByteString，与 null 不同。重复 / 未知的子项、变更的操作字段、不足的证明、父域 EVM 签名以及被改动的配置固定值都会被拒绝。
+```js
+import { createThresholdSession } from './features/operations/multiSig.js';
 
-公开 V3 的阈值统计的是验证器模块，而不是独立的密钥或人。不同模块可以共享凭据或控制方；一次成功的法定人数模拟并不能建立签名方之间的独立性。原生组合配置定义了自己的签名域规则，必须单独发现。
+const session = createThresholdSession({ rpcUrl });
+const prepared = await session.prepareMembers({
+  networkMagic,
+  coreContractHash,
+  accountId,
+  operation,
+  memberModuleIds: [1, 2],
+});
+// `preview` 重新读取核心的校验结果；`readProxyHash` 读取账户代理。
+// 每一次读取都走会话被指定的那个核心哈希。
+```
 
-## 配置子验证器凭据
+阈值计的是验证器实例，而不是独立的密钥或人。不同模块可以共享凭据或控制方，因此一次成功的法定人数并不建立签名方独立性。
 
-对于暴露 `callVerifierChild` API 的核心——它不在已固定的部署工件中（`contracts/build` 下的核心清单），因此目前仅为源码能力（DS-CU-202 发现 F1）——`buildChildConfiguration` 会为所有者控制、带时间锁的子配置路径创建一次调用。它只接受 `setPublicKey(accountId, publicKey)` 或 `setConfig(accountId, signers, threshold)`，且只针对直接配置的子验证器。首次调用会暂存确切意图并返回 false；请在 24 小时延迟之后提交完全相同的调用数据以使其生效。成功的 Void 子配置可能返回 null。根、子验证器、子顺序、阈值或参数发生变化，都会重新开始延迟。
+## 配置成员
 
-`readPendingConfiguration({ context })` 读取共享的验证器待生效槽位（`moduleHash`、`callHash`、`initiatedAt`）。该槽位与根验证器配置共享；仅有一条待生效记录，并不证明它对应某个特定的子请求。在所有者确认之前，请将其与确切的目标调用以及权威核心状态进行比对。合约边界见[子验证器配置](MULTISIG_CHILD_CONFIGURATION.md)。较旧的已部署核心不会因为 SDK 更新而获得该 API。
+成员配置就是普通的模块配置：对验证器实例调用 `configure` 需要在配置意图中携带 `configureModule` 动作，因此它与其它任何意图一样走 24 小时成熟期，且模块无法配置自身。轮换凭证则是即时的：`revokeCredentials(accountId, moduleId)` 是托管方授权的核心动作，会当场提升该实例的代数，这也是为什么绑定旧代数的签名在它执行的那一刻起就不再有效。
+
+核心没有暴露读取策略的方法。策略通过 `ThresholdPolicySet` 通知（`accountId`、`policyId`、`threshold`、`memberIds`）可观测，每个成员实例则通过 `getModule` 可观测——描述符携带 `credentialGeneration` 与 `thresholdMemberEligible`，正是成员摘要绑定的那两个值。要读取尚未生效的意图及其成熟时间与动作摘要，请用 `getPendingConfiguration`，并在确认前把该摘要与你实际提案的意图比对；仅有一条待生效记录并不能证明它携带你期望的变更。
 
 ## 证据与边界
 
-`MultiSigSdkVectorTests.cs` 运行真实的 JS 序列化器，把其字节与 VM 的 `StdLib.Serialize` 比对，拒绝错位与重复的子证明，演练保留阈值的 null 槽位，并用两个独立配置的 SessionKey 子验证器执行一次真实的核心 UserOperation。子载荷按域隔离。这证明了该运行时与该子验证器组合下的序列化 / 聚合路径；它不建立公开部署或所有可能的验证器适配器。
+`MultiSigSdkVectorTests.cs` 运行真实的 JS 序列化器，把其字节与 VM 的 `StdLib.Serialize` 比对，拒绝错位与重复的成员条目，并针对一次真实的核心操作演练阈值路由。序列化器上限为 10 个成员与 65,535 字节总量；空十六进制是 ByteString，与 null 不同。
 
-SDK 单元测试覆盖链配置 / 顺序 / 阈值 / 网络 / nonce / 参数漂移、类型化数据子域、错误的固定值、重复子项与配置载荷作用域。前端测试校验 RPC Array 与 base64 ByteArray 的传输编码。本工作不引入任何新的通用“多签已完成”界面徽标。
+SDK 单元测试覆盖成员摘要、代数绑定、畸形签名与装配顺序。前端测试校验 RPC Array 与 base64 ByteArray 的传输编码。本工作不引入任何新的通用“多签已完成”徽标。

@@ -34,7 +34,11 @@ const isSkippedDirectory = (source) => SKIP_DIRS.test(source.replaceAll(path.sep
 // compile against whatever package source and framework version the machine happens to resolve.
 export const RESTORE_POLICY_FILES = ["Directory.Build.props", "nuget.config"];
 export const ARTIFACT_PROFILES = ["public", "platform"];
-const RECIPE_SUPPORT_FILES = ["scripts/dotnet_env.sh", "scripts/check_neo_platform_packages.mjs"];
+// Every script compile.sh runs, not only the compiler pin check: the module
+// profile gate (sync-module-profiles.mjs) is part of the v4 recipe, and a
+// scratch copy without it compiles nothing at all.
+export const RECIPE_SUPPORT_FILES = ["scripts/dotnet_env.sh", "scripts/check_neo_platform_packages.mjs",
+  "scripts/sync-module-profiles.mjs"];
 // Every tree compile.sh reads: the contracts, and the mock contracts that live with the tests.
 export const SOURCE_ROOTS = ["contracts", "tests/mocks"];
 
@@ -175,8 +179,8 @@ export function prepareScratch() {
   }
   for (const file of RESTORE_POLICY_FILES) fs.copyFileSync(path.join(repoRoot, file), path.join(scratch, file));
   fs.mkdirSync(path.join(scratch, "scripts"), { recursive: true });
-  for (const file of ["dotnet_env.sh", "check_neo_platform_packages.mjs"]) {
-    fs.copyFileSync(path.join(repoRoot, "scripts", file), path.join(scratch, "scripts", file));
+  for (const file of RECIPE_SUPPORT_FILES) {
+    fs.copyFileSync(path.join(repoRoot, file), path.join(scratch, file));
   }
   return scratch;
 }

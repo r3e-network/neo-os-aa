@@ -1,38 +1,47 @@
 /**
- * Shared session-key registration blob builder for the Neo N3 Abstract
- * Account stack.
+ * Session-key module commands for the Neo N3 Smart Account v4 stack.
  *
- * Single source of truth for the version-0x01 initial session-key blob that
- * SessionKeyVerifier.setPublicKey parses when the core delivers registration
- * verifier params — the same layout as
- * scripts/neoexpress_validate.py session_key_registration_blob. Passing this
- * blob as verifierParamsHex at registration installs the first session key
- * immediately (first installation into an empty slot is immediate by
- * protocol semantics; later changes still go through the verifier's own
- * cooldown and the core's timelocked configuration path).
+ * A session key is a module instance of SessionKeyValidator. Its `initData`
+ * (on install) and `configData` (on configure) are command arrays, exactly the
+ * shape the validator parses (contracts/plugins/validators/SessionKeyValidator.cs):
  *
- * Blob layout (integers little-endian; UInt160 in its stored little-endian
- * form, i.e. reverseHex of the big-endian display hex):
+ *   ["setSessionKey", pubKey, targetContract, method, validUntil,
+ *    spendingLimit, description]
+ *   ["clearSessionKey"]
  *
- *   [0] version 0x01 | [1] pubKeyLength + pubKey (33 or 65 bytes) |
- *   targetContract (20) | methodLength (1) + method |
- *   validUntil ms (8) | spendingLimit datoshi (8, 0 = unlimited) |
- *   descriptionLength (1) + description (0-128)
+ * The v3 packed binary "registration blob" and the verifier-params registration
+ * path are gone: a v4 account installs the validator module and configures it
+ * with these arrays through `createAccount` actions or a configuration intent.
  *
- * Dependency-light by design: imports only the hex helpers from
- * shared/metaTxCore.mjs so browsers and Node consume it identically.
+ * The commands are operation operands, so they follow the §4.1 grammar exactly:
+ * a string is a `ByteString` of its UTF-8 bytes, a `UInt160` is a `ByteString`
+ * of its stored byte order (the reverse of the display hex a caller holds), and
+ * every entry is `ByteString` or `Integer`. The v3 `Hash160`/`String` kinds do
+ * not exist in that grammar and are refused by the operation codec.
  *
- * Consumers:
- * - sdk/js/src/index.js (CJS; loads this ESM graph via require)
- * - frontend (ESM, reachable the same way as shared/metaTxCore.mjs)
+ * The validators below mirror the contract's asserts so a malformed command
+ * fails in the SDK instead of reverting on chain:
+ * - public key: 33-byte compressed (02/03) or 65-byte uncompressed (04);
+ * - target: nonzero 20-byte hash;
+ * - method: 1..255 UTF-8 bytes;
+ * - validUntil: unsigned 64-bit milliseconds, in the future at install time,
+ *   at most 30 days out (the contract checks the clock, the SDK checks shape);
+ * - spendingLimit: unsigned 64-bit datoshi; 0 means unlimited and is the only
+ *   legal value for a non-"transfer" method (the cap is only enforceable on the
+ *   value-moving transfer path);
+ * - description: at most 128 UTF-8 bytes.
+ *
+ * Dependency-light by design: imports only the hex helpers from metaTxCore.mjs
+ * so browsers and Node consume it identically.
  */
 
-import { sanitizeHex, reverseHex } from './metaTxCore.mjs';
+import { sanitizeHex } from './metaTxCore.mjs';
 
-/** Blob format version consumed by SessionKeyVerifier.setPublicKey. */
-export const SESSION_KEY_BLOB_VERSION = 0x01;
+/** Command names the SessionKeyValidator dispatches on. */
+export const SESSION_KEY_INSTALL_COMMAND = 'setSessionKey';
+export const SESSION_KEY_CLEAR_COMMAND = 'clearSessionKey';
 
-/** Contract-side description cap (SessionKeyVerifier: "Description too long (max 128 chars)"). */
+/** Contract-side description cap (SessionKeyValidator: "Description too long (max 128 chars)"). */
 export const MAX_SESSION_KEY_DESCRIPTION_BYTES = 128;
 
 /** Contract-side session lifetime cap: 30 days in milliseconds. */
@@ -41,8 +50,8 @@ export const MAX_SESSION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
 const UINT64_MAX = (1n << 64n) - 1n;
 
 function invalid(message) {
-  const error = new Error(`session key blob: ${message}`);
-  error.code = 'SESSION_KEY_BLOB_INVALID';
+  const error = new Error(`session key: ${message}`);
+  error.code = 'SESSION_KEY_INVALID';
   return error;
 }
 
@@ -59,44 +68,7 @@ function requireUint64(value, field) {
   return integer;
 }
 
-function writeUint64LE(bytes, value) {
-  let remaining = value;
-  for (let i = 0; i < 8; i++) {
-    bytes.push(Number(remaining & 0xffn));
-    remaining >>= 8n;
-  }
-}
-
-/**
- * Builds the version-0x01 registration-time session key blob.
- *
- * @param {Object} options - Session key options
- * @param {string} options.publicKeyHex - secp256r1 public key, compressed
- *   (33 bytes, 02/03 prefix) or uncompressed (65 bytes, 04 prefix), hex
- * @param {string} options.targetContract - Target contract hash, big-endian
- *   display hex (40 hex chars, 0x prefix optional)
- * @param {string} options.method - Allowed target method ("*" wildcard is
- *   accepted by the contract but cannot carry a spending limit)
- * @param {string|number|bigint} options.validUntilMs - Expiry in Neo
- *   Runtime.Time milliseconds; the contract enforces future expiry and the
- *   30-day cap at installation time
- * @param {string|number|bigint} [options.spendingLimitDatoshi=0] - Total
- *   spending cap in datoshi; 0 means unlimited and is the only legal value
- *   for non-"transfer" methods (the limit is only enforceable on the
- *   value-moving transfer path)
- * @param {string} [options.description=''] - Human-readable label, at most
- *   128 UTF-8 bytes
- * @returns {string} Blob as a lowercase hex string (no 0x prefix), ready for
- *   createAccountPayload's verifierParamsHex
- */
-export function buildSessionKeyRegistrationBlob({
-  publicKeyHex,
-  targetContract,
-  method,
-  validUntilMs,
-  spendingLimitDatoshi = 0,
-  description = '',
-} = {}) {
+function requirePublicKey(publicKeyHex) {
   const pubKey = sanitizeHex(publicKeyHex);
   if (pubKey.length !== 66 && pubKey.length !== 130) {
     throw invalid(`public key must be 33 or 65 bytes, got ${pubKey.length / 2}`);
@@ -108,12 +80,48 @@ export function buildSessionKeyRegistrationBlob({
   if (pubKey.length === 130 && prefix !== '04') {
     throw invalid('uncompressed public key must start with 04');
   }
+  return pubKey;
+}
 
+const encoder = new TextEncoder();
+const utf8Hex = (text) =>
+  Array.from(encoder.encode(String(text ?? '')), (byte) => byte.toString(16).padStart(2, '0')).join('');
+const reverseHex = (hex) => {
+  const pairs = hex.match(/../g) ?? [];
+  return pairs.reverse().join('');
+};
+
+// §4.1 operands: strings are UTF-8 byte strings, a UInt160 is its stored byte order.
+const textValue = (text) => ({ type: 'ByteString', value: utf8Hex(text) });
+const bytesValue = (hex) => ({ type: 'ByteString', value: hex });
+const hashValue = (displayHex) => ({ type: 'ByteString', value: reverseHex(displayHex) });
+const integerValue = (value) => ({ type: 'Integer', value: String(value) });
+
+/**
+ * Builds the `setSessionKey` command array.
+ *
+ * @param {Object} options
+ * @param {string} options.publicKeyHex - secp256r1 public key (33 or 65 bytes)
+ * @param {string} options.targetContract - Target contract, 40-hex display
+ * @param {string} options.method - Allowed method (1..255 UTF-8 bytes)
+ * @param {string|number|bigint} options.validUntilMs - Expiry (Runtime.Time ms)
+ * @param {string|number|bigint} [options.spendingLimitDatoshi=0] - Cap in datoshi
+ * @param {string} [options.description=''] - Label, at most 128 UTF-8 bytes
+ * @returns {Array} Typed VM command array for `initData` / `configData`
+ */
+export function buildSessionKeyInstallCommand({
+  publicKeyHex,
+  targetContract,
+  method,
+  validUntilMs,
+  spendingLimitDatoshi = 0,
+  description = '',
+} = {}) {
+  const pubKey = requirePublicKey(publicKeyHex);
   const target = sanitizeHex(targetContract);
-  if (target.length !== 40) {
-    throw invalid(`target contract must be 20 bytes (40 hex chars), got ${target.length}`);
+  if (!/^[0-9a-f]{40}$/.test(target) || /^0+$/.test(target)) {
+    throw invalid('target contract must be a nonzero 20-byte hash');
   }
-
   const encoder = new TextEncoder();
   const methodBytes = encoder.encode(String(method || ''));
   if (methodBytes.length === 0 || methodBytes.length > 255) {
@@ -123,47 +131,44 @@ export function buildSessionKeyRegistrationBlob({
   if (descriptionBytes.length > MAX_SESSION_KEY_DESCRIPTION_BYTES) {
     throw invalid(`description must be at most ${MAX_SESSION_KEY_DESCRIPTION_BYTES} UTF-8 bytes, got ${descriptionBytes.length}`);
   }
-
   const validUntil = requireUint64(validUntilMs, 'validUntilMs');
   const spendingLimit = requireUint64(spendingLimitDatoshi, 'spendingLimitDatoshi');
   if (spendingLimit > 0n && String(method) !== 'transfer') {
-    // Fail closed exactly like the contract: a positive cap is only
-    // enforceable on the value-moving transfer path, so building such a blob
-    // would produce a registration the verifier rejects.
     throw invalid('spending limit only enforceable on transfer session keys');
   }
+  return [
+    textValue(SESSION_KEY_INSTALL_COMMAND),
+    bytesValue(pubKey),
+    hashValue(target),
+    textValue(String(method)),
+    integerValue(validUntil),
+    integerValue(spendingLimit),
+    textValue(String(description ?? '')),
+  ];
+}
 
-  const bytes = [SESSION_KEY_BLOB_VERSION, pubKey.length / 2];
-  for (let i = 0; i < pubKey.length; i += 2) bytes.push(parseInt(pubKey.slice(i, i + 2), 16));
-  // The contract copies these 20 bytes straight into a UInt160, so the blob
-  // carries the internal little-endian form (reverseHex of display hex).
-  const targetLE = reverseHex(target);
-  for (let i = 0; i < targetLE.length; i += 2) bytes.push(parseInt(targetLE.slice(i, i + 2), 16));
-  bytes.push(methodBytes.length, ...methodBytes);
-  writeUint64LE(bytes, validUntil);
-  writeUint64LE(bytes, spendingLimit);
-  bytes.push(descriptionBytes.length, ...descriptionBytes);
-  return bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+/** Builds the `clearSessionKey` command array. */
+export function buildSessionKeyClearCommand() {
+  return [textValue(SESSION_KEY_CLEAR_COMMAND)];
 }
 
 /**
  * Builds an ERC-7715-shaped session-key permission grant alongside the
- * on-chain artifacts. The 7715 envelope is a wallet-facing shape
- * (signer + permissions + expiry, expiry in unix seconds per 7715); the
- * registration blob and call arguments carry the canonical Neo values
- * (Runtime.Time milliseconds, datoshi).
+ * on-chain command. The 7715 envelope is a wallet-facing shape (signer +
+ * permissions + expiry, expiry in unix seconds per 7715); the install command
+ * carries the canonical Neo values (Runtime.Time milliseconds, datoshi).
  *
- * @param {Object} options - Same options as buildSessionKeyRegistrationBlob
+ * @param {Object} options - Same options as buildSessionKeyInstallCommand
  * @returns {{
  *   permission: Object,
- *   registrationBlobHex: string,
+ *   installCommand: Array,
  *   sessionKeyArgs: {publicKeyHex: string, targetContract: string, method: string,
  *     validUntilMs: string, spendingLimitDatoshi: string, description: string},
- * }} 7715-shaped request plus the blob and the canonical call arguments
+ * }} 7715-shaped request plus the command and the canonical arguments
  */
 export function buildSessionKeyPermission(options = {}) {
-  const registrationBlobHex = buildSessionKeyRegistrationBlob(options);
-  const pubKey = sanitizeHex(options.publicKeyHex);
+  const installCommand = buildSessionKeyInstallCommand(options);
+  const pubKey = requirePublicKey(options.publicKeyHex);
   const target = sanitizeHex(options.targetContract);
   const validUntil = requireUint64(options.validUntilMs, 'validUntilMs');
   const spendingLimit = requireUint64(options.spendingLimitDatoshi ?? 0, 'spendingLimitDatoshi');
@@ -180,7 +185,7 @@ export function buildSessionKeyPermission(options = {}) {
       }],
       expiry: Number(validUntil / 1000n),
     },
-    registrationBlobHex,
+    installCommand,
     sessionKeyArgs: {
       publicKeyHex: pubKey,
       targetContract: target,

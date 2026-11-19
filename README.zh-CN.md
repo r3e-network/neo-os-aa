@@ -4,11 +4,12 @@
 
 ## 功能
 
-- **确定性 V3 账户**：每个账户以 20 字节 `accountId` 为键，派生稳定的 Neo 虚拟地址，无需为每个用户单独部署钱包合约。
-- **验证器插件授权**：可为每个账户绑定 Web3Auth、TEE、WebAuthn、会话密钥、多签或其他验证器插件。
-- **钩子插件策略执行**：可附加可选的钩子插件用于每日限额、代币限制、凭证门控和执行后控制。
-- **备份所有者逃生通道**：每个账户可定义原生 Neo 备份所有者及时间锁验证器轮换。
-- **跨链 EVM 兼容**：V3 通过 Web3Auth 验证器路径支持 secp256k1 / Keccak256 EIP-712 `UserOperation` 签名。
+- **确定性账户**：每个账户以 20 字节 `accountId` 为键（由托管密钥与盐值派生），解析为稳定的 Neo 虚拟地址，无需为每个用户单独部署钱包合约。
+- **验证器模块授权**：可为每个账户实例安装 Web3Auth、TEE、P-256、会话密钥、订阅、委托身份、见证或多签等验证器模块。
+- **钩子模块策略执行**：可安装钩子模块用于每日限额、代币限制、凭证门控和执行后控制；执行顺序由核心维护的 hook 顺序决定。
+- **配置意图**：安装、卸载、重新绑定或重新配置模块都暂存为意图，24 小时后成熟、七天后过期；`proposeConfiguration`、`confirmConfiguration`、`cancelConfiguration` 是唯一的写入路径。
+- **备份所有者恢复**：每个账户可定义原生 Neo 备份所有者，恢复由已安装的恢复服务代理执行。
+- **跨链 EVM 兼容**：v4 通过委托身份验证器路径支持 secp256k1 / Keccak256 EIP-712 签名。
 - **链上 Paymaster（赞助交易）**：`SAPaymaster` 为支持的普通 UserOperation 提供无需信任的 GAS 赞助 —— 赞助商存入 GAS，创建每账户或全局策略，中继在成功执行后自动获得报销。代理地址转账仍要求独立见证，赞助代理转账明确拒绝；具体可用性还取决于已部署 Paymaster、策略、费用上限和链上回读。
 - **策略门控执行**：新集成应通过 `executeUserOp(accountId, op)` 执行，nonce 处理、验证、钩子和目标执行保持集中化。
 
@@ -37,7 +38,7 @@
 同一主分支保留两个实现，各自位于 `contracts/` 下的独立目录：
 [用户合约实现](contracts/custom/README.md)（`contracts/custom/`）和
 [原生 SmartAccount 提交实现](contracts/native/README.md)（`contracts/native/`）。
-两个实现共用的验证器、钩子与恢复插件位于 `contracts/plugins/`。
+两个实现共用的验证器、钩子与恢复模块位于 `contracts/plugins/`。
 两个目录中的 `profile.json` 记录各自的源码根、兼容路径、构建产物和
 验证命令；原生 SmartAccount 共识执行仍属于对应的 Neo core 仓库。
 
@@ -49,12 +50,12 @@
 
 - `contracts/custom/`：当前可用的 `SmartAccount` 用户合约实现（C# 主入口合约）及其服务合约。
 - `contracts/native/`：原生 ABI 2 标准提交实现，包含原生共识 `SmartAccount` 服务的真源与编译它的 Neo core 叠加工程，当前为 draft/unactivated。
-- `contracts/plugins/`：两个实现共用的插件合约。
-- `contracts/plugins/verifiers/`：验证器插件（Web3Auth、TEE、WebAuthn、SessionKey、MultiSig 等）。
-- `contracts/plugins/hooks/`：钩子插件（DailyLimit、Whitelist、TokenRestricted、MultiHook、NeoDIDCredential）。
-- `contracts/plugins/recovery/`：Morpheus 社交恢复验证器。
-- `contracts/plugins/templates/`：第三方验证器与钩子插件的起点模板。
-- `contracts/plugins/native-profile/`：共用插件的 native 配置构建。
+- `contracts/plugins/`：两个实现共用的模块合约。
+- `contracts/plugins/validators/`：验证器模块（Web3Auth、NeoWitness、P256、TeeKey、SessionKey、Subscription、DelegatedIdentity、MultiSig，以及被禁用的 ZKEmail 模板）。
+- `contracts/plugins/hooks/`：钩子模块（DailyLimit、Whitelist、TokenRestricted、NeoDIDCredential；MultiHook 已退役）。
+- `contracts/plugins/recovery/`：可选的社交恢复服务，以及委托给它的 action-session 验证器。
+- `contracts/plugins/templates/`：第三方验证器与钩子模块的起点模板。
+- `contracts/plugins/native-profile/`：共用模块的 native 配置构建。
 - `contracts/custom/paymaster/`：链上 Paymaster 合约，用于赞助/无 GAS 交易。
 - `contracts/custom/registrar/`：独立的 `SAPlatformRegistrar` 服务合约，负责平台账户注册与所有者轮换时间锁。
 - `contracts/custom/market/`：独立的 `SAAddressMarket` 托管合约。
@@ -66,10 +67,11 @@
 
 ## 部署配置
 
-对于通过 `SAPaymaster` 合约的链上赞助交易，将 `VITE_SA_PAYMASTER_HASH` 设置为已部署的 Paymaster 合约哈希。赞助商通过 `setPolicy` 将 GAS 存入 Paymaster 并创建赞助策略，中继调用 SA 核心的 `executeSponsoredUserOp`。核心验证策略、执行 UserOp，然后原子性结算报销。参见 SDK 的 `createSponsoredUserOpPayload` 和 `validatePaymasterOp` 方法。
+对于通过 `SAPaymaster` 合约的链上赞助交易，将 `VITE_SA_PAYMASTER_HASH` 设置为已部署的 Paymaster 合约哈希。赞助商通过 `setPolicy` 将 GAS 存入 Paymaster 并创建赞助策略，中继调用 SA 核心的 `executeSponsoredUserOp`。核心验证策略、执行 UserOp，然后原子性结算报销。参见 SDK 的 `buildSponsoredExecutionScript` 与 Paymaster 的 `validatePaymasterOp`。
 
 当前状态补充：
 
-- V3 插件矩阵与 Paymaster 路径已在 Neo N3 testnet 实际验证
-- 已验证的 verifier / hook 包括 Web3Auth、TEE、WebAuthn、SessionKey、MultiSig、Subscription、Whitelist、DailyLimit、TokenRestricted、MultiHook、NeoDIDCredentialHook
-- `ZKEmailVerifier` 当前被明确禁用，直到真实 proof verifier 实现完成
+- 历史上的验证器/钩子矩阵与 Paymaster 路径记录来自 2026 年 3 月的 Neo N3 testnet 运行，其部署集合已非当前 canonical 部署，不代表 v4 的链上验证状态（详见英文 README 的 Historical Testnet Records）
+- 当前源码中可供复现的证据是本地链套件 `tests/localchain/`；v4 测试网脚本已迁移到 v4 调用，但本次未运行
+- 已随 v4 安装的验证器模块包括 Web3Auth、NeoWitness、P256、TeeKey、SessionKey、Subscription、DelegatedIdentity、MultiSig；钩子模块包括 DailyLimit、Whitelist、TokenRestricted、NeoDIDCredential
+- `ZKEmailVerifier` 当前被明确禁用，直到真实 proof 验证实现完成

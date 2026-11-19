@@ -43,17 +43,11 @@ public class FixMarketPendingPaymentTests
             Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
 
-        public UInt160 RegisterAccount(UInt160 backupOwner, uint escapeTimelock)
+        public UInt160 RegisterAccount(UInt160 owner)
         {
-            UInt160 accountId = Fx.CallUInt160(
-                Wallet, "computeRegistrationAccountId",
-                UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, backupOwner, escapeTimelock);
-
-            Fx.SetSigners(backupOwner);
-            Fx.CallVoid(
-                Wallet, "registerAccount",
-                accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, backupOwner, escapeTimelock);
-            return accountId;
+            // v4: the canonical creation entrypoint; the custody is the seller's witness key.
+            Fx.SetSigners(owner);
+            return Fx.CreateAccount(Wallet, owner, RuntimeFixture.Salt("fix-market"), RuntimeFixture.MinRecoveryTimelockMs);
         }
 
         public BigInteger CreateListing(UInt160 accountId)
@@ -65,7 +59,7 @@ public class FixMarketPendingPaymentTests
 
         public BigInteger CreateAndFundedListing()
         {
-            UInt160 accountId = RegisterAccount(Seller, 2_592_000);
+            UInt160 accountId = RegisterAccount(Seller);
             BigInteger listingId = CreateListing(accountId);
 
             Fx.FundGasFromValidators(Buyer, Price * 2);
@@ -107,7 +101,7 @@ public class FixMarketPendingPaymentTests
     public void Settle_AfterPendingDeposit_StillSucceeds()
     {
         MarketHarness h = new();
-        UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(Seller);
         BigInteger listingId = h.CreateListing(accountId);
 
         h.Fx.FundGasFromValidators(Buyer, Price * 2);
@@ -127,7 +121,7 @@ public class FixMarketPendingPaymentTests
     public void RefundPendingPayment_ReleasesLock_ThenSellerMayCancel()
     {
         MarketHarness h = new();
-        UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(Seller);
         BigInteger listingId = h.CreateListing(accountId);
 
         h.Fx.FundGasFromValidators(Buyer, Price * 2);
@@ -149,19 +143,14 @@ public class FixMarketPendingPaymentTests
     public void CreateListing_WithNonAllowlistedSaContract_Faults()
     {
         // A fresh market with no SA core allowlisted: any listing must be refused before the
-        // contract trusts the SA contract for getBackupOwner/escrow calls, so a malicious or
+        // contract trusts the SA contract for custody/escrow calls, so a malicious or
         // arbitrary SA contract cannot be used to defraud buyers.
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 market = fx.Deploy("SAAddressMarket");
 
-        UInt160 accountId = fx.CallUInt160(
-            wallet, "computeRegistrationAccountId",
-            UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, Seller, 2_592_000u);
         fx.SetSigners(Seller);
-        fx.CallVoid(
-            wallet, "registerAccount",
-            accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, Seller, 2_592_000u);
+        UInt160 accountId = fx.CreateAccount(wallet, Seller, RuntimeFixture.Salt("fix-market-unlisted"), RuntimeFixture.MinRecoveryTimelockMs);
 
         Assert.IsFalse(fx.CallBoolean(market, "isAllowedSA", wallet));
         fx.SetSigners(Seller);
@@ -178,7 +167,7 @@ public class FixMarketPendingPaymentTests
         MarketHarness h = new();
         Assert.IsTrue(h.Fx.CallBoolean(h.Market, "isAllowedSA", h.Wallet));
 
-        UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(Seller);
         BigInteger listingId = h.CreateListing(accountId);
 
         h.Fx.FundGasFromValidators(Buyer, Price * 2);
@@ -189,6 +178,6 @@ public class FixMarketPendingPaymentTests
         h.Fx.CallVoid(h.Market, "settleListing", listingId, Buyer, Buyer);
 
         Assert.AreEqual(sellerBefore + Price, h.Fx.GasBalanceOf(Seller));
-        Assert.AreEqual(Buyer, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", accountId));
+        Assert.AreEqual(Buyer, new UInt160(((Neo.VM.Types.Array)h.Fx.Call(h.Wallet, "getAccount", accountId))[2].GetSpan()));
     }
 }

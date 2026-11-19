@@ -39,15 +39,10 @@ public class FixPaymasterTests
     private static readonly UInt160 TargetContract =
         UInt160.Parse("0x3333333333333333333333333333333333333333");
 
-    private static readonly UInt160 BackupOwner =
-        UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
-
     private static readonly UInt160 Recipient =
         UInt160.Parse("0x4444444444444444444444444444444444444444");
 
     private const long OneGas = 100_000_000;
-
-    private const uint EscapeTimelockSeconds = 2_592_000;
 
     // ====================================================================
     // MEDIUM-b: global policy must carry explicit finite budgets
@@ -141,6 +136,11 @@ public class FixPaymasterTests
 
         public UInt160 Paymaster { get; }
 
+        /// <summary>The P-256 custody key that signs the account's built-in operations.</summary>
+        public P256SessionKey OwnerKey { get; } = new();
+
+        public UInt160 Custody { get; }
+
         public UInt160 ExecAccount { get; }
 
         public SponsoredHarness(BigInteger depositAmount)
@@ -152,20 +152,22 @@ public class FixPaymasterTests
             // paymaster's settlement accepts the wallet as the authorized caller.
             Paymaster = Fx.Deploy("SAPaymaster", Wallet.ToArray());
 
-            // Register an SA account whose native-fallback path is authorized by the backup owner.
-            ExecAccount = Fx.CallUInt160(
-                Wallet, "computeRegistrationAccountId",
-                UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(
-                Wallet, "registerAccount",
-                ExecAccount, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
+            // Register a v4 account whose custody key signs the built-in operation profile.
+            Custody = RuntimeFixture.CustodyOf(OwnerKey);
+            ExecAccount = Fx.CreateAccount(Wallet, Custody, "paymaster-exec");
 
             // Fund the sponsor and deposit GAS into the paymaster.
             Fx.FundGasFromValidators(Sponsor, depositAmount * 2);
             Fx.SetSigners(Sponsor);
             Fx.TransferGas(Sponsor, Paymaster, depositAmount, null);
         }
+
+        /// <summary>Registers another account under the same custody with a distinct salt.</summary>
+        public UInt160 RegisterSecond() =>
+            Fx.CreateAccount(Wallet, Custody, "paymaster-second");
+
+        /// <summary>The relay sends the transaction; the custody co-signs the account operation.</summary>
+        public void SetSponsoredSigners() => Fx.SetSigners(Relay, Custody);
 
         public void SetWalletAccountPolicy(BigInteger maxPerOp, BigInteger dailyBudget, BigInteger totalBudget)
         {
@@ -175,11 +177,32 @@ public class FixPaymasterTests
                 ExecAccount, UInt160.Zero, "", maxPerOp, dailyBudget, totalBudget, BigInteger.Zero);
         }
 
-        public object[] TransferOp(BigInteger nonce, BigInteger deadline) =>
-            RuntimeFixture.UserOp(
-                Target, "transfer",
-                new object?[] { ExecAccount, Recipient, (BigInteger)1000, null },
-                nonce, deadline, Array.Empty<byte>());
+        /// <summary>
+        /// Builds a signed built-in operation (validatorId 0, spec §8). <paramref name="sequence"/> is
+        /// the low 64-bit sequence of the packed nonce, so same-transaction vectors stay in order.
+        /// </summary>
+        public object[] SignedOp(
+            UInt160 ownerAccount,
+            UInt160 target,
+            string method,
+            object?[] args,
+            BigInteger sequence,
+            BigInteger deadline)
+        {
+            BigInteger mask = (BigInteger.One << 64) - 1;
+            BigInteger packed = Fx.PackedNonce(Wallet, ownerAccount, 0);
+            object[] op = RuntimeFixture.UserOp(target, method, args,
+                (packed & ~mask) | sequence, deadline, new byte[] { 0x00 });
+            op[11] = Fx.SignBuiltIn(Wallet, ownerAccount, op, OwnerKey);
+            return op;
+        }
+
+        public object[] TransferOp(BigInteger sequence, BigInteger deadline, UInt160? account = null)
+        {
+            UInt160 ownerAccount = account ?? ExecAccount;
+            return SignedOp(ownerAccount, Target, "transfer",
+                new object?[] { ownerAccount, Recipient, (BigInteger)1000, null }, sequence, deadline);
+        }
 
         public BigInteger Deposit() => Fx.CallInteger(Paymaster, "getSponsorDeposit", Sponsor);
 
@@ -203,10 +226,10 @@ public class FixPaymasterTests
         // Relay is the transaction sender (first signer); the backup owner co-signs so the
         // account's native-fallback verification passes. This mirrors a real sponsored submission
         // where the relay sends the tx and the user's witness authorizes the operation.
-        h.Fx.SetSigners(Relay, BackupOwner);
+        h.SetSponsoredSigners();
         BigInteger deadline = h.Fx.Now() + 3_600_000;
         h.Fx.CallVoid(h.Wallet, "executeSponsoredUserOp",
-            h.ExecAccount, h.TransferOp(nonce: 0, deadline), h.Paymaster, Sponsor, inflatedRequest);
+            h.ExecAccount, h.TransferOp(0, deadline), h.Paymaster, Sponsor, inflatedRequest);
 
         BigInteger settled = depositBefore - h.Deposit();
         BigInteger relayGain = h.RelayBalance() - relayBefore;
@@ -230,12 +253,12 @@ public class FixPaymasterTests
         h.SetWalletAccountPolicy(maxPerOp: 50 * OneGas, dailyBudget: 50 * OneGas, totalBudget: 50 * OneGas);
         BigInteger depositBefore = h.Deposit();
         BigInteger request = 3 * OneGas;
-        h.Fx.SetSigners(Relay, BackupOwner);
+        h.SetSponsoredSigners();
         h.Fx.Engine.Transaction.SystemFee = 0;
         h.Fx.Engine.Transaction.NetworkFee = 0;
         BigInteger deadline = h.Fx.Now() + 3_600_000;
         h.Fx.CallVoid(h.Wallet, "executeSponsoredUserOp",
-            h.ExecAccount, h.TransferOp(nonce: 0, deadline), h.Paymaster, Sponsor, request);
+            h.ExecAccount, h.TransferOp(0, deadline), h.Paymaster, Sponsor, request);
         Assert.AreEqual(request, depositBefore - h.Deposit(),
             "An estimation container settles the requested amount instead of faulting");
     }
@@ -250,10 +273,10 @@ public class FixPaymasterTests
 
         // A tiny request below the actual gas cost is honoured verbatim (min(request, actualCost)).
         BigInteger smallRequest = 1;
-        h.Fx.SetSigners(Relay, BackupOwner);
+        h.SetSponsoredSigners();
         BigInteger deadline = h.Fx.Now() + 3_600_000;
         h.Fx.CallVoid(h.Wallet, "executeSponsoredUserOp",
-            h.ExecAccount, h.TransferOp(nonce: 0, deadline), h.Paymaster, Sponsor, smallRequest);
+            h.ExecAccount, h.TransferOp(0, deadline), h.Paymaster, Sponsor, smallRequest);
 
         BigInteger settled = depositBefore - h.Deposit();
         Assert.AreEqual(smallRequest, settled,
@@ -295,7 +318,7 @@ public class FixPaymasterTests
         h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
         BigInteger before = h.Deposit(), relayBefore = h.RelayBalance();
         BigInteger deadline = h.Fx.Now() + 3_600_000;
-        h.Fx.SetSigners(Relay, BackupOwner);
+        h.SetSponsoredSigners();
         h.Fx.Engine.Transaction.SystemFee = 4 * OneGas;
         h.Fx.Engine.Transaction.NetworkFee = OneGas;
         using ScriptBuilder script = new();
@@ -307,23 +330,12 @@ public class FixPaymasterTests
         RunCombined(h, script);
         Assert.AreEqual((BigInteger)(5 * OneGas), before - h.Deposit(), "Aggregate reimbursement must equal one transaction cost");
         Assert.AreEqual((BigInteger)(5 * OneGas), h.RelayBalance() - relayBefore);
-        Assert.AreEqual((BigInteger)2, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
-    }
-
-    private static UInt160 RegisterSecondAccount(SponsoredHarness h)
-    {
-        const uint delay = EscapeTimelockSeconds + 1;
-        UInt160 account = h.Fx.CallUInt160(h.Wallet, "computeRegistrationAccountId",
-            UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, BackupOwner, delay);
-        h.Fx.SetSigners(BackupOwner);
-        h.Fx.CallVoid(h.Wallet, "registerAccount", account, UInt160.Zero, Array.Empty<byte>(),
-            UInt160.Zero, BackupOwner, delay);
-        return account;
+        Assert.AreEqual((BigInteger)2, h.Fx.CurrentNonceSequence(h.Wallet, h.ExecAccount, 0));
     }
 
     private static void SetFees(SponsoredHarness h, long system = 4 * OneGas, long network = OneGas)
     {
-        h.Fx.SetSigners(Relay, BackupOwner);
+        h.SetSponsoredSigners();
         h.Fx.Engine.Transaction.SystemFee = system;
         h.Fx.Engine.Transaction.NetworkFee = network;
     }
@@ -344,7 +356,7 @@ public class FixPaymasterTests
         script.EmitPush(true);
         RunCombined(h, script);
         Assert.AreEqual((BigInteger)(5 * OneGas), before - h.Deposit());
-        Assert.AreEqual((BigInteger)3, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
+        Assert.AreEqual((BigInteger)3, h.Fx.CurrentNonceSequence(h.Wallet, h.ExecAccount, 0));
     }
 
     [TestMethod]
@@ -352,7 +364,7 @@ public class FixPaymasterTests
     {
         SponsoredHarness h = new(50 * OneGas);
         h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
-        UInt160 second = RegisterSecondAccount(h);
+        UInt160 second = h.RegisterSecond();
         h.Fx.SetSigners(Recipient); // A distinct deployer produces a second contract hash.
         UInt160 secondPaymaster = h.Fx.Deploy("SAPaymaster", h.Wallet.ToArray());
         Assert.AreNotEqual(h.Paymaster, secondPaymaster);
@@ -366,7 +378,7 @@ public class FixPaymasterTests
         AppendCall(script, h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
             h.TransferOp(0, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
         AppendCall(script, h.Wallet, "executeSponsoredUserOp", second,
-            h.TransferOp(0, deadline), secondPaymaster, Sponsor, (BigInteger)(3 * OneGas));
+            h.TransferOp(0, deadline, second), secondPaymaster, Sponsor, (BigInteger)(3 * OneGas));
         script.EmitPush(true);
         RunCombined(h, script);
         Assert.AreEqual((BigInteger)(5 * OneGas), h.RelayBalance() - relayBefore);
@@ -434,7 +446,7 @@ public class FixPaymasterTests
         StringAssert.Contains(error.Message, "Reimbursement exceeds actual gas cost");
         Assert.AreEqual(before, h.Deposit());
         Assert.AreEqual(relayBefore, h.RelayBalance());
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CurrentNonceSequence(h.Wallet, h.ExecAccount, 0));
         Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(key), "Failed invocation must not retain its reservation slot.");
     }
 
@@ -449,14 +461,14 @@ public class FixPaymasterTests
         // nested effect (nonce, transfer, reservation) rolls back.
         SponsoredHarness h = new(50 * OneGas);
         h.SetWalletAccountPolicy(50 * OneGas, 50 * OneGas, 50 * OneGas);
-        UInt160 second = RegisterSecondAccount(h);
+        UInt160 second = h.RegisterSecond();
         h.Fx.SetSigners(Sponsor);
         h.Fx.CallVoid(h.Paymaster, "setPolicy", second, UInt160.Zero, "",
             (BigInteger)(50 * OneGas), (BigInteger)(50 * OneGas), (BigInteger)(50 * OneGas), BigInteger.Zero);
         BigInteger deadline = h.Fx.Now() + 3_600_000;
         using ScriptBuilder callback = new();
         AppendCall(callback, h.Wallet, "executeSponsoredUserOp", second,
-            h.TransferOp(0, deadline), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
+            h.TransferOp(0, deadline, second), h.Paymaster, Sponsor, (BigInteger)(3 * OneGas));
         callback.EmitPush(true);
         callback.Emit(OpCode.RET);
         NefFile nef = new() { Compiler = "Sponsored nesting regression", Source = "", Tokens = [], Script = callback.ToArray() };
@@ -479,13 +491,13 @@ public class FixPaymasterTests
         BigInteger before = h.Deposit(), relayBefore = h.RelayBalance();
         SetFees(h);
         TestException refused = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Wallet, "executeSponsoredUserOp", h.ExecAccount,
-            RuntimeFixture.UserOp(target, "run", Array.Empty<object?>(), 0, deadline, Array.Empty<byte>()),
+            h.SignedOp(h.ExecAccount, target, "run", Array.Empty<object?>(), 0, deadline),
             h.Paymaster, Sponsor, (BigInteger)(3 * OneGas)));
         StringAssert.Contains(refused.Message, "Settlement must follow a completed sponsored execution");
         Assert.AreEqual(before, h.Deposit(),
             "The refused nested settlement must not spend sponsor deposit");
         Assert.AreEqual(relayBefore, h.RelayBalance());
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getNonce", h.ExecAccount, BigInteger.Zero));
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getNonce", second, BigInteger.Zero));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CurrentNonceSequence(h.Wallet, h.ExecAccount, 0));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CurrentNonceSequence(h.Wallet, second, 0));
     }
 }

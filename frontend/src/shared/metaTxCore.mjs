@@ -1,23 +1,25 @@
 /**
- * Shared meta-transaction core for the Neo N3 Smart Account stack.
+ * Shared stack-item decoders and EIP-712-style typed-data builders for the
+ * Neo N3 Smart Account v4 stack.
  *
- * Single source of truth for the EIP-712 typed-data layouts and the Neo RPC
- * stack-item decode helpers that were previously duplicated between the CJS
- * SDK (sdk/js/src/metaTx.js) and the frontend
- * (frontend/src/features/operations/metaTx.js). The typed data built here is
- * the exact structure the verifier contracts hash and check signatures
- * against, so any layout change MUST happen here and nowhere else.
+ * Single source of truth for the shapes the SDK (sdk/js/src/metaTx.js), the
+ * relay route and the wallet frontend decode, and for the secp256k1 signing
+ * payload the Web3AuthValidator verifies (contracts/plugins/validators/
+ * Web3AuthValidator.cs). A layout change happens here and nowhere else.
  *
- * Dependency-light by design: this module has no imports. keccak256 (needed
- * for the legacy MetaTransaction methodHash) is injected by each consumer
- * through createMetaTxBuilders(), and base64 decoding falls back from Buffer
- * (Node) to atob (browsers).
+ * The v4 typed data signs the core's §4.3 operation digest plus the context
+ * that binds it to the account, the core and one validator instance:
  *
- * Consumers:
- * - sdk/js/src/metaTx.js (CJS; loads this synchronous ESM graph via require)
- * - frontend/src/features/operations/metaTx.js (ESM, relative import; the
- *   frontend vite config also aliases the repo root as `@repo` and allows it
- *   in server.fs, so the module is reachable as @repo/shared/metaTxCore.mjs)
+ *   UserOperation(bytes20 accountId, bytes20 coreContract, uint64 validatorId,
+ *     address targetContract, string method, bytes32 argsHash, uint256 nonce,
+ *     uint256 deadline, bytes32 operationDigest)
+ *   domain: "Neo Smart Account" / version "4" / chainId / verifyingContract = module
+ *
+ * The domain version is the module protocol version: signatures over the v3
+ * "1" domain are invalid and there is no dual-domain verification.
+ *
+ * Dependency-light by design: no imports; keccak256 is injected and base64
+ * decoding falls back from Buffer (Node) to atob (browsers).
  */
 
 /**
@@ -103,8 +105,8 @@ export function decodeStackBoolean(item) {
  *
  * Real nodes return UInt160 values as ByteString stack items carrying the
  * internal little-endian bytes; this helper reverses them so every output
- * uses the same big-endian display form (e.g. 0xb4107cb2...) that all SDK
- * and frontend hash inputs accept.
+ * uses the same big-endian display form that all SDK and frontend hash inputs
+ * accept.
  *
  * @param {Object} item - Stack item from an RPC response
  * @returns {string} 40-character big-endian display hex string, '' when empty
@@ -119,104 +121,142 @@ export function decodeHash160Stack(item) {
   return '';
 }
 
-/**
- * Decodes a previewUserOpValidation result stack item.
- *
- * @param {Object} item - Array stack item from previewUserOpValidation
- * @returns {Object} Preview with deadlineValid, nonceAcceptable, hasVerifier,
- *   verifier and hook (big-endian display hex)
- */
-export function decodeValidationPreviewStack(item) {
+function arrayValues(item, length) {
   const values = item?.type === 'Array' && Array.isArray(item.value) ? item.value : [];
-  return {
-    deadlineValid: decodeStackBoolean(values[0]),
-    nonceAcceptable: decodeStackBoolean(values[1]),
-    hasVerifier: decodeStackBoolean(values[2]),
-    verifier: decodeHash160Stack(values[3]),
-    hook: decodeHash160Stack(values[4]),
-  };
+  return length === undefined || values.length === length ? values : [];
 }
 
+const ACCOUNT_STATUS_NAMES = ['Active', 'Frozen', 'MigrationRequired'];
+
 /**
- * Decodes a describeAccount result stack item.
+ * Decodes the 16-field `getAccount` descriptor (docs/SA-MODULE-PROTOCOL.md §9).
  *
- * The core returns the 14-field account descriptor in one read-only call so
- * wallets and indexers do not have to fan out across the individual getters.
- * Integer fields are returned as decimal strings, matching getAccountState.
+ * [exists, status, custody, recoveryAuthority, authorityEpoch,
+ *  configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
+ *  defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
+ *  controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive,
+ *  legacyRow]
  *
- * @param {Object} item - Array stack item from describeAccount
- * @returns {Object} Descriptor with exists, verifier, hook, backupOwner,
- *   escapeTimelock, escapeTriggeredAt, escapeActive, marketEscrowContract,
- *   marketEscrowListingId, marketEscrowActive, pendingVerifierUpdate,
- *   pendingVerifierMatureAt, pendingHookUpdate and pendingHookMatureAt
- *   (hashes in big-endian display hex)
+ * @param {Object} item - Array stack item from getAccount
+ * @returns {Object|null} Descriptor, or null for a missing account
  */
 export function decodeAccountDescriptorStack(item) {
-  const values = item?.type === 'Array' && Array.isArray(item.value) ? item.value : [];
+  if (item?.type === 'Null' || item == null) return null;
+  const values = arrayValues(item, 16);
+  if (values.length === 0) return null;
+  if (!decodeStackBoolean(values[0])) return null;
+  const status = Number(decodeIntegerStack(values[1]));
   return {
-    exists: decodeStackBoolean(values[0]),
-    verifier: decodeHash160Stack(values[1]),
-    hook: decodeHash160Stack(values[2]),
-    backupOwner: decodeHash160Stack(values[3]),
-    escapeTimelock: decodeIntegerStack(values[4]).toString(),
-    escapeTriggeredAt: decodeIntegerStack(values[5]).toString(),
-    escapeActive: decodeStackBoolean(values[6]),
-    marketEscrowContract: decodeHash160Stack(values[7]),
-    marketEscrowListingId: decodeIntegerStack(values[8]).toString(),
-    marketEscrowActive: decodeStackBoolean(values[9]),
-    pendingVerifierUpdate: decodeStackBoolean(values[10]),
-    pendingVerifierMatureAt: decodeIntegerStack(values[11]).toString(),
-    pendingHookUpdate: decodeStackBoolean(values[12]),
-    pendingHookMatureAt: decodeIntegerStack(values[13]).toString(),
+    exists: true,
+    status,
+    statusName: ACCOUNT_STATUS_NAMES[status] ?? '',
+    custody: decodeHash160Stack(values[2]),
+    recoveryAuthority: decodeHash160Stack(values[3]),
+    authorityEpoch: decodeIntegerStack(values[4]).toString(),
+    configurationNonce: decodeIntegerStack(values[5]).toString(),
+    recoveryTimelockMs: decodeIntegerStack(values[6]).toString(),
+    defaultOperationAuthorization: decodeStackBoolean(values[7]),
+    defaultMessageAuthorization: decodeStackBoolean(values[8]),
+    ownerOnlyRecovery: decodeStackBoolean(values[9]),
+    hookOrderRevision: decodeIntegerStack(values[10]).toString(),
+    controlRevision: decodeIntegerStack(values[11]).toString(),
+    recoveryPending: decodeStackBoolean(values[12]),
+    recoveryMatureAt: decodeIntegerStack(values[13]).toString(),
+    marketEscrowActive: decodeStackBoolean(values[14]),
+    legacyRow: decodeStackBoolean(values[15]),
   };
 }
 
 /**
- * Decodes a simulateValidation result stack item.
+ * Decodes the 12-field `getModule` descriptor.
  *
- * Non-faulting preflight of the core's execution-time checks, in the spirit
- * of ERC-4337 simulateValidation: every field reports instead of throwing,
- * so an unknown account decodes to an all-false result with
- * accountExists === false.
+ * [moduleId, moduleType, contractHash, contractId, updateCounter, nefSha256,
+ *  profileSha256, moduleRevision, credentialGeneration, instanceIsolation,
+ *  messageCapability, thresholdMemberEligible]
  *
- * @param {Object} item - Array stack item from simulateValidation
- * @returns {Object} Simulation with accountExists, deadlineOk, nonceOk,
- *   verifierBound, nativeWitnessPresent, marketEscrowBlocks and escapeActive
+ * @param {Object} item - Array stack item from getModule
+ * @returns {Object|null} Descriptor, or null for a missing module
  */
-export function decodeUserOpSimulationStack(item) {
-  const values = item?.type === 'Array' && Array.isArray(item.value) ? item.value : [];
+export function decodeModuleDescriptorStack(item) {
+  const values = arrayValues(item, 12);
+  if (values.length === 0) return null;
   return {
-    accountExists: decodeStackBoolean(values[0]),
-    deadlineOk: decodeStackBoolean(values[1]),
-    nonceOk: decodeStackBoolean(values[2]),
-    verifierBound: decodeStackBoolean(values[3]),
-    nativeWitnessPresent: decodeStackBoolean(values[4]),
-    marketEscrowBlocks: decodeStackBoolean(values[5]),
-    escapeActive: decodeStackBoolean(values[6]),
+    moduleId: decodeIntegerStack(values[0]).toString(),
+    moduleType: Number(decodeIntegerStack(values[1])),
+    contractHash: decodeHash160Stack(values[2]),
+    contractId: decodeIntegerStack(values[3]).toString(),
+    updateCounter: decodeIntegerStack(values[4]).toString(),
+    nefSha256: decodeByteStringStackHex(values[5]),
+    profileSha256: decodeByteStringStackHex(values[6]),
+    moduleRevision: decodeIntegerStack(values[7]).toString(),
+    credentialGeneration: decodeIntegerStack(values[8]).toString(),
+    instanceIsolation: decodeStackBoolean(values[9]),
+    messageCapability: decodeStackBoolean(values[10]),
+    thresholdMemberEligible: decodeStackBoolean(values[11]),
   };
 }
 
 /**
- * Validation-error kinds raised by the typed-data builders. Consumers may
- * map these onto their own error systems via the createError option of
+ * Decodes the `validateUserOp` result: [accepted, operationDigest].
+ *
+ * The digest is the core's §4.3 digest. Clients MUST compare it to their own
+ * locally computed digest before signing or broadcasting.
+ *
+ * @param {Object} item - Array stack item from validateUserOp
+ * @returns {{ accepted: boolean, operationDigest: string }}
+ */
+export function decodeValidationPreviewStack(item) {
+  const values = arrayValues(item, 2);
+  return {
+    accepted: decodeStackBoolean(values[0]),
+    operationDigest: decodeByteStringStackHex(values[1]),
+  };
+}
+
+/**
+ * Decodes the `getRecoveryStatus` result.
+ *
+ * @param {Object} item - Array stack item from getRecoveryStatus
+ * @returns {Object|null} Recovery status, or null when no recovery is pending
+ */
+export function decodeRecoveryStatusStack(item) {
+  const values = item?.type === 'Array' && Array.isArray(item.value) ? item.value : [];
+  if (values.length === 0) return null;
+  if (values.length !== 5) return null;
+  return {
+    pending: decodeStackBoolean(values[0]),
+    initiatedAt: decodeIntegerStack(values[1]).toString(),
+    matureAt: decodeIntegerStack(values[2]).toString(),
+    authorityEpochAtInit: decodeIntegerStack(values[3]).toString(),
+    newCustody: decodeHash160Stack(values[4]),
+  };
+}
+
+/**
+ * Validation-error kinds raised by the typed-data builders. Consumers may map
+ * these onto their own error systems via the createError option of
  * createMetaTxBuilders().
  */
 const CORE_ERRORS = {
   NONCE_REQUIRED: {
     code: 'METATX_NONCE_REQUIRED',
-    message: 'Nonce is required for EIP-712 payload',
+    message: 'Nonce is required for the EIP-712 payload',
   },
   DEADLINE_REQUIRED: {
     code: 'METATX_DEADLINE_REQUIRED',
-    message: 'Deadline is required for EIP-712 payload',
+    message: 'Deadline is required for the EIP-712 payload',
   },
   ARGS_HASH_INVALID: {
     code: 'METATX_ARGS_HASH_INVALID',
     message: 'Args hash must be 32 bytes (64 hex characters)',
   },
+  OPERATION_DIGEST_INVALID: {
+    code: 'METATX_OPERATION_DIGEST_INVALID',
+    message: 'Operation digest must be 32 bytes (64 hex characters)',
+  },
   CORE_CONTRACT_REQUIRED: {
     code: 'METATX_CORE_CONTRACT_REQUIRED',
-    message: 'SA core contract is required for V3 payload binding',
+    message: 'SA core contract is required for the v4 payload binding',
   },
   INTEGER_DOMAIN_INVALID: {
     code: 'METATX_INTEGER_DOMAIN_INVALID',
@@ -225,15 +265,10 @@ const CORE_ERRORS = {
 };
 
 const NEO_SIGNED_INTEGER_LIMIT = 1n << 255n;
+const UINT64_LIMIT = 1n << 64n;
+export const USER_OPERATION_DOMAIN_NAME = 'Neo Smart Account';
+export const USER_OPERATION_DOMAIN_VERSION = '4';
 
-/**
- * Default error factory: a plain Error carrying a stable code and details.
- *
- * @param {string} kind - One of the CORE_ERRORS keys
- * @param {Object} details - Additional details for the failure
- * @returns {Error} Error with code and details attached
- * @private
- */
 function defaultCreateError(kind, details = {}) {
   const spec = CORE_ERRORS[kind];
   const error = new Error(spec.message);
@@ -243,18 +278,13 @@ function defaultCreateError(kind, details = {}) {
 }
 
 /**
- * Creates the EIP-712 typed-data builders with an injected keccak256.
+ * Creates the v4 typed-data builder with an injected keccak256.
  *
- * @param {Object} options - Factory options
+ * @param {Object} options
  * @param {Function} options.keccak256 - keccak256(Uint8Array) returning a
  *   0x-prefixed 32-byte hex string (e.g. ethers.keccak256)
  * @param {Function} [options.createError] - Optional (kind, details) => Error
- *   factory used for validation failures; kinds are NONCE_REQUIRED,
- *   DEADLINE_REQUIRED and ARGS_HASH_INVALID
- * @returns {{
- *   buildMetaTransactionTypedData: Function,
- *   buildV3UserOperationTypedData: Function,
- * }} The typed-data builders
+ * @returns {{ buildUserOperationTypedData: Function }}
  */
 export function createMetaTxBuilders({ keccak256, createError = defaultCreateError } = {}) {
   if (typeof keccak256 !== 'function') {
@@ -263,15 +293,7 @@ export function createMetaTxBuilders({ keccak256, createError = defaultCreateErr
 
   const utf8Encoder = new TextEncoder();
 
-  /**
-   * Validates the signature-critical fields shared by both layouts.
-   * Carries the SDK validation guards: nonce and deadline must be present
-   * and the args hash must be exactly 32 bytes.
-   *
-   * @returns {string} Sanitized 64-hex-char args hash
-   * @private
-   */
-  function requireSignedFields({ nonce, deadline, argsHashHex }) {
+  function requireSignedFields({ nonce, deadline, argsHashHex, operationDigest }) {
     if (nonce == null) throw createError('NONCE_REQUIRED', {});
     if (deadline == null) throw createError('DEADLINE_REQUIRED', {});
     for (const [field, value] of [['nonce', nonce], ['deadline', deadline]]) {
@@ -289,113 +311,69 @@ export function createMetaTxBuilders({ keccak256, createError = defaultCreateErr
         });
       }
     }
-    const sanitized = sanitizeHex(argsHashHex);
-    if (sanitized.length !== 64) {
+    const argsHash = sanitizeHex(argsHashHex);
+    if (argsHash.length !== 64) {
       throw createError('ARGS_HASH_INVALID', {
         provided: argsHashHex,
-        hint: `Expected 64 hex chars, got ${sanitized.length}`,
+        hint: `Expected 64 hex chars, got ${argsHash.length}`,
       });
     }
-    return sanitized;
+    const digest = sanitizeHex(operationDigest);
+    if (digest.length !== 64) {
+      throw createError('OPERATION_DIGEST_INVALID', {
+        provided: operationDigest,
+        hint: `Expected 64 hex chars, got ${digest.length}`,
+      });
+    }
+    return { argsHash, digest };
   }
 
   /**
-   * Builds the EIP-712 typed data for a legacy MetaTransaction.
-   * Compatible with the legacy account-binding format.
+   * Builds the EIP-712-style typed data the Web3AuthValidator (and any
+   * secp256k1 signer) signs for one operation routed to one validator instance.
    *
-   * @param {Object} options - Typed data options
-   * @param {string|number} options.chainId - Chain ID for the EIP-712 domain
-   * @param {string} options.verifyingContract - Verifying contract hash (40 hex chars)
-   * @param {string} [options.accountAddressScriptHash] - Account script hash (legacy)
-   * @param {string} [options.accountAddressHash] - Account address hash (legacy)
-   * @param {string} options.targetContract - Target contract hash (40 hex chars)
-   * @param {string} options.method - Method name
-   * @param {string} options.argsHashHex - Args hash (32 bytes, 64 hex chars)
-   * @param {string|number} options.nonce - Nonce value
-   * @param {string|number} options.deadline - Deadline in Neo Runtime.Time milliseconds
+   * @param {Object} options
+   * @param {string|number} options.chainId - Network magic
+   * @param {string} options.verifyingContract - Validator (module) script hash
+   * @param {string} options.accountId - 40-hex account id
+   * @param {string} options.coreContractHash - 40-hex authorized SA core
+   * @param {string|number} options.validatorId - Module instance id
+   * @param {string} options.targetContract - 40-hex operation target
+   * @param {string} options.method - Operation method
+   * @param {string} options.argsHashHex - keccak256(StdLib.Serialize(args))
+   * @param {string|number} options.nonce - Packed 255-bit operation nonce
+   * @param {string|number} options.deadline - Deadline (Runtime.Time ms)
+   * @param {string} options.operationDigest - Core §4.3 digest
    * @returns {Object} EIP-712 typed data structure
-   * @throws {Error} If nonce/deadline are missing or the args hash is invalid
    */
-  function buildMetaTransactionTypedData({
+  function buildUserOperationTypedData({
     chainId,
     verifyingContract,
-    accountAddressScriptHash,
-    accountAddressHash,
-    targetContract,
-    method,
-    argsHashHex,
-    nonce,
-    deadline,
-  }) {
-    const sanitizedArgsHash = requireSignedFields({ nonce, deadline, argsHashHex });
-    return {
-      domain: {
-        // AA→SA wave-2 protocol switch: the EIP-712 domain name changed from
-        // "Neo N3 Abstract Account"; signatures over the old domain are invalid
-        // after this switch (no dual-domain verification).
-        name: 'Neo Smart Account',
-        version: '1',
-        chainId,
-        verifyingContract: `0x${sanitizeHex(verifyingContract)}`,
-      },
-      types: {
-        MetaTransaction: [
-          { name: 'accountAddress', type: 'address' },
-          { name: 'targetContract', type: 'address' },
-          { name: 'methodHash', type: 'bytes32' },
-          { name: 'argsHash', type: 'bytes32' },
-          { name: 'nonce', type: 'uint256' },
-          { name: 'deadline', type: 'uint256' },
-        ],
-      },
-      message: {
-        accountAddress: `0x${sanitizeHex(accountAddressScriptHash || accountAddressHash)}`,
-        targetContract: `0x${sanitizeHex(targetContract)}`,
-        methodHash: keccak256(utf8Encoder.encode(String(method || ''))),
-        argsHash: `0x${sanitizedArgsHash}`,
-        nonce: String(nonce),
-        deadline: String(deadline),
-      },
-    };
-  }
-
-  /**
-   * Builds the EIP-712 typed data for a V3 UserOperation.
-   * Uses accountId-based verification (V3 format).
-   *
-   * @param {Object} options - Typed data options
-   * @param {string|number} options.chainId - Chain ID for the EIP-712 domain
-   * @param {string} options.verifyingContract - Verifier contract hash (40 hex chars)
- * @param {string} options.accountIdHash - Account ID hash (40 hex chars)
- * @param {string} options.coreContractHash - Authorized SA core hash (40 hex chars)
-   * @param {string} options.targetContract - Target contract hash (40 hex chars)
-   * @param {string} options.method - Method name
-   * @param {string} options.argsHashHex - Args hash (32 bytes, 64 hex chars)
-   * @param {string|number} options.nonce - Nonce value
-   * @param {string|number} options.deadline - Deadline in Neo Runtime.Time milliseconds
-   * @returns {Object} EIP-712 typed data structure
-   * @throws {Error} If nonce/deadline are missing or the args hash is invalid
-   */
-  function buildV3UserOperationTypedData({
-    chainId,
-    verifyingContract,
-    accountIdHash,
+    accountId,
     coreContractHash,
+    validatorId,
     targetContract,
     method,
     argsHashHex,
     nonce,
     deadline,
+    operationDigest,
   }) {
-    const sanitizedArgsHash = requireSignedFields({ nonce, deadline, argsHashHex });
+    const { argsHash, digest } = requireSignedFields({ nonce, deadline, argsHashHex, operationDigest });
     if (!coreContractHash) throw createError('CORE_CONTRACT_REQUIRED', {});
+    let validator;
+    try {
+      validator = BigInt(validatorId ?? 0);
+    } catch {
+      throw createError('INTEGER_DOMAIN_INVALID', { field: 'validatorId', provided: validatorId });
+    }
+    if (validator < 0n || validator >= UINT64_LIMIT) {
+      throw createError('INTEGER_DOMAIN_INVALID', { field: 'validatorId', provided: validatorId });
+    }
     return {
       domain: {
-        // AA→SA wave-2 protocol switch: the EIP-712 domain name changed from
-        // "Neo N3 Abstract Account"; signatures over the old domain are invalid
-        // after this switch (no dual-domain verification).
-        name: 'Neo Smart Account',
-        version: '1',
+        name: USER_OPERATION_DOMAIN_NAME,
+        version: USER_OPERATION_DOMAIN_VERSION,
         chainId,
         verifyingContract: `0x${sanitizeHex(verifyingContract)}`,
       },
@@ -403,27 +381,36 @@ export function createMetaTxBuilders({ keccak256, createError = defaultCreateErr
         UserOperation: [
           { name: 'accountId', type: 'bytes20' },
           { name: 'coreContract', type: 'bytes20' },
+          { name: 'validatorId', type: 'uint64' },
           { name: 'targetContract', type: 'address' },
           { name: 'method', type: 'string' },
           { name: 'argsHash', type: 'bytes32' },
           { name: 'nonce', type: 'uint256' },
           { name: 'deadline', type: 'uint256' },
+          { name: 'operationDigest', type: 'bytes32' },
         ],
       },
       message: {
-        accountId: `0x${sanitizeHex(accountIdHash)}`,
+        accountId: `0x${sanitizeHex(accountId)}`,
         coreContract: `0x${sanitizeHex(coreContractHash)}`,
+        validatorId: validator.toString(),
         targetContract: `0x${sanitizeHex(targetContract)}`,
         method: String(method || ''),
-        argsHash: `0x${sanitizedArgsHash}`,
+        argsHash: `0x${argsHash}`,
         nonce: String(nonce),
         deadline: String(deadline),
+        operationDigest: `0x${digest}`,
       },
     };
   }
 
+  /** keccak256 of the UTF-8 method name, the struct's `method` field is a string. */
+  function methodHash(method) {
+    return keccak256(utf8Encoder.encode(String(method || '')));
+  }
+
   return {
-    buildMetaTransactionTypedData,
-    buildV3UserOperationTypedData,
+    buildUserOperationTypedData,
+    methodHash,
   };
 }

@@ -2,39 +2,102 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClientBroadcastRequest, buildRelayBroadcastRequest, buildRelayPayloadOptions, buildStagedTransactionBody, executeBroadcast } from '../src/features/operations/execution.js';
 import { summarizeSignerProgress } from '../src/features/operations/signatures.js';
-import { buildExecuteUserOpInvocation, buildV3UserOperationTypedData } from '../src/features/operations/metaTx.js';
+import { buildExecuteUserOpInvocation, buildUserOperationTypedData } from '../src/features/operations/metaTx.js';
+import { reverseHex } from '../src/utils/neo.js';
 
 const core = '11'.repeat(20);
 const accountId = '22'.repeat(20);
 const target = '33'.repeat(20);
+const validator = '44'.repeat(20);
+const argsHash = '55'.repeat(32);
+const digest = '99'.repeat(32);
+const signature = 'ab'.repeat(64);
+const nonce = '9';
+const deadline = '2000000000000';
+
+/** The 13-field operation the frontend signs; index constants match §4.1. */
+function operation({ signatureHex = signature, method = 'balanceOf', targetContract = target, args = [{ type: 'ByteString', value: reverseHex(accountId) }] } = {}) {
+  return {
+    targetContract,
+    method,
+    args,
+    nonce,
+    nonceSubkey: '00'.repeat(32),
+    deadline,
+    validatorId: '2',
+    credentialGeneration: '1',
+    authorityEpoch: '0',
+    configurationNonce: '0',
+    signature: signatureHex,
+    hookProofs: [],
+  };
+}
+
 function fixture() {
   const operationBody = { targetContract: target, method: 'balanceOf', args: [{ type: 'Hash160', value: `0x${accountId}` }] };
   const body = buildStagedTransactionBody({ saContractHash: core, account: { accountIdHash: accountId }, operationBody, morpheusNetwork: 'testnet' });
-  const invocation = buildExecuteUserOpInvocation({ saContractHash: core, accountIdHash: accountId, targetContract: target, method: 'balanceOf', methodArgs: operationBody.args, nonce: '9', deadline: '2000000000000', signatureHex: 'ab'.repeat(64) });
-  const typedData = buildV3UserOperationTypedData({ chainId: 894710606, verifyingContract: '44'.repeat(20), coreContractHash: core, accountIdHash: accountId, targetContract: target, method: 'balanceOf', argsHashHex: '55'.repeat(32), nonce: '9', deadline: '2000000000000' });
-  const signatures = [{ kind: 'evm', signerId: 'alice', signatureHex: 'ab'.repeat(64), metadata: { metaInvocation: invocation, typedData } }];
+  const invocation = buildExecuteUserOpInvocation({ saContractHash: core, accountId, operation: operation() });
+  const typedData = buildUserOperationTypedData({
+    chainId: 894710606,
+    verifyingContract: validator,
+    accountId,
+    coreContractHash: core,
+    validatorId: '2',
+    targetContract: target,
+    method: 'balanceOf',
+    argsHashHex: argsHash,
+    nonce,
+    deadline,
+    operationDigest: digest,
+  });
+  const signatures = [{
+    kind: 'evm',
+    signerId: 'alice',
+    signatureHex: signature,
+    payloadDigest: digest,
+    metadata: {
+      metaInvocation: invocation,
+      typedData,
+      verifierHash: validator,
+      validatorId: '2',
+      nonce,
+      deadline,
+      argsHashHex: argsHash,
+      operationDigest: digest,
+    },
+  }];
   return { body, signatures, invocation };
 }
+
 const client = ({ body, signatures }) => buildClientBroadcastRequest({ signerAddress: 'N-fee-payer', transactionBody: body, signatures, morpheusNetwork: 'testnet' });
 const relay = ({ body, signatures }) => buildRelayBroadcastRequest({ relayEndpoint: '/api/relay-transaction', transactionBody: body, signatures, morpheusNetwork: 'testnet' });
+const opField = (invocation, index) => invocation.args[1].value[index];
 
-test('immutable draft client and relay carry the same signed UserOperation without mutating its staged body', async () => {
+test('immutable draft client and relay carry the same signed operation without mutating its staged body', async () => {
   const state = fixture();
   const before = JSON.stringify(state);
   assert.deepEqual(client(state).args, state.invocation.args);
   assert.deepEqual(relay(state).metaInvocation.args, state.invocation.args);
   let sent;
-  await executeBroadcast({ mode: 'client', deps: { computeArgsHash: async () => '55'.repeat(32) }, signerAddress: 'N-fee-payer', transactionBody: state.body, signatures: state.signatures, morpheusNetwork: 'testnet', walletService: { invoke: async (request) => { sent = request; return { txid: 'ok' }; } } });
+  await executeBroadcast({
+    mode: 'client',
+    signerAddress: 'N-fee-payer',
+    transactionBody: state.body,
+    signatures: state.signatures,
+    morpheusNetwork: 'testnet',
+    deps: { computeArgsHash: async () => argsHash },
+    walletService: { invoke: async (request) => { sent = request; return { txid: 'ok' }; } },
+  });
   assert.deepEqual(sent.args, state.invocation.args);
   assert.equal(JSON.stringify(state), before);
 });
 
 for (const [label, mutate] of [
   ['core', (s) => { s.invocation.scriptHash = '66'.repeat(20); }],
-  ['account', (s) => { s.invocation.args[0].value = `0x${'66'.repeat(20)}`; }],
-  ['target', (s) => { s.invocation.args[1].value[0].value = `0x${'66'.repeat(20)}`; }],
-  ['method', (s) => { s.invocation.args[1].value[1].value = 'transfer'; }],
-  ['arguments', (s) => { s.invocation.args[1].value[2].value = []; }],
+  ['account', (s) => { s.invocation.args[0].value = '66'.repeat(20); }],
+  ['target', (s) => { opField(s.invocation, 1).value = reverseHex('66'.repeat(20)); }],
+  ['method', (s) => { opField(s.invocation, 2).value = Buffer.from('transfer', 'utf8').toString('hex'); }],
+  ['arguments', (s) => { opField(s.invocation, 3).value = []; }],
   ['body account', (s) => { s.body.accountIdHash = '66'.repeat(20); }],
   ['network', (s) => { s.body.network = 'neo-n3-mainnet'; }],
   ['typed network', (s) => { s.signatures[0].metadata.typedData.domain.chainId = 860833102; }],
@@ -56,7 +119,7 @@ test('conflicting EVM signatures require explicit aggregation and cannot select 
   const second = structuredClone(state.signatures[0]);
   second.signerId = 'bob';
   second.signatureHex = 'cd'.repeat(64);
-  second.metadata.metaInvocation.args[1].value[5].value = `0x${second.signatureHex}`;
+  opField(second.metadata.metaInvocation, 11).value = second.signatureHex;
   state.signatures.push(second);
   assert.throws(() => client(state), /multiple.*aggregation.*unsupported/i);
   assert.throws(() => relay(state), /multiple.*aggregation.*unsupported/i);
@@ -64,10 +127,10 @@ test('conflicting EVM signatures require explicit aggregation and cannot select 
 
 test('duplicate canonical invocations are harmless but stale signed body conflicts fail closed', () => {
   const state = fixture();
-  state.body.v3Invocation = structuredClone(state.invocation);
+  state.body.v4Invocation = structuredClone(state.invocation);
   assert.deepEqual(client(state).args, state.invocation.args);
-  state.body.v3Invocation.args[1].value[3].value = '1';
-  assert.throws(() => client(state), /multiple.*aggregation.*unsupported/i);
+  opField(state.body.v4Invocation, 3).value = [];
+  assert.throws(() => client(state), /staged arguments/);
 });
 
 test('collaborator metadata cannot inject fee-payer signers', () => {
@@ -90,30 +153,55 @@ test('approval progress counts distinct required records and never claims chain 
 test('invalid signed invocation blocks relay readiness with a useful cause', async () => {
   const { evaluateRelayReadiness } = await import('../src/features/operations/relayReadiness.js');
   const state = fixture();
-  state.invocation.args[1].value[1].value = 'transfer';
+  opField(state.invocation, 2).value = Buffer.from('transfer', 'utf8').toString('hex');
   const readiness = evaluateRelayReadiness({ runtime: { relayEnabled: true, relayMetaEnabled: true, morpheusNetwork: 'testnet' }, transactionBody: state.body, signatures: state.signatures });
   assert.equal(readiness.payloadReady, false);
   assert.equal(readiness.level, 'blocked');
   assert.match(readiness.detail, /mismatch/i);
 });
 
-test('malformed and unsigned V3 metadata cannot be offered as a signed relay payload', () => {
+test('malformed and unsigned v4 metadata cannot be offered as a signed relay payload', () => {
   for (const bad of [{ operation: 'executeUserOp', args: [] }, { operation: 'executeUserOp' }]) {
     const state = fixture();
     state.signatures[0].metadata.metaInvocation = { scriptHash: core, ...bad };
     assert.throws(() => client(state), /mismatch/i);
   }
   const state = fixture();
-  state.invocation.args[1].value[5].value = '0x';
+  opField(state.invocation, 11).value = '';
   assert.throws(() => client(state), /no signature/i);
 });
 
-test('client blocks proxy-sourced transfer even when imported metadata omits the witness requirement flag', () => {
-  const body = buildStagedTransactionBody({ saContractHash: core, account: { accountIdHash: accountId, accountAddressScriptHash: target }, morpheusNetwork: 'testnet', operationBody: { targetContract: core, method: 'transfer', args: [{ type: 'Hash160', value: `0x${target}` }] } });
+test('client blocks a proxy-sourced transfer even when imported metadata omits the witness requirement flag', () => {
+  // The account moves its own asset: the transfer's `from` is the account address.
+  const body = buildStagedTransactionBody({
+    saContractHash: core,
+    account: { accountIdHash: accountId, accountAddressScriptHash: target },
+    morpheusNetwork: 'testnet',
+    operationBody: { targetContract: core, method: 'transfer', args: [
+      { type: 'Hash160', value: `0x${target}` },
+      { type: 'Hash160', value: `0x${'77'.repeat(20)}` },
+      { type: 'Integer', value: 1 },
+      { type: 'Null' },
+    ] },
+  });
+  const invocation = buildExecuteUserOpInvocation({
+    saContractHash: core,
+    accountId,
+    operation: operation({ targetContract: core, method: 'transfer', args: [
+      { type: 'ByteString', value: reverseHex(target) },
+      { type: 'ByteString', value: reverseHex('77'.repeat(20)) },
+      { type: 'Integer', value: '1' },
+      { type: 'Null' },
+    ] }),
+  });
+  body.metaInvocation = invocation;
   assert.equal(body.requiresProxyWitness, false);
-  assert.throws(() => client({ body, signatures: [] }), /proxy witness/);
-  body.clientInvocation.args[1].value[2].value[0].value = `0x${'77'.repeat(20)}`;
-  assert.doesNotThrow(() => client({ body, signatures: [] }));
+  assert.throws(() => buildClientBroadcastRequest({ signerAddress: 'N-fee-payer', transactionBody: body, signatures: [], morpheusNetwork: 'testnet' }), /proxy witness/);
+
+  // The same shape paying from an address the account does not own is an ordinary invoke.
+  opField(body.metaInvocation, 3).value[0] = { type: 'ByteString', value: reverseHex('88'.repeat(20)) };
+  body.operationBody.args[0] = { type: 'Hash160', value: `0x${'88'.repeat(20)}` };
+  assert.doesNotThrow(() => buildClientBroadcastRequest({ signerAddress: 'N-fee-payer', transactionBody: body, signatures: [], morpheusNetwork: 'testnet' }));
 });
 
 test('typed EVM signature recovery verifies signer identity and submitted compact bytes', async () => {
@@ -122,11 +210,11 @@ test('typed EVM signature recovery verifies signer identity and submitted compac
   const state = fixture();
   const record = state.signatures[0];
   const typed = record.metadata.typedData;
-  const signature = signer.signingKey.sign(TypedDataEncoder.hash(typed.domain, typed.types, typed.message));
+  const signed = signer.signingKey.sign(TypedDataEncoder.hash(typed.domain, typed.types, typed.message));
   record.signerId = signer.address;
-  record.signatureHex = `${signature.r.slice(2)}${signature.s.slice(2)}`;
-  record.metadata.signatureFullHex = signature.serialized;
-  state.invocation.args[1].value[5].value = `0x${record.signatureHex}`;
+  record.signatureHex = `${signed.r.slice(2)}${signed.s.slice(2)}`;
+  record.metadata.signatureFullHex = signed.serialized;
+  opField(state.invocation, 11).value = record.signatureHex;
   assert.doesNotThrow(() => client(state));
   record.signerId = `0x${'77'.repeat(20)}`;
   assert.throws(() => client(state), /EVM signer/);
@@ -138,7 +226,7 @@ test('case sensitive Neo signer identities do not count toward another signer re
   assert.equal(progress.isComplete, false);
 });
 
-test('collaborator payload cannot replace an unanchored raw draft with wallet spending', () => {
+test('a signed envelope cannot be attached to a body that staged no operation', () => {
   const state = fixture();
   state.body = { network: 'neo-n3-testnet', accountIdHash: accountId, rawTransaction: 'deadbeef' };
   assert.throws(() => client(state), /staged operation anchor/);
@@ -149,8 +237,13 @@ test('collaborator payload cannot replace an unanchored raw draft with wallet sp
 test('client cannot send metadata whose claimed argument hash differs from the core computation', async () => {
   const state = fixture();
   let invoked = false;
-  await assert.rejects(() => executeBroadcast({ mode: 'client', signerAddress: 'fee-payer', morpheusNetwork: 'testnet', transactionBody: state.body, signatures: state.signatures,
-    deps: { computeArgsHash: async ({ args }) => { assert.deepEqual(args, state.invocation.args[1].value[2].value); return '66'.repeat(32); } },
+  await assert.rejects(() => executeBroadcast({
+    mode: 'client',
+    signerAddress: 'fee-payer',
+    morpheusNetwork: 'testnet',
+    transactionBody: state.body,
+    signatures: state.signatures,
+    deps: { computeArgsHash: async ({ args }) => { assert.deepEqual(args, opField(state.invocation, 3).value); return '66'.repeat(32); } },
     walletService: { invoke: async () => { invoked = true; } },
   }), /on-chain arguments hash/);
   assert.equal(invoked, false);

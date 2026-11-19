@@ -1,3 +1,4 @@
+using System;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
@@ -10,175 +11,262 @@ namespace SmartAccount.Contracts.Tests;
 /// These run local compiled NEFs in Neo's test VM. They are regression evidence,
 /// not a proof of C#-to-NEF refinement or live deployment equivalence.
 /// </summary>
+/// <remarks>
+/// Protocol v4 moved the boundary the formal models describe: the envelope is the 13-field
+/// canonical operation (spec §4.1), the nonce channel is derived from
+/// (authorityEpoch, validatorId, credentialGeneration, nonceSubkey) instead of being chosen by
+/// the caller (spec §6), and the executor is signature-bound. The assertions below keep the
+/// original formal intent — accept-once, roll back on fault, bounded envelopes, no cross-lane
+/// aliasing — and pin the v4 shape of each rule.
+/// </remarks>
 [TestClass]
 public class SAFormalCorrespondenceRuntimeTests
 {
-    private static readonly UInt160 Owner =
-        UInt160.Parse("0x1111111111111111111111111111111111111111");
-
-    private static (RuntimeFixture Fx, UInt160 Wallet, UInt160 Account) Register()
+    /// <summary>Distinct 32-byte nonce subkeys: one derived channel each (spec §6).</summary>
+    private static byte[] Lane(byte index)
     {
-        RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccount");
-        fx.SetSigners(Owner);
-        const uint timelock = 604_800;
-        byte[] parameters = Array.Empty<byte>();
-        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId",
-            UInt160.Zero, parameters, UInt160.Zero, Owner, timelock);
-        fx.CallVoid(wallet, "registerAccount", account, UInt160.Zero, parameters,
-            UInt160.Zero, Owner, timelock);
-        return (fx, wallet, account);
+        byte[] subkey = new byte[32];
+        subkey[31] = index;
+        return subkey;
     }
 
-    private static object[] Op(RuntimeFixture fx, UInt160 wallet, UInt160 account,
-        BigInteger nonce, string method = "isEscapeActive", object?[]? args = null) =>
-        RuntimeFixture.UserOp(wallet, method, args ?? new object?[] { account },
-            nonce, fx.Now(), Array.Empty<byte>());
+    private sealed class Harness
+    {
+        public RuntimeFixture Fx { get; } = new();
+
+        public UInt160 Wallet { get; }
+
+        public UInt160 Account { get; }
+
+        public UInt160 Target { get; }
+
+        public P256SessionKey Key { get; } = new();
+
+        public UInt160 Custody { get; }
+
+        public Harness()
+        {
+            Wallet = Fx.Deploy("SmartAccount");
+            Target = Fx.Deploy("MockTransferTarget");
+            Custody = RuntimeFixture.CustodyOf(Key);
+            Account = Fx.CreateAccount(Wallet, Custody, "formal");
+        }
+
+        public BigInteger PackedNonce(byte[] subkey) => Fx.PackedNonce(Wallet, Account, 0, subkey);
+
+        public BigInteger Sequence(byte[] subkey) => Fx.CurrentNonceSequence(Wallet, Account, 0, subkey);
+
+        /// <summary>
+        /// A signed built-in operation at an explicit nonce. The signature covers whatever
+        /// nonce is supplied, so a wrongly-addressed nonce is still a correctly signed
+        /// operation — exactly the case the nonce rule must reject on its own.
+        /// </summary>
+        public object[] OpAt(BigInteger nonce, byte[] subkey, UInt160? target = null,
+            string method = "balanceOf", object?[]? args = null)
+        {
+            object[] op = RuntimeFixture.UserOp(target ?? Target, method,
+                args ?? new object?[] { Account }, nonce, Fx.Now() + 3_600_000,
+                new byte[] { 0x00 }, nonceSubkey: subkey);
+            op[11] = Fx.SignBuiltIn(Wallet, Account, op, Key);
+            return op;
+        }
+
+        /// <summary>A signed operation at (derived channel ‖ <paramref name="sequence"/>).</summary>
+        public object[] Op(BigInteger sequence, byte[] subkey, UInt160? target = null,
+            string method = "balanceOf", object?[]? args = null)
+        {
+            BigInteger mask = (BigInteger.One << 64) - 1;
+            return OpAt((PackedNonce(subkey) & ~mask) | sequence, subkey, target, method, args);
+        }
+
+        public bool ExecutionActive() => Fx.CallBoolean(Wallet, "isExecutionActive", Account);
+
+        public int RecoveryStatusLength() =>
+            ((Neo.VM.Types.Array)Fx.Call(Wallet, "getRecoveryStatus", Account)).Count;
+
+        public void SignAsCustody() => Fx.SetSigners(Custody);
+    }
 
     [TestMethod]
     [DataRow(0)]
     [DataRow(1)]
     [DataRow(7)]
-    public void NormalFalseResultAtDeadline_ConsumesOnceAndRejectsReplayOrGap(int channel)
+    public void NormalZeroResultAtDeadline_ConsumesOnceAndRejectsReplayOrGap(int lane)
     {
-        var (fx, wallet, account) = Register();
-        BigInteger lane = (BigInteger)channel << 64;
-        // A normal Boolean false is NOT a FAULT and MUST consume the nonce.
+        Harness h = new();
+        byte[] subkey = Lane((byte)lane);
+        byte[] otherLane = Lane((byte)(lane + 32));
+        // getNonce returns the packed (channel ‖ cursor) value, so the lane's own base —
+        // channel ‖ sequence 0 — must be captured before anything is consumed.
+        BigInteger laneBase = h.PackedNonce(subkey);
+
+        // A normal zero result is NOT a fault and MUST consume the nonce.
         for (int sequence = 0; sequence < 2; sequence++)
         {
-            Assert.IsFalse(fx.CallBoolean(wallet, "executeUserOp", account,
-                Op(fx, wallet, account, lane + sequence)));
-            Assert.AreEqual((BigInteger)(sequence + 1), fx.CallInteger(wallet, "getNonce", account, channel));
-            Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, channel + 1));
-            Assert.IsFalse(fx.CallBoolean(wallet, "isExecutionActive", account));
+            Assert.AreEqual(BigInteger.Zero,
+                h.Fx.CallInteger(h.Wallet, "executeUserOp", h.Account, h.Op(sequence, subkey)));
+            Assert.AreEqual((BigInteger)(sequence + 1), h.Sequence(subkey));
+            Assert.AreEqual(BigInteger.Zero, h.Sequence(otherLane),
+                "Consuming one derived channel must never advance another lane");
+            Assert.IsFalse(h.ExecutionActive());
         }
-        foreach (BigInteger badNonce in new[] { lane, lane + 3, -BigInteger.One })
+
+        BigInteger cursor = h.Sequence(subkey);
+        foreach (BigInteger badNonce in new[]
+        {
+            laneBase,                                                // replay
+            laneBase + cursor + 1,                                   // gap
+            h.PackedNonce(otherLane),                                // foreign channel
+            -BigInteger.One                                          // out of domain
+        })
         {
             TestException fault = Assert.ThrowsExactly<TestException>(() =>
-                fx.Call(wallet, "executeUserOp", account, Op(fx, wallet, account, badNonce)));
-            StringAssert.Contains(fault.Message, "Invalid sequence for channel");
-            Assert.AreEqual((BigInteger)2, fx.CallInteger(wallet, "getNonce", account, channel));
+                h.Fx.Call(h.Wallet, "executeUserOp", h.Account, h.OpAt(badNonce, subkey)));
+            StringAssert.Contains(fault.Message, "SA_NONCE_INVALID");
+            Assert.AreEqual(cursor, h.Sequence(subkey),
+                "A rejected nonce must not consume the cursor");
         }
     }
 
     [TestMethod]
-    public void UnhandledTargetFault_RollsBackNonceAndEscapeCancellation()
+    public void UnhandledTargetFault_RollsBackNonceAndPendingRecovery()
     {
-        var (fx, wallet, account) = Register();
-        fx.CallVoid(wallet, "initiateEscape", account);
-        Assert.IsTrue(fx.CallBoolean(wallet, "isEscapeActive", account));
-        Assert.ThrowsExactly<TestException>(() => fx.Call(wallet, "executeUserOp", account,
-            Op(fx, wallet, account, 0, "doesNotExist")));
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
-        Assert.IsTrue(fx.CallBoolean(wallet, "isEscapeActive", account));
-        Assert.IsFalse(fx.CallBoolean(wallet, "isExecutionActive", account));
+        Harness h = new();
+        h.SignAsCustody();
+        h.Fx.CallVoid(h.Wallet, "beginRecovery", h.Account, UInt160.Zero);
+        Assert.AreEqual(5, h.RecoveryStatusLength(), "The recovery record must be armed");
+
+        Assert.ThrowsExactly<TestException>(() => h.Fx.Call(h.Wallet, "executeUserOp", h.Account,
+            h.Op(0, Lane(0), h.Wallet, "doesNotExist")));
+
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(Lane(0)));
+        Assert.AreEqual(5, h.RecoveryStatusLength(),
+            "A faulting operation must not disturb the armed recovery record");
+        Assert.IsFalse(h.ExecutionActive());
     }
 
     [TestMethod]
     public void BatchFault_RollsBackEarlierSuccessfulOperation()
     {
-        var (fx, wallet, account) = Register();
-        object[] first = Op(fx, wallet, account, 0);
-        object[] replay = Op(fx, wallet, account, 0);
-        Assert.ThrowsExactly<TestException>(() => fx.Call(wallet, "executeUserOps", account,
+        Harness h = new();
+        object[] first = h.Op(0, Lane(0));
+        object[] replay = h.Op(0, Lane(0));
+
+        Assert.ThrowsExactly<TestException>(() => h.Fx.Call(h.Wallet, "executeUserOps", h.Account,
             new object?[] { first, replay }));
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
-        Assert.IsFalse(fx.CallBoolean(wallet, "isExecutionActive", account));
-        Assert.IsFalse(fx.CallBoolean(wallet, "executeUserOp", account, first));
-        Assert.AreEqual(BigInteger.One, fx.CallInteger(wallet, "getNonce", account, 0));
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(Lane(0)),
+            "One envelope is atomic: the first operation must roll back with the second");
+        Assert.IsFalse(h.ExecutionActive());
+
+        h.Fx.Call(h.Wallet, "executeUserOp", h.Account, first);
+        Assert.AreEqual(BigInteger.One, h.Sequence(Lane(0)));
     }
 
     [TestMethod]
     public void SameAccountReentrancy_IsRejectedAndTopLevelFaultRollsBack()
     {
-        var (fx, wallet, account) = Register();
-        object[] inner = Op(fx, wallet, account, 1);
-        object[] outer = Op(fx, wallet, account, 0, "executeUserOp", new object?[] { account, inner });
+        Harness h = new();
+        object[] inner = h.Op(1, Lane(0));
+        object[] outer = h.Op(0, Lane(0), h.Wallet, "executeUserOp",
+            new object?[] { h.Account, inner });
+
         TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "executeUserOp", account, outer));
-        StringAssert.Contains(fault.Message, "Reentrant call rejected");
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
-        Assert.IsFalse(fx.CallBoolean(wallet, "isExecutionActive", account));
+            h.Fx.Call(h.Wallet, "executeUserOp", h.Account, outer));
+        StringAssert.Contains(fault.Message, "SA_REENTRANCY_FORBIDDEN");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(Lane(0)));
+        Assert.IsFalse(h.ExecutionActive());
     }
 
     [TestMethod]
     public void OperationBoundary_RejectsNegativeNonceAndDeadline()
     {
-        var (fx, wallet, account) = Register();
+        Harness h = new();
 
         TestException nonceFault = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "executeUserOp", account, Op(fx, wallet, account, -BigInteger.One)));
-        StringAssert.Contains(nonceFault.Message, "Invalid sequence for channel");
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
+            h.Fx.Call(h.Wallet, "executeUserOp", h.Account, h.OpAt(-BigInteger.One, Lane(0))));
+        StringAssert.Contains(nonceFault.Message, "SA_NONCE_INVALID");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(Lane(0)));
 
-        object[] deadlineOp = Op(fx, wallet, account, 0);
-        deadlineOp[4] = -BigInteger.One;
+        object[] deadlineOp = h.Op(0, Lane(0));
+        deadlineOp[6] = -BigInteger.One;
         TestException deadlineFault = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "executeUserOp", account, deadlineOp));
-        StringAssert.Contains(deadlineFault.Message, "Deadline outside uint256 domain");
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
+            h.Fx.Call(h.Wallet, "executeUserOp", h.Account, deadlineOp));
+        StringAssert.Contains(deadlineFault.Message, "SA_DEADLINE_EXPIRED");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(Lane(0)));
     }
 
     [TestMethod]
-    public void OperationBoundary_AcceptsHighestVmRepresentableChannelWithoutCrossLaneAlias()
+    public void OperationBoundary_NonceMustMatchTheDerivedChannel()
     {
-        var (fx, wallet, account) = Register();
-        // Neo VM integer literals are signed 256-bit values. The SA wire-level
-        // uint256 bound is checked by the core/formal gate; this runtime vector
-        // exercises the highest positive integer directly representable by the VM.
-        BigInteger maxChannel = (BigInteger.One << 191) - BigInteger.One;
-        BigInteger laneZero = maxChannel << 64;
+        Harness h = new();
+        byte[] laneZero = Lane(0);
+        byte[] laneOne = Lane(1);
 
-        Assert.IsFalse(fx.CallBoolean(wallet, "executeUserOp", account,
-            Op(fx, wallet, account, laneZero)));
-        Assert.AreEqual(BigInteger.One, fx.CallInteger(wallet, "getNonce", account, maxChannel));
+        // The caller can no longer choose a channel: the nonce's high bits must equal the
+        // channel derived from (authorityEpoch, validatorId, generation, nonceSubkey).
+        TestException aliased = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.Call(h.Wallet, "executeUserOp", h.Account,
+                h.OpAt(h.PackedNonce(laneOne), laneZero)));
+        StringAssert.Contains(aliased.Message, "SA_NONCE_INVALID");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(laneZero));
 
-        Assert.IsFalse(fx.CallBoolean(wallet, "executeUserOp", account,
-            Op(fx, wallet, account, laneZero + 1)));
-        Assert.AreEqual((BigInteger)2, fx.CallInteger(wallet, "getNonce", account, maxChannel));
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
+        Assert.AreEqual(BigInteger.Zero,
+            h.Fx.CallInteger(h.Wallet, "executeUserOp", h.Account, h.Op(0, laneZero)),
+            "The correctly addressed operation executes normally");
+        Assert.AreEqual(BigInteger.One, h.Sequence(laneZero));
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(laneOne));
     }
 
     [TestMethod]
     public void OperationBoundary_RejectsMalformedFieldsWithoutSideEffects()
     {
-        var (fx, wallet, account) = Register();
-        var cases = new (int Index, object? Value, string Message)[]
+        Harness h = new();
+        // v4 envelope: [0]=version [1]=target [2]=method [3]=args [4]=nonce [5]=nonceSubkey
+        // [6]=deadline [7]=validatorId [8]=credentialGeneration [9]=authorityEpoch
+        // [10]=configurationNonce [11]=signature [12]=hookProofs.
+        var cases = new (int Index, object? Value, string? Message)[]
         {
-            (0, UInt160.Zero, "Target contract required"),
-            (0, null, "Target contract required"),
-            (1, "", "Invalid method"),
-            (1, new string('a', 129), "Invalid method"),
-            (1, new string('界', 43), "Invalid method"), // 129 UTF-8 bytes
-            (1, null, "Invalid method"),
-            (2, null, "Arguments exceed protocol limit"),
-            (2, new object[65], "Arguments exceed protocol limit"),
-            (2, new object[] { new byte[4097] }, "Serialized arguments exceed protocol limit"),
-            (5, null, "Signature required"),
-            (5, new byte[1025], "Signature exceeds protocol limit"),
+            (1, UInt160.Zero, "SA_OPERATION_MALFORMED"),
+            (1, null, null),
+            (2, "", "SA_OPERATION_MALFORMED"),
+            (2, new string('a', 129), "SA_OPERATION_MALFORMED"),
+            (2, new string('界', 43), "SA_OPERATION_MALFORMED"), // 129 UTF-8 bytes
+            (3, null, null),
+            (3, new object[65], "SA_OPERATION_MALFORMED"),
+            (3, new object[] { new byte[4097] }, "SA_OPERATION_MALFORMED"),
+            (5, null, null),
+            (5, new byte[31], "SA_OPERATION_MALFORMED"),
+            (11, null, null),
+            (11, new byte[8193], "SA_OPERATION_MALFORMED"),
+            (0, (BigInteger)3, "SA_PROTOCOL_VERSION"),
+            (7, -BigInteger.One, "SA_OPERATION_MALFORMED"),
+            (8, BigInteger.Zero, "SA_OPERATION_MALFORMED"),
         };
         foreach (var test in cases)
         {
-            object[] op = Op(fx, wallet, account, 0);
+            object[] op = h.Op(0, Lane(0));
             op[test.Index] = test.Value!;
             TestException fault = Assert.ThrowsExactly<TestException>(() =>
-                fx.Call(wallet, "executeUserOp", account, op));
-            StringAssert.Contains(fault.Message, test.Message);
-            Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
-            Assert.IsFalse(fx.CallBoolean(wallet, "isExecutionActive", account));
+                h.Fx.Call(h.Wallet, "executeUserOp", h.Account, op));
+            // A VM Null cannot be widened into Hash160/ByteString/Array, so those rows fault
+            // while unwrapping instead of on an explicit protocol assert; either way the wire
+            // boundary rejects them before any state is touched.
+            if (test.Message != null) StringAssert.Contains(fault.Message, test.Message);
+            Assert.AreEqual(BigInteger.Zero, h.Sequence(Lane(0)));
+            Assert.IsFalse(h.ExecutionActive());
         }
 
-        object[] preview = Op(fx, wallet, account, 0);
-        preview[1] = string.Empty;
+        object[] preview = h.Op(0, Lane(0));
+        preview[2] = string.Empty;
         TestException previewFault = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "previewUserOpValidation", account, preview));
-        StringAssert.Contains(previewFault.Message, "Invalid method");
+            h.Fx.Call(h.Wallet, "getOperationDigest", h.Account, preview));
+        StringAssert.Contains(previewFault.Message, "SA_OPERATION_MALFORMED");
     }
 
     [TestMethod]
     public void OperationBoundary_RejectsNestedArgumentsBeyondProtocolDepth()
     {
-        var (fx, wallet, account) = Register();
+        Harness h = new();
 
         object nested = "leaf";
         for (int i = 0; i < 8; i++)
@@ -186,66 +274,76 @@ public class SAFormalCorrespondenceRuntimeTests
 
         // The top-level Args vector is excluded from the depth count, so eight nested
         // arrays remain valid at the protocol boundary.
-        fx.Call(wallet, "previewUserOpValidation", account,
-            Op(fx, wallet, account, 0, args: new object?[] { nested }));
+        h.Fx.Call(h.Wallet, "getOperationDigest", h.Account,
+            h.Op(0, Lane(0), args: new object?[] { nested }));
 
         nested = new object[] { nested };
         TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "previewUserOpValidation", account,
-                Op(fx, wallet, account, 0, args: new object?[] { nested })));
-        StringAssert.Contains(fault.Message, "Arguments exceed nesting depth");
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
+            h.Fx.Call(h.Wallet, "getOperationDigest", h.Account,
+                h.Op(0, Lane(0), args: new object?[] { nested })));
+        StringAssert.Contains(fault.Message, "SA_OPERATION_MALFORMED");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(Lane(0)));
     }
 
     [TestMethod]
-    public void NonceQuery_RejectsInvalidAccountAndChannelDomain()
+    public void NonceQuery_RejectsInvalidAccountAndValidatorDomain()
     {
-        var (fx, wallet, account) = Register();
+        Harness h = new();
+        byte[] subkey = Lane(0);
+
         TestException accountFault = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "getNonce", UInt160.Zero, 0));
+            h.Fx.Call(h.Wallet, "getNonce", UInt160.Zero, BigInteger.Zero, subkey));
         StringAssert.Contains(accountFault.Message, "Account id required");
-        foreach (BigInteger channel in new[] { -BigInteger.One, BigInteger.One << 191, BigInteger.One << 192 })
+
+        // There is no caller-chosen channel in v4: the query names a routing subject and a
+        // nonce subkey, and both must be in domain.
+        foreach (BigInteger validatorId in new[] { -BigInteger.One, (BigInteger)99 })
         {
-            try
-            {
-                fx.Call(wallet, "getNonce", account, channel);
-                Assert.Fail($"channel {channel} unexpectedly passed the signed-VM channel bound");
-            }
-            catch (TestException fault)
-            {
-                StringAssert.Contains(fault.Message, "Invalid channel");
-            }
+            TestException subjectFault = Assert.ThrowsExactly<TestException>(() =>
+                h.Fx.Call(h.Wallet, "getNonce", h.Account, validatorId, subkey));
+            StringAssert.Contains(subjectFault.Message, "SA_VALIDATOR_NOT_FOUND");
         }
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
+
+        foreach (byte[]? badSubkey in new byte[]?[] { null, new byte[31], new byte[33] })
+        {
+            TestException subkeyFault = Assert.ThrowsExactly<TestException>(() =>
+                h.Fx.Call(h.Wallet, "getNonce", h.Account, BigInteger.Zero, badSubkey!));
+            StringAssert.Contains(subkeyFault.Message, "SA_OPERATION_MALFORMED");
+        }
+
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(subkey));
     }
 
     [TestMethod]
     public void OperationBoundary_MaximumBatchSucceedsAndConsumesEachNonce()
     {
-        var (fx, wallet, account) = Register();
+        Harness h = new();
+        byte[] subkey = Lane(0);
         object[] operations = new object[32];
         for (int i = 0; i < operations.Length; i++)
-            operations[i] = Op(fx, wallet, account, i);
-        fx.Call(wallet, "executeUserOps", account, operations);
-        Assert.AreEqual((BigInteger)32, fx.CallInteger(wallet, "getNonce", account, 0));
-        Assert.IsFalse(fx.CallBoolean(wallet, "isExecutionActive", account));
+            operations[i] = h.Op(i, subkey);
+        h.Fx.Call(h.Wallet, "executeUserOps", h.Account, operations);
+        Assert.AreEqual((BigInteger)32, h.Sequence(subkey));
+        Assert.IsFalse(h.ExecutionActive());
     }
 
     [TestMethod]
     public void OperationBoundary_RejectsEmptyAndOversizedBatchesBeforeExecution()
     {
-        var (fx, wallet, account) = Register();
-        TestException empty = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "executeUserOps", account, Array.Empty<object>()));
-        StringAssert.Contains(empty.Message, "Operations required");
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
+        Harness h = new();
+        byte[] subkey = Lane(0);
 
-        object[] one = Op(fx, wallet, account, 0);
+        TestException empty = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.Call(h.Wallet, "executeUserOps", h.Account, Array.Empty<object>()));
+        StringAssert.Contains(empty.Message, "SA_OPERATION_MALFORMED");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(subkey));
+
+        object[] one = h.Op(0, subkey);
         object[] oversized = new object[33];
         for (int i = 0; i < oversized.Length; i++) oversized[i] = one;
         TestException tooLarge = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "executeUserOps", account, oversized));
-        StringAssert.Contains(tooLarge.Message, "Batch exceeds protocol limit");
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(wallet, "getNonce", account, 0));
+            h.Fx.Call(h.Wallet, "executeUserOps", h.Account, oversized));
+        StringAssert.Contains(tooLarge.Message, "SA_MODULE_LIMIT_BATCH");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(subkey));
     }
 }

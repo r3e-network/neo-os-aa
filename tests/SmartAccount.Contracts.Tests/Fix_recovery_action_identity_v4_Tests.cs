@@ -9,7 +9,7 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 // Test-source preparation only. Run against freshly generated exact269
-// SmartAccount and SocialRecoveryVerifier artifacts in contracts/bin/public.
+// SmartAccount and SocialRecoveryService artifacts in contracts/bin/public.
 // RuntimeFixture loads actual NEFs into TestEngine; no authorization model is
 // substituted. The protocol-version check rejects pre-v4 artifacts, but does
 // not replace an external source/compiler/NEF hash provenance receipt.
@@ -91,7 +91,14 @@ public partial class FixRecoveryTests
         h.Fx.CallVoid(h.Verifier, "submitRecoveryTicket", account, OwnerB, nonce,
             expiresAt, actionId, Factor(), nullifier, signature);
         h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(MinRecoveryTimelockMs));
+        // v4 splits the old one-shot finalize: the service first asks the core to
+        // open its own recovery record (finalizeRecovery -> beginRecovery, which
+        // also needs the new custody's witness), and only the matured core
+        // recovery rotates the custody (settleRecovery -> executeRecovery).
+        h.Fx.SetSigners(OwnerB);
         h.Fx.CallVoid(h.Verifier, "finalizeRecovery", account);
+        h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(MinRecoveryTimelockMs));
+        h.Fx.CallVoid(h.Verifier, "settleRecovery", account);
         Assert.AreEqual(OwnerB, h.Fx.CallUInt160(h.Verifier, "getOwner", account));
     }
 
@@ -134,10 +141,10 @@ public partial class FixRecoveryTests
         Assert.AreEqual(Executor, h.Fx.Engine.Transaction.Signers.Single().Account);
         SubmitIdentityGrantTicket(h, account, ticket);
         Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecutionMetaTx", account, new object?[] { Executor }));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyAdmin", account));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyAdminMetaTx", account, new object?[] { Executor }));
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(account));
+        // v4 publishes the owner row instead of the retired admin-witness reads:
+        // an action grant must never move admin authority.
+        Assert.AreEqual(OwnerA, h.Fx.CallUInt160(h.Verifier, "getOwner", account));
         AssertIdentityGrantTicketRejected(h, account, ticket, "Action nullifier already used");
     }
 
@@ -157,7 +164,7 @@ public partial class FixRecoveryTests
         AssertIdentityGrantTicketRejected(h, account, old, "Stale action authorization epoch");
         IdentityGrantTicket fresh = IdentityGrantTicketFor(h, key, account, "epoch", master, 0x23);
         SubmitIdentityGrantTicket(h, account, fresh);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(account));
     }
 
     [TestMethod]
@@ -169,7 +176,9 @@ public partial class FixRecoveryTests
             RecoveryHarness h = IdentityGrantHarness(); using P256SessionKey key = new();
             byte[] account = h.SetupAccount("invalidate", OwnerA, key.CompressedPublicKey), master = Factor();
             h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, true);
-            ulong expiry = (ulong)(h.Fx.Now() + MinRecoveryTimelockMs + 600_000);
+            // The session must outlive both staged timelocks (service, then core),
+            // otherwise the revocation cases below would pass by natural expiry.
+            ulong expiry = (ulong)(h.Fx.Now() + 2 * MinRecoveryTimelockMs + 600_000);
             IdentityGrantTicket active = IdentityGrantTicketFor(h, key, account, "invalidate", master, 0x24, expiry: expiry);
             h.Fx.SetSigners(Executor); SubmitIdentityGrantTicket(h, account, active);
             IdentityGrantTicket unused = IdentityGrantTicketFor(h, key, account, "invalidate", master, 0x25, expiry: expiry);
@@ -182,8 +191,7 @@ public partial class FixRecoveryTests
             Assert.IsTrue(h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account) > unused.Epoch);
             h.Fx.SetSigners(Executor);
             Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account), operation);
-            Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account), operation);
-            Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecutionMetaTx", account, new object?[] { Executor }), operation);
+            Assert.AreEqual(UInt160.Zero, h.AuthorizedSessionExecutor(account), operation);
             AssertIdentityGrantTicketRejected(h, account, unused, "Stale action authorization epoch");
             Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionNullifierUsed", account, unused.Nullifier));
         }
@@ -225,14 +233,14 @@ public partial class FixRecoveryTests
         IdentityGrantTicket ticket = IdentityGrantTicketFor(h, key, account, "old-session", master, 0x29);
         h.Fx.SetSigners(Executor);
         SubmitIdentityGrantTicket(h, account, ticket);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(account));
         // Enrolling a second identity advances the epoch, which deletes the
         // session's authorization row; the session itself stays active until expiry.
         byte[] second = Enumerable.Repeat((byte)0x71, 32).ToArray();
         h.Fx.SetSigners(OwnerA);
         h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, second, true);
         h.Fx.SetSigners(Executor);
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.AreEqual(UInt160.Zero, h.AuthorizedSessionExecutor(account));
         object[] before = IdentityGrantState(h, account, master, ticket.Nullifier);
         foreach (UInt160 unauthorized in new[] { OwnerB, Executor, Attacker })
         {
@@ -257,7 +265,7 @@ public partial class FixRecoveryTests
             CollectionAssert.AreEqual(before, IdentityGrantState(h, account, master, ticket.Nullifier));
         }
         h.Fx.CallVoid(h.Verifier, "reauthorizeActiveActionSession", account, Executor, ticket.ActionId, ticket.ExpiresAt, ticket.Nullifier);
-        h.Fx.SetSigners(Executor); Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        h.Fx.SetSigners(Executor); Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(account));
         Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
         Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
         // A ticket signed under the pre-enrollment epoch is stale.
@@ -284,8 +292,8 @@ public partial class FixRecoveryTests
         h.Fx.SetSigners(Executor);
         AssertIdentityGrantTicketRejected(h, b, ticketB with { Signature = ticketA.Signature }, "Invalid Morpheus action signature");
         SubmitIdentityGrantTicket(h, a, ticketA);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", a));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", b));
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(a));
+        Assert.AreEqual(UInt160.Zero, h.AuthorizedSessionExecutor(b));
         Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getSessionNonce", b));
     }
 
@@ -312,6 +320,6 @@ public partial class FixRecoveryTests
         foreach (byte[] signature in wrongDomainSignatures)
             AssertIdentityGrantTicketRejected(h, account, ticket with { Signature = signature }, "Invalid Morpheus action signature");
         SubmitIdentityGrantTicket(h, account, ticket);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(account));
     }
 }

@@ -8,11 +8,11 @@ import { decodeStackHash160, decodeStackHashArray, hash160Param, parseRecentTran
 const controllerPath = path.resolve('src/features/studio/useStudioController.js');
 const governancePath = path.resolve('src/features/studio/governance.js');
 const panelPath = path.resolve('src/features/studio/components/ManageGovernancePanel.vue');
-const manifestCandidates = [
-  path.resolve('../contracts/bin/public/SmartAccount.manifest.json'),
-  path.resolve('../contracts/build/SmartAccount.manifest.json'),
-];
-const manifestPath = manifestCandidates.find((candidate) => fs.existsSync(candidate)) || manifestCandidates[1];
+const protocolPath = path.resolve('src/services/smartAccountProtocol.js');
+// The current ABI is the v4 build. contracts/build holds the deployed v3
+// artifacts and is a historical record, so it must never answer "what does the
+// core export now?" — a missing build has to fail loudly instead.
+const manifestPath = path.resolve('../contracts/bin/public/SmartAccount.manifest.json');
 
 // Display form (big-endian) of a UInt160 and its node wire form: RPC result
 // stacks return UInt160 values as ByteString of the internal little-endian
@@ -49,41 +49,88 @@ test('decodeStackHashArray decodes each little-endian entry to display form', ()
   assert.deepEqual(decoded, [DISPLAY_HASH]);
 });
 
-test('every studio contract operation exists in the SmartAccount ABI', () => {
-  const source = [controllerPath, governancePath, panelPath].map((file) => fs.readFileSync(file, 'utf8')).join('\n');
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  const abiMethods = new Set(manifest.abi.methods.map((method) => method.name));
+test('every studio contract operation exists in the built v4 ABI', () => {
+  assert.ok(
+    fs.existsSync(manifestPath),
+    `the v4 core ABI is missing at ${manifestPath}; run contracts/compile.sh before the frontend tests`,
+  );
+  const read = (file) => fs.readFileSync(file, 'utf8');
+  const controller = read(controllerPath);
+  const governance = read(governancePath);
+  const protocol = read(protocolPath);
+  const panel = read(panelPath);
+  const source = [controller, governance, protocol, panel].join('\n');
+  const abiMethods = new Set(JSON.parse(read(manifestPath)).abi.methods.map((method) => method.name));
 
+  // Discover the operation names from the positions that actually reach the
+  // chain: the protocol plan builders, the custody action literals and the
+  // governance read literals.
   const operations = new Set();
-  for (const match of source.matchAll(/invokeReadOperation\(\s*["']([^"']+)["']/g)) {
-    operations.add(match[1]);
-  }
-  for (const match of source.matchAll(/invokeOperation\(\s*["'][^"']*["'],\s*["']([^"']+)["']/g)) {
-    operations.add(match[1]);
-  }
-  for (const match of source.matchAll(/(?:canGovernanceAction|submitCurrentGovernanceAction|buildGovernanceAction|operation\s*===)\(?'([^']+)'\)?/g)) {
-    operations.add(match[1]);
-  }
+  const collect = (text, pattern) => {
+    for (const match of text.matchAll(pattern)) operations.add(match[1]);
+  };
+  collect(protocol, /return plan\('([^']+)'/g);
+  collect(controller, /runCustodyAction\(\s*'([^']+)'/g);
+  collect(controller, /planAccountAction\(\s*'([^']+)'/g);
+  collect(governance, /readItem\('([^']+)'/g);
 
-  assert.ok(operations.size >= 10, `expected studio operations to be discovered, got ${operations.size}`);
+  assert.ok(operations.size >= 12, `expected studio operations to be discovered, got ${operations.size}`);
   for (const operation of operations) {
     assert.ok(
       abiMethods.has(operation),
-      `studio operation '${operation}' is missing from the contract ABI (method lookup is case-sensitive)`,
+      `studio operation '${operation}' is missing from the v4 ABI (method lookup is case-sensitive)`,
     );
   }
-  // Regression: the metadata save flow used the phantom 'SetMetadataUri'.
-  assert.ok(operations.has('setMetadataUri'));
+
+  // The v4 surface the studio claims, including the branches the regexes above
+  // cannot see (a ternary picks freeze or unfreeze by account status).
+  for (const operation of [
+    'createAccount', 'proposeConfiguration', 'confirmConfiguration', 'cancelConfiguration',
+    'executeUserOp', 'setMetadataUri', 'revokeCredentials',
+    'freezeAccount', 'unfreezeAccount', 'beginRecovery', 'cancelRecovery', 'executeRecovery',
+    'getAccount', 'getModules', 'getModule', 'getHookOrder',
+    'getPendingConfiguration', 'getPendingConfigurationIntentIds', 'getRecoveryStatus',
+  ]) {
+    assert.ok(abiMethods.has(operation), `${operation} is not in the built v4 ABI`);
+    assert.ok(source.includes(operation), `the studio never names ${operation}`);
+  }
+
+  // The v3 single-verifier and escape-era surface is gone from both sides. A
+  // name only counts when the studio spells it as a method (a quoted literal or
+  // a call), so prose and i18n keys that merely contain it do not match.
+  const namesOperation = (name) => new RegExp(`["']${name}["']|\\b${name}\\(`).test(source);
+  for (const retired of [
+    'registerAccount', 'updateVerifier', 'confirmVerifierUpdate', 'updateHook',
+    'confirmHookUpdate', 'initiateEscape', 'finalizeEscape',
+    'getVerifier', 'getHook', 'getBackupOwner', 'getEscapeTimelock',
+  ]) {
+    assert.equal(abiMethods.has(retired), false, `${retired} must not exist in the v4 ABI`);
+    assert.equal(namesOperation(retired), false, `the studio still calls the retired ${retired}`);
+  }
 });
 
-test('governance review modal renders canonical typed targets and explicit recovery mode', () => {
+test('the governance review dialog reads the v4 intent actions and the explicit recovery policy', () => {
   const source = fs.readFileSync(panelPath, 'utf8');
-  assert.match(source, /requestedTarget/);
-  assert.match(source, /review\.args\[1\]\?\.value/);
-  assert.match(source, /newVerifier/);
-  assert.match(source, /recoveryMode/);
-  assert.doesNotMatch(source, /0x\$\{review\.options\.module/);
-  assert.doesNotMatch(source, /0x\$\{review\.options\.verifier/);
+  // The dialog is built from the prepared configuration review, not from a
+  // verifier/hook update payload.
+  assert.match(source, /watch\(configurationReview/);
+  assert.match(source, /review\.actions\.map/);
+  assert.match(source, /review\.accountId/);
+  assert.match(source, /submitConfiguration/);
+  // Maturity and expiry are chain values the operator can see before signing.
+  assert.match(source, /pendingIntent\.matureAt/);
+  assert.match(source, /pendingIntent\.expiresAt/);
+  // Recovery is a policy plus a lifecycle, and owner-only is an explicit ack.
+  assert.match(source, /recoveryPolicyAuthority/);
+  assert.match(source, /ownerOnlyAcknowledged/);
+  assert.match(source, /executeRecovery/);
+  assert.match(source, /revokeCredentials/);
+  for (const retired of [
+    'requestedTarget', 'newVerifier', 'recoveryMode', 'review.options.verifier',
+    'review.options.module', 'submitCurrentGovernanceAction', 'prepareVerifierUpdate',
+  ]) {
+    assert.equal(source.includes(retired), false, `the panel still renders the retired ${retired}`);
+  }
 });
 
 test('parseRecentTransactions defaults missing status to pending and preserves valid statuses', () => {

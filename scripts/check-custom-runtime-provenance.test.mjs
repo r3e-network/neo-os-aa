@@ -6,7 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { buildInputSnapshot } from './check-artifact-reproducibility.mjs';
+import { buildInputSnapshot, RESTORE_POLICY_FILES, RECIPE_SUPPORT_FILES } from './check-artifact-reproducibility.mjs';
 import { verifyCustomRuntimeProvenance } from './check-custom-runtime-provenance.mjs';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
@@ -30,7 +30,11 @@ function fixture(t) {
   const write = (relative, bytes) => {
     const target = path.join(repoRoot, relative); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, bytes);
   };
-  for (const file of ['Directory.Build.props', 'nuget.config', 'scripts/dotnet_env.sh', 'scripts/check_neo_platform_packages.mjs', 'contracts/Core.cs']) write(file, 'fixture source');
+  // The fixture mirrors the recipe's own declared inputs, so growing the recipe
+  // (a new build script, a new source root) cannot leave the harness behind.
+  for (const file of [...RESTORE_POLICY_FILES, ...RECIPE_SUPPORT_FILES]) write(file, 'fixture source');
+  write('contracts/Core.cs', 'fixture source');
+  write('tests/mocks/MockContract.cs', 'fixture source');
   const body = Buffer.concat([Buffer.from('NEF3'), Buffer.alloc(64), Buffer.alloc(5), Buffer.from([1, 0x40])]);
   const nef = Buffer.concat([body, createHash('sha256').update(createHash('sha256').update(body).digest()).digest().subarray(0, 4)]);
   const checksum = nef.readUInt32LE(nef.length - 4);

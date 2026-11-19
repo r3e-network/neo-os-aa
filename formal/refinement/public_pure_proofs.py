@@ -32,7 +32,7 @@ def bind_methods(inventory):
     for filename, expected in inventory['inputs'].items():
         require(sha(snapshots[filename]) == expected, 'Inventory input drift: ' + filename)
     candidates = [name for name, expected in inventory['inputs'].items()
-                  if name.endswith('SmartAccountV3.nef') and expected == inventory['nef']['sha256']]
+                  if name.endswith('SmartAccount.nef') and expected == inventory['nef']['sha256']]
     require(len(candidates) == 1, 'Ambiguous actual NEF')
     spec = importlib.util.spec_from_file_location('public_pure_nef_binding', ROOT / 'verify.py')
     gate = importlib.util.module_from_spec(spec); spec.loader.exec_module(gate)
@@ -48,7 +48,7 @@ def bind_methods(inventory):
     require(inventory['sourceMap']['exactByteMatch'] is True and inventory['sourceMap']['exactManifestMatch'] is True,
             'Source rebuild correspondence unavailable')
     manifests = [name for name, expected in inventory['inputs'].items()
-                 if name.endswith('SmartAccountV3.manifest.json')
+                 if name.endswith('SmartAccount.manifest.json')
                  and expected == inventory['manifest']['sha256']]
     require(len(manifests) == 1 and json.loads(snapshots[manifests[0]])['abi']['methods'] == inventory['manifest']['methods'],
             'Actual full manifest differs from inventory')
@@ -220,13 +220,16 @@ def declarations(text):
 
 
 def run_proofs(inventory, output_dir, controls=True):
+    # The destination is validated before the toolchain is probed: a caller that
+    # points at a populated directory gets that answer whether or not Coq is
+    # installed on the machine.
+    directory = Path(output_dir)
+    require(not directory.exists() or (directory.is_dir() and not any(directory.iterdir())),
+            'Output directory must be new or empty')
     require(shutil.which('coqc') and shutil.which('coqchk'), 'coqc and coqchk are required')
     tool_paths = [ROOT / p for p in ('public_pure_proofs.py', 'public_source.py', 'method_source.py', 'nef_decode.py', 'verify.py')]
     tools = {str(p): sha(p.read_bytes()) for p in tool_paths}
     bound = bind_methods(inventory)
-    directory = Path(output_dir)
-    require(not directory.exists() or (directory.is_dir() and not any(directory.iterdir())),
-            'Output directory must be new or empty')
     directory.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='public-pure-kernel-', dir=directory))
     models, names = {}, {}

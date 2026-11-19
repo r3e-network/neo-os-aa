@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
@@ -11,164 +13,244 @@ using VmArray = Neo.VM.Types.Array;
 
 namespace SmartAccount.Contracts.Tests;
 
-/// <summary>Executes only ordinary configuration reads and their existing update lifecycle.</summary>
+/// <summary>
+/// Read-only surface of an unresolved configuration intent (docs/SA-MODULE-PROTOCOL.md §10).
+///
+/// v3 exposed two single-occupancy pending slots — <c>getPendingVerifierUpdate</c> /
+/// <c>getPendingHookUpdate</c> plus their <c>*Time</c> twins — that only described an
+/// upgrade of one installed verifier or hook. v4 replaced them with the bounded intent
+/// index: <c>getPendingConfigurationIntentIds(accountId)</c> lists every unresolved
+/// intent and <c>getPendingConfiguration(accountId, intentId)</c> returns the record
+/// <c>[exists, intentId, proposedAt, matureAt, expiresAt, authorityEpoch, actionDigest,
+/// actions]</c> (empty array when the intent is gone). Both are <c>[Safe]</c> and need
+/// no witness, so any observer can read what a 24h timelock is about to change.
+/// </summary>
 [TestClass]
 public class PendingConfigUpdateReadRuntimeTests
 {
-    private static readonly UInt160 Owner = UInt160.Parse("0x2323232323232323232323232323232323232323");
-    private static readonly UInt160 Stranger = UInt160.Parse("0x4545454545454545454545454545454545454545");
-    private static readonly UInt160 NextVerifier = UInt160.Parse("0x6767676767676767676767676767676767676767");
-    private static readonly byte[] Parameters = { 0x00, 0x81, 0xff, 0x24 };
-    private const long TimelockMs = 86_400_000;
-    private static readonly string[] Getters = { "getPendingVerifierUpdate", "getPendingHookUpdate" };
+    private static readonly UInt160 Stranger =
+        UInt160.Parse("0x4545454545454545454545454545454545454545");
 
-    private static (RuntimeFixture Fx, UInt160 Core, UInt160 Account, UInt160 Verifier, UInt160 Hook) CreateAccount()
-    {
-        RuntimeFixture fx = new();
-        UInt160 core = fx.Deploy("SmartAccount");
-        UInt160 verifier = fx.Deploy("verifiers/NeoNativeVerifier", core.ToArray());
-        UInt160 hook = fx.Deploy("hooks/WhitelistHook", core.ToArray());
-        UInt160 account = fx.CallUInt160(core, "computeRegistrationAccountId", verifier,
-            System.Array.Empty<byte>(), hook, Owner, 604_800u);
-        fx.SetSigners(Owner);
-        fx.CallVoid(core, "registerAccount", account, verifier, System.Array.Empty<byte>(), hook, Owner, 604_800u);
-        return (fx, core, account, verifier, hook);
-    }
+    /// <summary>24h module-change delay; maturity plus 7 days is the expiry window.</summary>
+    private const long MatureDelayMs = 86_400_000;
+    private const long ExpiryWindowMs = 604_800_000;
 
-    private static StackItem ReadOnly(RuntimeFixture fx, UInt160 core, string method, UInt160 account)
+    private sealed class Harness
     {
-        using ScriptBuilder script = new();
-        script.EmitDynamicCall(core, method, CallFlags.ReadOnly, account);
-        return fx.Engine.Execute(new Script(script.ToArray()));
-    }
+        public RuntimeFixture Fx { get; } = new();
+        public UInt160 Core { get; }
+        public UInt160 Target { get; }
+        public UInt160 Member { get; }
+        public P256SessionKey CustodyKey { get; } = new();
+        public P256SessionKey KeyA { get; } = new();
+        public P256SessionKey KeyB { get; } = new();
+        public UInt160 Custody { get; }
+        public UInt160 Account { get; }
 
-    private static void AssertRecord(StackItem result, UInt160 module, byte[] parameters, BigInteger initiatedAt)
-    {
-        Assert.AreEqual(typeof(VmArray), result.GetType(), "Public results must be Array, not the internal Struct");
-        VmArray fields = (VmArray)result;
-        Assert.AreEqual(4, fields.Count);
-        Assert.AreEqual(StackItemType.ByteString, fields[0].Type);
-        Assert.AreEqual(StackItemType.ByteString, fields[1].Type);
-        CollectionAssert.AreEqual(module.ToArray(), fields[0].GetSpan().ToArray());
-        CollectionAssert.AreEqual(parameters, fields[1].GetSpan().ToArray());
-        Assert.AreEqual(StackItemType.Integer, fields[2].Type);
-        Assert.AreEqual(StackItemType.Integer, fields[3].Type);
-        Assert.AreEqual(initiatedAt, fields[2].GetInteger());
-        Assert.AreEqual(initiatedAt + TimelockMs, fields[3].GetInteger());
+        public Harness()
+        {
+            Core = Fx.Deploy("SmartAccount");
+            Target = Fx.Deploy("MockTransferTarget");
+            Member = Fx.Deploy("validators/MultiSigValidator", Core.ToArray());
+            Custody = RuntimeFixture.CustodyOf(CustodyKey);
+            // Two unconfigured member instances: two independent configuration
+            // resources (moduleId:1 and moduleId:2).
+            Account = Fx.CreateAccount(Core, Custody, "pending-intent-read",
+                Fx.InstallValidator(Member), Fx.InstallValidator(Member));
+        }
+
+        public object Configure(int moduleId, P256SessionKey key) =>
+            RuntimeFixture.ConfigureModule(moduleId, "setMemberKey", key.CompressedPublicKey);
+
+        public BigInteger Propose(params object[] actions) =>
+            Fx.ProposeConfiguration(Core, Account, Custody, actions);
+
+        public void Confirm(BigInteger intentId, params object[] actions) =>
+            Fx.ConfirmConfiguration(Core, Account, Custody, intentId, actions);
+
+        public BigInteger[] PendingIds() =>
+            ((VmArray)Read("getPendingConfigurationIntentIds", Account))
+                .Select(item => item.GetInteger()).ToArray();
+
+        public VmArray? Pending(BigInteger intentId, bool asStranger = false)
+        {
+            if (asStranger) Fx.SetSigners(Stranger);
+            VmArray record = (VmArray)Read("getPendingConfiguration", Account, intentId);
+            return record.Count == 0 ? null : record;
+        }
+
+        public StackItem Read(string method, params object?[] args)
+        {
+            using ScriptBuilder script = new();
+            script.EmitDynamicCall(Core, method, CallFlags.ReadOnly, args);
+            return Fx.Engine.Execute(new Script(script.ToArray()));
+        }
     }
 
     [TestMethod]
-    public void PendingReadAbi_IsSafeArrayWithOneHash160Parameter()
+    public void PendingReadAbi_IsSafeArraySurface()
     {
         string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
         ContractManifest manifest = ContractManifest.Parse(File.ReadAllText(
             Path.Combine(root, "contracts/bin/public/SmartAccount.manifest.json")));
-        foreach (string method in Getters)
-        {
-            ContractMethodDescriptor? descriptor = manifest.Abi.GetMethod(method, 1);
-            Assert.IsNotNull(descriptor, $"Missing ABI method: {method}");
-            Assert.IsTrue(descriptor.Safe);
-            Assert.AreEqual(ContractParameterType.Array, descriptor.ReturnType);
-            Assert.AreEqual(ContractParameterType.Hash160, descriptor.Parameters[0].Type);
-        }
+
+        ContractMethodDescriptor? record = manifest.Abi.GetMethod("getPendingConfiguration", 2);
+        Assert.IsNotNull(record, "Missing ABI method: getPendingConfiguration");
+        Assert.IsTrue(record.Safe, "Reading an intent must never need a writer phase");
+        Assert.AreEqual(ContractParameterType.Array, record.ReturnType);
+        Assert.AreEqual(ContractParameterType.Hash160, record.Parameters[0].Type);
+        Assert.AreEqual(ContractParameterType.Integer, record.Parameters[1].Type);
+
+        ContractMethodDescriptor? index = manifest.Abi.GetMethod("getPendingConfigurationIntentIds", 1);
+        Assert.IsNotNull(index, "Missing ABI method: getPendingConfigurationIntentIds");
+        Assert.IsTrue(index.Safe);
+        Assert.AreEqual(ContractParameterType.Array, index.ReturnType);
+        Assert.AreEqual(ContractParameterType.Hash160, index.Parameters[0].Type);
     }
 
     [TestMethod]
-    public void NoPending_ReturnsNullForRegisteredAndUnknownAccountsWithoutOwnerWitness()
+    public void NoPendingIntent_ReturnsEmptyResultsForRegisteredAndUnknownAccounts()
     {
-        var (fx, core, account, _, _) = CreateAccount();
-        fx.SetSigners(Stranger);
-        foreach (string getter in Getters)
-        {
-            Assert.IsTrue(ReadOnly(fx, core, getter, account).IsNull);
-            Assert.IsTrue(ReadOnly(fx, core, getter, Stranger).IsNull);
-        }
+        Harness h = new();
+        h.Fx.SetSigners(Stranger);
+
+        Assert.AreEqual(0, h.PendingIds().Length);
+        Assert.IsNull(h.Pending(1), "An unknown intent id reports an empty array, never a fault");
+        // An account that was never created has no index and no record either.
+        Assert.AreEqual(0,
+            ((VmArray)h.Read("getPendingConfigurationIntentIds", Stranger)).Count);
+        Assert.AreEqual(0,
+            ((VmArray)h.Read("getPendingConfiguration", Stranger, (BigInteger)1)).Count);
     }
 
     [TestMethod]
-    public void PendingRecords_SelectCorrectModuleAndExposeExactBytesAndTimesReadOnly()
+    public void PendingRecord_ExposesExactActionsAndTimesReadOnly()
     {
-        var (fx, core, account, verifier, hook) = CreateAccount();
-        BigInteger verifierAt = fx.Now();
-        fx.CallVoid(core, "updateVerifier", account, NextVerifier, Parameters);
-        fx.AdvanceTime(TimeSpan.FromMilliseconds(1234));
-        BigInteger hookAt = fx.Now();
-        fx.CallVoid(core, "updateHook", account, hook);
-        fx.SetSigners(Stranger);
+        Harness h = new();
+        object configure = h.Configure(1, h.KeyA);
+        BigInteger proposedAt = h.Fx.Now();
+        BigInteger intentId = h.Propose((object)configure);
 
-        AssertRecord(ReadOnly(fx, core, Getters[0], account), NextVerifier, Parameters, verifierAt);
-        AssertRecord(ReadOnly(fx, core, Getters[1], account), hook, System.Array.Empty<byte>(), hookAt);
-        Assert.AreEqual(verifierAt + TimelockMs, fx.CallInteger(core, "getPendingVerifierUpdateTime", account));
-        Assert.AreEqual(hookAt + TimelockMs, fx.CallInteger(core, "getPendingHookUpdateTime", account));
-        Assert.AreEqual(verifier, fx.CallUInt160(core, "getVerifier", account));
-        Assert.AreEqual(hook, fx.CallUInt160(core, "getHook", account));
-        Assert.AreEqual(BigInteger.Zero, fx.CallInteger(core, "getNonce", account, BigInteger.Zero));
-        Assert.IsTrue(ReadOnly(fx, core, Getters[0], Stranger).IsNull);
+        // A stranger can describe the pending change without any witness.
+        VmArray record = h.Pending(intentId, asStranger: true)!;
+        Assert.IsNotNull(record);
+        Assert.AreEqual(8, record.Count);
+        Assert.IsTrue(record[0].GetBoolean());
+        Assert.AreEqual(intentId, record[1].GetInteger());
+        Assert.AreEqual(proposedAt, record[2].GetInteger());
+        Assert.AreEqual(proposedAt + MatureDelayMs, record[3].GetInteger(),
+            "Every intent matures after the uniform 24h module-change delay");
+        Assert.AreEqual(proposedAt + MatureDelayMs + ExpiryWindowMs, record[4].GetInteger());
+        Assert.AreEqual(h.Fx.AccountAuthorityEpoch(h.Core, h.Account), record[5].GetInteger(),
+            "The intent records the authority epoch it must still match at confirmation");
+
+        Assert.AreEqual(32, record[6].GetSpan().Length, "actionDigest is a SHA-256 over the action array");
+        VmArray actions = (VmArray)record[7];
+        Assert.AreEqual(1, actions.Count);
+        VmArray action = (VmArray)actions[0];
+        Assert.AreEqual(new BigInteger(RuntimeFixture.ActionConfigureModule), action[0].GetInteger());
+        Assert.AreEqual(BigInteger.One, action[1].GetInteger());
+        VmArray configData = (VmArray)action[2];
+        Assert.AreEqual("setMemberKey", configData[0].GetString());
+
+        CollectionAssert.AreEqual(new[] { intentId }, h.PendingIds());
+        Assert.AreEqual(0,
+            h.Fx.CallBytes(h.Member, "getMemberKey", h.Account, BigInteger.One).Length,
+            "A pending intent changes nothing until it is confirmed");
     }
 
     [TestMethod]
-    public void NullVerifierParameters_AreReadAsEmptyBytes()
+    public void Cancellation_ClearsOnlyTheSelectedIntent()
     {
-        var (fx, core, account, _, _) = CreateAccount();
-        BigInteger initiatedAt = fx.Now();
-        fx.CallVoid(core, "updateVerifier", account, NextVerifier, null);
-        AssertRecord(ReadOnly(fx, core, Getters[0], account), NextVerifier, System.Array.Empty<byte>(), initiatedAt);
+        Harness h = new();
+        object first = h.Configure(1, h.KeyA);
+        object second = h.Configure(2, h.KeyB);
+        BigInteger firstId = h.Propose((object)first);
+        BigInteger secondId = h.Propose((object)second);
+        CollectionAssert.AreEquivalent(new[] { firstId, secondId }, h.PendingIds(),
+            "Independent resources may be pending at the same time");
+
+        h.Fx.CallVoid(h.Core, "cancelConfiguration", h.Account, firstId);
+        Assert.IsNull(h.Pending(firstId));
+        Assert.IsNotNull(h.Pending(secondId), "Cancelling one intent must not disturb another");
+        CollectionAssert.AreEqual(new[] { secondId }, h.PendingIds());
+
+        h.Fx.CallVoid(h.Core, "cancelConfiguration", h.Account, secondId);
+        Assert.IsNull(h.Pending(secondId));
+        Assert.AreEqual(0, h.PendingIds().Length);
     }
 
     [TestMethod]
-    public void Cancellation_ClearsOnlyTheSelectedPendingRecord()
+    public void SuccessfulConfirmation_ClearsThePendingRecord()
     {
-        var (fx, core, account, _, hook) = CreateAccount();
-        BigInteger initiatedAt = fx.Now();
-        fx.CallVoid(core, "updateVerifier", account, NextVerifier, Parameters);
-        fx.CallVoid(core, "updateHook", account, hook);
-        fx.CallVoid(core, "cancelVerifierUpdate", account);
-        Assert.IsTrue(ReadOnly(fx, core, Getters[0], account).IsNull);
-        AssertRecord(ReadOnly(fx, core, Getters[1], account), hook, System.Array.Empty<byte>(), initiatedAt);
-        fx.CallVoid(core, "cancelHookUpdate", account);
-        Assert.IsTrue(ReadOnly(fx, core, Getters[1], account).IsNull);
+        Harness h = new();
+        object configure = h.Configure(1, h.KeyA);
+        BigInteger intentId = h.Propose((object)configure);
+        h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(MatureDelayMs) + TimeSpan.FromMinutes(1));
+        h.Confirm(intentId, (object)configure);
+
+        Assert.IsNull(h.Pending(intentId));
+        Assert.AreEqual(0, h.PendingIds().Length);
+        CollectionAssert.AreEqual(h.KeyA.CompressedPublicKey,
+            h.Fx.CallBytes(h.Member, "getMemberKey", h.Account, BigInteger.One));
     }
 
     [TestMethod]
-    public void SuccessfulConfirmation_ClearsBothPendingRecords()
+    public void UnrelatedSigner_CanReadButCannotCancelOrAlter()
     {
-        var (fx, core, account, _, _) = CreateAccount();
-        fx.CallVoid(core, "updateVerifier", account, UInt160.Zero, System.Array.Empty<byte>());
-        fx.CallVoid(core, "updateHook", account, UInt160.Zero);
-        fx.AdvanceTime(TimeSpan.FromMilliseconds(TimelockMs));
-        fx.CallVoid(core, "confirmVerifierUpdate", account);
-        fx.CallVoid(core, "confirmHookUpdate", account);
-        foreach (string getter in Getters) Assert.IsTrue(ReadOnly(fx, core, getter, account).IsNull);
+        Harness h = new();
+        object configure = h.Configure(1, h.KeyA);
+        BigInteger intentId = h.Propose((object)configure);
+
+        h.Fx.SetSigners(Stranger);
+        Assert.IsNotNull(h.Pending(intentId), "Reads stay permissionless");
+        TestException denied = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallVoid(h.Core, "cancelConfiguration", h.Account, intentId));
+        StringAssert.Contains(denied.Message, "SA_UNAUTHORIZED");
+
+        VmArray record = h.Pending(intentId)!;
+        Assert.AreEqual(intentId, record[1].GetInteger());
+        Assert.AreEqual(0,
+            h.Fx.CallBytes(h.Member, "getMemberKey", h.Account, BigInteger.One).Length);
     }
 
     [TestMethod]
-    public void UnrelatedSigner_CanReadButCannotCancelOrAlterPendingRecords()
+    public void ExpiredIntent_IsCleanedWithoutAWitness()
     {
-        var (fx, core, account, _, hook) = CreateAccount();
-        BigInteger initiatedAt = fx.Now();
-        fx.CallVoid(core, "updateVerifier", account, NextVerifier, Parameters);
-        fx.CallVoid(core, "updateHook", account, hook);
-        fx.SetSigners(Stranger);
-        Assert.ThrowsExactly<TestException>(() => fx.CallVoid(core, "cancelVerifierUpdate", account));
-        Assert.ThrowsExactly<TestException>(() => fx.CallVoid(core, "cancelHookUpdate", account));
-        AssertRecord(ReadOnly(fx, core, Getters[0], account), NextVerifier, Parameters, initiatedAt);
-        AssertRecord(ReadOnly(fx, core, Getters[1], account), hook, System.Array.Empty<byte>(), initiatedAt);
+        Harness h = new();
+        object configure = h.Configure(1, h.KeyA);
+        BigInteger intentId = h.Propose((object)configure);
+        h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(MatureDelayMs + ExpiryWindowMs)
+            + TimeSpan.FromMinutes(1));
+
+        // Past its expiry window the record is explicit garbage: anyone may
+        // clear it, and no confirmation can ever commit it.
+        h.Fx.SetSigners(Stranger);
+        h.Fx.CallVoid(h.Core, "cancelConfiguration", h.Account, intentId);
+        Assert.IsNull(h.Pending(intentId));
+        Assert.AreEqual(0, h.PendingIds().Length);
+        Assert.AreEqual(0,
+            h.Fx.CallBytes(h.Member, "getMemberKey", h.Account, BigInteger.One).Length);
     }
 
     [TestMethod]
     public void InvalidAccountIds_FaultWithoutChangingPendingRecords()
     {
-        var (fx, core, account, _, hook) = CreateAccount();
-        BigInteger initiatedAt = fx.Now();
-        fx.CallVoid(core, "updateVerifier", account, NextVerifier, Parameters);
-        fx.CallVoid(core, "updateHook", account, hook);
-        fx.SetSigners(Stranger);
-        foreach (string getter in Getters)
+        Harness h = new();
+        object configure = h.Configure(1, h.KeyA);
+        BigInteger intentId = h.Propose((object)configure);
+        h.Fx.SetSigners(Stranger);
+
+        foreach (object? invalid in new object?[] { UInt160.Zero, new byte[19], new byte[21] })
         {
-            foreach (object? invalid in new object?[] { null, UInt160.Zero, new byte[19], new byte[21] })
-                Assert.ThrowsExactly<TestException>(() => fx.Call(core, getter, invalid));
+            Assert.ThrowsExactly<TestException>(() =>
+                h.Read("getPendingConfiguration", invalid, intentId));
+            Assert.ThrowsExactly<TestException>(() =>
+                h.Read("getPendingConfigurationIntentIds", invalid));
         }
-        AssertRecord(ReadOnly(fx, core, Getters[0], account), NextVerifier, Parameters, initiatedAt);
-        AssertRecord(ReadOnly(fx, core, Getters[1], account), hook, System.Array.Empty<byte>(), initiatedAt);
+
+        VmArray record = h.Pending(intentId)!;
+        Assert.AreEqual(intentId, record[1].GetInteger());
+        CollectionAssert.AreEqual(new[] { intentId }, h.PendingIds());
     }
 }

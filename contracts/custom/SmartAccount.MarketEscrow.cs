@@ -230,7 +230,12 @@ namespace SmartAccount
             }
 
             // Drop the seller's stale legacy pending/cancel markers (core-owned
-            // prefixes; the physical Market markers are cleared below).
+            // prefixes; the physical Market markers are cleared below). The 0x59
+            // recovery record of the seller dies with the sale too: the custody it
+            // was initiated under is replaced, and a leftover record would wedge
+            // the buyer's own recovery channel behind SA_RECOVERY_PENDING even
+            // though its epoch can never mature again.
+            Storage.Delete(Storage.CurrentContext, CoreRecoveryKey(accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierUpdate, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingHookUpdate, (byte[])accountId));
             Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_PendingVerifierCall, (byte[])accountId));

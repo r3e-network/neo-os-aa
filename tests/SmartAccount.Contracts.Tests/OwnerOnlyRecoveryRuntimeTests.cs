@@ -1,345 +1,305 @@
 using System;
-using System.Linq;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
-using Neo.SmartContract;
 using Neo.SmartContract.Testing.Exceptions;
 
 namespace SmartAccount.Contracts.Tests;
 
+/// <summary>
+/// Behavioural VM tests for the owner-only recovery latch in protocol v4.
+///
+/// The v3 suite pinned a custody-rotation flow around verifier/hook callbacks
+/// (<c>initiateEscape</c>/<c>finalizeEscapeToOwner</c>). v4 replaced both: the
+/// account's permanent "recovered to owner-only" election is a monotonic flag on
+/// <c>AccountControl</c> (elected through the <c>setRecoveryPolicy</c> configuration
+/// action), and it is enforced against the module model it was meant to freeze —
+/// install, uninstall, configure, hook order, code rebind and threshold policy. The
+/// flag never blocks the custody's own execution, non-model configuration, freeze
+/// or a later core recovery; it survives all of them, including a custody rotation.
+/// </summary>
 [TestClass]
 public class OwnerOnlyRecoveryRuntimeTests
 {
-    private const uint Delay = 604800;
-    private static readonly UInt160 Stranger = UInt160.Parse("0x8181818181818181818181818181818181818181");
-    private static readonly TimeSpan ConfigDelay = TimeSpan.FromHours(24);
+    private static readonly UInt160 Stranger =
+        UInt160.Parse("0x8181818181818181818181818181818181818181");
+
+    private static readonly UInt160 NewCustody =
+        UInt160.Parse("0x2222222222222222222222222222222222222222");
+
+    private static readonly UInt160 Target =
+        UInt160.Parse("0x4444444444444444444444444444444444444444");
+
+    private static readonly BigInteger Timelock = RuntimeFixture.MinRecoveryTimelockMs;
+
+    private const string Permanent = "Owner-only recovery is permanent";
 
     private sealed class Harness
     {
         public RuntimeFixture Fx { get; } = new();
-        public UInt160 Core { get; }
-        public UInt160 Faulting { get; }
-        public UInt160 Hook { get; }
-        public UInt160 Target { get; }
-        public UInt160 Root { get; }
-        public UInt160 Account { get; }
-        public UInt160 Owner => Fx.Engine.ValidatorsAddress;
-        public int CoreId { get; }
 
-        public Harness(bool composite = false)
+        public UInt160 Core { get; }
+
+        public UInt160 Target { get; }
+
+        public UInt160 Hook { get; }
+
+        public UInt160 SessionKey { get; }
+
+        public P256SessionKey Key { get; }
+
+        public UInt160 Custody { get; }
+
+        private int _registrations;
+
+        public Harness(P256SessionKey custodyKey)
         {
             Core = Fx.Deploy("SmartAccount");
-            Faulting = Fx.Deploy("MockVerifierCore");
-            Hook = Fx.Deploy("hooks/WhitelistHook", Core.ToArray());
             Target = Fx.Deploy("MockTransferTarget");
-            Root = composite ? Fx.Deploy("verifiers/MultiSigVerifier", Core.ToArray()) : Faulting;
-            Account = Fx.CallUInt160(Core, "computeRegistrationAccountId", Root, Array.Empty<byte>(), Hook, Owner, Delay);
-            Fx.CallVoid(Core, "registerAccount", Account, Root, Array.Empty<byte>(), Hook, Owner, Delay);
-            var record = (Neo.VM.Types.Array)Fx.Call(UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd"), "getContract", Core);
-            CoreId = (int)record[0].GetInteger();
+            Hook = Fx.Deploy("hooks/WhitelistHook", Core.ToArray());
+            SessionKey = Fx.Deploy("validators/SessionKeyValidator", Core.ToArray());
+            Key = custodyKey;
+            Custody = RuntimeFixture.CustodyOf(custodyKey);
         }
 
-        public StorageKey Key(byte prefix) => new() { Id = CoreId, Key = new[] { prefix }.Concat(Account.ToArray()).ToArray() };
-        public void Seed(byte prefix, byte[] value) => Fx.Engine.Storage.Snapshot.Add(Key(prefix), new StorageItem(value));
-        public StorageKey GlobalKey(byte prefix) => new() { Id = CoreId, Key = new[] { prefix } };
-        public void SeedGlobal(byte prefix, byte[] value) => Fx.Engine.Storage.Snapshot.Add(GlobalKey(prefix), new StorageItem(value));
-        public void Mature()
+        public UInt160 CreateAccount(string label, params object[] actions)
         {
-            Fx.SetSigners(Owner);
-            Fx.CallVoid(Core, "initiateEscape", Account);
-            Fx.AdvanceTime(TimeSpan.FromSeconds(Delay));
+            _registrations += 1;
+            return Fx.CreateAccount(Core, Custody, label + "-" + _registrations, actions);
         }
-        public void Recover() => Fx.CallVoid(Core, "finalizeEscapeToOwner", Account);
-        public void AssertLatched()
+
+        /// <summary>The session-key validator's registration-time init command.</summary>
+        public object?[] SessionCommand() =>
+            new object?[]
+            {
+                "setSessionKey", Key.CompressedPublicKey, Target, "transfer",
+                Fx.Now() + 3_600_000, (BigInteger)0, "owner-only suite"
+            };
+
+        /// <summary>
+        /// The owner-only election is a configuration action like any other; it is
+        /// ordered last so it cannot block the module installs in the same batch.
+        /// </summary>
+        public object[] ElectOwnerOnly() =>
+            RuntimeFixture.SetRecoveryPolicy(UInt160.Zero, Timelock, ownerOnlyRecovery: true);
+
+        public bool OwnerOnly(UInt160 accountId) =>
+            Fx.CallBoolean(Core, "isOwnerOnlyRecovery", accountId);
+
+        public BigInteger[] ValidatorIds(UInt160 accountId) =>
+            Fx.ModuleIds(Core, accountId, RuntimeFixture.ModuleTypeNameValidator);
+
+        public BigInteger[] HookIds(UInt160 accountId) =>
+            Fx.ModuleIds(Core, accountId, RuntimeFixture.ModuleTypeNameHook);
+
+        /// <summary>Executes a built-in (custody-signed) transfer of one unit at the current sequence.</summary>
+        public bool ExecuteTransfer(UInt160 accountId, P256SessionKey signer)
         {
-            Assert.IsTrue(Fx.CallBoolean(Core, "isOwnerOnlyRecovery", Account));
-            Assert.AreEqual(UInt160.Zero, Fx.CallUInt160(Core, "getVerifier", Account));
-            Assert.AreEqual(UInt160.Zero, Fx.CallUInt160(Core, "getHook", Account));
+            // The digest binds the live authority epoch and configuration nonce; a
+            // recovery or freeze advances both, so they are read back, never assumed.
+            Neo.VM.Types.Array control = Fx.AccountControl(Core, accountId);
+            object[] op = RuntimeFixture.UserOp(
+                Target, "transfer",
+                new object?[]
+                {
+                    Fx.CallUInt160(Core, "getProxyScriptHash", accountId), Stranger, (BigInteger)1, null
+                },
+                Fx.PackedNonce(Core, accountId, 0),
+                Fx.Now() + 600_000, new byte[] { 0x00 },
+                authorityEpoch: control[4].GetInteger(), configurationNonce: control[5].GetInteger());
+            op[11] = Fx.SignBuiltIn(Core, accountId, op, signer);
+            Fx.SetSigners(CustodyOf(signer));
+            return Fx.CallBoolean(Core, "executeUserOp", accountId, op);
         }
+
+        private static UInt160 CustodyOf(P256SessionKey signer) => RuntimeFixture.CustodyOf(signer);
+    }
+
+    // ============================================================================
+    // The latch itself and what it freezes.
+    // ============================================================================
+
+    [TestMethod]
+    public void OwnerOnlyRecovery_LatchesAndSurvivesARecovery()
+    {
+        using P256SessionKey key = new();
+        using P256SessionKey newKey = new();
+        UInt160 rotated = RuntimeFixture.CustodyOf(newKey);
+        Harness h = new(key);
+        UInt160 accountId = h.CreateAccount("owner-only-latch",
+            h.Fx.InstallHook(h.Hook, "allowTarget", h.Target),
+            h.Fx.InstallValidator(h.SessionKey, h.SessionCommand()),
+            h.ElectOwnerOnly());
+
+        Assert.IsTrue(h.OwnerOnly(accountId), "The election is recorded on AccountControl");
+        Assert.AreEqual(1, h.HookIds(accountId).Length, "Precondition: hook installed");
+        Assert.AreEqual(1, h.ValidatorIds(accountId).Length, "Precondition: validator installed");
+
+        // A recovery is still available to the custody and it still sweeps the model.
+        h.Fx.SetSigners(h.Custody, rotated);
+        h.Fx.CallVoid(h.Core, "beginRecovery", accountId, rotated);
+        h.Fx.AdvanceTime(TimeSpan.FromMilliseconds((long)Timelock));
+        h.Fx.CallVoid(h.Core, "executeRecovery", accountId);
+
+        Assert.AreEqual(rotated, h.Fx.AccountCustody(h.Core, accountId), "Custody rotated");
+        Assert.AreEqual(0, h.HookIds(accountId).Length, "Recovery sweeps the hook instance");
+        Assert.AreEqual(0, h.ValidatorIds(accountId).Length, "Recovery sweeps the validator instance");
+        Assert.IsTrue(h.OwnerOnly(accountId), "The latch is monotonic across recovery");
+
+        // The recovered account executes again on the built-in route with the new custody ...
+        Assert.IsTrue(h.ExecuteTransfer(accountId, newKey), "Execution stays available");
+        // ... and the module model stays permanently closed, even after the sweep.
+        TestException reinstall = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.ProposeConfiguration(
+                h.Core, accountId, rotated,
+                (object)h.Fx.InstallValidator(h.SessionKey, h.SessionCommand())));
+        StringAssert.Contains(reinstall.Message, Permanent);
     }
 
     [TestMethod]
-    public void OwnerOnlyRecovery_DetachesFaultingPluginWithoutCleanupAndPreservesNonceIdentity()
+    public void OwnerOnlyRecovery_RejectsEveryModuleModelActionUpFront()
     {
-        Harness h = new();
-        UInt160 proxy = h.Fx.CallUInt160(h.Core, "getProxyScriptHash", h.Account);
-        object[] whitelist = { h.Account, h.Target, true };
-        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "callHook", h.Account, "setWhitelist", whitelist));
-        h.Fx.AdvanceTime(ConfigDelay);
-        h.Fx.CallVoid(h.Core, "callHook", h.Account, "setWhitelist", whitelist);
-        object[] op = RuntimeFixture.UserOp(h.Target, "transfer", new object?[] { proxy, Stranger, 1, null }, (BigInteger)7 << 64, h.Fx.Now() + 600000, Array.Empty<byte>());
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "executeUserOp", h.Account, op));
-        h.Fx.CallVoid(h.Core, "setMetadataUri", h.Account, "ipfs://old-policy");
-        h.Mature();
-        TestException blocked = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "finalizeEscape", h.Account, UInt160.Zero));
-        StringAssert.Contains(blocked.Message, "Mock plugin cleanup failure");
-        h.Recover();
-        h.AssertLatched();
-        Assert.AreEqual(proxy, h.Fx.CallUInt160(h.Core, "getProxyScriptHash", h.Account));
-        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Core, "getNonce", h.Account, 7));
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Core, "getNonce", h.Account, 0));
-        Assert.AreEqual(h.Owner, h.Fx.CallUInt160(h.Core, "getBackupOwner", h.Account));
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Core, "getEscapeTriggeredAt", h.Account));
-        Assert.AreEqual(string.Empty, h.Fx.Call(h.Core, "getMetadataUri", h.Account).GetString());
-        Assert.IsTrue(h.Fx.CallBoolean(h.Hook, "isWhitelisted", h.Account, h.Target), "Old hook bytes may remain; it is detached permanently, not called during recovery.");
-        h.Fx.SetSigners(Stranger);
-        TestException denied = Assert.ThrowsExactly<TestException>(() => h.Fx.CallBoolean(h.Core, "executeUserOp", h.Account,
-            RuntimeFixture.UserOp(h.Target, "transfer", new object?[] { proxy, Stranger, 1, null }, ((BigInteger)7 << 64) + 1, h.Fx.Now() + 600000, Array.Empty<byte>())));
-        StringAssert.Contains(denied.Message, "Native witness failed");
-        h.Fx.SetSigners(h.Owner);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "executeUserOp", h.Account,
-            RuntimeFixture.UserOp(h.Target, "transfer", new object?[] { proxy, Stranger, 1, null }, ((BigInteger)7 << 64) + 1, h.Fx.Now() + 600000, Array.Empty<byte>())));
-    }
+        using P256SessionKey key = new();
+        Harness h = new(key);
+        UInt160 accountId = h.CreateAccount("owner-only-reject", (object)h.ElectOwnerOnly());
 
-    [TestMethod]
-    public void OwnerOnlyRecovery_PermanentlyRejectsRootsChildrenAndLegacyEscapeReplacement()
-    {
-        Harness h = new(composite: true);
-        h.Mature();
-        h.Recover();
-        h.AssertLatched();
-        foreach (UInt160 verifier in new[] { h.Root, h.Faulting })
+        object[][] modelActions =
         {
-            TestException fault = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, verifier, Array.Empty<byte>()));
-            StringAssert.Contains(fault.Message, "Owner-only recovery is permanent");
-        }
-        TestException hook = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "updateHook", h.Account, h.Hook));
-        StringAssert.Contains(hook.Message, "Owner-only recovery is permanent");
-        TestException child = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "callVerifierChild", h.Account, h.Faulting, "setPublicKey", new object[] { h.Account, Array.Empty<byte>() }));
-        StringAssert.Contains(child.Message, "Owner-only recovery is permanent");
-        h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, UInt160.Zero, Array.Empty<byte>());
-        h.Fx.CallVoid(h.Core, "updateHook", h.Account, UInt160.Zero);
-        h.Mature();
-        TestException legacy = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "finalizeEscape", h.Account, h.Root));
-        StringAssert.Contains(legacy.Message, "Owner-only recovery is permanent");
-        h.Fx.CallVoid(h.Core, "finalizeEscape", h.Account, UInt160.Zero);
-        h.AssertLatched();
-    }
+            // 1 = install
+            h.Fx.InstallValidator(h.SessionKey, h.SessionCommand()),
+            // 2 = uninstall
+            new object[] { 2, (BigInteger)1 },
+            // 3 = configure
+            RuntimeFixture.ConfigureModule(1, h.SessionCommand()),
+            // 4 = hook order
+            RuntimeFixture.SetHookOrder(1),
+            // 6 = rebind module code
+            new object[] { 6, (BigInteger)1, new byte[32] },
+            // 7 = threshold policy
+            RuntimeFixture.SetThresholdPolicy(1, 1, new[] { BigInteger.One }, true)
+        };
 
-    [TestMethod]
-    public void OwnerOnlyRecovery_ClearsEveryPendingIntentAndRejectsRepeat()
-    {
-        Harness h = new();
-        h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, h.Faulting, Array.Empty<byte>());
-        h.Fx.CallVoid(h.Core, "updateHook", h.Account, h.Hook);
-        h.Fx.CallBoolean(h.Core, "callVerifier", h.Account, "clearAccount", new object[] { h.Account });
-        h.Fx.CallBoolean(h.Core, "callHook", h.Account, "clearAccount", new object[] { h.Account });
-        // Phase 1b: pending platform owner rotations moved to the registrar service's
-        // storage, so a raw 0x20 row is no longer core-owned state to sweep; the retired
-        // 0x13 escrow-cancel sibling likewise no longer exists in the design-phase
-        // prefix map, so there is nothing to seed or sweep there.
-        h.Seed(0x06, UInt160.Zero.ToArray());
-        h.Seed(0x07, new byte[] { 1 });
-        h.Seed(0x1D, new byte[] { 1 });
-        h.Mature();
-        h.Recover();
-        foreach (byte prefix in new byte[] { 0x02, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x1D })
-            Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key(prefix)), $"Stale account marker {prefix:X2}");
-        TestException repeat = Assert.ThrowsExactly<TestException>(() => h.Recover());
-        StringAssert.Contains(repeat.Message, "Already recovered to owner-only");
-        h.AssertLatched();
-    }
-
-    [TestMethod]
-    [DataRow(0x02)]
-    [DataRow(0x04)]
-    [DataRow(0x05)]
-    [DataRow(0x0B)]
-    [DataRow(0x0D)]
-    [DataRow(0x0E)]
-    public void OwnerOnlyRecovery_RejectsEveryActiveContext(int prefix)
-    {
-        Harness h = new();
-        h.Mature();
-        h.Seed((byte)prefix, new byte[] { 1 });
-        TestException locked = Assert.ThrowsExactly<TestException>(() => h.Recover());
-        StringAssert.Contains(locked.Message, "Recovery context active");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", h.Account));
-        Assert.AreEqual(h.Root, h.Fx.CallUInt160(h.Core, "getVerifier", h.Account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isEscapeActive", h.Account));
-        Assert.IsNotNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key((byte)prefix)));
-    }
-
-    [TestMethod]
-    public void OwnerOnlyRecovery_RejectsGlobalConfigurationContext()
-    {
-        Harness h = new();
-        h.Mature();
-        h.SeedGlobal(0x26, new byte[] { 1 });
-        TestException locked = Assert.ThrowsExactly<TestException>(() => h.Recover());
-        StringAssert.Contains(locked.Message, "Recovery context active");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", h.Account));
-        Assert.AreEqual(h.Root, h.Fx.CallUInt160(h.Core, "getVerifier", h.Account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isEscapeActive", h.Account));
-        Assert.IsNotNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.GlobalKey(0x26)));
-    }
-
-    [TestMethod]
-    public void OwnerOnlyRecovery_RejectsMissingInitiationImmatureAndUnauthorizedCalls()
-    {
-        Harness h = new();
-        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", h.Account));
-        TestException unarmed = Assert.ThrowsExactly<TestException>(() => h.Recover());
-        StringAssert.Contains(unarmed.Message, "Escape not initiated");
-        h.Fx.CallVoid(h.Core, "initiateEscape", h.Account);
-        h.Fx.AdvanceTime(TimeSpan.FromSeconds(Delay) - TimeSpan.FromMilliseconds(1));
-        TestException early = Assert.ThrowsExactly<TestException>(() => h.Recover());
-        StringAssert.Contains(early.Message, "Timelock active");
-        h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(1));
-        h.Fx.SetSigners(Stranger);
-        TestException denied = Assert.ThrowsExactly<TestException>(() => h.Recover());
-        StringAssert.Contains(denied.Message, "Only backup owner can finalize");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", h.Account));
-        h.Fx.SetSigners(h.Owner);
-        h.Recover();
-        h.AssertLatched();
-    }
-
-    [TestMethod]
-    public void OwnerOnlyRecovery_RejectsEscrowAndPreservesBinding()
-    {
-        Harness h = new();
-        h.Mature();
-        UInt160 market = h.Fx.Deploy("SAAddressMarket");
-        h.Fx.CallVoid(market, "setAllowedSA", h.Core, true);
-        // Phase 1b: the core admin (the deploying validators account) registers the
-        // market as an approved escrow service.
-        h.Fx.CallVoid(h.Core, "setMarketService", market, true);
-        h.Fx.CallVoid(market, "createListing", h.Core, h.Account, 100000000, "account", "");
-        TestException locked = Assert.ThrowsExactly<TestException>(() => h.Recover());
-        StringAssert.Contains(locked.Message, "Account locked in market escrow");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", h.Account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isMarketEscrowActive", h.Account));
-    }
-
-    [TestMethod]
-    public void OwnerOnlyRecovery_RejectsCleanupCallbackReentryAndRollsBackOuterRotation()
-    {
-        Harness h = new();
-        h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, UInt160.Zero, Array.Empty<byte>());
-        h.Mature();
-        h.Fx.CallVoid(h.Faulting, "setCleanupRecoveryTarget", h.Core);
-        TestException reentry = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "confirmVerifierUpdate", h.Account));
-        StringAssert.Contains(reentry.Message, "Recovery context active");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", h.Account));
-        Assert.AreEqual(h.Faulting, h.Fx.CallUInt160(h.Core, "getVerifier", h.Account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "hasPendingVerifierUpdate", h.Account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isEscapeActive", h.Account));
-        Assert.IsNull(h.Fx.Engine.Storage.Snapshot.TryGet(h.Key(0x04)), "Faulted config grant must roll back.");
-        h.Recover();
-        h.AssertLatched();
-    }
-
-    [TestMethod]
-    public void OwnerOnlyRecovery_RejectsForgedLegacyContextsPendingConfirmationAndMaintenance()
-    {
-        Harness h = new();
-        h.Mature();
-        h.Recover();
-        foreach (byte prefix in new byte[] { 0x04, 0x05, 0x0D, 0x0E }) h.Seed(prefix, h.Faulting.ToArray());
-        foreach (string method in new[] { "canConfigureVerifier", "canConfigureHook" })
-            Assert.IsFalse(h.Fx.CallBoolean(h.Faulting, "forward", h.Core, method, new object[] { h.Account, h.Faulting }));
-        foreach (string method in new[] { "canExecuteVerifier", "canExecuteHook" })
-            Assert.IsFalse(h.Fx.CallBoolean(h.Faulting, "forward", h.Core, method, new object[] { h.Account, h.Core, h.Faulting }));
-        foreach (string method in new[] { "callVerifier", "callHook" })
+        foreach (object[] action in modelActions)
         {
-            TestException fault = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, method, h.Account, "clearAccount", new object[] { h.Account }));
-            StringAssert.Contains(fault.Message, "Owner-only recovery is permanent");
+            TestException rejected = Assert.ThrowsExactly<TestException>(
+                () => h.Fx.ProposeConfiguration(h.Core, accountId, h.Custody, (object)action));
+            StringAssert.Contains(rejected.Message, Permanent);
         }
-        byte[] pending = h.Fx.StdLibSerialize(new object[] { h.Faulting, h.Hook, Array.Empty<byte>(), 1 });
-        h.Seed(0x09, pending);
-        h.Seed(0x0A, pending);
-        foreach (string method in new[] { "confirmVerifierUpdate", "confirmHookUpdate" })
-        {
-            TestException fault = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, method, h.Account));
-            StringAssert.Contains(fault.Message, "Owner-only recovery is permanent");
-        }
-        h.AssertLatched();
+
+        // Rejections happen before an intent is allocated, so nothing waits out the
+        // 24h window only to fail at confirmation.
+        Assert.AreEqual(0,
+            ((Neo.VM.Types.Array)h.Fx.Call(h.Core, "getPendingConfigurationIntentIds", accountId)).Count,
+            "A rejected proposal leaves no pending intent");
+        Assert.AreEqual(0, h.HookIds(accountId).Length);
+        Assert.AreEqual(0, h.ValidatorIds(accountId).Length);
     }
 
     [TestMethod]
-    public void OwnerOnlyRecovery_MarketBuyerInheritsPermanentRestriction()
+    public void OwnerOnlyRecovery_IsMonotonicAndCannotBeCleared()
     {
-        Harness h = new();
-        h.Mature();
-        h.Recover();
-        UInt160 market = h.Fx.Deploy("SAAddressMarket");
-        h.Fx.CallVoid(market, "setAllowedSA", h.Core, true);
-        // Phase 1b: the core admin (the deploying validators account) registers the
-        // market as an approved escrow service.
-        h.Fx.CallVoid(h.Core, "setMarketService", market, true);
-        h.Fx.CallVoid(market, "createListing", h.Core, h.Account, 100000000, "account", "");
-        BigInteger listing = h.Fx.CallInteger(market, "getListingCount");
-        h.Fx.FundGasFromValidators(Stranger, 200000000);
-        h.Fx.SetSigners(Stranger);
-        h.Fx.TransferGas(Stranger, market, 100000000, listing);
-        h.Fx.CallVoid(market, "settleListing", listing, Stranger, Stranger);
-        Assert.AreEqual(Stranger, h.Fx.CallUInt160(h.Core, "getBackupOwner", h.Account));
-        TestException fault = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "updateVerifier", h.Account, h.Faulting, Array.Empty<byte>()));
-        StringAssert.Contains(fault.Message, "Owner-only recovery is permanent");
-        h.AssertLatched();
+        using P256SessionKey key = new();
+        Harness h = new(key);
+        UInt160 accountId = h.CreateAccount("owner-only-monotonic", (object)h.ElectOwnerOnly());
+
+        // Re-electing with ownerOnly = false must not clear the earlier election.
+        object[] rewrite = RuntimeFixture.SetRecoveryPolicy(Stranger, Timelock, ownerOnlyRecovery: false);
+        BigInteger intentId = h.Fx.ProposeConfiguration(h.Core, accountId, h.Custody, (object)rewrite);
+        h.Fx.AdvanceTime(TimeSpan.FromHours(24) + TimeSpan.FromMinutes(1));
+        // Naming a new recovery authority requires that subject's witness at confirmation.
+        h.Fx.SetSigners(h.Custody, Stranger);
+        h.Fx.CallVoid(h.Core, "confirmConfiguration", accountId, intentId, new object[] { rewrite });
+        Assert.IsTrue(h.OwnerOnly(accountId), "The latch survives a policy rewrite");
+        Assert.AreEqual(Stranger, new UInt160(h.Fx.AccountControl(h.Core, accountId)[3].GetSpan()),
+            "The unrelated recovery-authority change is applied");
+
+        // Clearing the authority back to zero behaves the same way.
+        h.Fx.ConfigureAfterTimelock(
+            h.Core, accountId, h.Custody,
+            (object)RuntimeFixture.SetRecoveryPolicy(UInt160.Zero, Timelock, ownerOnlyRecovery: false));
+        Assert.IsTrue(h.OwnerOnly(accountId), "The latch is a one-way election");
     }
 
     [TestMethod]
-    public void OwnerOnlyRecovery_DoesNotChangeOtherAccountAuthority()
+    public void OwnerOnlyRecovery_DoesNotConstrainExecutionOrNonModelConfiguration()
     {
-        Harness h = new();
-        UInt160 peer = h.Fx.CallUInt160(h.Core, "computeRegistrationAccountId", h.Faulting, Array.Empty<byte>(), UInt160.Zero, h.Owner, Delay);
-        h.Fx.CallVoid(h.Core, "registerAccount", peer, h.Faulting, Array.Empty<byte>(), UInt160.Zero, h.Owner, Delay);
-        h.Mature();
-        h.Recover();
-        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", peer));
-        Assert.AreEqual(h.Faulting, h.Fx.CallUInt160(h.Core, "getVerifier", peer));
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Core, "getNonce", peer, 0));
-        UInt160 proxy = h.Fx.CallUInt160(h.Core, "getProxyScriptHash", peer);
-        h.Fx.SetSigners(Stranger);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "executeUserOp", peer,
-            RuntimeFixture.UserOp(h.Target, "transfer", new object?[] { proxy, Stranger, 1, null }, 0, h.Fx.Now() + 600000, Array.Empty<byte>())));
-        h.AssertLatched();
+        using P256SessionKey key = new();
+        Harness h = new(key);
+        UInt160 accountId = h.CreateAccount("owner-only-open", (object)h.ElectOwnerOnly());
+
+        // Non-model configuration still confirms after the 24h window.
+        h.Fx.ConfigureAfterTimelock(h.Core, accountId, h.Custody,
+            (object)RuntimeFixture.SetRecoveryPolicy(UInt160.Zero, Timelock));
+        Assert.IsTrue(h.OwnerOnly(accountId));
+
+        h.Fx.SetSigners(h.Custody);
+        h.Fx.CallVoid(h.Core, "setMetadataUri", accountId, "ipfs://owner-only");
+        Assert.AreEqual("ipfs://owner-only", h.Fx.Call(h.Core, "getMetadataUri", accountId).GetString());
+
+        Assert.IsTrue(h.ExecuteTransfer(accountId, key), "The built-in route stays authorized");
+        Assert.AreEqual(BigInteger.One, h.Fx.CurrentNonceSequence(h.Core, accountId, 0));
     }
 
     [TestMethod]
-    public void OwnerOnlyRecovery_PlatformRotationSurvivesEscapeAndInheritsRestriction()
+    public void OwnerOnlyRecovery_LatchSurvivesFreezeUnfreezeAndCustodyRotation()
     {
-        Harness h = new();
-        UInt160 registrar = h.Fx.Deploy("SAPlatformRegistrar", h.Core.ToArray());
-        byte[] binding = System.Text.Encoding.UTF8.GetBytes("neo-miniapps-platform:owner-only-recovery");
-        h.Fx.CallVoid(h.Core, "proposePlatformRegistrar", registrar);
-        h.Fx.AdvanceTime(TimeSpan.FromDays(7));
-        h.Fx.CallVoid(h.Core, "confirmPlatformRegistrar");
-        UInt160 account = h.Fx.CallUInt160(registrar, "registerStablePlatformAccount", binding, h.Owner, Delay);
-        h.Fx.CallVoid(h.Core, "updateVerifier", account, h.Faulting, Array.Empty<byte>());
-        UInt160 proxy = h.Fx.CallUInt160(h.Core, "getProxyScriptHash", account);
-        h.Fx.CallVoid(registrar, "proposePlatformAccountOwnerRotation", account, binding, Stranger);
-        h.Fx.CallVoid(h.Core, "initiateEscape", account);
-        h.Fx.AdvanceTime(TimeSpan.FromSeconds(Delay));
-        h.Fx.CallVoid(h.Core, "finalizeEscapeToOwner", account);
-        // Phase 1b: the registrar service owns the pending rotation record, so escape
-        // finalization no longer clears it; completing it still needs the new owner's
-        // witness through the core's registrar-gated apply.
-        Assert.AreEqual(Neo.VM.Types.StackItemType.Array,
-            h.Fx.Call(registrar, "getPendingPlatformOwnerRotation", account).Type);
-        h.Fx.AdvanceTime(TimeSpan.FromDays(7));
-        h.Fx.SetSigners(Stranger);
-        h.Fx.CallVoid(registrar, "confirmPlatformAccountOwnerRotation", account, binding);
-        Assert.AreEqual(Stranger, h.Fx.CallUInt160(h.Core, "getBackupOwner", account));
-        Assert.AreEqual(proxy, h.Fx.CallUInt160(h.Core, "getProxyScriptHash", account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", account));
-        TestException denied = Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "updateHook", account, h.Hook));
-        StringAssert.Contains(denied.Message, "Owner-only recovery is permanent");
-        Assert.ThrowsExactly<TestException>(() => h.Fx.CallUInt160(registrar, "registerStablePlatformAccount", binding, Stranger, Delay));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", account));
+        using P256SessionKey key = new();
+        Harness h = new(key);
+        UInt160 accountId = h.CreateAccount("owner-only-freeze", (object)h.ElectOwnerOnly());
+
+        h.Fx.SetSigners(h.Custody);
+        h.Fx.CallVoid(h.Core, "freezeAccount", accountId);
+        h.Fx.CallVoid(h.Core, "unfreezeAccount", accountId);
+        Assert.AreEqual(BigInteger.Zero, h.Fx.AccountStatus(h.Core, accountId), "Active again");
+        Assert.IsTrue(h.OwnerOnly(accountId), "Freeze/unfreeze does not touch the latch");
+
+        // A recovery to a fresh custody inherits the permanent restriction.
+        h.Fx.SetSigners(h.Custody, NewCustody);
+        h.Fx.CallVoid(h.Core, "beginRecovery", accountId, NewCustody);
+        h.Fx.AdvanceTime(TimeSpan.FromMilliseconds((long)Timelock));
+        h.Fx.CallVoid(h.Core, "executeRecovery", accountId);
+        Assert.AreEqual(NewCustody, h.Fx.AccountCustody(h.Core, accountId));
+        Assert.IsTrue(h.OwnerOnly(accountId), "The new custody inherits the latch");
+
+        TestException rejected = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.ProposeConfiguration(h.Core, accountId, NewCustody,
+                (object)h.Fx.InstallValidator(h.SessionKey, h.SessionCommand())));
+        StringAssert.Contains(rejected.Message, Permanent);
+    }
+
+    [TestMethod]
+    public void OwnerOnlyRecovery_DoesNotChangePeerAccounts()
+    {
+        using P256SessionKey key = new();
+        Harness h = new(key);
+        UInt160 accountId = h.CreateAccount("owner-only-subject", (object)h.ElectOwnerOnly());
+
+        // A peer account with the same core and a different custody is untouched.
+        UInt160 peer = h.Fx.CreateAccount(h.Core, Stranger, "owner-only-peer",
+            (object)h.Fx.InstallValidator(h.SessionKey, h.SessionCommand()));
+        Assert.IsFalse(h.OwnerOnly(peer));
+        Assert.AreEqual(1, h.ValidatorIds(peer).Length, "The peer may install modules");
+
+        // The peer can still add a hook through the ordinary timelocked path.
+        h.Fx.ConfigureAfterTimelock(h.Core, peer, Stranger,
+            (object)h.Fx.InstallHook(h.Hook, "allowTarget", h.Target));
+        Assert.AreEqual(1, h.HookIds(peer).Length);
+        Assert.IsTrue(h.OwnerOnly(accountId), "The subject account is unaffected");
     }
 
     [TestMethod]
     public void OwnerOnlyRecovery_RejectsMalformedAndUnknownAccountIds()
     {
-        Harness h = new();
-        Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "finalizeEscapeToOwner", new byte[19]));
-        Assert.ThrowsExactly<TestException>(() => h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", new byte[19]));
-        Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Core, "finalizeEscapeToOwner", UInt160.Zero));
-        Assert.ThrowsExactly<TestException>(() => h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", Stranger));
+        using P256SessionKey key = new();
+        Harness h = new(key);
+
+        Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", new byte[19]));
+        Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", UInt160.Zero));
+
+        // A well-formed id with no account state is reported as not latched (fail-closed read).
+        Assert.IsFalse(h.Fx.CallBoolean(h.Core, "isOwnerOnlyRecovery", Stranger));
     }
 }

@@ -15,6 +15,11 @@ against the post-sweep candidate: the RefinementExport inventory was rerun,
 receipt was regenerated against the fresh kernel, the method/context lane
 constants were re-pinned, and the five-shape helper-gas runtime capture was
 regenerated against the new artifact (NEF `9f714866…`, manifest `a6533d47…`).
+The 2026-11-19 v4 rebuild moved the artifact again, to NEF `2887bad3…` /
+manifest `f44cddeb…`; every lane constant, fixture and receipt listed in this
+document was re-pinned or re-distilled against that artifact, except the archived
+helper-gas runtime capture, which still pins `9f714866…` and therefore fails
+closed until a new capture is produced.
 The retired pre-sweep getter shapes are gone: `storage_getter_source.py` no
 longer carries the `legacy_symbol` / `inline-fallback` forms, the lane's
 source-level semantic controls are now the prefix/default binding mutants, and
@@ -892,7 +897,7 @@ models under `verified/` for its own `verify.sh`.
 | `formal/coq/CustomRecovery.v` | **Public V3/PLATFORM source candidate:** callback-free recovery and irreversible owner-only latch with projected identity/nonce retention; no storage or all-entrypoint refinement |
 | `formal/coq/NativeCompositePhase.v` | **Native ABI 2 only:** first-threshold selection, one-operation receipt ownership and discard, approved-child grants, all-active pins, and pre/post policy equality under bounds 3/2/2/3; no byte-copy, hash, crypto or gas-feasibility refinement |
 | `formal/coq/ProxyWitnessScript.v` | Byte-level model of the proxy-witness transaction-script parser (`ScriptIsSingleExecuteCall`, `ScriptPrefixIsDataPushes`, `DataPushInstructionSize`): an accepted script is a data-push walk landing exactly on the expected direct `executeUserOp`/`executeUserOps` call with its two-argument pack, every instruction start in that walk is a data-push opcode (so no SYSCALL/CALL/JMP/TRY precedes the core call), acceptance binds account id and core hash, and the canonical shapes are reachable while a leading non-push opcode, a foreign account id, an out-of-range CallFlags push and a trailing instruction are rejected |
-| `formal/coq/CallbackPluginTopology.v` | Closed abstract correspondence model for the six-field hook callback tuple, configured-vs-absent callback phases, success/callback ordering, CalledByEntry/Custom target binding, and fail-closed plugin cleanup/rotation; it is not a proof of NeoVM dispatch or arbitrary plugin storage |
+| `formal/coq/CallbackPluginTopology.v` | Closed abstract correspondence model for the six-field hook callback tuple, configured-vs-absent callback phases, success/callback ordering, CalledByEntry/Custom target binding, and fail-closed plugin cleanup/rotation; it is not a proof of NeoVM dispatch or arbitrary plugin storage. The tuple it fixes is the one `BuildHookOperationParams(UserOperation, object[])` produced, and that constructor does not exist in v4: a v4 hook is a module callback reached through `CallHookPreCheck` / `CallHookPostCheck`, which no Coq artefact models |
 | `formal/coq/VerifierGasBudget.v` | **Bounded PLATFORM/native profiles only:** closed abstract model of bounded callback charging: every charge checks the callback and all ancestor budgets before mutation, exhaustion is atomic, and nested callbacks cannot escape an ancestor cap; inapplicable to `public` |
 | `formal/coq/AuthorizationEvidence.v` | Closed protocol-level binding and replay model for cryptographic, native-witness, attestation and proof evidence; primitive validity is an explicit oracle, so this is not a proof of ECDSA, witness-rule evaluation, attestation or ZK soundness |
 | `formal/coq/AttestationProofBinding.v` | Closed protocol-envelope model for attestation and zero-knowledge evidence: account, target, nonce, issuer, measurement commitment, non-zero nullifier and single-use binding; primitive cryptographic and proof validity remain explicit oracle inputs |

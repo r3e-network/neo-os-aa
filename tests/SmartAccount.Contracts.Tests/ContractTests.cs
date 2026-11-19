@@ -21,18 +21,25 @@ public class ContractTests
     private static readonly string[] SmartAccountFiles =
     {
         "SmartAccount.cs",
+        "SmartAccount.ModuleProtocol.cs",
         "SmartAccount.Models.cs",
+        "SmartAccount.Modules.cs",
+        "SmartAccount.Intents.cs",
+        "SmartAccount.Nonce.cs",
+        "SmartAccount.Message.cs",
         "SmartAccount.Internal.cs",
         "SmartAccount.Events.cs",
         "SmartAccount.Accounts.cs",
+        "SmartAccount.Migration.cs",
+        "SmartAccount.PlatformRegistrar.cs",
+        "SmartAccount.Proxy.cs",
         "SmartAccount.State.cs",
         "SmartAccount.Execution.cs",
         "SmartAccount.VerifyContext.cs",
         "SmartAccount.Escape.cs",
         "SmartAccount.MarketEscrow.cs",
         "SmartAccount.Admin.cs",
-        "SmartAccount.Paymaster.cs",
-        "SmartAccount.PlatformRegistrar.cs"
+        "SmartAccount.Paymaster.cs"
     };
 
     private static readonly string[] HookFiles =
@@ -47,15 +54,15 @@ public class ContractTests
 
     private static readonly string[] VerifierFiles =
     {
-        "plugins/verifiers/VerifierAuthority.cs",
-        "plugins/verifiers/Web3AuthVerifier.cs",
-        "plugins/verifiers/TEEVerifier.cs",
-        "plugins/verifiers/WebAuthnVerifier.cs",
-        "plugins/verifiers/SessionKeyVerifier.cs",
-        "plugins/verifiers/MultiSigVerifier.cs",
-        "plugins/verifiers/SubscriptionVerifier.cs",
-        "plugins/verifiers/ZKEmailVerifier.cs",
-        "plugins/verifiers/ZkLoginVerifier.cs"
+        "plugins/validators/ValidatorAuthority.cs",
+        "plugins/validators/Web3AuthValidator.cs",
+        "plugins/validators/TeeKeyValidator.cs",
+        "plugins/validators/P256Validator.cs",
+        "plugins/validators/SessionKeyValidator.cs",
+        "plugins/validators/MultiSigValidator.cs",
+        "plugins/validators/SubscriptionValidator.cs",
+        "plugins/validators/ZKEmailVerifier.cs",
+        "plugins/validators/DelegatedIdentityValidator.cs"
     };
 
     private static readonly string[] ContractProjectFiles =
@@ -71,14 +78,14 @@ public class ContractTests
         "../tests/mocks/MockTransferTarget.csproj",
         "custom/paymaster/Paymaster.csproj",
         "custom/registrar/PlatformRegistrar.csproj",
-        "plugins/verifiers/MultiSigVerifier.csproj",
-        "plugins/verifiers/SessionKeyVerifier.csproj",
-        "plugins/verifiers/SubscriptionVerifier.csproj",
-        "plugins/verifiers/TEEVerifier.csproj",
-        "plugins/verifiers/Web3AuthVerifier.csproj",
-        "plugins/verifiers/WebAuthnVerifier.csproj",
-        "plugins/verifiers/ZKEmailVerifier.csproj",
-        "plugins/verifiers/ZkLoginVerifier.csproj",
+        "plugins/validators/MultiSigValidator.csproj",
+        "plugins/validators/SessionKeyValidator.csproj",
+        "plugins/validators/SubscriptionValidator.csproj",
+        "plugins/validators/TeeKeyValidator.csproj",
+        "plugins/validators/Web3AuthValidator.csproj",
+        "plugins/validators/P256Validator.csproj",
+        "plugins/validators/ZKEmailVerifier.csproj",
+        "plugins/validators/DelegatedIdentityValidator.csproj",
     };
 
     private static Type ContractType => typeof(global::SmartAccount.SmartAccount);
@@ -137,40 +144,55 @@ public class ContractTests
         Assert.AreEqual(2, manifestExtra!.ConstructorArguments.Count);
         Assert.AreEqual("Description", manifestExtra.ConstructorArguments[0].Value);
         Assert.AreEqual(
-            "ERC-4337 Aligned Minimalist SA Engine for Neo N3",
+            "ERC-7579-aligned SA module-model kernel for Neo N3",
             manifestExtra.ConstructorArguments[1].Value);
     }
 
     [TestMethod]
-    public void ContractExposesCanonicalV3Entrypoints()
+    public void ContractExposesCanonicalV4Entrypoints()
     {
+        // Protocol v4 replaces the v3 register/update/call-verifier surface with
+        // the module-model kernel: atomic account creation, timelocked
+        // configuration intents, the canonical executeUserOp envelope, recovery
+        // and the service boundaries (market, registrar, paymaster, admin).
+        // Names are the C# declarations; nccs lowercases the first letter in the
+        // manifest, and Contract.Call targets that manifest form.
         string[] requiredMethods =
         {
-            "RegisterAccount",
-            "RegisterAccounts",
-            "UpdateHook",
-            "ConfirmHookUpdate",
-            "UpdateVerifier",
-            "ConfirmVerifierUpdate",
-            "CallVerifier",
-            "CallHook",
-            "PreviewUserOpValidation",
-            "DescribeAccount",
-            "SimulateValidation",
-            "ExecuteUserOp",
-            "ExecuteUserOps",
+            "ComputeAccountIdentity",
+            "createAccount",
+            "createAccounts",
+            "proposeConfiguration",
+            "confirmConfiguration",
+            "cancelConfiguration",
+            "executeUserOp",
+            "executeUserOps",
             "ExecuteSponsoredUserOp",
             "ExecuteSponsoredUserOps",
-            "InitiateEscape",
-            "FinalizeEscape",
+            "beginRecovery",
+            "cancelRecovery",
+            "executeRecovery",
+            "freezeAccount",
+            "unfreezeAccount",
+            // Phase 1b service-boundary entries.
             "EnterMarketEscrow",
             "CancelMarketEscrow",
             "SettleMarketEscrow",
-            // Phase 1b service-boundary entries.
             "SetMarketService",
             "IsMarketService",
             "ApplyPlatformAccountOwnerRotation",
             "GetPlatformAccountBinding",
+            "ProposePlatformRegistrar",
+            "ConfirmPlatformRegistrar",
+            "CancelPlatformRegistrar",
+            "getAccount",
+            "getModules",
+            "getHookOrder",
+            "getRecoveryStatus",
+            "getProtocolInfo",
+            "getOperationDigest",
+            "isValidSignature",
+            "Verify",
             "_deploy",
             "Update",
             "GetContractAdmin",
@@ -206,82 +228,114 @@ public class ContractTests
 
         StringAssert.Contains(
             executionSource,
-            "object result = Contract.Call(op.TargetContract, op.Method, CallFlags.All, executionArgs);");
+            "object result = Contract.Call(target, (string)method, CallFlags.All, executionArgs);");
         Assert.IsFalse(executionSource.Contains("op.CallFlags", StringComparison.Ordinal));
-        StringAssert.Contains(executionSource, "ConsumeNonce(accountId, op.Nonce);");
-        StringAssert.Contains(executionSource, "PlatformSyscalls.CallWithGasLimit(");
-        StringAssert.Contains(executionSource, "CallVerifierWithGasLimit(");
-        StringAssert.Contains(executionSource, "state.Verifier,");
-        StringAssert.Contains(executionSource, "\"validateSignature\"");
-        StringAssert.Contains(executionSource, "CallFlags.ReadOnly");
-        StringAssert.Contains(executionSource, "private const long VerifierGasLimit = 1_000_000_000;");
-        Assert.IsFalse(executionSource.Contains("Contract.Call(state.Verifier", StringComparison.Ordinal));
-        StringAssert.Contains(executionSource, "VerifierGasLimit");
+        StringAssert.Contains(executionSource, "ConsumeOperationNonce(accountId, channel, namespaceDigest, sequence);");
+        StringAssert.Contains(executionSource, "AssertNoMarketEscrow(accountId);");
+        StringAssert.Contains(executionSource, "SetVerifyContext(accountId, target);");
+        StringAssert.Contains(executionSource, "ClearVerifyContext(accountId);");
+        // Module callbacks never reach a raw Contract.Call from the execution
+        // kernel: the dispatched target is the only unbounded call, and every
+        // callback goes through the bounded gate in the module-callback helpers.
+        Assert.AreEqual(
+            1,
+            CountOccurrences(executionSource, "Contract.Call("),
+            "the dispatched target call must be the only raw contract call in the execution kernel");
+        StringAssert.Contains(executionSource, "CallModuleGasCapped(");
     }
 
     [TestMethod]
-    public void RegisterAccountBindsAccountIdToRegistrationParameters()
+    public void CreateAccountBindsAccountIdToRegistrationParameters()
     {
         string accountsSource = ReadCoreFile("SmartAccount.Accounts.cs");
 
-        StringAssert.Contains(accountsSource, "Account id required");
+        StringAssert.Contains(accountsSource, "Custody required");
         StringAssert.Contains(accountsSource, "Account already exists");
-        StringAssert.Contains(accountsSource, "public static UInt160 ComputeRegistrationAccountId(");
-        StringAssert.Contains(accountsSource, "public static void RegisterAccounts(");
+        StringAssert.Contains(accountsSource, "Custody witness required");
+        StringAssert.Contains(accountsSource, "public static UInt160 ComputeAccountIdentity(UInt160 custody, ByteString salt)");
+        StringAssert.Contains(accountsSource, "public static void createAccounts(");
         StringAssert.Contains(accountsSource, "Account batch size must be 1-64");
-        StringAssert.Contains(accountsSource, "RegisterAccount(ids[i]!, verifier, paramList[i], hookId, backupOwner!, escapeTimelock)");
-        StringAssert.Contains(accountsSource, "Account id does not match registration parameters");
         StringAssert.Contains(
             accountsSource,
-            "ComputeRegistrationAccountId(verifier, verifierParams, hookId, backupOwner!");
-    }
-
-    [TestMethod]
-    public void VerifierAllowlistBlocksImmediateKeyRotationMethods()
-    {
-        string accountsSource = ReadCoreFile("SmartAccount.Accounts.cs");
-        string allowlistBlock = ExtractSourceBlock(
+            "CreateAccountCore(ids[i], custody, saltList[i], recoveryTimelockMs, new object[0], true, null);");
+        StringAssert.Contains(
             accountsSource,
-            "private static readonly string[] AllowedVerifierMethods = new string[]",
-            "private static readonly string[] AllowedHookMethods = new string[]");
-
-        Assert.IsFalse(allowlistBlock.Contains("\"setPublicKey\"", StringComparison.Ordinal));
+            "ExecutionEngine.Assert(accountId == expected, \"Account id does not match registration parameters\");");
+        StringAssert.Contains(accountsSource, "UInt160 expected = expectedAccountId ?? ComputeAccountIdentity(custody!, salt!);");
     }
 
     [TestMethod]
-    public void PluginConfigurationCallsRequireReplayAfterTimelock()
+    public void PluginConfigurationHasNoCallerSuppliedMethodAllowlist()
     {
+        // v3 reached plugins through a name allowlist, which left every future
+        // plugin method one omission away from being callable. v4 configuration
+        // is a fixed set of typed action codes that terminate in the module's
+        // own lifecycle callback, so no caller-supplied method name exists.
         string accountsSource = ReadCoreFile("SmartAccount.Accounts.cs");
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
+        string sessionSource = ReadContractFile("plugins/validators/SessionKeyValidator.cs");
 
-        StringAssert.Contains(accountsSource, "PendingModuleCall pending = new PendingModuleCall");
-        StringAssert.Contains(accountsSource, "ComputeModuleCallHash(string method, object[] args)");
-        StringAssert.Contains(accountsSource, "return false;");
-        StringAssert.Contains(accountsSource, "Timelock not elapsed");
-        StringAssert.Contains(accountsSource, "Storage.Delete(Storage.CurrentContext, pendingKey);");
+        Assert.IsFalse(accountsSource.Contains("AllowedVerifierMethods", StringComparison.Ordinal));
+        Assert.IsFalse(accountsSource.Contains("AllowedHookMethods", StringComparison.Ordinal));
+        StringAssert.Contains(modulesSource, "CallModuleLifecycle(accountId, moduleId, module, \"configure\", configData!);");
+
+        // The immediate key-rotation hole is closed inside the validator: the
+        // grant cannot be swapped inside the cooldown, so a fresh key cannot
+        // reset the spending window.
+        StringAssert.Contains(sessionSource, "Key rotation cooldown active (24h)");
+        StringAssert.Contains(
+            sessionSource,
+            "// Do NOT reset spending tracking — prevent spending limit bypass via key rotation");
     }
 
     [TestMethod]
-    public void ExecutionPathAppliesVerifierPostExecutionEffectsAfterSuccessfulCalls()
+    public void PluginConfigurationRequiresAProposedIntentAfterTimelock()
     {
-        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
+        string intentsSource = ReadCoreFile("SmartAccount.Intents.cs");
+        string protocolSource = ReadCoreFile("SmartAccount.ModuleProtocol.cs");
 
         StringAssert.Contains(
-            executionSource,
-            "PlatformSyscalls.CallWithGasLimit(");
-        StringAssert.Contains(executionSource, "CallVerifierWithGasLimit(");
-        StringAssert.Contains(executionSource, "\"postExecute\"");
-        StringAssert.Contains(executionSource, "private const long VerifierGasLimit = 1_000_000_000;");
-        Assert.IsFalse(executionSource.Contains("Contract.Call(state.Verifier", StringComparison.Ordinal));
-        StringAssert.Contains(executionSource, "VerifierGasLimit");
+            intentsSource,
+            "public static BigInteger proposeConfiguration(UInt160 accountId, object[] actions, ByteString[] readSet)");
+        StringAssert.Contains(intentsSource, "intent.MatureAt = now + ModuleChangeDelayMs;");
+        StringAssert.Contains(intentsSource, "ExecutionEngine.Assert(now >= record!.MatureAt, ErrorIntentImmature);");
+        StringAssert.Contains(intentsSource, "ExecutionEngine.Assert(now <= record.ExpiresAt, ErrorIntentExpired);");
+        StringAssert.Contains(intentsSource, "private static ByteString ComputeActionsDigest(object[] actions)");
+        StringAssert.Contains(
+            intentsSource,
+            "ExecutionEngine.Assert(ComputeActionsDigest(actions!) == record.ActionDigest, ErrorOperationMalformed);");
+        StringAssert.Contains(intentsSource, "DropConfigurationIntent(accountId, intentId);");
+        StringAssert.Contains(protocolSource, "ModuleChangeDelayMs = 86_400_000");
     }
 
     [TestMethod]
-    public void GasBoundedVerifierSyscallIsDeclaredByTheContractAndUsedForBothCallbacks()
+    public void ExecutionPathAppliesValidatorCompletionAfterSuccessfulCalls()
     {
-        // No published Neo.SmartContract.Framework declares Contract.CallWithGasLimit, so the
-        // contract declares the syscall itself. The compiled bytes are checked separately in
-        // CompiledCoreSyscallTests; this pins the source shape.
         string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
+
+        StringAssert.Contains(executionSource, "CallValidatorOnUserOpComplete(");
+        StringAssert.Contains(
+            modulesSource,
+            "module.ContractHash, \"onUserOpComplete\", CallFlags.All, CompletionPerCallGasLimit,");
+        StringAssert.Contains(modulesSource, "EnterModulePhase(accountId, ctx, PhaseCompletion, moduleId);");
+        StringAssert.Contains(modulesSource, "ChargeCallbackGas(ctx, GasPoolCompletion, gasBefore, CompletionPerCallGasLimit);");
+        // Completion runs only for the routed validator or for the members that
+        // actually approved, and only after the target dispatch returned.
+        StringAssert.Contains(executionSource, "if (approvedMembers[i] == 0) break;");
+        StringAssert.Contains(executionSource, "approvedMembers[i], approvedModules[i], op, result);");
+    }
+
+    [TestMethod]
+    public void BoundedModuleCallbackSyscallIsDeclaredOnceAndBehindOneGate()
+    {
+        // No published Neo.SmartContract.Framework declares
+        // System.Contract.CallWithGasLimit, so the contract declares the syscall
+        // itself in the PLATFORM build. The compiled bytes are checked separately
+        // in CompiledCoreSyscallTests; this pins the source shape and the single
+        // gate every module callback passes through.
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
 
         StringAssert.Contains(executionSource, "[Syscall(\"System.Contract.CallWithGasLimit\")]");
         StringAssert.Contains(executionSource, "public static extern object CallWithGasLimit(");
@@ -289,12 +343,24 @@ public class ContractTests
             executionSource,
             "UInt160 scriptHash, string method, CallFlags flags, long gasLimit, params object?[]? args);");
         Assert.AreEqual(
-            5,
-            CountOccurrences(executionSource, "PlatformSyscalls.CallWithGasLimit("),
-            "Two verifier callbacks plus bounded verifier, leaf-maintenance and composite-root-maintenance helpers");
+            1,
+            CountOccurrences(modulesSource, "PlatformSyscalls.CallWithGasLimit("),
+            "the platform syscall is reached from exactly one gate");
         Assert.IsFalse(
             executionSource.Contains("Contract.CallWithGasLimit(", StringComparison.Ordinal),
             "the framework-declared form does not exist in any published framework");
+
+        // Public builds cannot reach that syscall: the same gate carries the
+        // documented degradation branch instead of calling modules directly.
+        StringAssert.Contains(modulesSource, "#if PLATFORM");
+        StringAssert.Contains(modulesSource, "PLAN A DEGRADATION");
+        StringAssert.Contains(modulesSource, "#else");
+        Assert.AreEqual(
+            2,
+            CountOccurrences(
+                modulesSource,
+                "private static object CallModuleGasCapped(UInt160 scriptHash, string method, CallFlags flags, long gasLimit, object[] args) =>"),
+            "one gate, one implementation per build branch");
 
         int declarations = Directory.EnumerateFiles(ContractsDir, "*.cs", SearchOption.AllDirectories)
             .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
@@ -303,57 +369,55 @@ public class ContractTests
     }
 
     [TestMethod]
-    public void HookCallbacksUseTheCanonicalOperationTupleForPreAndPostPhases()
+    public void HookCallbacksReceiveTheCanonicalOperationViewInPreAndPostPhases()
     {
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
         string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
-        string preHookBlock = ExtractSourceBlock(
-            executionSource,
-            "// [Hook phase] pre-execution hook",
-            "// [Execution phase]");
-        string postHookBlock = ExtractSourceBlock(
-            executionSource,
-            "// [Hook phase] post-execution hook",
-            "if (state.Verifier != UInt160.Zero)");
 
-        StringAssert.Contains(preHookBlock, "BuildHookOperationParams(op, executionArgs)");
-        StringAssert.Contains(postHookBlock, "BuildHookOperationParams(op, executionArgs)");
-        StringAssert.Contains(executionSource, "private static object[] BuildHookOperationParams(UserOperation op, object[] args)");
+        // The 13-field canonical operation is rebuilt field by field, with deep
+        // copies of the two nested arrays, so a hook can neither observe a
+        // Struct nor mutate the authenticated operation the target executes.
+        StringAssert.Contains(modulesSource, "private static object[] BuildCanonicalOperationView(object[] operation)");
+        StringAssert.Contains(modulesSource, "operation[OpVersion],");
+        StringAssert.Contains(modulesSource, "operation[OpSignature],");
+        StringAssert.Contains(modulesSource, "CloneOperationArguments((object[])operation[OpArgs]),");
+        StringAssert.Contains(modulesSource, "CloneOperationArguments((object[])operation[OpHookProofs])");
+        StringAssert.Contains(
+            modulesSource,
+            "new object[] { accountId, BuildCanonicalOperationView(operation) });");
+        StringAssert.Contains(
+            modulesSource,
+            "new object[] { accountId, BuildCanonicalOperationView(operation), CloneCallbackValue(result)!, hookData });");
+        StringAssert.Contains(executionSource, "object[] executionArgs = CloneOperationArguments((object[])op[OpArgs]);");
+        StringAssert.Contains(executionSource, "ByteString[] hookData = new ByteString[hookCount];");
+        // postCheck runs in reverse over the ORIGINAL pre-approved snapshot and
+        // receives exactly the hookData its own instance returned.
+        StringAssert.Contains(executionSource, "for (int i = hookCount - 1; i >= 0; i--)");
+        StringAssert.Contains(
+            executionSource,
+            "CallHookPostCheck(accountId, ctx, hookOrder.HookIds[i], hookModules[i], op, result, hookData[i]);");
         StringAssert.Contains(executionSource, "private static object[] CloneOperationArguments(object[] args)");
-        StringAssert.Contains(executionSource, "Hook mutated authenticated operation");
-        StringAssert.Contains(executionSource, "executionArgs = CloneOperationArguments(op.Args)");
-        StringAssert.Contains(executionSource, "UserOperation verificationOp = CloneUserOperation(op);");
-        StringAssert.Contains(executionSource, "private static UserOperation CloneUserOperation(UserOperation op)");
-        StringAssert.Contains(executionSource, "new object[] { accountId, CloneUserOperation(op), CloneCallbackValue(result)! }");
         StringAssert.Contains(executionSource, "private static object? CloneCallbackValue(object? value)");
-        StringAssert.Contains(executionSource, "op.TargetContract,");
-        StringAssert.Contains(executionSource, "op.Method,");
-        StringAssert.Contains(executionSource, "args,");
-        StringAssert.Contains(executionSource, "op.Nonce,");
-        StringAssert.Contains(executionSource, "op.Deadline,");
-        StringAssert.Contains(executionSource, "op.Signature");
-
-        // Passing the opaque UserOperation object directly was incompatible with every shipped
-        // hook, whose ABI reads target/method/args from opParams[0..2]. Keep both phases on the
-        // same canonical tuple so a hook cannot validate one shape and meter another.
-        Assert.IsFalse(
-            preHookBlock.Contains("new object[] { accountId, op });", StringComparison.Ordinal),
-            "PreExecute must not receive an opaque UserOperation in place of the hook tuple");
-        Assert.IsFalse(
-            postHookBlock.Contains("new object[] { accountId, op, result });", StringComparison.Ordinal),
-            "PostExecute must not receive an opaque UserOperation in place of the hook tuple");
     }
 
     [TestMethod]
-    public void MultiHookIsolatesMutableOperationArraysBetweenChildren()
+    public void MultiHookChildCompositionIsRetiredInProtocolV4()
     {
-        string source = File.ReadAllText(Path.Combine(ContractsDir, "plugins", "hooks", "MultiHook.cs"));
+        string source = ReadContractFile("plugins/hooks/MultiHook.cs");
 
-        StringAssert.Contains(source, "private static object[] CloneHookParams(object[] opParams)");
-        Assert.AreEqual(2, CountOccurrences(source, "CloneHookParams(opParams)"));
-        Assert.AreEqual(2, CountOccurrences(source, "Child hook mutated authenticated operation"));
-        StringAssert.Contains(source, "ByteString resultSnapshot = StdLib.Serialize(result)");
-        Assert.AreEqual(1, CountOccurrences(source, "StdLib.Deserialize(resultSnapshot)"));
-        Assert.IsFalse(source.Contains("new object[] { accountId, childParams, result }", StringComparison.Ordinal));
+        // v4 owns composition (the per-account hookOrder), so the composable
+        // hook has no children to fan out to — and the shared-mutable-array
+        // problem it used to mitigate does not exist.
+        StringAssert.Contains(source, "MultiHook is not installable in protocol v4; use the core hookOrder");
+        StringAssert.Contains(source, "MultiHook is retired in protocol v4");
+        Assert.IsFalse(source.Contains("CloneHookParams", StringComparison.Ordinal));
+        Assert.IsFalse(source.Contains("Contract.Call(", StringComparison.Ordinal));
+
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
+        StringAssert.Contains(modulesSource, "private static HookOrderRecord AppendHookToOrder(UInt160 accountId, BigInteger hookId)");
+        StringAssert.Contains(modulesSource, "private static HookOrderRecord RemoveHookFromOrder(UInt160 accountId, BigInteger hookId)");
+        StringAssert.Contains(modulesSource, "private static void PutHookOrder(UInt160 accountId, HookOrderRecord order)");
+        StringAssert.Contains(modulesSource, "case ActionSetHookOrder:");
     }
 
     [TestMethod]
@@ -374,21 +438,22 @@ public class ContractTests
 
         StringAssert.Contains(marketSource, "state.Verifier = UInt160.Zero;");
         StringAssert.Contains(marketSource, "state.HookId = UInt160.Zero;");
-        StringAssert.Contains(marketSource, "state.EscapeTriggeredAt = 0;");
+        StringAssert.Contains(marketSource, "state.EscapeTriggeredAt = BigInteger.Zero;");
         StringAssert.Contains(marketSource, "Account locked in market escrow");
         StringAssert.Contains(marketSource, "Only escrow market");
     }
 
     [TestMethod]
-    public void CombinedSourceDocumentsV3RegistrationAndExecutionFlow()
+    public void CombinedSourceDocumentsV4RegistrationAndExecutionFlow()
     {
         string source = ReadCombinedSource();
 
-        StringAssert.Contains(source, "RegisterAccount");
-        StringAssert.Contains(source, "ExecuteUserOp");
-        StringAssert.Contains(source, "Backup owner required");
-        StringAssert.Contains(source, "Verifier rejected signature");
-        StringAssert.Contains(source, "Native witness failed");
+        StringAssert.Contains(source, "createAccount");
+        StringAssert.Contains(source, "executeUserOp");
+        StringAssert.Contains(source, "Custody required");
+        StringAssert.Contains(source, "ErrorValidationRejected");
+        StringAssert.Contains(source, "VerifyHookProofsAgainstSnapshot");
+        StringAssert.Contains(source, "InitializeDefaultMessageSubjects");
     }
 
     [TestMethod]
@@ -405,27 +470,45 @@ public class ContractTests
                 $"Direct caller-controlled authority call still present in {fileName}");
         }
 
-        StringAssert.Contains(ReadContractFile("plugins/hooks/WhitelistHook.cs"), "HookAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("plugins/hooks/WhitelistHook.cs"), "HookAuthority.ValidateExecutionCaller");
-        StringAssert.Contains(ReadContractFile("plugins/hooks/DailyLimitHook.cs"), "HookAuthority.ValidateExecutionCaller");
-        StringAssert.Contains(ReadContractFile("plugins/hooks/MultiHook.cs"), "HookAuthority.ValidateExecutionCaller");
-        StringAssert.Contains(ReadContractFile("plugins/hooks/NeoDIDCredentialHook.cs"), "HookAuthority.ValidateExecutionCaller");
-        StringAssert.Contains(ReadContractFile("plugins/hooks/TokenRestrictedHook.cs"), "HookAuthority.ValidateExecutionCaller");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/HookAuthority.cs"), "ModuleContext.RequireLifecycle(Core(), accountId, moduleId);");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/HookAuthority.cs"), "ModuleContext.RequireInstance(Core(), accountId, ModulePhase.HookPre);");
+        StringAssert.Contains(ReadContractFile("plugins/hooks/HookAuthority.cs"), "ModuleContext.RequireInstance(Core(), accountId, ModulePhase.HookPost);");
+        foreach (string fileName in HookFiles.Where(path => path != "plugins/hooks/HookAuthority.cs"))
+        {
+            string source = ReadContractFile(fileName);
+            StringAssert.Contains(
+                source,
+                "HookAuthority.RequirePreCheck(accountId, operation);",
+                $"Core authority preCheck missing from {fileName}");
+            StringAssert.Contains(
+                source,
+                "HookAuthority.RequirePostCheck(accountId, operation);",
+                $"Core authority postCheck missing from {fileName}");
+        }
     }
 
     [TestMethod]
-    public void WalletTracksHookExecutionContextForTrustedPluginCalls()
+    public void CoreRecordsTheHookWriterPhaseForTrustedPluginCalls()
     {
-        string internalSource = ReadCoreFile("SmartAccount.Internal.cs");
-        string verifyContextSource = ReadCoreFile("SmartAccount.VerifyContext.cs");
+        string modelsSource = ReadCoreFile("SmartAccount.Models.cs");
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
         string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
 
-        StringAssert.Contains(internalSource, "Prefix_HookExecutionContext");
-        StringAssert.Contains(internalSource, "SetHookExecutionContext");
-        StringAssert.Contains(internalSource, "ClearHookExecutionContext");
-        StringAssert.Contains(verifyContextSource, "public static bool CanExecuteHook");
-        StringAssert.Contains(executionSource, "SetHookExecutionContext(accountId, state.HookId);");
-        StringAssert.Contains(executionSource, "ClearHookExecutionContext(accountId);");
+        // v3 tracked a hook "execution context" blob; v4 publishes the writer
+        // phase itself (0x58), so a plugin authenticates through
+        // getAuthorizedModuleId(accountId, phase) and gets its own instance id
+        // back only while the core is actually running that phase for it.
+        StringAssert.Contains(modelsSource, "private const byte PhaseHookPre = 2;");
+        StringAssert.Contains(modelsSource, "private const byte PhaseTargetDispatch = 3;");
+        StringAssert.Contains(modelsSource, "private const byte PhaseHookPost = 4;");
+        StringAssert.Contains(modulesSource, "EnterModulePhase(accountId, ctx, PhaseHookPre, moduleId);");
+        StringAssert.Contains(modulesSource, "EnterModulePhase(accountId, ctx, PhaseHookPost, moduleId);");
+        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseTargetDispatch, BigInteger.Zero);");
+        StringAssert.Contains(modulesSource, "public static BigInteger getAuthorizedModuleId(UInt160 accountId, byte phase)");
+        StringAssert.Contains(
+            modulesSource,
+            "if (ctx == null || ctx.Phase != phase || ctx.ActiveModuleId <= 0) return BigInteger.MinusOne;");
+        StringAssert.Contains(modulesSource, "if (Runtime.CallingScriptHash != module.ContractHash) return BigInteger.MinusOne;");
     }
 
     [TestMethod]
@@ -452,28 +535,36 @@ public class ContractTests
     {
         string source = ReadContractFile("plugins/hooks/DailyLimitHook.cs");
 
-        StringAssert.Contains(source, "public static void PostExecute");
+        StringAssert.Contains(source, "public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)");
         Assert.IsFalse(source.Contains("if (!DidExecutionSucceed(result)) return;", StringComparison.Ordinal));
+        // The account's assets leave from the proxy script hash, not from the
+        // accountId itself, so the protected-source check compares that address.
         StringAssert.Contains(source, "ExecutionEngine.Assert(IsProtectedTransferSource(accountId, fromAccount), \"Transfer source not permitted\");");
-        // Assets leave from the account's holding address (the core's proxy script
-        // hash), not from the accountId itself, so the protected-source check has to
-        // compare against that address.
-        StringAssert.Contains(source, "return from == AssetAddressOf(accountId);");
-        StringAssert.Contains(source, "Contract.Call(core, \"getProxyScriptHash\", CallFlags.ReadOnly, accountId)");
-        StringAssert.Contains(source, "MeterAllLimitedOutflows(accountId, directToken, declaredAmount);");
+        StringAssert.Contains(source, "return from == HookAuthority.AssetAddress(accountId);");
+        // Measured balance delta is the authoritative meter: a router/intermediary
+        // hop cannot slip past the limit by hiding the token from the target.
+        StringAssert.Contains(source, "SnapshotAllLimitedBalances(accountId, moduleId);");
+        StringAssert.Contains(source, "MeterAllLimitedOutflows(accountId, moduleId, directToken, declaredAmount);");
         Assert.IsFalse(source.Contains("Storage.Put(Storage.CurrentContext, spentKey, newTotal);", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void MultiHookRejectsUnsafeHookTopologies()
+    public void CoreHookOrderRejectsUnsafeHookTopologies()
     {
-        string source = ReadContractFile("plugins/hooks/MultiHook.cs");
+        // Composition moved from the composable hook into the core. The order
+        // must be exactly the installed hook set (every installed hook runs, so a
+        // signature scheme cannot drop policy by omitting hooks), distinct and
+        // bounded — the checks that used to live in MultiHook.
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
 
-        StringAssert.Contains(source, "hooks allowed");
-        StringAssert.Contains(source, "Self hook not allowed");
-        StringAssert.Contains(source, "Duplicate hook not allowed");
-        StringAssert.Contains(source, "AssertChildHook");
-        StringAssert.Contains(source, "Child hook cleanup ABI missing");
+        StringAssert.Contains(modulesSource, "private static void ValidateHookOrder(UInt160 accountId, BigInteger[] hookIds)");
+        StringAssert.Contains(modulesSource, "ExecutionEngine.Assert(hookIds != null && hookIds.Length <= MaxHookModuleInstances, ErrorModuleLimitHook);");
+        StringAssert.Contains(modulesSource, "ExecutionEngine.Assert(module.ModuleType == ModuleTypeCodeHook, ErrorOperationMalformed);");
+        StringAssert.Contains(modulesSource, "ExecutionEngine.Assert(hookIds[j] != hookIds[i], ErrorOperationMalformed);");
+        StringAssert.Contains(
+            modulesSource,
+            "(BigInteger)hookIds.Length == CountModulesOfType(accountId, ModuleTypeCodeHook),");
+        StringAssert.Contains(modulesSource, "case ActionSetHookOrder:");
     }
 
     [TestMethod]
@@ -495,24 +586,42 @@ public class ContractTests
     [TestMethod]
     public void ZkLoginConfigBlobRejectsTrailingBytes()
     {
-        string source = ReadContractFile("plugins/verifiers/ZkLoginVerifier.cs");
+        string source = ReadContractFile("plugins/validators/DelegatedIdentityValidator.cs");
 
-        // Configuration is a signed protocol envelope.  The parser must consume the
-        // entire byte string so two encodings cannot map to the same stored tuple.
-        StringAssert.Contains(source, "raw.Length == cursor + 32");
+        // Configuration is a signed protocol envelope with a fixed arity, so two
+        // encodings cannot map to the same stored tuple.
+        StringAssert.Contains(
+            source,
+            "ExecutionEngine.Assert(ModuleConfig.Command(data, 3) == \"setConfig\", \"Unknown config command\");");
+        StringAssert.Contains(
+            ReadContractFile("plugins/validators/ModuleOperation.cs"),
+            "ExecutionEngine.Assert(data != null && data.Length == argumentCount + 1, \"Invalid config arguments\");");
+
+        // The proof is the same story: an exact-length canonical layout means it
+        // must consume the whole byte string.
+        StringAssert.Contains(
+            source,
+            "int expectedLength = 2 + provider.Length + NullifierLength + NullifierLength + SignatureLength;");
+        StringAssert.Contains(source, "if (proof.Length != expectedLength) return false;");
         Assert.AreEqual(
             1,
-            CountOccurrences(source, "raw.Length == cursor + 32"),
-            "ZkLogin config must have exactly one canonical end-of-input check");
+            CountOccurrences(source, "if (proof.Length != expectedLength) return false;"),
+            "ZkLogin proof must have exactly one canonical end-of-input check");
     }
 
     [TestMethod]
     public void ZkLoginProviderUsesTheOneByteWireLengthBound()
     {
-        string source = ReadContractFile("plugins/verifiers/ZkLoginVerifier.cs");
+        string source = ReadContractFile("plugins/validators/DelegatedIdentityValidator.cs");
 
-        StringAssert.Contains(source, "encoded.Length > 0 && encoded.Length <= 255");
-        StringAssert.Contains(source, "Provider must be 1-255 bytes");
+        // The provider travels with a one-byte length prefix in both the proof
+        // and the signed preimage, so values that cannot be encoded canonically
+        // are rejected at configuration time.
+        StringAssert.Contains(
+            source,
+            "ExecutionEngine.Assert(provider != null && provider.Length > 0 && provider.Length <= 255, \"Provider must be 1-255 bytes\");");
+        StringAssert.Contains(source, "if (proof[1] != provider.Length) return false;");
+        StringAssert.Contains(source, "preimage = Helper.Concat(preimage, new byte[] { (byte)provider.Length });");
     }
 
     [TestMethod]
@@ -527,140 +636,212 @@ public class ContractTests
                 $"Direct caller-controlled verifier authority call still present in {fileName}");
         }
 
-        StringAssert.Contains(ReadContractFile("plugins/verifiers/Web3AuthVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("plugins/verifiers/TEEVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("plugins/verifiers/WebAuthnVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("plugins/verifiers/SessionKeyVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("plugins/verifiers/MultiSigVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("plugins/verifiers/SubscriptionVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("plugins/verifiers/ZKEmailVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
-        StringAssert.Contains(ReadContractFile("plugins/verifiers/ZkLoginVerifier.cs"), "VerifierAuthority.ValidateConfigCaller");
+        StringAssert.Contains(ReadContractFile("plugins/validators/ValidatorAuthority.cs"), "ModuleContext.RequireLifecycle(Core(), accountId, moduleId);");
+        StringAssert.Contains(ReadContractFile("plugins/validators/ValidatorAuthority.cs"), "ModuleContext.ResolveValidationInstance(Core(), accountId, operation);");
+        StringAssert.Contains(ReadContractFile("plugins/validators/ValidatorAuthority.cs"), "ModuleContext.RequireInstance(Core(), accountId, ModulePhase.Completion);");
+
+        // Each shipped validator authenticates its lifecycle callback and at
+        // least one of the two execution phases through the shared authority.
+        foreach (string fileName in VerifierFiles.Where(path => path != "plugins/validators/ValidatorAuthority.cs"))
+        {
+            string source = ReadContractFile(fileName);
+            StringAssert.Contains(
+                source,
+                "ValidatorAuthority.RequireLifecycle(accountId, moduleId);",
+                $"Core authority lifecycle gate missing from {fileName}");
+            Assert.IsTrue(
+                source.Contains("ValidatorAuthority.RequireValidation(accountId, operation);", StringComparison.Ordinal)
+                || source.Contains("ValidatorAuthority.RequireCompletion(accountId, operation);", StringComparison.Ordinal),
+                $"Core authority execution gate missing from {fileName}");
+        }
     }
 
     [TestMethod]
-    public void DisabledZkEmailVerifierIsRejectedAtTheBindGate()
+    public void DisabledZkEmailVerifierFaultsEveryLifecycleCallback()
     {
-        // A verifier whose proof path is disabled must not advertise the V3
-        // capability: AssertV3Verifier calls supportsV3() at registration and at
-        // every update, so returning false rejects binding up front instead of
-        // letting an account attach to a verifier whose validateSignature always
-        // faults (which previously forced a 7-90 day escape to recover).
-        string source = ReadContractFile("plugins/verifiers/ZKEmailVerifier.cs");
-        StringAssert.Contains(source, "public static bool SupportsV3() => false;");
+        // The placeholder advertises the v4 validator surface, so the ABI gate
+        // passes; every lifecycle callback then faults. Installation is atomic
+        // with the registration/confirmation action, so binding is rejected up
+        // front instead of letting an account attach to a validator that can
+        // only ever reject (which previously forced a 7-90 day escape).
+        string source = ReadContractFile("plugins/validators/ZKEmailVerifier.cs");
+        StringAssert.Contains(
+            source,
+            "public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation) => false;");
         StringAssert.Contains(source, "ZKEmailVerifier disabled pending real proof verification");
+        Assert.AreEqual(
+            4,
+            CountOccurrences(source, "ExecutionEngine.Assert(false, Disabled);"),
+            "onInstall, onUninstall, configure and onUserOpComplete must all refuse");
     }
 
     [TestMethod]
-    public void DiscoveryAndSimulationReadsAreSafeAndNonFaulting()
+    public void DiscoveryReadsAreSafeAndNonFaulting()
     {
-        // Wallets and explorers probe counterfactual accounts before registration,
-        // so both reads must be Safe and must report instead of faulting on an
-        // unknown account id.
+        // Wallets and explorers probe counterfactual accounts before creation,
+        // so getAccount must be Safe and must report a zero row (not fault) for
+        // an unknown account id, including the two execution-relevant latches.
         string source = ReadCoreFile("SmartAccount.State.cs");
-        StringAssert.Contains(source, "public static object[] DescribeAccount(UInt160 accountId)");
-        StringAssert.Contains(source, "public static object[] SimulateValidation(UInt160 accountId, UserOperation op)");
-        StringAssert.Contains(source, "if (data == null)");
-        // Simulation reports the two execution-relevant latches: market escrow blocks
-        // execution; an active escape is cancelled by execution.
-        StringAssert.Contains(source, "IsMarketEscrowActive(accountId)");
-        StringAssert.Contains(source, "Runtime.CheckWitness(state.BackupOwner)");
+        StringAssert.Contains(source, "[Safe]\n        public static object[] getAccount(UInt160 accountId)");
+        StringAssert.Contains(source, "Non-faulting for unknown accounts");
+        StringAssert.Contains(source, "if (control != null)");
+        StringAssert.Contains(source, "IsMarketEscrowActive(accountId),");
+        StringAssert.Contains(source, "HasLegacyAccountRow(accountId)");
+        StringAssert.Contains(source, "public static object[] getModules(UInt160 accountId, string moduleType, BigInteger cursor, BigInteger limit)");
+        StringAssert.Contains(source, "public static object[] getHookOrder(UInt160 accountId)");
+
+        // Off-chain pre-flight signs the digest published by the core, never a
+        // locally reconstructed copy of the domain separator.
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
+        StringAssert.Contains(executionSource, "[Safe]\n        public static ByteString getOperationDigest(UInt160 accountId, object operation)");
     }
 
     [TestMethod]
-    public void SessionKeyVerifierAcceptsRegistrationTimeInitialKey()
+    public void SessionKeyValidatorAcceptsInstallTimeInitialKey()
     {
-        // The core delivers registration verifierParams to setPublicKey; decoding and
-        // storing must reuse the timelocked path's validation instead of duplicating it.
-        string source = ReadContractFile("plugins/verifiers/SessionKeyVerifier.cs");
-        StringAssert.Contains(source, "public static void SetPublicKey(UInt160 accountId, ByteString initialKeyBlob)");
-        StringAssert.Contains(source, "\"Unsupported session key blob version\"");
-        StringAssert.Contains(source, "SetSessionKey(accountId, pubKey, targetContract, method, validUntil, spendingLimit, description);");
+        // The core delivers registration initData to onInstall; decoding and
+        // storing must reuse the timelocked configure path instead of
+        // duplicating the validation.
+        string source = ReadContractFile("plugins/validators/SessionKeyValidator.cs");
+        StringAssert.Contains(source, "if (initData.Length > 0) ApplyConfig(accountId, moduleId, generation, initData);");
+        StringAssert.Contains(source, "if (command == \"setSessionKey\")");
+        StringAssert.Contains(
+            source,
+            "SetSessionKey(accountId, moduleId, generation, (ByteString)data[1], (UInt160)data[2], (string)data[3],");
+        StringAssert.Contains(
+            source,
+            "ExecutionEngine.Assert(spendingLimit == 0 || method == \"transfer\", \"Spending limit only enforceable on transfer session keys\");");
+        StringAssert.Contains(source, "ExecutionEngine.Assert(false, \"Unknown config command\");");
     }
 
     [TestMethod]
-    public void SessionAndSubscriptionVerifiersKeepValidateSignatureReadOnlyAndPersistStateInPostExecute()
+    public void SessionAndSubscriptionValidatorsKeepValidationReadOnlyAndPersistInCompletion()
     {
-        string sessionSource = ReadContractFile("plugins/verifiers/SessionKeyVerifier.cs");
-        string subscriptionSource = ReadContractFile("plugins/verifiers/SubscriptionVerifier.cs");
+        string sessionSource = ReadContractFile("plugins/validators/SessionKeyValidator.cs");
+        string subscriptionSource = ReadContractFile("plugins/validators/SubscriptionValidator.cs");
+
+        // The core calls validateUserOp with ReadOnly, and the declared-Safe ABI
+        // is what makes that impossible to bypass: validation can never write.
+        // The state transition therefore lives in the completion callback.
+        StringAssert.Contains(sessionSource, "[Safe]\n        public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)");
+        StringAssert.Contains(subscriptionSource, "[Safe]\n        public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)");
 
         string sessionValidateBlock = ExtractSourceBlock(
             sessionSource,
-            "public static bool ValidateSignature(UInt160 accountId, UserOperation op)",
-            "private static BigInteger ExtractTransferValue(UInt160 accountId, UserOperation op)");
+            "public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)",
+            "public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)");
         string subscriptionValidateBlock = ExtractSourceBlock(
             subscriptionSource,
-            "public static bool ValidateSignature(UInt160 accountId, UserOperation op)",
-            "public static void ClearAccount(UInt160 accountId)");
+            "public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)",
+            "public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)");
 
         Assert.IsFalse(sessionValidateBlock.Contains("Storage.Put(", StringComparison.Ordinal));
         Assert.IsFalse(subscriptionValidateBlock.Contains("Storage.Put(", StringComparison.Ordinal));
-        StringAssert.Contains(sessionSource, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
-        StringAssert.Contains(subscriptionSource, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
+        StringAssert.Contains(sessionSource, "public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)");
+        StringAssert.Contains(subscriptionSource, "public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)");
     }
 
     [TestMethod]
-    public void MultiSigPropagatesVerifierPostExecutionEffectsToChildVerifiers()
+    public void MultiSigCompletionIsOrchestratedByTheCore()
     {
-        string source = ReadContractFile("plugins/verifiers/MultiSigVerifier.cs");
+        // v4 moved threshold orchestration into the core: every approved member
+        // receives its own completion callback from the core, and the member
+        // validator owns no child calls of its own.
+        string executionSource = ReadCoreFile("SmartAccount.Execution.cs");
+        string multiSigSource = ReadContractFile("plugins/validators/MultiSigValidator.cs");
 
-        StringAssert.Contains(source, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
+        StringAssert.Contains(executionSource, "if (approvedMembers[i] == 0) break;");
+        StringAssert.Contains(executionSource, "approvedMembers[i], approvedModules[i], op, result);");
         StringAssert.Contains(
-            source,
-            "Contract.Call(config.Verifiers[i], \"postExecute\", CallFlags.All, new object[] { accountId, subOp, childResult });");
+            multiSigSource,
+            "public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)");
+        StringAssert.Contains(multiSigSource, "ValidatorAuthority.RequireCompletion(accountId, operation);");
+        Assert.IsFalse(multiSigSource.Contains("Contract.Call(", StringComparison.Ordinal));
     }
 
     [TestMethod]
-    public void PluginCleanupFailsClosedAcrossOwnershipTransitions()
+    public void AccountSweepIsCallbackFreeAcrossOwnershipTransitions()
     {
-        string[] sources =
-        {
-            ReadCoreFile("SmartAccount.Accounts.cs"),
-            ReadCoreFile("SmartAccount.Escape.cs"),
-            ReadCoreFile("SmartAccount.MarketEscrow.cs")
-        };
+        // v3 handed ownership transitions a clearAccount callback, so a stale or
+        // hostile plugin still held a write window on a shell it no longer
+        // controlled. v4 deletes the account's own rows locally and never calls
+        // the plugin, so there is nothing to fail open.
+        string escapeSource = ReadCoreFile("SmartAccount.Escape.cs");
+        string marketSource = ReadCoreFile("SmartAccount.MarketEscrow.cs");
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
 
-        // Swallowing clearAccount faults would hand a buyer a shell whose old plugin storage can
-        // still authorize actions. Settlement must let the enclosing Neo transaction fault; only
-        // the temporary verifier/hook caller context is cleared in finally blocks.
-        foreach (string source in sources)
+        foreach (string source in new[] { escapeSource, marketSource, modulesSource })
         {
-            Assert.IsFalse(source.Contains("catch { } // Plugin may not implement clearAccount",
-                StringComparison.Ordinal));
-            StringAssert.Contains(source, "finally");
+            Assert.IsFalse(source.Contains("clearAccount", StringComparison.Ordinal));
         }
-        StringAssert.Contains(sources[2], "the enclosing Neo transaction rolls every state write back on the fault.");
+
+        StringAssert.Contains(escapeSource, "Callback-free sweep: no external call is made anywhere below.");
+        StringAssert.Contains(escapeSource, "SweepAccountModulesAndPolicies(accountId);");
+        StringAssert.Contains(marketSource, "SweepAccountModulesAndPolicies(accountId);");
+        StringAssert.Contains(marketSource, "Callback-free clean sweep: no old plugin, market or oracle call.");
+        Assert.IsFalse(escapeSource.Contains("Contract.Call(", StringComparison.Ordinal));
+        Assert.IsFalse(marketSource.Contains("Contract.Call(", StringComparison.Ordinal));
+
+        // A code-identity change under a bound instance still fails the whole
+        // transaction, so an upgrade can never silently swap behaviour.
+        StringAssert.Contains(modulesSource, "private static void AssertCodeBindingUnchanged(ModuleInstance module)");
+        int bindingStart = modulesSource.IndexOf(
+            "private static void AssertCodeBindingUnchanged(ModuleInstance module)", StringComparison.Ordinal);
+        string bindingBody = modulesSource.Substring(bindingStart,
+            modulesSource.IndexOf("\n        }", bindingStart, StringComparison.Ordinal) - bindingStart);
+        StringAssert.Contains(bindingBody, "contract!.Id == module.ContractId");
+        StringAssert.Contains(bindingBody, "contract.UpdateCounter == module.UpdateCounter");
+        // The per-callback check compares (deployment id, update counter) and
+        // carries the install-time NEF hash only as the record's evidence: a
+        // destroy-and-redeploy cannot reuse the id and any update of the slot
+        // bumps the counter, so re-hashing every Nef on every callback charged
+        // the account for a proof the pair already carries (spec §11).
+        Assert.IsFalse(bindingBody.Contains("CryptoLib", StringComparison.Ordinal),
+            "The per-callback continuity check must not re-hash the Nef");
+        StringAssert.Contains(modulesSource, "module.NefSha256 = CryptoLib.Sha256(contract.Nef);");
     }
 
     [TestMethod]
-    public void HookLifecycleRequiresTheV3MarkerBeforeBinding()
+    public void ModuleBindingRequiresTheCanonicalProfile()
     {
+        // v3 gated binding on a supportsV3() marker plus a clearAccount ABI
+        // probe. v4 binds to the canonical profile the configuration action
+        // committed to: its digest, its declared module type, its declared
+        // capabilities, and the full callback ABI of that module type.
         string accountsSource = ReadCoreFile("SmartAccount.Accounts.cs");
-        StringAssert.Contains(accountsSource, "private static void AssertV3Hook(UInt160 hook)");
-        StringAssert.Contains(accountsSource, "AssertV3Hook(hookId)");
-        StringAssert.Contains(accountsSource, "AssertV3Hook(newHookId)");
-        StringAssert.Contains(accountsSource, "AssertV3Hook(pending.NewHookId)");
-        StringAssert.Contains(accountsSource, "private static bool ModuleExposesSafeMethod(UInt160 module, string methodName, ContractParameterType returnType");
-        StringAssert.Contains(accountsSource, "private static bool ModuleExposesMethod(UInt160 module, string methodName, ContractParameterType returnType");
-        StringAssert.Contains(accountsSource, "method.Parameters[j].Type != parameterTypes[j]");
-        StringAssert.Contains(accountsSource, "Verifier V3 cleanup ABI missing");
-        StringAssert.Contains(accountsSource, "Hook V3 cleanup ABI missing");
+        string modulesSource = ReadCoreFile("SmartAccount.Modules.cs");
 
-        foreach (string fileName in HookFiles.Where(path => path != "plugins/hooks/HookAuthority.cs"))
+        StringAssert.Contains(modulesSource, "private static void BindModuleProfile(ModuleInstance module, Contract contract, ByteString profileDigest)");
+        StringAssert.Contains(modulesSource, "ModuleExposesSafeMethod(moduleHash, \"getModuleProfile\", ContractParameterType.String),");
+        StringAssert.Contains(modulesSource, "ExecutionEngine.Assert(CryptoLib.Sha256((ByteString)profileJson) == profileDigest,");
+        StringAssert.Contains(
+            modulesSource,
+            "ExecutionEngine.Assert((string)profile[\"moduleType\"] == ModuleTypeNameFromCode((int)module.ModuleType),");
+        StringAssert.Contains(modulesSource, "private static void AssertModuleCallbackAbi(UInt160 moduleHash, ModuleInstance module)");
+        StringAssert.Contains(modulesSource, "ModuleExposesMethod(moduleHash, \"onInstall\", ContractParameterType.Void,");
+        StringAssert.Contains(accountsSource, "private static bool ModuleExposesSafeMethod(UInt160 module, string methodName, ContractParameterType returnType,");
+        StringAssert.Contains(accountsSource, "if (method.Parameters[j].Type != parameterTypes[j])");
+
+        foreach (string moduleName in new[] { "WhitelistHook", "DailyLimitHook", "TokenRestrictedHook", "NeoDIDCredentialHook", "MultiHook" })
         {
+            string profile = ReadContractFile($"plugins/hooks/{moduleName}.profile.json");
+            StringAssert.Contains(profile, "\"profileVersion\":1", $"Profile version missing from {moduleName}");
+            StringAssert.Contains(profile, "\"moduleType\":\"hook\"", $"Module type missing from {moduleName}");
+            StringAssert.Contains(profile, $"\"contractName\":\"{moduleName}\"", $"Contract name missing from {moduleName}");
             StringAssert.Contains(
-                ReadContractFile(fileName),
-                "public static bool SupportsV3() => true",
-                $"Hook lifecycle marker missing from {fileName}");
+                profile,
+                "\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"]",
+                $"Lifecycle declaration missing from {moduleName}");
         }
     }
 
     [TestMethod]
-    public void SessionAndSubscriptionPostExecuteEnforceTransferResultLocally()
+    public void SessionAndSubscriptionCompletionEnforceTransferResultLocally()
     {
-        string sessionSource = ReadContractFile("plugins/verifiers/SessionKeyVerifier.cs");
-        string subscriptionSource = ReadContractFile("plugins/verifiers/SubscriptionVerifier.cs");
+        string sessionSource = ReadContractFile("plugins/validators/SessionKeyValidator.cs");
+        string subscriptionSource = ReadContractFile("plugins/validators/SubscriptionValidator.cs");
 
-        StringAssert.Contains(sessionSource, "if (op.Method == \"transfer\")");
+        StringAssert.Contains(sessionSource, "if (ModuleOperation.Method(operation) == \"transfer\")");
         StringAssert.Contains(sessionSource, "result is bool accepted && accepted");
         StringAssert.Contains(subscriptionSource, "result is bool accepted && accepted");
         Assert.IsFalse(sessionSource.Contains("DidExecutionSucceed(result)", StringComparison.Ordinal));
@@ -684,20 +865,20 @@ public class ContractTests
     {
         string[] verifierProjects =
         {
-            "plugins/verifiers/Web3AuthVerifier.csproj",
-            "plugins/verifiers/TEEVerifier.csproj",
-            "plugins/verifiers/WebAuthnVerifier.csproj",
-            "plugins/verifiers/SessionKeyVerifier.csproj",
-            "plugins/verifiers/MultiSigVerifier.csproj",
-            "plugins/verifiers/SubscriptionVerifier.csproj",
-            "plugins/verifiers/ZKEmailVerifier.csproj",
-            "plugins/verifiers/ZkLoginVerifier.csproj",
+            "plugins/validators/Web3AuthValidator.csproj",
+            "plugins/validators/TeeKeyValidator.csproj",
+            "plugins/validators/P256Validator.csproj",
+            "plugins/validators/SessionKeyValidator.csproj",
+            "plugins/validators/MultiSigValidator.csproj",
+            "plugins/validators/SubscriptionValidator.csproj",
+            "plugins/validators/ZKEmailVerifier.csproj",
+            "plugins/validators/DelegatedIdentityValidator.csproj",
         };
 
         foreach (string project in verifierProjects)
         {
             string projectFile = ReadContractFile(project);
-            StringAssert.Contains(projectFile, "<Compile Include=\"VerifierAuthority.cs\" />");
+            StringAssert.Contains(projectFile, "<Compile Include=\"ValidatorAuthority.cs\" />");
         }
     }
 
@@ -917,7 +1098,7 @@ public class ContractTests
     [TestMethod]
     public void VerifierAndHookAuthorityUseRuntimeMillisecondsForAdminRotation()
     {
-        string verifierSource = ReadContractFile("plugins/verifiers/VerifierAuthority.cs");
+        string verifierSource = ReadContractFile("plugins/validators/ValidatorAuthority.cs");
         string hookSource = ReadContractFile("plugins/hooks/HookAuthority.cs");
 
         StringAssert.Contains(verifierSource, "AdminRotationTimelockMs = 7L * 24 * 60 * 60 * 1000");
@@ -929,7 +1110,7 @@ public class ContractTests
     [TestMethod]
     public void VerifierAndHookAuthorityRequireNewAdminWitnessForRotationConfirmation()
     {
-        string verifierSource = ReadContractFile("plugins/verifiers/VerifierAuthority.cs");
+        string verifierSource = ReadContractFile("plugins/validators/ValidatorAuthority.cs");
         string hookSource = ReadContractFile("plugins/hooks/HookAuthority.cs");
 
         StringAssert.Contains(verifierSource, "Runtime.CheckWitness(newAdmin)");
@@ -997,9 +1178,10 @@ public class ContractTests
         StringAssert.Contains(source, "authorizedCore");
         StringAssert.Contains(source, "Paymaster not bound to this core");
 
-        // M-2 fix: accountId validation is shared with the canonical execution path
+        // M-2 fix: accountId validation and the 13-field envelope check are
+        // shared with the canonical execution path
         StringAssert.Contains(source, "ValidateAccountId(accountId)");
-        StringAssert.Contains(source, "ValidateUserOperation(op)");
+        StringAssert.Contains(source, "object[] op = ValidateOperationEnvelope(operation);");
 
         // H-2 fix: batch ops must share target/method
         StringAssert.Contains(source, "Batch ops must share target contract");

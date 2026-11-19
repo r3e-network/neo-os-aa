@@ -144,5 +144,7 @@ Array）迁移到共同模块协议版本 4（`docs/SA-MODULE-PROTOCOL.md`）。
 5. 迁移后两网复扫一致。
 
 这些将成为
-`tests/fixtures/sa-module-protocol/golden-vectors/migration.template.json`
-的 golden fixture 条目（kernel 批次 39/40 填入期望输出）。
+`tests/fixtures/sa-module-protocol/golden-vectors/migration.json` 的 golden
+fixture 条目：它固定的是核心在没有链上导出时也能证明的 §14 状态机（核心
+解码种子 0x01 行、标记、通过 24h 迁移意图导入、拒绝重放）。第 1 步与第 5 步
+仍需 `migration-manifest.template.json` 所描述的真实 53/407 账户导出。

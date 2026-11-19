@@ -11,7 +11,9 @@ export const walletService = {
   },
 };
 export function getSmartAccountHash() {
-  return '0268a387913250166ddec032b03332690a1ef78';
+  // A full 20-byte hash: a truncated one would make every derivation fail and
+  // quietly hide that the create flow never derived anything.
+  return '0268a387913250166ddec032b03332690a1ef781';
 }
 export function useToast() {
   return { error() {}, info() {}, success() {} };

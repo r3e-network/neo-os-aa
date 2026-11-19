@@ -1,398 +1,809 @@
-/** Native SmartAccount ABI 2. Hashes are display-order hex; ByteString values are wire-order hex. */
-export type NativeInteger = string | bigint | number;
-export type NativeValue =
+/**
+ * Neo Smart Account v4 — native kernel surface and the protocol types both
+ * kernels share.
+ *
+ * One protocol: a 13-field operation, a 191-bit channel nonce, the §4.3
+ * operation digest, the §8 message digest, configuration intents and module
+ * queries. The two kernels differ in exactly two constructor constants — which
+ * script hash answers and which call flags the proxy verification script
+ * pushes — so every type here is kernel-agnostic.
+ *
+ * Hashes are display-order hex (40 characters for Hash160). ByteString values
+ * carried inside arguments are wire-order hex. Integer fields are decimal text
+ * in every returned descriptor and `string | number | bigint` on input.
+ */
+
+export type VMInteger = string | number | bigint;
+
+/** A canonical NeoVM value: `Struct` is rejected inside an operation (§4.1). */
+export type VMValue =
   | { type: "Null"; value?: null }
   | { type: "Boolean"; value: boolean }
-  | { type: "Integer"; value: NativeInteger }
+  | { type: "Integer"; value: VMInteger }
   | { type: "ByteString"; value: string }
-  | { type: "Array" | "Struct"; value: NativeValue[] };
-export interface NativeOperation {
+  | { type: "Array"; value: VMValue[] };
+
+/** One hook proof: instance id and its serialized proof bytes. */
+export interface HookProofEntry {
+  hookId: VMInteger;
+  proof: string;
+}
+
+/**
+ * The v4 13-field operation (§4): version, target, method, args, nonce,
+ * nonceSubkey, deadline, validatorId, credentialGeneration, authorityEpoch,
+ * configurationNonce, signature, hookProofs. Fields 0 and 12 are derived from
+ * the protocol and never supplied.
+ */
+export interface UserOperation {
   targetContract: string;
   method: string;
-  args: NativeValue[];
-  nonce: NativeInteger;
-  deadline: NativeInteger;
+  args: VMValue[];
+  nonce: VMInteger;
+  /** 32-byte nonce subkey; the channel is derived from it (§6). */
+  nonceSubkey: string;
+  deadline: VMInteger;
+  validatorId?: VMInteger;
+  credentialGeneration?: VMInteger;
+  authorityEpoch: VMInteger;
+  configurationNonce: VMInteger;
   signature?: string;
+  hookProofs?: ReadonlyArray<HookProofEntry | readonly [VMInteger, string]>;
 }
-export interface NativeContext {
-  networkMagic: NativeInteger;
+
+/** Network, core and account binding of every derivation. */
+export interface ProtocolContext {
+  networkMagic: VMInteger;
+  coreContractHash?: string;
   accountId: string;
-  authorityEpoch: NativeInteger;
-  configurationNonce: NativeInteger;
 }
+
+/** Nonce routing inputs; the authority epoch is part of the namespace. */
+export interface NonceRouting {
+  authorityEpoch: VMInteger;
+  validatorId?: VMInteger;
+  credentialGeneration?: VMInteger;
+  nonceSubkey: string;
+}
+
+/** §8 message envelope: the original sender, the 32-byte hash and the route. */
+export interface MessageEnvelope {
+  originalSender: string;
+  hash: string;
+  validatorId?: VMInteger;
+  credentialGeneration?: VMInteger;
+}
+
+export interface MessageContext extends ProtocolContext {
+  authorityEpoch: VMInteger;
+}
+
+/** §16.1 identity: `Hash160(0xAA524704 ‖ custody ‖ salt)`. */
 export interface NativeIdentity {
   readonly accountId: string;
-  readonly accountAddress: string;
   readonly verificationScript: string;
+  readonly accountAddress: string;
 }
-export interface NativeCodec {
+
+export interface NonceSplit {
+  channel: bigint;
+  sequence: bigint;
+}
+
+export interface BuiltInSignatureInput {
+  credentialGeneration: VMInteger;
+  pairs: ReadonlyArray<{ script: string; signature: string }>;
+}
+
+export interface ThresholdSignatureInput {
+  moduleId: VMInteger;
+  signature: string;
+}
+
+/** The one protocol codec: every byte a signature covers comes from here. */
+export interface ProtocolCodec {
+  readonly protocolVersion: number;
   hex(value: string, bytes?: number): string;
   bytes(value: string): Uint8Array;
   bytesToHex(value: Uint8Array): string;
-  integer(value: NativeInteger): bigint;
-  unsigned(value: NativeInteger, bits: number, label: string): bigint;
-  hashValue(displayHash: string): NativeValue;
-  stringValue(text: string): NativeValue;
-  canonicalValue(value: NativeValue): NativeValue;
-  serializeValue(value: NativeValue): string;
-  encodeValue(value: NativeValue): string;
-  operationValue(
-    operation: NativeOperation,
-    emptySignature?: boolean,
-  ): NativeValue;
-  serializeOperation(
-    operation: NativeOperation,
-    emptySignature?: boolean,
-  ): string;
+  integer(value: VMInteger): bigint;
+  unsigned(value: VMInteger, bits: number, label: string): bigint;
+  integerValue(value: VMInteger): VMValue;
+  byteStringValue(value: string): VMValue;
+  hashValue(displayHash: string): VMValue;
+  stringValue(text: string): VMValue;
+  canonicalValue(value: VMValue): VMValue;
+  serializeValue(value: VMValue): string;
+  encodeValue(value: VMValue): string;
+  operationValue(operation: UserOperation, emptySignature?: boolean): VMValue;
+  serializeOperation(operation: UserOperation, emptySignature?: boolean): string;
   dynamicCall(
     contract: string,
     method: string,
-    args: NativeValue[],
+    args: VMValue[],
     flags?: number,
   ): string;
-  composeNonce(channel: NativeInteger, sequence: NativeInteger): bigint;
-  splitNonce(nonce: NativeInteger): { channel: bigint; sequence: bigint };
-  verificationScript(accountId: string): string;
-  accountAddress(accountId: string): string;
+  composeNonce(channel: VMInteger, sequence: VMInteger): bigint;
+  splitNonce(nonce: VMInteger): NonceSplit;
+  verificationScript(
+    accountId: string,
+    options?: { coreContractHash?: string; callFlags?: number },
+  ): string;
+  accountAddress(
+    accountId: string,
+    options?: { coreContractHash?: string; callFlags?: number },
+  ): string;
   deriveIdentity(input: {
-    networkMagic: NativeInteger;
     custodyAddress: string;
     salt: string;
+    coreContractHash?: string;
+    callFlags?: number;
   }): NativeIdentity;
-  authorizationDomain(context: NativeContext): string;
-  operationPreimage(context: NativeContext, operation: NativeOperation): string;
-  operationDigest(context: NativeContext, operation: NativeOperation): string;
+  nonceNamespaceDigest(context: ProtocolContext, routing: NonceRouting): string;
+  deriveNonceChannel(context: ProtocolContext, routing: NonceRouting): string;
+  operationDomain(context: ProtocolContext, operation: UserOperation): string;
+  operationPreimage(context: ProtocolContext, operation: UserOperation): string;
+  operationDigest(context: ProtocolContext, operation: UserOperation): string;
+  messageDigest(context: MessageContext, message: MessageEnvelope): string;
+  builtInSignature(input: BuiltInSignatureInput): string;
+  thresholdSignature(members: readonly ThresholdSignatureInput[]): string;
+  thresholdMemberDigest(
+    operationDigest: string,
+    moduleId: VMInteger,
+    credentialGeneration: VMInteger,
+  ): string;
   buildExecutionScript(
     accountId: string,
-    operations: NativeOperation[],
-    context: Pick<NativeContext, "authorityEpoch" | "configurationNonce"> & {
-      accountId?: string;
-    },
-    batch?: boolean,
+    operations: readonly UserOperation[],
+    context?: ProtocolContext,
   ): string;
 }
-export declare const nativeCodec: NativeCodec;
-export declare function createNativeCodec(hashAdapters: {
-  sha256: (hex: string) => string;
-  hash160: (hex: string) => string;
-}): NativeCodec;
-export declare const NATIVE_SMART_ACCOUNT_CONTRACT: "398dc3f0227d7efac5533ed5ce9937390c158084";
-export declare const NATIVE_ABI_VERSION: 2;
-export declare const NATIVE_PROFILE_PARAMETER_DIGEST: string;
+
+/** §4.3 domain name, shared with the meta-transaction validators. */
+export declare const USER_OPERATION_DOMAIN_NAME: "Neo Smart Account";
+export declare const USER_OPERATION_DOMAIN_VERSION: "4";
+
+export declare const nativeCodec: ProtocolCodec;
+export declare const PROTOCOL_VERSION: 4;
+export declare const NATIVE_ABI_VERSION: 4;
+export declare const NATIVE_SMART_ACCOUNT_CONTRACT: string;
+export declare const NATIVE_PROXY_CALL_FLAGS: 5;
+
+/** `[parameters, returntype, safe, parameterNames]` per required method. */
+export type RequiredAbiEntry = readonly [
+  readonly string[],
+  string,
+  boolean,
+  readonly string[],
+];
+export declare const NATIVE_REQUIRED_ABI: Readonly<
+  Record<string, RequiredAbiEntry>
+>;
+export declare const NATIVE_REQUIRED_EVENTS: readonly string[];
+
 export interface NativeProfile {
   readonly contract: string;
   readonly networkMagic: number;
-  readonly abiVersion: 2;
-  readonly identityVersion: 1;
-  readonly authorizationVersion: 2;
-  readonly profileParameterDigest: string;
+  readonly protocolVersion: number;
+  readonly implementationId: string;
 }
-export interface NativeModuleBinding {
-  readonly contract: string;
-  readonly codeHash: string;
+
+export type SignerScope =
+  | "None"
+  | "CalledByEntry"
+  | "CustomContracts"
+  | "Global"
+  | "WitnessRules";
+
+export interface WitnessRule {
+  readonly action: "Allow" | "Deny";
+  readonly condition: { readonly type: string; readonly hash?: string };
 }
-export interface NativePendingIntent {
-  readonly address?: string;
-  readonly contract?: string;
-  readonly codeHash?: string;
-  readonly proposedAt: string;
-  readonly matureAt: string;
-  readonly configurationNonce: string;
-}
-export interface NativePendingModuleCall {
-  readonly accountId: string;
-  readonly role: "verifier" | "hook";
-  readonly root: NativeModuleBinding | null;
-  readonly selected: NativeModuleBinding | null;
-  readonly method: string;
-  readonly invokedArguments: NativeValue;
-  readonly proposedAt: string;
-  readonly matureAt: string;
-  readonly configurationNonce: string;
-}
-export interface NativeAccount {
-  readonly version: 2;
-  readonly accountId: string;
-  readonly accountAddress: string;
-  readonly custodyAddress: string;
-  readonly recoveryAddress: string;
-  readonly verifier: NativeModuleBinding | null;
-  readonly hook: NativeModuleBinding | null;
-  readonly status: "Active" | "Frozen";
-  readonly configurationNonce: string;
-  readonly authorityEpoch: string;
-  readonly pendingVerifier: NativePendingIntent | null;
-  readonly pendingHook: NativePendingIntent | null;
-  readonly pendingRecoveryAddress: NativePendingIntent | null;
-  readonly pendingRecovery: NativePendingIntent | null;
-}
-export interface NativePreparedOperation {
-  readonly kind: "native-operation";
-  readonly profile: NativeProfile;
-  readonly account: NativeAccount;
-  readonly context: NativeContext;
-  readonly operation: NativeOperation;
-  readonly digest: string;
-  readonly preimage: string;
-  readonly channel: string;
-  readonly sequence: string;
-}
-export interface NativeSignerDescriptor {
+
+export interface SignerDescriptor {
   readonly account: string;
-  readonly scopes: "None" | "CustomContracts";
-  readonly allowedcontracts?: readonly string[];
+  readonly scopes: SignerScope;
+  readonly allowedContracts?: readonly string[];
+  readonly rules?: readonly WitnessRule[];
 }
-export interface NativeWitness {
+
+export interface Witness {
   readonly invocation: string;
   readonly verification: string;
 }
-export interface NativePlan {
-  readonly kind: "registration" | "configuration" | "lifecycle" | "execution";
-  readonly accountId: string;
-  readonly script: string;
-  readonly requiredAuthorities: readonly string[];
-  readonly method?: string;
-  readonly accountAddress?: string;
-  readonly verificationScript?: string;
-  readonly accountState?: NativeAccount;
-  readonly configurationNonce?: string;
-  readonly authorityPolicy?: string;
-  readonly role?: "verifier" | "hook";
-  readonly pending?: NativePendingModuleCall | null;
-  readonly pendingCallBytes?: string;
-  readonly requiresExactScript?: boolean;
-}
-export interface NativeExecutionPlan extends NativePlan {
-  readonly kind: "execution";
-  readonly batch: boolean;
-  readonly accountAddress: string;
-  readonly preparedOperations: readonly NativePreparedOperation[];
-  readonly proxySigner: NativeSignerDescriptor;
-  readonly proxyWitness: NativeWitness;
-}
-export interface NativeSimulation {
-  readonly failedTransfers: number[];
+
+export interface InvocationResult {
   readonly state: string;
-  readonly exception: string | null;
+  readonly exception?: string | null;
   readonly stack: unknown[];
+  readonly gasconsumed?: string;
+  readonly [key: string]: unknown;
+}
+
+/** Account status: 0 Active, 1 Frozen, 2 MigrationRequired. */
+export type AccountStatus = 0 | 1 | 2;
+
+export interface AccountDescriptor {
+  readonly accountId: string;
+  readonly accountAddress: string;
+  readonly exists: true;
+  readonly status: AccountStatus;
+  readonly statusName: "Active" | "Frozen" | "MigrationRequired";
+  readonly custodyAddress: string;
+  readonly recoveryAuthority: string;
+  readonly authorityEpoch: string;
+  readonly configurationNonce: string;
+  readonly recoveryTimelockMs: string;
+  readonly defaultOperationAuthorization: boolean;
+  readonly defaultMessageAuthorization: boolean;
+  readonly ownerOnlyRecovery: boolean;
+  readonly hookOrderRevision: string;
+  readonly controlRevision: string;
+  readonly recoveryPending: boolean;
+  readonly recoveryMatureAt: string;
+  readonly marketEscrowActive: boolean;
+  readonly legacyRow: unknown;
+}
+
+export interface ModuleBinding {
+  readonly moduleId: string;
+  readonly moduleType: number;
+  readonly contractHash: string;
+  readonly contractId: string;
+  readonly updateCounter: string;
+  readonly nefSha256: string;
+  readonly profileSha256: string;
+  readonly moduleRevision: string;
+  readonly credentialGeneration: string;
+  readonly instanceIsolation: boolean;
+  readonly messageCapability: boolean;
+  readonly thresholdMemberEligible: boolean;
+}
+
+export interface ModulePage {
+  readonly moduleIds: readonly string[];
+  readonly nextCursor: string;
+  readonly configurationNonce: string;
+}
+
+export interface HookOrder {
+  readonly hookIds: readonly string[];
+  readonly revision: string;
+}
+
+export interface ProtocolInfo {
+  readonly protocolVersion: string;
+  readonly migrationModeOpen: unknown;
+}
+
+export interface NonceState {
+  readonly packed: string;
+  readonly channel: string;
+  readonly sequence: string;
+}
+
+export interface RecoveryStatus {
+  readonly pending: unknown;
+  readonly initiatedAt: string;
+  readonly matureAt: string;
+  readonly authorityEpochAtInit: string;
+  readonly newCustody: string;
+}
+
+export interface PendingConfiguration {
+  readonly exists: unknown;
+  readonly intentId: string;
+  readonly proposedAt: string;
+  readonly matureAt: string;
+  readonly expiresAt: string;
+  readonly authorityEpoch: string;
+  readonly actionDigest: string;
+  readonly actions: readonly unknown[];
+}
+
+export interface OperationValidation {
+  readonly accepted: boolean;
+  readonly operationDigest: string;
+}
+
+export interface SignatureCheck {
+  readonly valid: boolean;
+  readonly magic: string;
+}
+
+/** A failed simulation is reported, not thrown; the review shows it. */
+export interface SimulationResult {
+  readonly state: string | null;
+  readonly exception: string | null;
+  readonly stack: readonly unknown[];
+  readonly incompleteTransfers: readonly number[];
   readonly gasConsumed: string | null;
   readonly minimumRequiredFee: string | null;
-  readonly automaticSystemFeeAvailable: boolean;
-  readonly raw: unknown;
 }
-/** One member's IEEE P1363 r||s signature (64-byte hex) and compressed P-256 public key. */
-export interface NativeWalletMemberSignature {
+
+export interface PlanBase {
+  readonly kind: "registration" | "execution" | "configuration" | "account";
+  readonly method: string;
+  readonly script: string;
+  readonly signers: readonly string[];
+  readonly accountId?: string;
+  readonly accountAddress?: string;
+}
+
+export interface RegistrationPlan extends PlanBase {
+  readonly kind: "registration";
+  readonly method: "createAccount";
+  readonly accountId: string;
+  readonly accountAddress: string;
+  readonly custodyAddress: string;
+  readonly verificationScript: string;
+}
+
+/** Batch registration names its accounts as lists; no single id exists. */
+export interface BatchRegistrationPlan extends PlanBase {
+  readonly kind: "registration";
+  readonly method: "createAccounts";
+  readonly accountIds: readonly string[];
+  readonly accountAddresses: readonly string[];
+  readonly custodyAddress: string;
+}
+
+export interface ExecutionPlan extends PlanBase {
+  readonly kind: "execution";
+  readonly accountId: string;
+  readonly accountAddress: string;
+  readonly proxyCallFlags: number;
+  readonly batch: boolean;
+  readonly operations: readonly UserOperation[];
+}
+
+export interface ConfigurationPlan extends PlanBase {
+  readonly kind: "configuration";
+  readonly method: "proposeConfiguration" | "confirmConfiguration" | "cancelConfiguration";
+  readonly accountId: string;
+  readonly accountAddress: string;
+}
+
+export interface AccountActionPlan extends PlanBase {
+  readonly kind: "account";
+  readonly accountId: string;
+  readonly accountAddress: string;
+}
+
+export type NativePlan =
+  | RegistrationPlan
+  | BatchRegistrationPlan
+  | ExecutionPlan
+  | ConfigurationPlan
+  | AccountActionPlan;
+
+/** The method that built a reviewed plan, and the input that rebuilds it. */
+export interface PlanRecipe {
+  readonly method: string;
+  readonly input: any;
+}
+
+export interface CreateAccountInput {
+  custodyAddress: string;
+  salt: string;
+  recoveryTimelockMs?: VMInteger;
+  actions?: VMValue[];
+}
+
+export interface ExecutionInput {
+  accountId: string;
+  operations: UserOperation[];
+}
+
+export type ConfigurationIntentKind = "propose" | "confirm" | "cancel";
+
+export interface ConfigurationInput {
+  kind: ConfigurationIntentKind;
+  accountId: string;
+  intentId?: VMInteger;
+  actions?: VMValue[];
+  readSet?: VMValue[];
+}
+
+export interface AccountActionInput {
+  method: string;
+  accountId: string;
+  args?: VMValue[];
+}
+
+/** One member's IEEE P1363 r‖s signature and its compressed P-256 public key. */
+export interface WalletMemberSignature {
   publicKey: string;
   signature: string;
 }
-/** Standard Neo P-256 CHECKSIG or canonical CHECKMULTISIG wallet. Sign exact
- * networkLE32 || SHA256(unsignedTx), hashing it once with P-256/SHA256.
- * CHECKSIG returns one signature string. CHECKMULTISIG returns member entries;
- * every submitted entry is verified before selecting m in script public-key order.
- * Both witness scripts must fit Neo's existing 1,024-byte limits. */
-export interface NativeWalletSigner {
+
+/**
+ * A wallet: its account, the standard verification script it owns and a signer
+ * for the network-bound `signData`. CHECKSIG returns one signature string,
+ * CHECKMULTISIG returns member entries; both are verified before use.
+ */
+export interface WalletSigner {
   account: string;
   verificationScript: string;
-  sign: (signDataHex: string) =>
+  sign(
+    signDataHex: string,
+  ):
     | string
-    | readonly NativeWalletMemberSignature[]
-    | Promise<string | readonly NativeWalletMemberSignature[]>;
+    | readonly WalletMemberSignature[]
+    | Promise<string | readonly WalletMemberSignature[]>;
 }
-export interface NativeTransactionOptions {
-  feePayer: NativeWalletSigner;
-  authoritySigners?: NativeWalletSigner[];
-  /** Explicit custody or recovery authority for cancelRecovery, independently of feePayer. */
-  cancellationAuthority?: string;
-  /** Explicit NeoNativeVerifier witnesses; scopes are derived from current root/active children and code pins. */
-  verifierSigners?: NativeWalletSigner[];
-  systemFee?: NativeInteger;
-  maxSystemFee: NativeInteger;
-  maxNetworkFee: NativeInteger;
-  maxTotalFee: NativeInteger;
+
+/** A wallet bound into a prepared transaction. */
+export interface BoundWallet {
+  readonly account: string;
+  readonly verification: string;
+  readonly descriptor: SignerDescriptor;
+  readonly role: string;
+  sign(
+    signDataHex: string,
+  ):
+    | string
+    | readonly WalletMemberSignature[]
+    | Promise<string | readonly WalletMemberSignature[]>;
+}
+
+export interface TransactionOptions {
+  /** The fee payer; its witness is signer 0. */
+  feePayer: WalletSigner;
+  /** Extra authority wallets (custody, recovery, registration). */
+  authorizers?: WalletSigner[];
+  /** The plan-building call this review replays before every signature. */
+  recipe: PlanRecipe;
+  systemFee?: VMInteger;
+  maxSystemFee: VMInteger;
+  maxNetworkFee: VMInteger;
+  maxTotalFee: VMInteger;
   validUntilBlock?: number;
   nonce?: number;
 }
+
+export interface ReviewedTransaction {
+  readonly format: "neo-native-reviewed-request";
+  readonly version: 1;
+  readonly submission: "native-sdk";
+  readonly profile: NativeProfile;
+  readonly feePayer: string;
+  readonly signers: readonly SignerDescriptor[];
+  readonly plan: NativePlan;
+  readonly recipe: PlanRecipe;
+  readonly simulation: {
+    readonly state: string | null;
+    readonly gasConsumed: string | null;
+    readonly minimumRequiredFee: string | null;
+  };
+}
+
+export interface EncodedTransaction {
+  readonly nonce: number;
+  readonly systemFee: string;
+  readonly networkFee: string;
+  readonly validUntilBlock: number;
+  readonly script: string;
+  readonly signers: readonly SignerDescriptor[];
+}
+
 export interface NativePreparedTransaction {
   readonly kind: "native-transaction";
-  readonly cancellationAuthority?: string;
-  readonly plan: NativePlan;
-  readonly transaction: {
-    readonly nonce: number;
-    readonly systemFee: string;
-    readonly networkFee: string;
-    readonly validUntilBlock: number;
-    readonly script: string;
-    readonly signers: readonly NativeSignerDescriptor[];
-  };
+  readonly review: ReviewedTransaction;
+  readonly reviewJson: string;
+  readonly transaction: EncodedTransaction;
+  readonly witnesses: readonly (Witness | { placeholder: true })[];
   readonly unsignedHex: string;
   readonly txid: string;
   readonly signData: string;
   readonly systemFee: string;
   readonly networkFee: string;
   readonly systemFeeSource: "explicit-budget" | "minimumrequiredfee";
-  readonly simulation: NativeSimulation;
+  readonly simulation: SimulationResult;
+  readonly wallets: readonly BoundWallet[];
+  readonly proxy: { readonly signer: SignerDescriptor; readonly witness: Witness } | null;
+  readonly placeholderWitnesses: readonly (Witness | { placeholder: true })[];
 }
+
 export interface NativeSignedTransaction {
   readonly kind: "signed-native-transaction";
   readonly prepared: NativePreparedTransaction;
   readonly txid: string;
   readonly rawTransaction: string;
-  readonly witnesses: readonly { readonly invocation: string; readonly verification: string }[];
+  readonly witnesses: readonly Witness[];
 }
-/** Public exact-byte artifact. Contains signatures and transaction data, never signing callbacks or private keys. */
+
+/** Public exact-byte artifact: signatures and transaction data, no signers. */
 export interface NativeSignedTransactionArtifact {
   readonly format: "neo-native-signed-transaction";
   readonly version: 1;
   readonly networkMagic: number;
   readonly profile: NativeProfile;
-  readonly transaction: NativePreparedTransaction["transaction"];
-  readonly witnesses: NativeSignedTransaction["witnesses"];
+  readonly transaction: EncodedTransaction;
+  readonly witnesses: readonly Witness[];
   readonly unsignedHex: string;
   readonly txid: string;
   readonly signData: string;
   readonly rawTransaction: string;
 }
-export interface NativeOperationInput {
-  targetContract: string;
-  method: string;
-  args?: NativeValue[];
-  channel?: NativeInteger;
-  deadline: NativeInteger;
+
+export interface NativeTransactionPreflight {
+  readonly hash: string;
+  readonly network: number;
+  readonly snapshot: { readonly height: number; readonly hash: string };
+  readonly simulation: {
+    readonly mode: "single-transaction-next-block";
+    readonly height: number;
+    readonly timestamp: string;
+    readonly primaryIndex: number;
+    readonly view: 0;
+    readonly transactionCount: 1;
+    readonly onPersist: "HALT";
+    readonly nextConsensus: string;
+  };
+  readonly verification: "Succeed";
+  readonly relayed: false;
+  readonly mempoolChecked: false;
+  readonly state: "HALT";
+  readonly gasconsumed: string;
+  readonly minimumrequiredfee: string;
+  readonly stack: unknown[];
+  readonly exception?: string | null;
+  readonly notifications: unknown[];
 }
-export type NativeLifecycleAction =
-  | "proposeVerifier"
-  | "activateVerifier"
-  | "cancelVerifier"
-  | "proposeHook"
-  | "activateHook"
-  | "cancelHook"
-  | "proposeRecoveryAddress"
-  | "activateRecoveryAddress"
-  | "cancelRecoveryAddress"
-  | "proposeRecovery"
-  | "executeRecovery"
-  | "cancelRecovery"
-  | "freeze"
-  | "unfreeze"
-  | "cancelModuleCall";
-export declare class NativeSmartAccountClient {
-  constructor(options: {
-    rpcUrl?: string;
-    rpcClient?: { send(method: string, params: unknown[]): Promise<any> };
-    networkMagic: NativeInteger;
-    profileParameterDigest?: string;
-  });
+
+export type NativeTransactionReceipt =
+  | { readonly txid: string; readonly confirmed: false }
+  | {
+      readonly txid: string;
+      readonly confirmed: true;
+      readonly succeeded: boolean;
+      readonly failures: readonly number[];
+      readonly blockHash: string;
+      readonly vmState: string;
+      readonly exception: string | null;
+      readonly stack: readonly unknown[];
+      readonly notifications: readonly unknown[];
+      readonly gasConsumed: string;
+      readonly systemFee: string;
+      readonly networkFee: string;
+    };
+
+export interface BroadcastResult {
+  readonly txid: string;
+  readonly submitted: true;
+  readonly confirmed: false;
+}
+
+/** The methods both kernels expose; the two clients extend this surface. */
+export interface SmartAccountKernel {
   readonly networkMagic: number;
-  readonly profileParameterDigest: string;
+  readonly contractHash: string;
+  readonly callFlags: number;
   readonly profile: NativeProfile | null;
+  proxyAddress(accountId: string): string;
+  invokeScript(
+    script: string,
+    signers?: readonly SignerDescriptor[],
+  ): Promise<InvocationResult>;
   discover(): Promise<NativeProfile>;
-  deriveIdentity(options: {
+  deriveIdentity(input: {
     custodyAddress: string;
     salt: string;
   }): NativeIdentity;
-  getAccount(accountId: string): Promise<NativeAccount | null>;
-  getNonce(accountId: string, channel?: NativeInteger): Promise<bigint>;
-  buildRegistration(options: {
-    custodyAddress: string;
-    salt: string;
-    verifier?: string;
-    hook?: string;
-    recoveryAddress?: string;
-  }): NativePlan & NativeIdentity;
-  prepareOperation(
-    options: NativeOperationInput & { accountId: string },
-  ): Promise<NativePreparedOperation>;
-  prepareOperations(options: {
-    accountId: string;
-    operations: NativeOperationInput[];
-  }): Promise<readonly NativePreparedOperation[]>;
-  attachSignature(
-    prepared: NativePreparedOperation,
-    signatureHex: string,
-  ): NativePreparedOperation;
-  revalidate(prepared: NativePreparedOperation): Promise<true>;
-  revalidateExecution(plan: NativeExecutionPlan): Promise<true>;
-  revalidatePlan(plan: NativePlan): Promise<true>;
-  buildExecution(
-    prepared: readonly NativePreparedOperation[],
-    options?: { batch?: boolean },
-  ): NativeExecutionPlan;
-  getPendingModuleCall(
+  getAccount(accountId: string): Promise<AccountDescriptor | null>;
+  getProtocolInfo(): Promise<ProtocolInfo>;
+  getModules(
     accountId: string,
-    role: "verifier" | "hook",
-  ): Promise<NativePendingModuleCall | null>;
-  getModuleDependencies(
+    moduleType: string,
+    options?: { cursor?: VMInteger; limit?: number },
+  ): Promise<ModulePage>;
+  getModule(accountId: string, moduleId: VMInteger): Promise<ModuleBinding | null>;
+  isModuleInstalled(
     accountId: string,
-    role: "verifier" | "hook",
-  ): Promise<{
-    root: NativeModuleBinding | null;
-    cleanupBindings: NativeModuleBinding[];
-    activeChildren: string[];
-  }>;
-  buildModuleCall(options: {
-    accountId: string;
-    role: "verifier" | "hook";
-    child?: string;
-    method: string;
-    args?: NativeValue[];
-  }): Promise<NativePlan>;
-  buildAction(options: {
-    accountId: string;
-    action: NativeLifecycleAction;
-    address?: string;
-    role?: "verifier" | "hook";
-  }): Promise<NativePlan>;
+    moduleType: string,
+    moduleHash: string,
+    additionalContext?: string,
+  ): Promise<boolean>;
+  getHookOrder(accountId: string): Promise<HookOrder>;
+  deriveNonceRouting(accountId: string, routing: NonceRouting): string;
+  getNonce(accountId: string, routing: NonceRouting): Promise<NonceState>;
+  getNonceSequence(accountId: string, channel: VMInteger): Promise<string>;
+  getOperationDigest(
+    accountId: string,
+    operation: UserOperation,
+  ): Promise<string>;
+  validateUserOp(
+    accountId: string,
+    operation: UserOperation,
+  ): Promise<OperationValidation>;
+  isValidSignature(
+    accountId: string,
+    hash: string,
+    envelope: VMValue[],
+  ): Promise<SignatureCheck>;
+  getRecoveryStatus(accountId: string): Promise<RecoveryStatus | null>;
+  getPendingConfiguration(
+    accountId: string,
+    intentId: VMInteger,
+  ): Promise<PendingConfiguration | null>;
+  getPendingConfigurationIntentIds(accountId: string): Promise<readonly string[]>;
+  buildCreateAccountScript(input: CreateAccountInput): RegistrationPlan;
+  buildExecutionScript(input: ExecutionInput): ExecutionPlan;
+  buildConfigurationScript(input: ConfigurationInput): ConfigurationPlan;
+  buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
-    plan: { script: string },
-    signers?: NativeSignerDescriptor[],
-  ): Promise<NativeSimulation>;
+    plan: NativePlan,
+    signers?: readonly SignerDescriptor[],
+  ): Promise<SimulationResult>;
+  execute(plan: NativePlan, signers?: readonly SignerDescriptor[]): Promise<InvocationResult>;
+  prepare<T extends NativePlan>(plan: T): T;
+  revalidatePlan(plan: NativePlan): Promise<true>;
   prepareTransaction(
     plan: NativePlan,
-    options: NativeTransactionOptions,
+    options: TransactionOptions,
   ): Promise<NativePreparedTransaction>;
   signTransaction(
     prepared: NativePreparedTransaction,
   ): Promise<NativeSignedTransaction>;
-  exportSignedTransaction(signed: NativeSignedTransaction): NativeSignedTransactionArtifact;
-  preflightTransaction(signed: NativeSignedTransaction): Promise<{
-    hash: string;
-    network: number;
-    snapshot: { height: number; hash: string };
-    simulation: {
-      mode: "single-transaction-next-block";
-      height: number;
-      timestamp: string;
-      primaryIndex: number;
-      view: 0;
-      transactionCount: 1;
-      onPersist: "HALT";
-      nextConsensus: string;
-    };
-    verification: "Succeed";
-    relayed: false;
-    mempoolChecked: false;
-    state: "HALT";
-    gasconsumed: string;
-    minimumrequiredfee: string;
-    stack: unknown[];
-    exception?: string | null;
-    notifications: unknown[];
-  }>;
-  getTransactionReceipt(signed: NativeSignedTransaction): Promise<{
-    txid: string;
-    confirmed: boolean;
-    succeeded?: boolean;
-    failures?: string[];
-    blockHash?: string;
-    vmState?: string;
-    exception?: string | null;
-    stack?: unknown[];
-    notifications?: unknown[];
-    gasConsumed?: string;
-    systemFee?: string;
-    networkFee?: string;
-  }>;
-  broadcastTransaction(
+  exportSignedTransaction(
     signed: NativeSignedTransaction,
-  ): Promise<{ txid: string; submitted: true; confirmed: false }>;
+  ): NativeSignedTransactionArtifact;
+  preflightTransaction(
+    signed: NativeSignedTransaction,
+  ): Promise<NativeTransactionPreflight>;
+  broadcastTransaction(signed: NativeSignedTransaction): Promise<BroadcastResult>;
+  getTransactionReceipt(
+    signed: NativeSignedTransaction,
+  ): Promise<NativeTransactionReceipt>;
 }
+
+/**
+ * The native kernel client: the same protocol as the custom kernel, bound to
+ * the native core hash and call flags 5 (CallFlags.ReadOnly).
+ */
+export declare class NativeSmartAccountClient implements SmartAccountKernel {
+  constructor(options: {
+    rpcUrl?: string;
+    rpcClient?: { send(method: string, params: unknown[]): Promise<any> };
+    networkMagic: VMInteger;
+    contractHash?: string;
+    callFlags?: number;
+  });
+  readonly networkMagic: number;
+  readonly contractHash: string;
+  readonly callFlags: number;
+  profile: NativeProfile | null;
+  proxyAddress(accountId: string): string;
+  invokeScript(
+    script: string,
+    signers?: readonly SignerDescriptor[],
+  ): Promise<InvocationResult>;
+  discover(): Promise<NativeProfile>;
+  deriveIdentity(input: {
+    custodyAddress: string;
+    salt: string;
+  }): NativeIdentity;
+  getAccount(accountId: string): Promise<AccountDescriptor | null>;
+  getProtocolInfo(): Promise<ProtocolInfo>;
+  getModules(
+    accountId: string,
+    moduleType: string,
+    options?: { cursor?: VMInteger; limit?: number },
+  ): Promise<ModulePage>;
+  getModule(accountId: string, moduleId: VMInteger): Promise<ModuleBinding | null>;
+  isModuleInstalled(
+    accountId: string,
+    moduleType: string,
+    moduleHash: string,
+    additionalContext?: string,
+  ): Promise<boolean>;
+  getHookOrder(accountId: string): Promise<HookOrder>;
+  deriveNonceRouting(accountId: string, routing: NonceRouting): string;
+  getNonce(accountId: string, routing: NonceRouting): Promise<NonceState>;
+  getNonceSequence(accountId: string, channel: VMInteger): Promise<string>;
+  getOperationDigest(
+    accountId: string,
+    operation: UserOperation,
+  ): Promise<string>;
+  validateUserOp(
+    accountId: string,
+    operation: UserOperation,
+  ): Promise<OperationValidation>;
+  isValidSignature(
+    accountId: string,
+    hash: string,
+    envelope: VMValue[],
+  ): Promise<SignatureCheck>;
+  getRecoveryStatus(accountId: string): Promise<RecoveryStatus | null>;
+  getPendingConfiguration(
+    accountId: string,
+    intentId: VMInteger,
+  ): Promise<PendingConfiguration | null>;
+  getPendingConfigurationIntentIds(accountId: string): Promise<readonly string[]>;
+  buildCreateAccountScript(input: CreateAccountInput): RegistrationPlan;
+  buildExecutionScript(input: ExecutionInput): ExecutionPlan;
+  buildConfigurationScript(input: ConfigurationInput): ConfigurationPlan;
+  buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
+  simulate(
+    plan: NativePlan,
+    signers?: readonly SignerDescriptor[],
+  ): Promise<SimulationResult>;
+  execute(plan: NativePlan, signers?: readonly SignerDescriptor[]): Promise<InvocationResult>;
+  prepare<T extends NativePlan>(plan: T): T;
+  revalidatePlan(plan: NativePlan): Promise<true>;
+  prepareTransaction(
+    plan: NativePlan,
+    options: TransactionOptions,
+  ): Promise<NativePreparedTransaction>;
+  signTransaction(
+    prepared: NativePreparedTransaction,
+  ): Promise<NativeSignedTransaction>;
+  exportSignedTransaction(
+    signed: NativeSignedTransaction,
+  ): NativeSignedTransactionArtifact;
+  preflightTransaction(
+    signed: NativeSignedTransaction,
+  ): Promise<NativeTransactionPreflight>;
+  broadcastTransaction(signed: NativeSignedTransaction): Promise<BroadcastResult>;
+  getTransactionReceipt(
+    signed: NativeSignedTransaction,
+  ): Promise<NativeTransactionReceipt>;
+}
+
+/** The shared transaction tools, bound to the native codec. */
+export interface NativeTransactionTools {
+  prepareNativeTransaction(
+    client: SmartAccountKernel,
+    plan: NativePlan,
+    options: TransactionOptions,
+  ): Promise<NativePreparedTransaction>;
+  signNativeTransaction(
+    client: SmartAccountKernel,
+    prepared: NativePreparedTransaction,
+  ): Promise<NativeSignedTransaction>;
+  exportSignedTransaction(
+    client: SmartAccountKernel,
+    signed: NativeSignedTransaction,
+  ): NativeSignedTransactionArtifact;
+  preflightNativeTransaction(
+    client: SmartAccountKernel,
+    signed: NativeSignedTransaction,
+  ): Promise<NativeTransactionPreflight>;
+  broadcastNativeTransaction(
+    client: SmartAccountKernel,
+    signed: NativeSignedTransaction,
+  ): Promise<BroadcastResult>;
+  getNativeTransactionReceipt(
+    client: SmartAccountKernel,
+    signed: NativeSignedTransaction,
+  ): Promise<NativeTransactionReceipt>;
+}
+
+export interface ModuleContractInput {
+  nef: {
+    magic: number;
+    compiler: string;
+    source: string;
+    tokens: ReadonlyArray<{
+      hash: string;
+      method: string;
+      paramcount: number;
+      hasreturnvalue: boolean;
+      callflags: number | string;
+    }>;
+    script: string;
+    checksum: number;
+  };
+  manifest: unknown;
+}
+
+/** Module deployment identity: canonical NEF+manifest hash (§7). */
+export interface CodeIdentityTools {
+  canonicalJson(value: unknown): string;
+  serializeNef(nef: ModuleContractInput["nef"]): Uint8Array;
+  moduleCodeHash(contract: ModuleContractInput): string;
+}
+
+export declare const transactionTools: NativeTransactionTools;
+export declare const codeIdentityTools: (codec: ProtocolCodec) => CodeIdentityTools;

@@ -4,20 +4,20 @@ This project contains the comprehensive standard, smart contract implementation,
 
 Current status note:
 
-- The current `main` branch runs `SmartAccountV3`.
-- V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
+- The current `main` branch ships **protocol version 4** — one `SmartAccount` protocol with a custom C# kernel and a native kernel that implement the same interface.
+- v4 keeps the core minimalist: authorization and policy are module instances (`validator` and `hook`), installed through configuration intents instead of bound verifier/hook fields.
 - The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
 - The canonical shared testnet SA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
 ## Features
-- **Deterministic V3 Accounts**: Each account is keyed by a 20-byte `accountId` and derives a stable Neo virtual address without deploying per-user wallet logic.
-- **Verifier Plugin Authorization**: Bind Web3Auth, TEE, WebAuthn, session keys, multisig, or other verifier plugins per account.
-- **Hook Plugin Policy Enforcement**: Attach optional hook plugins for daily limits, token restrictions, credential gates, and post-execution controls.
-- **Backup-Owner Escape Hatch**: Every account can define a native Neo backup owner plus timelocked verifier rotation.
-- **Trustless SA Address Escrow Market**: Deterministic SA addresses can be listed, escrow-locked, purchased with GAS, and transferred atomically on-chain.
-- **Cross-Chain EVM Compatibility**: V3 supports secp256k1 / Keccak256 EIP-712 `UserOperation` signatures through the Web3Auth verifier path.
-- **On-Chain Paymaster (Sponsored Transactions)**: The `SAPaymaster` contract enables trustless gasless execution — sponsors deposit GAS, create per-account or global sponsorship policies, and relays are reimbursed automatically after successful `UserOp` execution. Supports per-op limits, daily budgets, total budgets, target/method restrictions, and expiry timestamps.
-- **Policy-Gated Execution**: New integrations should flow through `executeUserOp(accountId, op)` where nonce handling, verification, hooks, and target execution stay centralized.
+- **Deterministic v4 Accounts**: the account id is `hash160(0xAA524704 || custody || salt)`, and the asset-holding address is the proxy script that embeds it, so no per-user wallet logic is deployed.
+- **Validator Module Authorization**: install `Web3AuthValidator`, `NeoWitnessValidator`, `P256Validator`, `TeeKeyValidator`, `SessionKeyValidator`, `SubscriptionValidator`, `DelegatedIdentityValidator`, or `MultiSigValidator` as a threshold policy.
+- **Hook Module Policy Enforcement**: attach ordered hook modules for daily limits, token restrictions, target allowlists and credential gates; `preCheck` runs forward and `postCheck` reverse over the same snapshot.
+- **Core-Owned Recovery**: custody self-rescue plus an optional recovery authority behind a 7–90 day per-account timelock; matured recovery is permissionless and removes modules callback-free.
+- **Trustless SA Address Escrow Market**: deterministic SA addresses can be listed, escrow-locked, purchased with GAS, and settled on-chain, where settlement hands custody to the buyer and clears every module.
+- **Cross-Chain EVM Compatibility**: secp256k1 / Keccak256 EIP-712 operation signatures through the `Web3AuthValidator` path.
+- **On-Chain Paymaster (Sponsored Transactions)**: the `SAPaymaster` contract lets sponsors deposit GAS, create per-account or global policies, and reimburse relays atomically after a successful operation — with per-op limits, daily and total budgets, target/method restrictions and expiry.
+- **Policy-Gated Execution**: integrations flow through `executeUserOp(accountId, op)` (or `executeUserOps` for a batch), where nonce handling, validation, hooks and target execution stay centralized.
 
 ## App + Market Deployment
 
@@ -27,14 +27,14 @@ The frontend now separates:
 - an app workspace for account creation and operation flow,
 - and a trustless SA address market backed by an on-chain escrow contract.
 
-For the market UI, set `VITE_AA_MARKET_HASH` to the deployed `SAAddressMarket` contract hash.
+For the market UI, set `VITE_SA_MARKET_HASH` to the deployed `SAAddressMarket` contract hash.
 
-For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_AA_RELAY_URL`, and `VITE_AA_RELAY_RPC_URL`, then apply every file in `supabase/migrations/` in filename order — the chain is replayable end to end on a fresh database. Its CI replay gate is currently disabled (`.github/workflows/supabase-migrations.yml.disabled`, deliberately parked on 2026-09-27 to drop the CI runner cost; see the deployment checklist below for the current manual replay step). The full chain keeps the public share link read-only, narrows collaborator links to signature-safe writes, moves operator-only status/relay mutations behind the signed operator mutation server route in `frontend/api/draft-operator.js`, and bounds anonymous draft payloads. `supabase/migrations/20260327_security_hardening.sql` and `supabase/migrations/20260611_draft_metadata_hardening.sql` are mandatory — without them the draft tables keep permissive RLS policies, racy metadata writers, and unbounded anonymous draft creation.
+For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SA_RELAY_URL`, and `VITE_SA_RELAY_RPC_URL`, then apply every file in `supabase/migrations/` in filename order — the chain is replayable end to end on a fresh database. Its CI replay gate is currently disabled (`.github/workflows/supabase-migrations.yml.disabled`, deliberately parked on 2026-09-27 to drop the CI runner cost; see the deployment checklist below for the current manual replay step). The full chain keeps the public share link read-only, narrows collaborator links to signature-safe writes, moves operator-only status/relay mutations behind the signed operator mutation server route in `frontend/api/draft-operator.js`, and bounds anonymous draft payloads. `supabase/migrations/20260327_security_hardening.sql` and `supabase/migrations/20260611_draft_metadata_hardening.sql` are mandatory — without them the draft tables keep permissive RLS policies, racy metadata writers, and unbounded anonymous draft creation.
 
-If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `AA_RELAY_WIF` on the server, prefer `AA_RELAY_RPC_URL` for the relay backend, pin `AA_RELAY_ALLOWED_HASH` to the intended SA contract, and leave `AA_RELAY_ALLOW_RAW_FORWARD=0` unless you explicitly want raw passthrough in `frontend/api/relay-transaction.js`.
+If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `SA_RELAY_WIF` on the server, prefer `SA_RELAY_RPC_URL` for the relay backend, pin `SA_RELAY_ALLOWED_HASH` to the intended SA contract, and leave `SA_RELAY_ALLOW_RAW_FORWARD=0` unless you explicitly want raw passthrough in `frontend/api/relay-transaction.js`.
 For local setup, start from `frontend/.env.example` and copy the values you need into `frontend/.env.local` or your hosting provider's environment-variable dashboard.
 
-For on-chain sponsored transactions via the `SAPaymaster` contract, set `VITE_AA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the SA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `createSponsoredUserOpPayload` and `validatePaymasterOp` methods.
+For on-chain sponsored transactions via the `SAPaymaster` contract, set `VITE_SA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the SA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `buildSponsoredExecutionScript` and the paymaster's `validatePaymasterOp`.
 
 If you want relay submission to request Morpheus off-chain sponsorship before broadcasting, also configure the server-side paymaster bridge:
 
@@ -42,7 +42,7 @@ If you want relay submission to request Morpheus off-chain sponsorship before br
 - `MORPHEUS_PAYMASTER_TESTNET_API_TOKEN`
 - `MORPHEUS_PAYMASTER_MAINNET_ENDPOINT`
 - `MORPHEUS_PAYMASTER_MAINNET_API_TOKEN`
-- Optional debug only: `AA_RELAY_INCLUDE_RAW_ERRORS=1`
+- Optional debug only: `SA_RELAY_INCLUDE_RAW_ERRORS=1`
 
 The relay route now forwards optional paymaster metadata and can request Morpheus paymaster pre-authorization before broadcasting a relay-ready `executeUserOp` or `executeUserOps` invocation. Failures are now phase-tagged as `preview`, `paymaster`, `relay`, or `response` so operator logs can separate Morpheus sponsorship errors from on-chain relay failures.
 
@@ -50,8 +50,8 @@ The relay route now forwards optional paymaster metadata and can request Morpheu
 
 Production integrations should treat the core SA runtime as having three distinct boundaries:
 
-- **validation preview**: `previewUserOpValidation(accountId, op)` is a read-only check for deadline validity, nonce acceptability, and current verifier/hook bindings
-- **authorization**: only the configured verifier plugin or backup-owner witness can authorize `executeUserOp`
+- **validation preview**: the read-only `validateUserOp(accountId, op)` runs the real verification path — status, epoch, deadline, nonce channel, validator route and hook instances — and returns a structured result without writing state
+- **authorization**: only the routed validator instance, the threshold policy, or the built-in custody route (gated by the default authorizations) can authorize `executeUserOp`
 - **execution**: hooks and target contracts still run after authorization and can still reject the operation
 
 The relay is an operator convenience layer, not an authority layer:
@@ -59,19 +59,22 @@ The relay is an operator convenience layer, not an authority layer:
 - **relay trust boundary**: the relay can simulate, package, and submit, but it cannot authorize on behalf of the account
 - relay preflight and validation preview help operators simulate readiness before submit
 - relay submission can package and pay for transactions, but it does not replace on-chain signature validation
-- paymaster sponsorship (on-chain or off-chain) does not replace the configured verifier or backup-owner witness
+- paymaster sponsorship (on-chain or off-chain) does not replace the routed validator or the custody witness
 - paymaster does not authorize execution — it only funds the relay reimbursement after successful verification
 
 ### Module Lifecycle
 
-V3 now exposes a generic module lifecycle for new tooling while preserving the legacy verifier/hook events for compatibility.
+Configuration is an intent, and every step is an event:
 
-- **install**: first binding of a verifier or hook emits `ModuleInstalled`
-- **replace**: timelocked rotations emit `ModuleUpdateInitiated` and later `ModuleUpdateConfirmed`
-- **remove**: clearing a binding, escape-driven clearing, or market-settlement cleanup emits `ModuleRemoved`
-- **cancel**: aborting a pending verifier or hook rotation emits `ModuleUpdateCancelled`
+- **propose**: `ConfigurationIntentProposed` records the actions, the read set and the authority epoch
+- **install**: `ModuleInstalled` and `ModuleInstanceInstalled` carry the module id, so two instances of one contract stay distinguishable
+- **configure**: `ModuleInstanceConfigured` runs after the module's own command array
+- **replace code**: `ModuleCodeRebound` points an instance at new code
+- **remove**: `ModuleRemoved` and `ModuleInstanceRemoved`, including the callback-free sweep during settlement or recovery
+- **cancel**: `ConfigurationIntentCancelled`, `ConfigurationIntentExpired` and `ModuleUpdateCancelled`
+- **order and threshold**: `HookOrderSet` and `ThresholdPolicySet`
 
-This generic lifecycle is the recommended surface for indexers, dashboards, and operational tooling that should not care whether the bound module is a verifier or a hook.
+New configuration matures after 24 hours and expires seven days later; registration, emergency freeze and callback-free credential revocation are the only immediate paths. Indexers and dashboards should read the instance events — they name the module id, which the legacy verifier/hook events could not.
 
 ## Canonical Morpheus Network Anchors
 
@@ -140,10 +143,10 @@ Shared draft metadata is intentionally bounded: the frontend keeps the latest 10
 - Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for browser-side anonymous draft persistence.
 - Share the normal draft URL for read-only review, the collaborator link for signature collection, and the operator link for relay checks, broadcast, and other operator-only actions. Signer links cannot append operator-class relay or broadcast activity entries.
 - Use the Rotate Collaborator Link action when a signer link leaks, and rotate the operator link if an operator-only URL should be invalidated without rebuilding the draft.
-- Set `VITE_AA_RELAY_URL`, `VITE_AA_RELAY_RPC_URL`, and server-side `AA_RELAY_WIF` before enabling relay submission flows.
+- Set `VITE_SA_RELAY_URL`, `VITE_SA_RELAY_RPC_URL`, and server-side `SA_RELAY_WIF` before enabling relay submission flows.
 - Set server-only `SUPABASE_SERVICE_ROLE_KEY` so `frontend/api/draft-operator.js` can accept signed operator mutation requests for status changes, relay-preflight persistence, submission receipts, and link rotation.
-- Prefer server-side `AA_RELAY_RPC_URL`, pin `AA_RELAY_ALLOWED_HASH` to the intended SA contract, and keep `AA_RELAY_ALLOW_RAW_FORWARD` disabled unless you intentionally want the relay route to forward already-signed raw transactions.
-- Set `VITE_AA_EXPLORER_BASE_URL` if you want tx receipts and timeline actions to open your preferred explorer.
+- Prefer server-side `SA_RELAY_RPC_URL`, pin `SA_RELAY_ALLOWED_HASH` to the intended SA contract, and keep `SA_RELAY_ALLOW_RAW_FORWARD` disabled unless you intentionally want the relay route to forward already-signed raw transactions.
+- Set `VITE_SA_EXPLORER_BASE_URL` if you want tx receipts and timeline actions to open your preferred explorer.
 - Expect shared draft metadata to retain only the latest 100 activity entries and the latest 12 submission receipts.
 
 ### Documentation Map
@@ -192,7 +195,7 @@ To run the full local verification sequence in one command:
 ```bash
 cd sdk/js
 cp .env.example .env
-# fill in TEST_WIF
+# fill in TEST_WIF or NEO_TESTNET_WIF
 npm run testnet:validate:dry-run
 npm run testnet:validate
 ```
@@ -201,14 +204,16 @@ When public testnet RPC reliability matters, you can pin one endpoint with `TEST
 
 For the off-chain Morpheus paymaster lanes, the validators also fall back to the remote worker path through `phala` (or `npx --yes phala`) when the public `paymaster/authorize` endpoint rejects a valid Phala Cloud API token with `401` or `403`.
 
-The runner now executes the current V3 live testnet flow in order:
+The runner executes the v4 live testnet flow in order:
 
-- `v3_testnet_smoke.js`
-- `v3_testnet_plugin_matrix.js`
-- `v3_testnet_market_escrow.js`
-- `v3_testnet_paymaster_onchain.mjs`
-- `v3_testnet_paymaster_policy.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
-- `v3_testnet_paymaster_relay.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
+- `testnet_smoke.js`
+- `testnet_plugin_matrix.js`
+- `testnet_market_escrow.js`
+- `testnet_paymaster_onchain.mjs`
+- `testnet_paymaster_policy.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available, plus `SA_CORE_HASH_TESTNET` and `PAYMASTER_ACCOUNT_ID`
+- `testnet_paymaster_relay.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
+
+Every stage deploys the v4 kernel and the modules it installs under their canonical manifest names, because the SDK client only adopts a contract named `SmartAccount` and the kernel binds a module by comparing the profile's `contractName` with the deployed manifest name. Only non-module contracts (paymaster, address market, test probe) carry a per-run suffix. `SA_VALIDATION_RUN_ID` names one run, `SA_VALIDATION_DEPLOY_TAG` overrides the derived tag, and `SA_MATRIX_SCENARIOS` narrows the plugin matrix to a comma-separated scenario list.
 
 You can also run the stages individually with:
 
@@ -222,7 +227,7 @@ npm run testnet:validate:paymaster
 npm run testnet:validate:report
 ```
 
-The suite writes JSON artifacts under `sdk/docs/reports/`.
+The suite writes JSON artifacts under `docs/reports/`.
 
 ### Platform Registrar Service
 
@@ -267,8 +272,9 @@ verbatim in
 
 ## Structure
 - `contracts/`: C# Smart Contract implementation of the Master Entry Contract.
-- `contracts/plugins/verifiers/`: Verifier plugins (Web3Auth, TEE, WebAuthn, SessionKey, MultiSig, etc.).
-- `contracts/plugins/hooks/`: Hook plugins (DailyLimit, Whitelist, TokenRestricted, MultiHook, NeoDIDCredential).
+- `contracts/plugins/validators/`: Validator modules (Web3Auth, NeoWitness, P256, TEE, SessionKey, Subscription, DelegatedIdentity, MultiSig, and the disabled ZKEmail template).
+- `contracts/plugins/hooks/`: Hook modules (DailyLimit, Whitelist, TokenRestricted, NeoDIDCredential; MultiHook is retired).
+- `contracts/plugins/recovery/`: Optional social-recovery service and action-session validator; base recovery is core-native.
 - `contracts/custom/paymaster/`: On-chain Paymaster contract for sponsored/gasless transactions.
 - `contracts/custom/registrar/`: Standalone `SAPlatformRegistrar` service contract for platform-account registration and owner-rotation timelocks, extracted from the core.
 - `frontend/`: Vue components demonstrating Account creation and signature workflows.

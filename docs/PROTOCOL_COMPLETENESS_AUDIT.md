@@ -20,17 +20,20 @@ The custom source protocol is internally consistent for its executable nonce
 domain, operation-shape isolation, plugin lifecycle and bounded policy
 cardinality. The current source candidate is compiled and runtime-tested, while
 the pinned public artifact remains the separately verified deployment identity.
-The source candidate currently has a 109-entry ABI (108 unique method names because
-of a retained overload entry); the pinned public artifact has 90 ABI entries.
+The protocol v4 source candidate compiles to an 81-entry ABI; the pinned public
+artifact under `contracts/build/` is the frozen v3 (`UnifiedSmartWalletV3`) identity
+with 90 ABI entries and is no longer the shape of the source.
 The current source also adds a shared per-transaction reimbursement ceiling within
-each core and callback-free `finalizeEscapeToOwner`: a permanent owner-only
-recovery mode. The latter preserves identity and nonce history while prohibiting
-all later plugin installation; it does not provide native epoch-module reinstallation.
-The 2026-11-16 Ethereum-AA alignment revision adds the `describeAccount`
-capability-discovery read and the non-faulting `simulateValidation` preflight
-(named after ERC-4337's EntryPoint), and lets `SessionKeyVerifier.setPublicKey`
-accept a version-0x01 initial-key blob in the registration verifier params so a
-session-key account works on day one.
+each core, and the timelocked, callback-free recovery lane `beginRecovery` / 
+`cancelRecovery` / `executeRecovery`, read back through `getRecoveryStatus`:
+maturity rotates custody, sweeps every module instance, policy, intent and nonce
+channel without calling a validator, hook, Market or Oracle, and advances the
+authority epoch; it does not provide native epoch-module reinstallation.
+Every module change travels the `proposeConfiguration` / `confirmConfiguration` /
+`cancelConfiguration` intent path with a 24-hour timelock, and a validator's
+credential is written by that validator's own `configure` callback, so a
+session-key account is usable from its initial installation instead of a central
+registration-time verifier-param blob.
 These local fixes have NeoVM regression coverage and corresponding formal models.
 Three release gates remain explicit:
 
@@ -86,18 +89,18 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 **Implementation Location:** `contracts/custom/SmartAccount.Accounts.cs`
 
 **Features:**
-- **Installation:** `registerAccount()` sets initial verifier and hook
-- **Update with Timelock:** `updateVerifier()` and `updateHook()` replace an installed plugin through a 24-hour (86,400,000ms) ConfigUpdateTimelock; first installation into an empty slot is immediate
-- **Confirmation:** `confirmVerifierUpdate()` and `confirmHookUpdate()` allow completion after timelock
-- **Cancellation:** `cancelVerifierUpdate()` and `cancelHookUpdate()` allow immediate cancel
-- **Authorization:** All config changes require `BackupOwner` native witness
-- **Authority Checks:** `VerifierAuthority.canConfigureVerifier()` and `HookAuthority.canConfigureHook()`
-- **Events:** All lifecycle events emitted (ModuleInstalled, ModuleUpdateInitiated, ModuleUpdateConfirmed, ModuleUpdateCancelled, ModuleRemoved)
+- **Installation:** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` installs the initial validator and hook instances atomically through its `actions` list; batch `createAccounts` creates accounts with no modules installed
+- **Update with Timelock:** `proposeConfiguration(accountId, actions, readSet)` opens a 24-hour (86,400,000ms) intent that installs, configures, replaces or removes module instances; installing into an empty slot travels the same path
+- **Confirmation:** `confirmConfiguration(accountId, intentId, actions)` executes or re-arms the intent after the timelock
+- **Cancellation:** `cancelConfiguration(accountId, intentId)` cancels immediately
+- **Authorization:** Every configuration change requires the custody witness; `getPendingConfiguration` and `getPendingConfigurationIntentIds` expose the queue
+- **Authority Checks:** The core resolves an instance through `getModule(accountId, moduleId)` and `getAuthorizedModuleId(accountId, phase)`; modules gate themselves with `ValidatorAuthority` / `HookAuthority`
+- **Events:** All lifecycle events emitted (ModuleInstanceInstalled, ModuleInstanceConfigured, ModuleInstanceRemoved, ConfigurationIntentProposed, ConfigurationIntentConfirmed, ConfigurationIntentCancelled, ConfigurationIntentExpired, HookOrderSet, ThresholdPolicySet)
 
 **Comparison to ERC-7579:**
-- ERC-7579 `onInstall(bytes32)` → Neo's `registerAccount()` with direct call
-- ERC-7579 `onUninstall(bytes32)` → Neo's authorization-based removal
-- ERC-7579 does not prescribe this waiting period; the custom core waits 24 hours for replacement of an installed plugin
+- ERC-7579 `onInstall(bytes32)` → Neo's `onInstall(Hash160, Integer, Integer, Array)` reached from a configuration intent
+- ERC-7579 `onUninstall(bytes32)` → Neo's `onUninstall(Hash160, Integer, Integer, Array)` plus core-side instance removal and `InstanceKey` cleanup
+- ERC-7579 does not prescribe this waiting period; the custom core waits 24 hours before a proposed module change can be confirmed
 - Core artifact upgrades and platform-owner rotation use a separate seven-day delay; neither is the per-account plugin replacement timer
 
 **Assessment:** ✓ Source-verified lifecycle implementation; this does not certify every future plugin or the pinned public artifact
@@ -137,41 +140,45 @@ are republished; that read boundary does not make such a channel executable.
 
 ---
 
-### 3. Escape Hatch Mechanism (timelock, cooldown, finalization) ✓
+### 3. Callback-Free Recovery (timelock, cancellation, execution) ✓
 
 **Implementation Location:** `contracts/custom/SmartAccount.Escape.cs`
 
 **Flow:**
 ```mermaid
 stateDiagram-v2
-    [*] --> Configured: BackupOwner set
-    Configured --> EscapeInitiated: initiateEscape(accountId) called
-    EscapeInitiated --> Configured: Successful operation with BackupOwner witness cancels escape
-    EscapeInitiated --> EscapeFinalized: Timelock expires + finalizeEscape(accountId, newVerifier)
-    EscapeFinalized --> Configured: Selected verifier installed or BackupOwner fallback
+    [*] --> Configured: recoveryTimelockMs fixed at createAccount
+    Configured --> RecoveryInitiated: beginRecovery(accountId, newCustody)
+    RecoveryInitiated --> Configured: cancelRecovery(accountId)
+    RecoveryInitiated --> RecoveryExecuted: matureAt reached + executeRecovery(accountId)
+    RecoveryExecuted --> Configured: custody rotated, modules swept, epoch advanced
 ```
 
-The deployed names carry the account id: `initiateEscape(accountId)` and
-`finalizeEscape(accountId, newVerifier)` are the two ABI methods in
-`contracts/build/SmartAccount.manifest.json` (`contracts/custom/SmartAccount.Escape.cs`).
+The names carry the account id: `beginRecovery(accountId, newCustody)`,          
+`cancelRecovery(accountId)` and the permissionless `executeRecovery(accountId)`   
+are ABI methods of the current v4 source
+(`contracts/custom/SmartAccount.Escape.cs`); `getRecoveryStatus(accountId)` reads
+the pending record back as
+`[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]` and returns an
+empty array when nothing is pending.
 
 **Features:**
-- **Timelock:** Configurable 7-90 days (604,800-7,776,000 seconds)
-- **Cooldown:** One hour between initiation attempts while the cooldown marker is retained; successful finalization deletes that marker
-- **Activity Cancellation:** A successful `executeUserOp()` may cancel an active escape only with the current BackupOwner witness; verifier-only execution cannot cancel it
-- **Finalization:** `finalizeEscape()` installs a selected V3 verifier (with optional parameters), or zero for BackupOwner authorization, and removes the old hook; old plugin cleanup must succeed or the transaction rolls back. The current source additionally offers `finalizeEscapeToOwner(accountId)`, which invokes no plugin, preserves identity/nonces and permanently disables all plugin installation
-- **Events:** `EscapeInitiated`, `EscapeFinalized`, `EscapeCancelled` emitted
+- **Timelock:** `recoveryTimelockMs` is fixed per account in `createAccount` and must be 7-90 days (604,800,000-7,776,000,000 ms); `beginRecovery` stamps `matureAt = now + recoveryTimelockMs`
+- **Authority:** custody or the configured recovery authority must witness the call; a non-zero `newCustody` additionally requires that address's witness
+- **Single pending record:** a second `beginRecovery` while one is pending is rejected (`SA_RECOVERY_PENDING`) and never restarts the timer; `cancelRecovery` (custody or recovery authority) deletes the record
+- **Execution:** `executeRecovery` is permissionless once matured but rejects a stale `authorityEpochAtInit`; it makes no external call, sweeps every module instance, threshold policy, hook order, message-subject set, pending intent, nonce channel and pending migration state, rotates custody, clears the recovery authority, re-enables built-in authorization and advances the authority epoch, configuration nonce and control revision; the orphaned Market control binding is invalidated
+- **Events:** `RecoveryInitiated`, `RecoveryCancelled`, `RecoveryExecuted`, plus the reused `EscapeInitiated` / `EscapeCancelled` / `EscapeFinalized` mirrors
 
 **Security Properties:**
-- **Delayed Takeover:** 7-90 day minimum prevents immediate takeover
-- **No Oracle Dependency:** Pure on-chain state machine
-- **No Per-Account Deployment:** Works with virtual accounts
-- **Audit Trail:** All escape events emitted
+- **Delayed Takeover:** the 7-90 day minimum prevents an immediate custody rotation
+- **No Plugin Dependency:** no validator, hook, Market or Oracle can block or observe a recovery
+- **No Per-Account Deployment:** works with virtual accounts
+- **Audit Trail:** recovery events and the reused escape mirrors are emitted
 
 **Comparison to ERC-4337/7579:**
-- Ethereum AA: No native recovery specified (wallet-specific)
-- Neo: An explicit backup-owner escape path, whose liveness depends on the owner witness and successful plugin cleanup
-- Neo: **Advantage**: Works with virtual accounts (zero deployment cost)
+- Ethereum AA: no native recovery specified (wallet-specific)
+- Neo: an explicit custody-rotation recovery whose liveness depends only on the timelock and the account's own state
+- Neo: **Advantage**: works with virtual accounts (zero deployment cost)        
 
 **Assessment:** ✓ Source-verified recovery state machine; this is not an unconditional recovery or asset-access guarantee
 
@@ -242,7 +249,8 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 
 ---
 
-`initiateEscape(accountId)` starts the backup-owner recovery window.
+`beginRecovery(accountId, newCustody)` records a pending custody rotation; `cancelRecovery`
+deletes it and `executeRecovery` applies it once the account's `recoveryTimelockMs` matures.
 
 ### 6. Market Escrow (cancellation, expiry, dispute) ✓
 
@@ -308,19 +316,19 @@ ClearVerifyContext(accountId);
 - **Verify Context:** Limits `CheckWitness(accountId)` to specific execution
 - **No State Changes:** Verifiers called with `CallFlags.ReadOnly`
 - **Isolation:** Verifiers cannot directly access account state
-- **Authority Gating:** `VerifierAuthority.canConfigureVerifier()` checks permissions
+- **Authority Gating:** `ValidatorAuthority.RequireValidation` / `RequireLifecycle` and `HookAuthority.RequirePreCheck` / `RequirePostCheck` bind every callback to the core-recorded phase and instance
 
-**Supported Verifiers:**
-- **Web3AuthVerifier:** EVM EIP-712 signatures
-- **WebAuthnVerifier:** Hardware biometrics
-- **TEEVerifier:** Trusted execution environment
-- **SessionKeyVerifier:** Temporary delegation
-- **MultiSigVerifier:** Threshold approval
-- **SubscriptionVerifier:** Off-chain allowance
+**Supported Validators:**
+- **Web3AuthValidator:** EVM EIP-712 signatures
+- **P256Validator:** Passkey / hardware biometrics
+- **TeeKeyValidator:** Trusted execution environment
+- **SessionKeyValidator:** Temporary delegation
+- **MultiSigValidator:** One configured child signer (composition is core-owned)
+- **SubscriptionValidator:** Off-chain allowance
 
 **SDK Integration:**
-- `buildContractCompatibleStructHash()` matches contract encoding exactly
-- `buildWeb3AuthSigningPayload()` creates complete 66-byte signing payload
+- `buildUserOperationTypedData()` matches contract encoding exactly
+- `buildUserOperationSigningPayload()` creates the complete 66-byte signing payload
 - `signMessage()` applies EIP-191 wrapper (expected by verifiers)
 
 **Assessment:** ✓ Full Neo native script model compatibility

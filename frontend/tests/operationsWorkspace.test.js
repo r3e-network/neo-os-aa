@@ -88,12 +88,18 @@ test('immutable drafts reject transaction-body mutation after persistence', () =
 
 test('signing a persisted draft appends the signature without mutating the immutable body', () => {
   const workspace = createOperationsWorkspace();
-  workspace.setOperationBody({ kind: 'invoke', targetContract: 'cc33', method: 'transfer', args: [] });
-  workspace.setTransactionBody({ txHex: '' });
+  const target = '99'.repeat(20);
+  workspace.setOperationBody({ kind: 'invoke', targetContract: target, method: 'transfer', args: [] });
+  // The staged intent the operator approved travels with the transaction body, so
+  // a signed envelope that names another target can be refused against it.
+  workspace.setTransactionBody({
+    txHex: '',
+    operationBody: { kind: 'invoke', targetContract: target, method: 'transfer', args: [] },
+  });
   workspace.markPersisted({ draftId: 'draft-1', shareSlug: 'share-1' });
   assert.equal(workspace.isDraftImmutable.value, true);
 
-  const metaInvocation = executeUserOpInvocation();
+  const metaInvocation = executeUserOpInvocation({ target, method: 'transfer', args: [] });
 
   // The signing flows skip setTransactionBody on persisted drafts and store
   // the invocation in the signature metadata instead — the relay path reads

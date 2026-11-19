@@ -28,8 +28,8 @@ def build_current_inventory():
     complete ABI from its manifest. The small metadata fixture supplies only
     compiler-declared static slots and the focused helper range.
     """
-    nef_path = CURRENT_ARTIFACT_DIR / "SmartAccountV3.nef"
-    manifest_path = CURRENT_ARTIFACT_DIR / "SmartAccountV3.manifest.json"
+    nef_path = CURRENT_ARTIFACT_DIR / "SmartAccount.nef"
+    manifest_path = CURRENT_ARTIFACT_DIR / "SmartAccount.manifest.json"
     nef_raw = nef_path.read_bytes()
     manifest_raw = manifest_path.read_bytes()
     decoded = refinement_verify.decode_nef(nef_raw)
@@ -106,7 +106,7 @@ def materialize_nef_fixture(inventory, directory):
     nef = body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4]
     if hashlib.sha256(nef).hexdigest() != inventory["nef"]["sha256"]:
         raise AssertionError("Reconstituted test NEF does not match the original candidate")
-    path = Path(directory) / "SmartAccountV3.nef"
+    path = Path(directory) / "SmartAccount.nef"
     path.write_bytes(nef)
     return path
 
@@ -123,7 +123,7 @@ class MethodProofTests(unittest.TestCase):
         # A portable manifest fixture binds the complete ABI list. Its test-only
         # container digest is explicit; it does not impersonate the production
         # manifest's original digest or require host build output.
-        manifest = Path(cls.fixture_directory.name) / "SmartAccountV3.manifest.json"
+        manifest = Path(cls.fixture_directory.name) / "SmartAccount.manifest.json"
         manifest_raw = json.dumps({"abi":{"methods":cls.inventory["manifest"]["methods"]}},
                                   sort_keys=True).encode()
         manifest.write_bytes(manifest_raw)
@@ -133,7 +133,7 @@ class MethodProofTests(unittest.TestCase):
 
     def test_nef_hash_and_decode_share_one_captured_payload(self):
         nef_path = next(Path(name) for name in self.inventory["inputs"]
-                        if name.endswith("SmartAccountV3.nef"))
+                        if name.endswith("SmartAccount.nef"))
         read = Path.read_bytes
         original = read(nef_path)
         changed = bytearray(original)
@@ -170,8 +170,8 @@ class MethodProofTests(unittest.TestCase):
         self.assertEqual(bound["manifestSha256"], self.inventory["manifest"]["sha256"])
 
     def test_complete_method_is_bound(self):
-        self.assertEqual(self.program["start"], 18900)
-        self.assertEqual(self.program["end"], 19181)
+        self.assertEqual(self.program["start"], 36048)
+        self.assertEqual(self.program["end"], 36329)
         self.assertEqual(len(self.program["bytes"]), 281)
         self.assertEqual(len(self.program["instructions"]), 116)
 
@@ -213,8 +213,8 @@ class MethodProofTests(unittest.TestCase):
         result = method.execute(self.program["bytes"], requested=1, system_fee=0,
                                 network_fee=0, tx_hash=bytes([1])*32, stored=ledger)
         # The helper now asserts the remaining VM-integer headroom before the
-        # addition, so this input is rejected by that assertion at 18011 and the
-        # ADD at 18017 never runs. It is an abort, not an arithmetic fault.
+        # addition, so this input is rejected by that assertion at 36297 and the
+        # ADD at 36303 never runs. It is an abort, not an arithmetic fault.
         self.assertEqual(result["status"], "ABORT")
         self.assertEqual(result["error"], method.MARGIN_ERROR)
         self.assertEqual(result["stored"], ledger)
@@ -269,7 +269,7 @@ class MethodProofTests(unittest.TestCase):
     def test_wrong_static_slot_type_or_key_faults(self):
         for key in (b"\x21", bytearray(b"\x22")):
             with self.subTest(key=key):
-                self.assertEqual(self.execute(static_values={38:key})["status"], "FAULT")
+                self.assertEqual(self.execute(static_values={58:key})["status"], "FAULT")
 
     def test_malformed_storage_is_not_an_expected_result_oracle(self):
         for stored in ({"Reserved": 0}, b"garbage", method.Ledger(bytes(32), 0, "Map")):
@@ -307,13 +307,13 @@ class MethodProofTests(unittest.TestCase):
     def test_partial_helper_boundary_rejected(self):
         inventory = copy.deepcopy(self.inventory)
         entry = next(item for item in inventory["sourceMap"]["focusedMethods"] if item["id"] == method.METHOD)
-        entry["range"] = "19030-19060"
+        entry["range"] = "36178-36208"
         with self.assertRaisesRegex(ValueError, "boundary"):
             method.bind_method(inventory)
 
     def test_exported_instruction_drift_rejected(self):
         inventory = copy.deepcopy(self.inventory)
-        entry = next(item for item in inventory["nef"]["instructions"] if item["offset"] == 19030)
+        entry = next(item for item in inventory["nef"]["instructions"] if item["offset"] == 36178)
         entry["opcode"] = 255
         with self.assertRaisesRegex(ValueError, "inventory differs"):
             method.bind_method(inventory)
@@ -327,7 +327,7 @@ class MethodProofTests(unittest.TestCase):
 
     def test_min_to_max_control_has_observable_semantic_difference(self):
         mutated = list(self.program["bytes"])
-        mutated[19030-method.START] = 0xba
+        mutated[36178-method.START] = 0xba
         result = method.execute(mutated, requested=90, system_fee=50, network_fee=10,
                                 tx_hash=bytes([1])*32, stored=None)
         self.assertEqual((result["status"], result["result"], result["stored"].reserved), ("HALT", 90, 90))
@@ -370,7 +370,7 @@ class MethodProofTests(unittest.TestCase):
             self.assertIs(receipt["kernelChecked"], True)
             self.assertIs(receipt["referenceRefinementVerified"], True)
             self.assertIs(receipt["fullImplementationVerified"], False)
-            self.assertEqual(receipt["methodRange"], [18900, 19181])
+            self.assertEqual(receipt["methodRange"], [36048, 36329])
             self.assertEqual((receipt["byteCount"], receipt["instructionCount"]), (281, 116))
             self.assertEqual(len(receipt["semanticControls"]), 6)
             self.assertTrue(all(item["definitionsCompiled"] and item["certificateRejected"]

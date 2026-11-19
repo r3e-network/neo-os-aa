@@ -88,7 +88,7 @@ function buildTypePresentationMap(t) {
 function buildFilterEmptyStates(t) {
   return {
     all: t ? t('operations.emptyAll', 'No activity recorded yet.') : 'No activity recorded yet.',
-    workflow: t ? t('operations.emptyWorkflow', 'Load a V3 account and stage an operation to populate workflow activity.') : 'Load a V3 account and stage an operation to populate workflow activity.',
+    workflow: t ? t('operations.emptyWorkflow', 'Load an account and stage an operation to populate workflow activity.') : 'Load an account and stage an operation to populate workflow activity.',
     identity: t ? t('operations.emptyIdentity', 'Connect DID, bind NeoDID, or request recovery/private sessions to populate identity activity.') : 'Connect DID, bind NeoDID, or request recovery/private sessions to populate identity activity.',
     signatures: t ? t('operations.emptySignatures', 'Use Append Manual Signature or Sign with EVM Wallet to populate the signatures timeline.') : 'Use Append Manual Signature or Sign with EVM Wallet to populate the signatures timeline.',
     relay: t ? t('operations.emptyRelay', 'Run Check Relay to create relay diagnostics and readiness activity.') : 'Run Check Relay to create relay diagnostics and readiness activity.',

@@ -1,11 +1,11 @@
-// CU-161 drive: guided account creation with verifier presets, and the dead V2
-// create paths the operations composer still carried.
+// CU-161 drive, v4: guided account creation.
 //
-// Every assertion here is a value: a hash compared with the registry, an id
-// compared with the shipped ABI, a mutation observed on the real create form,
-// or an error carrying the reason it claims. The component is not grepped: the
-// real <script setup> and the real template are compiled, evaluated and mounted
-// on a minimal renderer, then its rendered buttons are clicked.
+// A v4 account is created from a custody, a salt and a recovery timelock — no
+// verifier, no hook and no backup owner enter the identity, so the same pair
+// names the same account on both kernels. Every assertion here is a value
+// compared with the built ABI, the shared identity deriver or a mutation
+// observed on the real create form; the panel is compiled and mounted rather
+// than grepped.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -16,58 +16,65 @@ import { createRenderer, nextTick, ref } from 'vue';
 import { compileScript, compileTemplate, parse } from 'vue/compiler-sfc';
 import { createServer } from 'vite';
 
-import { MORPHEUS_PUBLIC_REGISTRY } from '../src/config/generatedMorpheusRegistry.js';
-import { EC } from '../src/config/errorCodes.js';
-import * as operationPresets from '../src/features/operations/presets.js';
 import * as matrixDomain from '../src/services/matrixDomainService.js';
 import { createCreateFormState } from '../src/features/studio/constants.js';
 import {
-  applyCreateAccountVerifierPreset,
-  createAccountVerifierPresets,
+  MAX_RECOVERY_TIMELOCK_DAYS,
+  MIN_RECOVERY_TIMELOCK_DAYS,
+  REGISTRATION_SALT_BYTES,
+  generateRegistrationSalt,
+  normalizeRegistrationSalt,
   planCreateAccount,
-} from '../src/features/studio/createAccountPresets.js';
-import { deriveRegistrationAccountIdHash } from '../src/utils/neo.js';
+  recoveryTimelockDaysToMs,
+} from '../src/features/studio/createAccountPlan.js';
+import {
+  createProxyScript,
+  deriveAccountAddress,
+  deriveAccountIdentity,
+} from '../src/utils/neo.js';
+import { getSmartAccountHash } from './fixtures/studioBoundaryStubs.js';
 
 const FRONTEND_ROOT = path.resolve('.');
 const PANEL_FILE = path.resolve('src/features/studio/components/CreateAccountPanel.vue');
 const BOUNDARY_STUB = path.resolve('tests/fixtures/studioBoundaryStubs.js');
-const MANIFEST_DIR = path.resolve('..', 'contracts', 'build');
-const NETWORK = 'mainnet';
-// The catalogue is per-network: the testnet registry publishes no
-// social-recovery verifier yet (empty address), and an unpublished entry
-// yields no preset.
-const PUBLISHED_VERIFIER_KEYS = {
-  mainnet: ['saWeb3AuthVerifier', 'saSessionKeyVerifier', 'saSocialRecoveryVerifier'],
-  testnet: ['saWeb3AuthVerifier', 'saSessionKeyVerifier'],
-};
+const MANIFEST_PATH = path.resolve('..', 'contracts', 'bin', 'public', 'SmartAccount.manifest.json');
 
-const publishedVerifierContracts = PUBLISHED_VERIFIER_KEYS[NETWORK].map(
-  (key) => MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts[key],
-);
+const CORE = getSmartAccountHash();
+const OTHER_CORE = 'aa'.repeat(20);
+const CUSTODY = '11'.repeat(19) + '12';
+const SALT = 'a1b2c3d4e5f60718';
+const DAY = 86_400_000;
 
-function readManifest(moduleName) {
-  return JSON.parse(readFileSync(path.join(MANIFEST_DIR, `${moduleName}.manifest.json`), 'utf8'));
+function manifest() {
+  assert.ok(
+    path.relative(FRONTEND_ROOT, MANIFEST_PATH) && readFileSyncExists(MANIFEST_PATH),
+    `the v4 core ABI is missing at ${MANIFEST_PATH}; run contracts/compile.sh before the frontend tests`,
+  );
+  return JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
 }
 
-function manifestMethods(moduleName) {
-  return readManifest(moduleName).abi.methods;
+function readFileSyncExists(file) {
+  try {
+    readFileSync(file, 'utf8');
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function createForm(overrides = {}) {
+  return { ...createCreateFormState(), custody: CUSTODY, salt: SALT, recoveryTimelockDays: 30, ...overrides };
 }
 
 if (typeof globalThis.localStorage === 'undefined') {
   globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
 }
-// v-model's directive reads document.activeElement during patch; the custom
-// renderer has no browser document, and none of the driven controls is focused.
 if (typeof globalThis.document === 'undefined') {
   globalThis.document = { activeElement: null };
 }
-// v-model's directive compares getRootNode() against Document; the custom
-// renderer's nodes are not DOM nodes, so the check simply never matches.
 globalThis.Document ??= class Document {};
 globalThis.ShadowRoot ??= class ShadowRoot {};
 
-// The wallet and toast boundary is replaced so the real studio controller can be
-// loaded in Node; nothing under test lives in those modules.
 const STUBBED_SPECIFIERS = {
   'vue-toastification': BOUNDARY_STUB,
   '@/utils/wallet': BOUNDARY_STUB,
@@ -125,11 +132,12 @@ function loadPanelModule() {
       throw new AggregateError(template.errors, 'CreateAccountPanel.vue template did not compile');
     }
     const specifierFiles = {
-      'vue': import.meta.resolve('vue'),
+      vue: import.meta.resolve('vue'),
       '@/i18n': pathToFileURL(path.resolve('src/i18n/index.js')).href,
       '@/composables/useClipboard': pathToFileURL(
         path.resolve('src/composables/useClipboard.js'),
       ).href,
+      '@/utils/neo.js': pathToFileURL(path.resolve('src/utils/neo.js')).href,
     };
     const unknown = [];
     const code = `${script.content}\n${template.code}`.replace(
@@ -225,14 +233,13 @@ async function mountCreateAccountPanel(activeStudio) {
   app.provide('studio', activeStudio);
   app.mount(root);
   await nextTick();
-  const buttons = [];
-  walk(root, (node) => {
-    if (String(node.tag).toLowerCase() === 'button') buttons.push(node);
-  });
+  const nodes = [];
+  walk(root, (node) => nodes.push(node));
   return {
     root,
+    nodes,
     text: () => textOf(root),
-    buttons,
+    buttons: nodes.filter((node) => String(node.tag).toLowerCase() === 'button'),
     click: async (node) => {
       const onClick = listeners.get(node)?.onClick;
       assert.equal(typeof onClick, 'function', 'the rendered control carries no click handler');
@@ -247,328 +254,210 @@ function buttonWithText(mounted, text) {
   return mounted.buttons.find((button) => textOf(button).trim() === text);
 }
 
-// --- acceptance clause 1: the create flow offers registry presets ---------
+// --- the identity the create flow commits to ------------------------------
 
-test('the studio create flow exposes a verifier preset catalogue', () => {
-  assert.ok(
-    studio.createVerifierPresets,
-    'useStudioController() exposes no createVerifierPresets: the create flow offers no presets',
-  );
-  const presets = studio.createVerifierPresets.value;
-  assert.deepEqual(
-    presets.map((preset) => preset.registryKey),
-    PUBLISHED_VERIFIER_KEYS[NETWORK],
-    'the create presets are not the registry-published verifier keys',
-  );
-  for (const preset of presets) {
-    assert.equal(
-      preset.verifierContract,
-      MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts[preset.registryKey],
-      `${preset.id} does not carry the ${NETWORK} registry address`,
-    );
-  }
+test('the identity is derived from custody and salt alone, so one pair names the same account on both kernels', () => {
+  const plan = planCreateAccount(createForm(), CORE);
+  const identity = deriveAccountIdentity({ custodyAddress: CUSTODY, salt: SALT });
+  assert.equal(plan.accountId, identity.accountId);
+  assert.match(plan.accountId, /^[0-9a-f]{40}$/);
+  assert.equal(plan.identityPreimageHex, identity.identityPreimageHex);
+
+  // The core hash decides the address, never the id: the same account is
+  // addressable at two cores without becoming two identities.
+  const otherCore = planCreateAccount(createForm(), OTHER_CORE);
+  assert.equal(otherCore.accountId, plan.accountId);
+  assert.notEqual(otherCore.accountAddress, plan.accountAddress);
+
+  // And the plan's script/address are the shared derivation, not a local copy.
+  assert.equal(plan.verificationScript, createProxyScript(CORE, plan.accountId));
+  assert.equal(plan.accountAddress, deriveAccountAddress({ accountId: plan.accountId, coreContractHash: CORE }));
+
+  // A different salt is a different account.
+  const salted = planCreateAccount(createForm({ salt: 'ff' }), CORE);
+  assert.notEqual(salted.accountId, plan.accountId);
 });
 
-test('the create panel renders every published verifier address as a choice', async () => {
-  const mounted = await mountCreateAccountPanel(studio);
-  try {
-    for (const contract of publishedVerifierContracts) {
-      assert.ok(
-        mounted.text().includes(contract),
-        `the create panel offers no choice backed by the registry address ${contract}`,
-      );
-    }
-  } finally {
-    mounted.unmount();
-  }
-});
+test('the planned createAccount invocation carries exactly what the built v4 ABI declares', () => {
+  const createAccount = manifest().abi.methods.find((method) => method.name === 'createAccount');
+  assert.ok(createAccount, 'the built v4 ABI has no createAccount');
+  assert.equal(createAccount.safe, false);
+  assert.deepEqual(createAccount.parameters.map((parameter) => parameter.type), [
+    'Hash160', 'Hash160', 'ByteArray', 'Integer', 'Array',
+  ]);
 
-// --- acceptance clause 2: the create flow targets no removed ABI entry ----
-
-test('the shipped V3 ABI has no V2 create entry, and the operations preset refuses batchCreate', () => {
-  const methodNames = manifestMethods('SmartAccount').map((method) => method.name);
-  assert.equal(methodNames.includes('create'), false, 'the V3 ABI never exported create');
-  assert.equal(methodNames.includes('registerAccount'), true);
-  assert.equal(
-    'EXPERIMENTAL_OPERATION_PRESETS' in operationPresets,
-    false,
-    'the operations module still exports the unreachable batch-create preset list',
-  );
-  assert.throws(
-    () =>
-      operationPresets.buildOperationFromPreset({
-        preset: 'batchCreate',
-        invoke: { targetContract: '0x5be915aea3ce85e4752d522632f0a9520e377aaf' },
-        batch: { accountIds: '["0xabc"]', signers: '[]', threshold: '1' },
-      }),
-    (error) => {
-      assert.ok(error instanceof operationPresets.OperationPresetRefusedError);
-      assert.equal(error.code, EC.presetUnknown);
-      assert.equal(error.details.preset, 'batchCreate');
-      return true;
-    },
-    'the removed batch-create preset still builds an operation',
-  );
-});
-
-test('the live operation presets still build, so the refusal is not the only path', () => {
-  const operation = operationPresets.buildOperationFromPreset({
-    preset: 'invoke',
-    invoke: {
-      targetContract: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
-      method: 'getNonce',
-      argsText: '[]',
-    },
-  });
-  assert.equal(operation.kind, 'invoke');
-  assert.equal(operation.method, 'getNonce');
-  assert.equal(operation.targetContract, '5be915aea3ce85e4752d522632f0a9520e377aaf');
-});
-
-
-// --- the catalogue is the registry, not a wish list -----------------------
-
-const fallbackT = (_, fallback) => fallback;
-
-test('the catalogue is exactly the verifier modules the registry publishes on each network', () => {
-  for (const network of ['mainnet', 'testnet']) {
-    const presets = createAccountVerifierPresets(network, { t: fallbackT });
-    assert.deepEqual(
-      presets.map((preset) => preset.registryKey),
-      PUBLISHED_VERIFIER_KEYS[network],
-      `${network} preset keys are not the published verifier keys`,
-    );
-    for (const preset of presets) {
-      assert.equal(
-        preset.verifierContract,
-        MORPHEUS_PUBLIC_REGISTRY[network].contracts[preset.registryKey],
-        `${network} ${preset.id} does not carry the registry address`,
-      );
-    }
-  }
-});
-
-test('an unpublished, empty or malformed registry entry yields no preset (control: the same oracle lists the published three)', () => {
-  const registry = structuredClone(MORPHEUS_PUBLIC_REGISTRY);
-  delete registry.mainnet.contracts.saSessionKeyVerifier;
-  registry.mainnet.contracts.saWeb3AuthVerifier = '0xnot-a-hash';
-  const narrowed = createAccountVerifierPresets('mainnet', { registry, t: fallbackT });
-  assert.deepEqual(
-    narrowed.map((preset) => preset.registryKey),
-    ['saSocialRecoveryVerifier'],
-    'the catalogue still offers a verifier the registry does not publish',
-  );
-  // Positive control: the same function lists all three from the unmodified
-  // registry, so the assertion above is about the registry content and not
-  // about a catalogue that is always short.
-  assert.equal(createAccountVerifierPresets('mainnet', { t: fallbackT }).length, 3);
-});
-
-test('each preset params mode is pinned to the shipped verifier ABI', () => {
-  const presets = createAccountVerifierPresets('mainnet', { t: fallbackT });
-  for (const preset of presets) {
-    const setPublicKey = manifestMethods(preset.module).find((method) => method.name === 'setPublicKey');
-    assert.equal(
-      preset.paramsMode === 'publicKey',
-      Boolean(setPublicKey),
-      `${preset.module} params mode disagrees with its shipped setPublicKey`,
-    );
-  }
-  // Paired controls: the instrument sees the method where it exists and its
-  // absence where it does not, and it reads the pushed parameter type.
-  const web3auth = manifestMethods('Web3AuthVerifier').find((method) => method.name === 'setPublicKey');
-  assert.deepEqual(web3auth.parameters.map((parameter) => parameter.type), ['Hash160', 'ByteArray']);
-  assert.equal(
-    manifestMethods('SessionKeyVerifier').some((method) => method.name === 'setPublicKey'),
-    false,
-    'SessionKeyVerifier unexpectedly exports setPublicKey; re-derive its params mode',
-  );
-});
-
-// --- applying a preset is decided by the registry and the ABI -------------
-
-test('applying a published preset writes the registry address and clears params a none preset cannot take', () => {
-  Object.assign(studio.createForm.value, createCreateFormState());
-  const form = studio.createForm.value;
-  form.verifierContract = `0x${'11'.repeat(20)}`;
-  form.verifierParams = 'deadbeef';
-  studio.applyCreateVerifierPreset('sessionKey');
-  assert.equal(
-    form.verifierContract,
-    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saSessionKeyVerifier,
-  );
-  assert.equal(form.verifierParams, '', 'a none preset left stale registration params in the form');
-});
-
-test('a forged preset object cannot substitute an address the registry does not publish', () => {
-  const form = { ...createCreateFormState() };
-  applyCreateAccountVerifierPreset(
-    form,
-    { id: 'web3Auth', verifierContract: `0x${'22'.repeat(20)}`, paramsMode: 'none' },
-    NETWORK,
-    { t: fallbackT },
-  );
-  assert.equal(
-    form.verifierContract,
-    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saWeb3AuthVerifier,
-    'the applied address came from the caller instead of the registry',
-  );
-});
-
-test('an unpublished preset is refused and the form is not touched', () => {
-  const form = {
-    ...createCreateFormState(),
-    verifierContract: MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saWeb3AuthVerifier,
-    verifierParams: '02ab',
-  };
-  const snapshot = structuredClone(form);
-  assert.throws(
-    () => applyCreateAccountVerifierPreset(form, { id: 'teeVerifier' }, NETWORK, { t: fallbackT }),
-    /is not published on mainnet/,
-  );
-  assert.deepEqual(form, snapshot, 'a refused preset mutated the create form');
-  assert.throws(
-    () => applyCreateAccountVerifierPreset(form, '', NETWORK, { t: fallbackT }),
-    /Verifier preset \(none\) is not published on mainnet/,
-  );
-  assert.deepEqual(form, snapshot);
-});
-
-// --- the invocation the create flow submits -------------------------------
-
-function createFormWith(backupOwnerSeed = 'ab') {
-  return {
-    ...createCreateFormState(),
-    backupOwner: `0x${backupOwnerSeed.repeat(20)}`,
-  };
-}
-
-test('the planned registerAccount invocation carries what the shipped ABI declares', () => {
-  const register = manifestMethods('SmartAccount').find((method) => method.name === 'registerAccount');
-  assert.ok(register, 'the shipped V3 ABI has no registerAccount');
-  assert.equal(register.safe, false);
-
-  const form = createFormWith();
-  applyCreateAccountVerifierPreset(form, 'web3Auth', NETWORK, { t: fallbackT });
-  form.verifierParams = '0x02ab';
-  const plan = planCreateAccount(form, NETWORK, { t: fallbackT });
-
-  assert.equal(plan.invocation.operation, 'registerAccount');
+  const plan = planCreateAccount(createForm(), CORE);
+  assert.equal(plan.invocation.operation, 'createAccount');
   assert.deepEqual(
     plan.invocation.args.map((argument) => argument.type),
-    register.parameters.map((parameter) => parameter.type),
-    'the invocation argument types are not the shipped registerAccount parameter types',
+    createAccount.parameters.map((parameter) => parameter.type),
+    'the invocation argument types are not the shipped createAccount parameter types',
   );
-  assert.equal(plan.invocation.args[0].value, plan.accountIdHash);
-  assert.equal(plan.invocation.args[1].value, plan.verifierHash);
-  assert.equal(plan.invocation.args[2].value, '0x02ab');
-  assert.equal(plan.invocation.args[3].value, plan.hookHash);
-  assert.equal(plan.invocation.args[4].value, plan.backupOwnerHash);
-  assert.equal(plan.invocation.args[5].value, plan.escapeTimelockSeconds);
-  assert.equal(plan.escapeTimelockSeconds, 30 * 24 * 60 * 60);
-  assert.equal(
-    plan.verifierHash,
-    MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saWeb3AuthVerifier.replace(/^0x/, ''),
-  );
+  assert.equal(plan.invocation.args[0].value, plan.accountId);
+  assert.equal(plan.invocation.args[1].value, plan.custodyAddress);
+  assert.equal(plan.invocation.args[2].value, `0x${plan.salt}`);
+  assert.equal(plan.invocation.args[3].value, String(30 * DAY));
+  // Creation installs nothing: modules arrive through configuration intents.
+  assert.deepEqual(plan.invocation.args[4].value, []);
+
+  // The v3 create entries are gone from the built ABI.
+  const names = new Set(manifest().abi.methods.map((method) => method.name));
+  for (const retired of ['create', 'registerAccount', 'registerAccounts']) {
+    assert.equal(names.has(retired), false, `${retired} must not exist in the v4 ABI`);
+  }
 });
 
-test('a none preset feeds empty params to both the account id and the invocation', () => {
-  const form = createFormWith();
-  applyCreateAccountVerifierPreset(form, 'socialRecovery', NETWORK, { t: fallbackT });
-  form.verifierParams = 'deadbeef';
-  const plan = planCreateAccount(form, NETWORK, { t: fallbackT });
-  assert.equal(plan.verifierParamsHex, '');
-  assert.equal(plan.invocation.args[2].value, '0x');
-  assert.equal(
-    plan.accountIdHash,
-    deriveRegistrationAccountIdHash({
-      verifierContractHash: plan.verifierHash,
-      verifierParamsHex: '',
-      hookContractHash: plan.hookHash,
-      backupOwnerAddress: form.backupOwner,
-      escapeTimelock: plan.escapeTimelockSeconds,
-    }),
-    'the stale params reached the account id derivation',
-  );
-  // Control: the same stale params on a publicKey preset are carried and do
-  // change the derived id, so the assertion above is not true of every preset.
-  const keyed = createFormWith();
-  applyCreateAccountVerifierPreset(keyed, 'web3Auth', NETWORK, { t: fallbackT });
-  keyed.verifierParams = 'deadbeef';
-  const keyedPlan = planCreateAccount(keyed, NETWORK, { t: fallbackT });
-  assert.equal(keyedPlan.invocation.args[2].value, '0xdeadbeef');
-  assert.notEqual(keyedPlan.accountIdHash, plan.accountIdHash);
+test('a salt is 1 through 128 hex bytes and the generator draws from a secure source', () => {
+  const generated = generateRegistrationSalt();
+  assert.equal(generated.length, REGISTRATION_SALT_BYTES * 2);
+  assert.match(generated, /^[0-9a-f]+$/);
+  assert.notEqual(generateRegistrationSalt(), generateRegistrationSalt(), 'two salts must not collide');
+  assert.equal(normalizeRegistrationSalt('0xAB'), 'ab');
+  assert.equal(normalizeRegistrationSalt('ab'.repeat(128)).length, 256);
+
+  for (const byteLength of [0, 129, 1.5, -1]) {
+    assert.throws(() => generateRegistrationSalt(byteLength), /salt/i, `length ${byteLength}`);
+  }
+  for (const bad of ['', '0x', 'a', 'zz', 'ab'.repeat(129)]) {
+    assert.throws(() => normalizeRegistrationSalt(bad), /salt/i, `value ${bad.slice(0, 8)}`);
+  }
+  assert.throws(() => planCreateAccount(createForm({ salt: 'a1b' }), CORE), /salt/i);
+  assert.throws(() => planCreateAccount(createForm({ salt: '' }), CORE), /salt/i);
 });
 
-test('the params rule follows the verifier address, not the last clicked preset', () => {
-  const form = createFormWith();
-  applyCreateAccountVerifierPreset(form, 'sessionKey', NETWORK, { t: fallbackT });
-  // The user now replaces the guided address with their own verifier contract.
-  form.verifierContract = `0x${'33'.repeat(20)}`;
-  form.verifierParams = 'cafebabe';
-  const plan = planCreateAccount(form, NETWORK, { t: fallbackT });
-  assert.equal(
-    plan.invocation.args[2].value,
-    '0xcafebabe',
-    'the params rule of a preset the address no longer selects was still applied',
-  );
-  // Control: putting the published address back selects the preset's own rule.
-  form.verifierContract = MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts.saSessionKeyVerifier;
-  form.verifierParams = 'cafebabe';
-  const guided = planCreateAccount(form, NETWORK, { t: fallbackT });
-  assert.equal(guided.invocation.args[2].value, '0x');
+test('the recovery timelock is 7 through 90 days, carried as milliseconds', () => {
+  assert.equal(MIN_RECOVERY_TIMELOCK_DAYS, 7);
+  assert.equal(MAX_RECOVERY_TIMELOCK_DAYS, 90);
+  assert.equal(recoveryTimelockDaysToMs(7), 7 * DAY);
+  assert.equal(recoveryTimelockDaysToMs(90), 90 * DAY);
+  assert.equal(recoveryTimelockDaysToMs('30'), 30 * DAY);
+  for (const bad of [0, 6, 6.9, 91, 365, Number.NaN, 'soon', null, undefined]) {
+    assert.throws(() => recoveryTimelockDaysToMs(bad), /timelock/i, `days ${String(bad)}`);
+  }
+});
+
+test('a plan refuses a malformed custody or a missing core instead of guessing', () => {
+  assert.throws(() => planCreateAccount(createForm({ custody: '' }), CORE), /address/i);
+  assert.throws(() => planCreateAccount(createForm({ custody: '0x1234' }), CORE), /address/i);
+  assert.throws(() => planCreateAccount(createForm({ custody: '00'.repeat(20) }), CORE), /address/i);
+  assert.throws(() => planCreateAccount(createForm(), ''), /contract/i);
+  assert.throws(() => planCreateAccount(null, CORE), TypeError);
+});
+
+// --- the controller that drives the form ----------------------------------
+
+test('the controller derives the same id, address and script the plan does', async () => {
+  Object.assign(studio.createForm.value, createForm());
+  await studio.computeSA();
+  const plan = planCreateAccount(createForm(), CORE);
+  assert.equal(studio.computedAccountIdHash.value, plan.accountId);
+  assert.equal(studio.computedAddress.value, plan.accountAddress);
+  assert.equal(studio.computedScriptHex.value, plan.verificationScript);
+
+  // An unusable timelock clears all three instead of deriving a half identity.
+  studio.createForm.value.recoveryTimelockDays = 6;
+  await studio.computeSA();
+  assert.equal(studio.computedAccountIdHash.value, '');
+  assert.equal(studio.computedAddress.value, '');
+  assert.equal(studio.computedScriptHex.value, '');
+
+  // So does a salt the derivation refuses.
+  studio.createForm.value.recoveryTimelockDays = 30;
+  studio.createForm.value.salt = 'zz';
+  await studio.computeSA();
+  assert.equal(studio.computedAddress.value, '');
+});
+
+test('regenerating the salt replaces it with fresh bytes', () => {
+  Object.assign(studio.createForm.value, createForm());
+  const before = studio.createForm.value.salt;
+  studio.regenerateSalt();
+  assert.match(studio.createForm.value.salt, /^[0-9a-f]{32}$/);
+  assert.notEqual(studio.createForm.value.salt, before);
 });
 
 // --- the rendered create flow, clicked ------------------------------------
 
-test('each rendered preset control applies its own registry address to the real create form', async () => {
-  Object.assign(studio.createForm.value, createCreateFormState());
+test('the create panel renders the derived identity from the controller state', async () => {
+  Object.assign(studio.createForm.value, createForm());
+  await studio.computeSA();
   const mounted = await mountCreateAccountPanel(studio);
   try {
-    const presets = studio.createVerifierPresets.value;
-    assert.equal(presets.length, 3);
-    for (const preset of presets) {
-      studio.createForm.value.verifierContract = '';
-      studio.createForm.value.verifierParams = 'deadbeef';
-      const button = mounted.buttons.find((candidate) =>
-        textOf(candidate).includes(preset.verifierContract),
-      );
-      assert.ok(button, `no rendered preset control shows ${preset.verifierContract}`);
-      await mounted.click(button);
-      assert.equal(
-        studio.createForm.value.verifierContract,
-        MORPHEUS_PUBLIC_REGISTRY[NETWORK].contracts[preset.registryKey],
-      );
-      assert.equal(
-        button.props['aria-pressed'],
-        true,
-        'the clicked preset is not marked selected in the rendered row',
-      );
-      assert.equal(
-        studio.createForm.value.verifierParams,
-        preset.paramsMode === 'none' ? '' : 'deadbeef',
-      );
-    }
+    const text = mounted.text();
+    assert.ok(text.includes('Create Smart Account'), 'the create panel did not render');
+    assert.ok(text.includes(studio.computedAddress.value), 'the derived address is not shown');
+    assert.ok(text.includes(studio.computedAccountIdHash.value), 'the derived account id is not shown');
+    assert.ok(
+      text.includes('AA524704'),
+      'the account id hint does not name the identity preimage the id commits to',
+    );
+    // The v4 form has exactly these controls: no verifier address, no hook
+    // address, no backup owner and no escape timelock are collected at creation.
+    const controls = mounted.nodes
+      .filter((node) => ['input', 'textarea'].includes(String(node.tag).toLowerCase()))
+      .map((node) => node.props.id || node.props.type || String(node.tag).toLowerCase());
+    assert.deepEqual(controls, [
+      'matrix-domain-input',
+      'custody-input',
+      'recovery-timelock-days',
+      'salt-input',
+      'verificationScriptHex',
+    ]);
   } finally {
     mounted.unmount();
   }
 });
 
-test('the rendered choices come from the controller catalogue (control: an empty catalogue renders none of them)', async () => {
-  const emptyStudio = { ...studio, createVerifierPresets: ref([]) };
-  const mounted = await mountCreateAccountPanel(emptyStudio);
+test('the create panel disables creation until a custody wallet is connected', async () => {
+  Object.assign(studio.createForm.value, createForm());
+  await studio.computeSA();
+  const mounted = await mountCreateAccountPanel(studio);
   try {
-    for (const contract of publishedVerifierContracts) {
-      assert.equal(
-        mounted.text().includes(contract),
-        false,
-        `the panel still renders ${contract} with an empty catalogue, so the drive is not reading the catalogue`,
-      );
-    }
-    assert.ok(
-      mounted.text().includes('Create Smart Account'),
-      'the control mount did not render the create panel, so its silence proves nothing',
-    );
+    const create = buttonWithText(mounted, 'Create Account');
+    assert.ok(create, 'the panel renders no Create Account control');
+    // The boundary stub reports no connected wallet, so the controller refuses.
+    assert.equal(create.props.disabled, true, 'creation is offered without a custody wallet');
+  } finally {
+    mounted.unmount();
+  }
+
+  // Control: the same control is enabled once the controller reports readiness.
+  const ready = { ...studio, canCreate: ref(true), isCreating: ref(false) };
+  const mountedReady = await mountCreateAccountPanel(ready);
+  try {
+    const create = buttonWithText(mountedReady, 'Create Account');
+    assert.ok(create);
+    assert.equal(create.props.disabled, false, 'the drive cannot enable the control it just disabled');
+  } finally {
+    mountedReady.unmount();
+  }
+});
+
+test('the Generate control regenerates the salt through the controller', async () => {
+  Object.assign(studio.createForm.value, createForm());
+  await studio.computeSA();
+  const mounted = await mountCreateAccountPanel(studio);
+  try {
+    const generate = buttonWithText(mounted, 'Generate');
+    assert.ok(generate, 'the panel renders no Generate control');
+    await mounted.click(generate);
+    assert.match(studio.createForm.value.salt, /^[0-9a-f]{32}$/);
+    assert.notEqual(studio.createForm.value.salt, SALT);
+  } finally {
+    mounted.unmount();
+  }
+});
+
+test('the recovery timelock input is bounded to the contract window', async () => {
+  Object.assign(studio.createForm.value, createForm());
+  await studio.computeSA();
+  const mounted = await mountCreateAccountPanel(studio);
+  try {
+    const input = mounted.nodes.find((node) => String(node.tag).toLowerCase() === 'input'
+      && node.props.id === 'recovery-timelock-days');
+    assert.ok(input, 'the panel renders no recovery timelock control');
+    assert.equal(String(input.props.min), '7');
+    assert.equal(String(input.props.max), '90');
   } finally {
     mounted.unmount();
   }

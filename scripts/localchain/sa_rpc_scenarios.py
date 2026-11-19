@@ -505,11 +505,16 @@ def sc_paymaster(c, x):
 def sc_sdk_sponsored(c, x):
     """SA-11 the SDK sponsored-operation end to end on the deployed core.
 
-    The invocation is composed by the SDK's own payload builder (scripts/localchain/sdk_paymaster_fixture.mjs)
+    The invocation is composed by the SDK's own builder (scripts/localchain/sdk_paymaster_fixture.mjs)
     rather than by the harness, then driven through the deployed core exactly as a relay would receive it.
     The scenario also records the two halves of the sponsorship bound: the pricing container cannot price the
     sponsored envelope at all, while the inner operation prices cleanly, and the settlement on chain pays the
-    relay the fee it actually paid, never the amount it requested."""
+    relay the fee it actually paid, never the amount it requested.
+
+    The fixture now emits the v4 plan of a sponsored execution (a 13-field operation inside one
+    `executeSponsoredUserOp(s)` envelope, §4.2), plus the §4.3 digest a validator signs. The chain leg of
+    this scenario is v3: it runs against the deployed artifacts and is ported with them, which is why the
+    suite is not part of the v4 run (see the local-chain README)."""
     c.records.append({"scenario": "SA-11 SDK sponsored operation end to end (payload built by the SDK)"})
     core, pm, target, sess_v = x.core, c.contracts["SAPaymaster"], c.contracts["MockTransferTarget"], c.contracts["SessionKeyVerifier"]
     buyer, sponsor = c.hashes["buyer"], c.hashes["sponsor"]

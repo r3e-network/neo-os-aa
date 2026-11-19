@@ -96,18 +96,50 @@ public class CompiledCoreSyscallTests
         return targets;
     }
 
-    private static int FirstReturnOffset(string artifact, int start)
+    /// <summary>
+    /// End (first RET) of the helper body that starts at <paramref name="start"/>, or null when the
+    /// offset is not an instruction boundary: a CALL_L target can also be a data island (the compiler
+    /// jumps over inline buffers), and decoding there would throw.
+    /// </summary>
+    private static int? TryFirstReturnOffset(string artifact, int start)
     {
         NefFile nef = NefFile.Parse(File.ReadAllBytes(Path.Combine(CompiledContractsDir, artifact + ".nef")), verify: true);
         Script script = new(nef.Script);
-        for (int ip = start; ip < script.Length;)
+        if (start < 0 || start >= script.Length)
+            return null;
+        try
         {
-            Instruction instruction = script.GetInstruction(ip);
-            if (instruction.OpCode == OpCode.RET)
-                return ip;
-            ip += instruction.Size;
+            for (int ip = start; ip < script.Length;)
+            {
+                Instruction instruction = script.GetInstruction(ip);
+                if (instruction.OpCode == OpCode.RET)
+                    return ip;
+                ip += instruction.Size;
+            }
         }
-        throw new AssertFailedException($"{artifact}: helper at {start} has no return");
+        catch (BadScriptException)
+        {
+            // Not a helper: skip the target.
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The CALL_L helpers an ABI method reaches directly, with the SYSCALL sites inside
+    /// each helper's address range up to its first RET.
+    /// </summary>
+    private static (int Target, (uint Hash, string Method, OpCode Flags, int Offset)[] Sites)[] Helpers(
+        string artifact, string methodName)
+    {
+        return CallTargets(artifact, methodName)
+            .Distinct()
+            .Select(target => (Target: target, End: TryFirstReturnOffset(artifact, target)))
+            .Where(helper => helper.End.HasValue)
+            .Select(helper => (helper.Target, Sites: Syscalls(artifact)
+                .Where(site => site.Offset >= helper.Target && site.Offset <= helper.End!.Value)
+                .ToArray()))
+            .ToArray();
     }
 
     [TestMethod]
@@ -124,14 +156,26 @@ public class CompiledCoreSyscallTests
     [TestMethod]
     public void MessageSignatureAdaptersUseTheProfileSpecificVerifierCall()
     {
+        // v4 folds the ERC-1271 adapter into a fail-closed wrapper
+        // (isValidSignature -> try IsValidSignatureCore catch invalid magic) and the
+        // single module callback lives in that helper, so the ABI method itself owns
+        // no syscall site: the profile split must be proven on the helper.
         var publicRange = MethodRange("SmartAccount", "isValidSignature");
         var publicSites = Syscalls("SmartAccount")
             .Where(site => site.Offset >= publicRange.Start && site.Offset < publicRange.End)
             .ToArray();
-        Assert.AreEqual(2, publicSites.Count(site => site.Hash == Unbounded),
-            "The public ERC-1271 adapter must retain both ordinary verifier calls");
-        Assert.AreEqual(0, publicSites.Count(site => site.Hash == GasBounded),
-            "The public ERC-1271 adapter must not emit CallWithGasLimit");
+        Assert.AreEqual(0, publicSites.Count(site => site.Hash == Unbounded || site.Hash == GasBounded),
+            "The public ERC-1271 adapter is a wrapper and must not call a verifier directly");
+
+        var publicHelpers = Helpers("SmartAccount", "isValidSignature")
+            .Where(helper => helper.Sites.Any(site => site.Hash == Unbounded))
+            .ToArray();
+        Assert.AreEqual(1, publicHelpers.Length,
+            "The public ERC-1271 verifier helper must be unambiguous");
+        Assert.AreEqual(1, publicHelpers[0].Sites.Count(site => site.Hash == Unbounded),
+            "The public ERC-1271 helper must issue exactly one ordinary verifier callback");
+        Assert.AreEqual(0, publicHelpers[0].Sites.Count(site => site.Hash == GasBounded),
+            "The public ERC-1271 helper must not emit CallWithGasLimit");
 
         const string platformArtifact = "../platform/SmartAccount";
         var platformRange = MethodRange(platformArtifact, "isValidSignature");
@@ -140,25 +184,16 @@ public class CompiledCoreSyscallTests
             .ToArray();
         Assert.AreEqual(0, platformSites.Count(site =>
                 site.Hash == GasBounded || site.Hash == Unbounded),
-            "The PLATFORM ERC-1271 adapter must route both verifier calls through a helper");
+            "The PLATFORM ERC-1271 adapter must route its verifier call through a helper");
 
-        List<int> callTargets = CallTargets(platformArtifact, "isValidSignature");
-        var helperCandidates = callTargets
-            .Distinct()
-            .Select(target => (Target: target, End: FirstReturnOffset(platformArtifact, target)))
-            .Select(helper => (helper.Target, helper.End, Sites: Syscalls(platformArtifact)
-                .Where(site => site.Offset >= helper.Target && site.Offset <= helper.End)
-                .ToArray()))
+        var platformHelpers = Helpers(platformArtifact, "isValidSignature")
             .Where(helper => helper.Sites.Any(site => site.Hash == GasBounded))
             .ToArray();
-
-        Assert.AreEqual(1, helperCandidates.Length,
+        Assert.AreEqual(1, platformHelpers.Length,
             "PLATFORM ERC-1271 has an ambiguous gas-bounded verifier helper");
-        var selected = helperCandidates[0];
-        Assert.AreEqual(2, callTargets.Count(target => target == selected.Target),
-            "The PLATFORM ERC-1271 adapter must call the shared verifier helper twice");
+        var selected = platformHelpers[0];
         Assert.AreEqual(1, selected.Sites.Count(site => site.Hash == GasBounded),
-            "The PLATFORM ERC-1271 helper must contain one shared gas-bounded call");
+            "The PLATFORM ERC-1271 helper must contain exactly one shared gas-bounded call");
         Assert.AreEqual(0, selected.Sites.Count(site => site.Hash == Unbounded),
             "The PLATFORM ERC-1271 helper must not mix call profiles");
     }
@@ -167,10 +202,11 @@ public class CompiledCoreSyscallTests
     public void PlatformCoreEmitsTheGasBoundedCallSurface()
     {
         var syscalls = Syscalls("../platform/SmartAccount");
-        // Five source call sites (two verifier callbacks plus the verifier, leaf
-        // maintenance and composite-root maintenance helpers) compile to five
-        // SYSCALL drains, and nccs retains one extern-declaration stub.
-        Assert.AreEqual(6, syscalls.Count(s => s.Hash == GasBounded));
+        // v4 funnels every module callback (validation, hooks, completion, lifecycle) and
+        // the ERC-1271 verifier through the single CallModuleGasCapped helper, so the
+        // artifact has one gas-bounded drain plus nccs' extern-declaration stub. The v3
+        // per-path helpers (verifier, leaf and composite-root maintenance) are gone.
+        Assert.AreEqual(2, syscalls.Count(s => s.Hash == GasBounded));
     }
 
     [TestMethod]

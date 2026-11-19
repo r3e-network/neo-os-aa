@@ -7,6 +7,7 @@ import {
   runRelayPreflight,
 } from '../src/features/operations/relayPreflight.js';
 import {
+  ACCOUNT_ID,
   GAS_HASH,
   boolItem,
   executeUserOpInvocation,
@@ -15,16 +16,20 @@ import {
   relayRoute,
 } from './fixtures/saChainFixtures.js';
 
+/** A draft whose staged body carries the signed envelope it anchors (the shape a workspace submits). */
+function signedDraft(invocation) {
+  return {
+    transactionBody: { accountIdHash: ACCOUNT_ID, v4Invocation: invocation },
+    signatures: [{ kind: 'evm', metadata: { metaInvocation: invocation } }],
+  };
+}
+
 test('buildRelayPreflightRequest reuses the selected relay payload and adds simulate mode', () => {
   const request = buildRelayPreflightRequest({
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
     morpheusNetwork: 'testnet',
-    transactionBody: {},
-    signatures: [{
-      kind: 'evm',
-      metadata: { metaInvocation: executeUserOpInvocation() },
-    }],
+    ...signedDraft(executeUserOpInvocation()),
   });
 
   assert.deepEqual(request, {
@@ -174,11 +179,8 @@ test('runRelayPreflight submits simulate requests through the relay transport', 
         operation: 'executeUserOp',
         stack: [{ type: 'Integer', value: '1' }],
         validationPreview: {
-          deadlineValid: true,
-          nonceAcceptable: true,
-          hasVerifier: true,
-          verifier: 'b4107cb2cb4bace0ebe15bc4842890734abe133a',
-          hook: '0000000000000000000000000000000000000000',
+          accepted: true,
+          operationDigest: '88'.repeat(32),
         },
       };
     },
@@ -188,11 +190,7 @@ test('runRelayPreflight submits simulate requests through the relay transport', 
     walletService,
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: 'meta',
-    transactionBody: {},
-    signatures: [{
-      kind: 'evm',
-      metadata: { metaInvocation: executeUserOpInvocation() },
-    }],
+    ...signedDraft(executeUserOpInvocation()),
   });
 
   assert.equal(calls.length, 1);
@@ -201,7 +199,7 @@ test('runRelayPreflight submits simulate requests through the relay transport', 
   assert.equal(result.operation, 'executeUserOp');
   assert.equal(result.gasConsumed, '77');
   assert.deepEqual(result.stack, [{ type: 'Integer', value: '1' }]);
-  assert.equal(result.validationPreview?.hasVerifier, true);
+  assert.equal(result.validationPreview?.accepted, true);
 });
 
 // --- CU-06: the preflight never reports a transfer that returned false as ready ---------------------------------
@@ -218,8 +216,7 @@ function preflightWith(payload, invocation, payloadMode = 'meta') {
     walletService,
     relayEndpoint: '/api/relay-transaction',
     relayPayloadMode: payloadMode,
-    transactionBody: {},
-    signatures: [{ kind: 'evm', metadata: { metaInvocation: invocation } }],
+    ...signedDraft(invocation),
   });
 }
 

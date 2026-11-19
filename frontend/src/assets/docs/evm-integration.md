@@ -8,14 +8,16 @@ The canonical shared testnet SA core is `0xdbf38e7b2117186bf7a5e17ead702322c0c5b
 generated `frontend/src/config/generatedMorpheusRegistry.js` is the source of that anchor and the
 repository README restates it. Point the client there unless you are deliberately overriding it:
 
-- `executeUserOp(accountId, op)` succeeds with a valid EVM signature (the account's verifier runs
-  the typed-data path)
+- `executeUserOp(accountId, op)` succeeds with a valid EVM signature (the routed `Web3AuthValidator`
+  instance runs the typed-data path)
 - stale nonces, expired deadlines, wrong chain IDs, wrong verifying contracts, and tampered
   `argsHash` values are rejected
+- a freeze, a matured recovery or a settlement advances the authority epoch, and a signature built
+  against the previous epoch is stale by construction
 
 The V1/V2 wrappers `executeUnified` and `executeUnifiedByAddress` were removed. No deployed manifest
 and no contract source in this repository defines them, so the earlier "hardened testnet
-deployment" that the examples here used (`0x5be915…`) is a V1/V2 core and cannot carry a V3
+deployment" that the examples here used (`0x5be915…`) is a V1/V2 core and cannot carry a v4
 invocation.
 
 ## Signing Flow

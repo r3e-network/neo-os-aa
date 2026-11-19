@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""Real native SDK verifier workflows on a disposable loopback chain; no public writes."""
+"""RETIRED v3 harness: kept as dated evidence, exits non-zero without touching a chain.
+
+Protocol v4 removed the client calls this harness drives (`buildRegistration`,
+`buildModuleCall`, `buildAction`, `getConfig`, `verifierContext`) and renamed the
+native modules it loads (`NeoNativeVerifier`/`SessionKeyVerifier` ->
+`NeoWitnessValidator`/`SessionKeyValidator`). Running it would fail halfway
+through a disposable chain, so it refuses to start instead.
+
+The reproducible v4 runbook is `sdk/js/tests/testnet-v4-harness.js`, which drives
+the v4 13-field operation, `proposeConfiguration`/`confirmConfiguration` intent
+plans, module install, threshold policy and recovery flows. The receipts under
+`docs/reports/` record what this file proved at their date; they are historical
+evidence for the v3 surface, not a claim about v4.
+"""
 import argparse
 import base64
 import datetime
@@ -12,6 +25,10 @@ import socket
 import subprocess
 import sys
 import tempfile
+
+sys.exit('Retired: this v3 native runtime harness no longer matches the SDK. '
+         'Use sdk/js/tests/testnet-v4-harness.js for v4 module-install, '
+         'configuration-intent, threshold and recovery flows.')
 
 os.umask(0o077)
 parser = argparse.ArgumentParser()

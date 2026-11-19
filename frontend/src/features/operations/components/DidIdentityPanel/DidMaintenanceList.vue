@@ -4,7 +4,7 @@
     class="rounded-xl border border-sa-warning/30 bg-sa-warning/5 p-4 space-y-3"
   >
     <p class="text-xs uppercase text-sa-warning font-bold">
-      {{ t("didPanel.pendingMaintenance", "Pending Account Maintenance") }}
+      {{ t("didPanel.pendingConfiguration", "Pending Configuration Intents") }}
     </p>
     <div
       v-for="item in items"
@@ -23,26 +23,26 @@
       <div class="mt-3 grid gap-3 md:grid-cols-3">
         <div>
           <p class="text-[10px] uppercase text-sa-muted font-bold">
-            {{ t("didPanel.executableAt", "executable at") }}
+            {{ t("didPanel.maturesAt", "matures at") }}
           </p>
           <p class="mt-1 text-sm text-sa-text break-all">
-            {{ item.executeAfter }}
+            {{ item.matureAt }}
           </p>
         </div>
         <div>
           <p class="text-[10px] uppercase text-sa-muted font-bold">
-            {{ t("didPanel.boundModule", "Bound Module") }}
+            {{ t("didPanel.expiresAt", "expires at") }}
           </p>
           <p class="mt-1 text-sm text-sa-text break-all">
-            {{ item.moduleHash || t("didPanel.unset", "unset") }}
+            {{ item.expiresAt }}
           </p>
         </div>
         <div>
           <p class="text-[10px] uppercase text-sa-muted font-bold">
-            {{ t("didPanel.pendingCallHash", "Pending Call Hash") }}
+            {{ t("didPanel.actionDigest", "Action Digest") }}
           </p>
           <p class="mt-1 text-sm text-sa-text break-all">
-            {{ item.callHash || t("didPanel.unset", "unset") }}
+            {{ item.actionDigest || t("didPanel.unset", "unset") }}
           </p>
         </div>
       </div>

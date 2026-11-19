@@ -1,146 +1,232 @@
-import { hash160Param, decodeStackHash160, decodeStackByteStringHex } from './helpers.js';
+/**
+ * Account configuration reads and review checks for the v4 protocol.
+ *
+ * v4 has no verifier slot, no hook slot and no escape latch to read: an account
+ * carries a control record (custody, recovery authority, timelock, nonces),
+ * a set of installed module instances, a core-owned hook order, and pending
+ * configuration intents that mature rather than take effect on proposal. This
+ * module reads exactly those and refuses to describe anything it cannot decode.
+ *
+ * Writes live in smartAccountProtocol.js (action grammar) and
+ * useStudioController.js (which intent the operator chose); nothing here builds
+ * a transaction.
+ */
 
-const ZERO = '00'.repeat(20);
-const HASH = /^[0-9a-f]{40}$/;
-function normalizeHash(value) {
-  const result = hash160Param(value).toLowerCase();
-  if (!HASH.test(result)) throw new Error('Invalid Neo script hash.');
-  return result;
+import { decodeStackInteger, hash160Param } from './helpers.js';
+import {
+  decodeAccountDescriptor,
+  decodeHookOrder,
+  decodeModuleDescriptor,
+  decodeModulePage,
+  decodePendingConfiguration,
+  decodeRecoveryStatus,
+} from '../../services/smartAccountProtocol.js';
+
+const MODULE_PAGE_LIMIT = '32';
+
+function hashItem(value) {
+  return { type: 'Hash160', value: hash160Param(value) };
 }
-export function validateRegistrationOwner(owner, wallet) {
+
+function intItem(value) {
+  return { type: 'Integer', value: String(value) };
+}
+
+/**
+ * True when the connected wallet is the account's custody. The distinction
+ * decides whether a configuration intent can be proposed at all: custody is
+ * the witness-bearing controller, not a display preference.
+ */
+export function custodyIssues(custody, wallet) {
+  let authority;
   try {
-    const hash = normalizeHash(owner);
-    if (hash === ZERO) return 'owner-invalid';
-    if (!wallet) return 'wallet-required';
-    return hash === normalizeHash(wallet) ? '' : 'owner-mismatch';
-  } catch (_) { return 'owner-invalid'; }
+    authority = hash160Param(custody);
+  } catch (_) {
+    return 'custody-invalid';
+  }
+  if (/^0+$/.test(authority)) return 'custody-invalid';
+  if (!wallet) return 'wallet-required';
+  try {
+    return hash160Param(wallet) === authority ? '' : 'custody-mismatch';
+  } catch (_) {
+    return 'custody-mismatch';
+  }
 }
-function integer(item, label) {
-  if (item?.type !== 'Integer' || !/^\d+$/.test(String(item.value))) throw new Error(`Invalid ${label}.`);
-  const value = Number(item.value);
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}.`);
-  return value;
-}
-function boolean(item) {
-  if (item?.type !== 'Boolean' || typeof item.value !== 'boolean') throw new Error('Invalid account Boolean state.');
-  return item.value;
-}
-function stackHash(item) {
-  const hash = decodeStackHash160(item).toLowerCase();
-  if (!HASH.test(hash)) throw new Error('Invalid account script hash.');
-  return hash;
-}
-export function decodePendingUpdate(item) {
-  if (item?.type === 'Any' && item.value == null) return { exists: false, full: true };
-  if (item?.type !== 'Array' || !Array.isArray(item.value) || item.value.length !== 4) throw new Error('Invalid pending update.');
-  const [moduleItem, paramsItem, started, mature] = item.value;
-  if (paramsItem?.type !== 'ByteString' || typeof paramsItem.value !== 'string') throw new Error('Invalid pending parameters.');
-  const module = stackHash(moduleItem);
-  const params = decodeStackByteStringHex(paramsItem);
-  if (btoa(String.fromCharCode(...Uint8Array.from(params.match(/../g) || [], (pair) => parseInt(pair, 16)))) !== paramsItem.value) throw new Error('Invalid pending parameters.');
-  const initiatedAt = integer(started, 'pending initiation time'), matureAt = integer(mature, 'pending maturity time');
-  if (matureAt !== initiatedAt + 86400000) throw new Error('Invalid pending timelock.');
-  return { exists: true, full: true, module, params, initiatedAt, matureAt };
-}
-export function supportedPendingRoles(contractState) {
-  const methods = contractState?.manifest?.abi?.methods;
-  if (!Array.isArray(methods)) throw new Error('Cannot verify the custom contract ABI.');
-  return ['verifier', 'hook'].filter((role) => methods.some((method) =>
-    method.name === `getPending${role === 'verifier' ? 'Verifier' : 'Hook'}Update`
-    && method.safe === true && method.parameters?.length === 1 && method.parameters[0].type === 'Hash160'));
-}
-export function supportsOwnerOnlyRecovery(contractState) {
-  const methods = contractState?.manifest?.abi?.methods;
-  if (!Array.isArray(methods)) throw new Error('Cannot verify the custom contract ABI.');
-  return [['finalizeEscapeToOwner', 'Void', false], ['isOwnerOnlyRecovery', 'Boolean', true]].every(([name, returntype, safe]) => {
-    const matching = methods.filter((method) => method.name === name);
-    return matching.length === 1 && matching[0].returntype === returntype && matching[0].safe === safe
-      && matching[0].parameters?.length === 1 && matching[0].parameters[0].type === 'Hash160';
-  });
-}
+
 export async function readChainClock(send) {
   const count = await send('getblockcount', []);
   if (!Number.isSafeInteger(count) || count <= 0) throw new Error('Invalid node block count.');
   const header = await send('getblockheader', [count - 1, true]);
-  if (!header || header.index !== count - 1 || !Number.isSafeInteger(header.time) || header.time <= 0 || !/^(0x)?[0-9a-fA-F]{64}$/.test(header.hash || '')) throw new Error('Invalid node block timestamp.');
+  if (!header
+    || header.index !== count - 1
+    || !Number.isSafeInteger(header.time)
+    || header.time <= 0
+    || !/^(0x)?[0-9a-fA-F]{64}$/.test(header.hash || '')) {
+    throw new Error('Invalid node block timestamp.');
+  }
   return { height: header.index, hash: header.hash.toLowerCase(), time: header.time };
 }
-export async function readGovernanceSnapshot({ accountId, read, readClock, fullPendingRoles = [], ownerOnlyRecoverySupported = false }) {
-  accountId = normalizeHash(accountId);
+
+/**
+ * One consistent read of an account's v4 configuration. The chain clock is
+ * sampled before and after so a snapshot never mixes two blocks — a maturity
+ * decision made on mixed state is exactly the kind of review error this guard
+ * exists to prevent.
+ */
+export async function readAccountConfiguration({ accountId, read, readClock }) {
+  const normalized = hash160Param(accountId);
   const before = await readClock();
-  const readItem = async (method) => {
-    const response = await read(method, [{ type: 'Hash160', value: accountId }]);
-    if (String(response?.state).toUpperCase() !== 'HALT' || response.stack?.length !== 1) throw new Error(`Cannot read ${method}.`);
+
+  const readItem = async (method, args) => {
+    const response = await read(method, args);
+    if (String(response?.state).toUpperCase() !== 'HALT' || response.stack?.length !== 1) {
+      throw new Error(`Cannot read ${method}.`);
+    }
     return response.stack[0];
   };
-  const pending = async (role) => {
-    const label = role === 'verifier' ? 'Verifier' : 'Hook';
-    if (fullPendingRoles.includes(role)) return decodePendingUpdate(await readItem(`getPending${label}Update`));
-    const [exists, time] = await Promise.all([readItem(`hasPending${label}Update`), readItem(`getPending${label}UpdateTime`)]);
-    const present = boolean(exists), matureAt = integer(time, 'pending maturity time');
-    if (present !== (matureAt > 0)) throw new Error('Inconsistent pending update. Refresh state.');
-    return present ? { exists: true, full: false, matureAt } : { exists: false, full: false };
-  };
-  const [verifier, hook, backupOwner, delay, triggered, active, escrow, pendingVerifier, pendingHook, ownerOnlyRecovery] = await Promise.all([
-    readItem('getVerifier').then(stackHash), readItem('getHook').then(stackHash), readItem('getBackupOwner').then(stackHash),
-    readItem('getEscapeTimelock').then((item) => integer(item, 'escape timelock')),
-    readItem('getEscapeTriggeredAt').then((item) => integer(item, 'escape initiation time')),
-    readItem('isEscapeActive').then(boolean), readItem('isMarketEscrowActive').then(boolean), pending('verifier'), pending('hook'),
-    ownerOnlyRecoverySupported ? readItem('isOwnerOnlyRecovery').then(boolean) : false,
-  ]);
+
+  const account = decodeAccountDescriptor(await readItem('getAccount', [hashItem(normalized)]));
+
+  const modules = [];
+  const pages = [];
+  for (const moduleType of ['validator', 'hook']) {
+    let cursor = '0';
+    for (;;) {
+      const page = decodeModulePage(await readItem('getModules', [
+        hashItem(normalized),
+        { type: 'String', value: moduleType },
+        intItem(cursor),
+        intItem(MODULE_PAGE_LIMIT),
+      ]));
+      pages.push({ moduleType, ...page });
+      for (const moduleId of page.ids) {
+        const descriptor = decodeModuleDescriptor(await readItem('getModule', [
+          hashItem(normalized),
+          intItem(moduleId),
+        ]));
+        if (descriptor) modules.push(descriptor);
+      }
+      if (page.ids.length === 0 || page.nextCursor === '0') break;
+      cursor = page.nextCursor;
+    }
+  }
+
+  const hookOrder = decodeHookOrder(await readItem('getHookOrder', [hashItem(normalized)]));
+
+  const intentIdsItem = await readItem('getPendingConfigurationIntentIds', [hashItem(normalized)]);
+  const intentIds = intentIdsItem?.type === 'Array' && Array.isArray(intentIdsItem.value)
+    ? intentIdsItem.value.map((item) => String(decodeStackInteger(item)))
+    : [];
+
+  const pending = [];
+  for (const intentId of intentIds) {
+    const decoded = decodePendingConfiguration(await readItem('getPendingConfiguration', [
+      hashItem(normalized),
+      intItem(intentId),
+    ]));
+    if (decoded) pending.push(decoded);
+  }
+
+  const recovery = decodeRecoveryStatus(await readItem('getRecoveryStatus', [hashItem(normalized)]));
+
   const chain = await readClock();
-  if (before.height !== chain.height || before.hash !== chain.hash) throw new Error('Node block changed while reading. Refresh state.');
-  if (backupOwner === ZERO || active !== (triggered > 0)) throw new Error('Invalid account recovery state.');
-  if (ownerOnlyRecovery && (verifier !== ZERO || hook !== ZERO)) throw new Error('Invalid owner-only recovery state.');
-  return { accountId, verifier, hook, backupOwner, escapeTimelock: delay, escapeTriggeredAt: triggered, escapeActive: active, marketEscrow: escrow, pendingVerifier, pendingHook, ownerOnlyRecoverySupported, ownerOnlyRecovery, chain };
+  if (before.height !== chain.height || before.hash !== chain.hash) {
+    throw new Error('Node block changed while reading. Refresh state.');
+  }
+  if (account.exists && /^0+$/.test(account.custody)) {
+    throw new Error('Invalid account custody state.');
+  }
+
+  return {
+    accountId: normalized,
+    account,
+    modules,
+    pages,
+    hookOrder,
+    recovery,
+    intentIds,
+    pending,
+    chain,
+  };
 }
-function paramsHex(value, allowEmpty = true) {
-  const hex = String(value || '').trim().replace(/^0x/i, '').toLowerCase();
-  if (!/^(?:[0-9a-f]{2})*$/.test(hex) || (!allowEmpty && !hex)) throw new Error('Provide valid verifier initialization parameters.');
-  return hex;
+
+/**
+ * Why a configuration intent cannot be proposed right now. Order matters: the
+ * first blocker is the one the screen explains.
+ */
+export function configurationBlockers(snapshot, actions) {
+  if (!snapshot?.account?.exists) return 'account-missing';
+  if (snapshot.account.status === 'frozen') return 'account-frozen';
+  if (snapshot.account.status === 'migrationRequired') return 'migration-required';
+  if (snapshot.account.marketEscrowActive) return 'market-escrow';
+  if (Array.isArray(actions) && actions.length === 0) return 'no-actions';
+  if (Array.isArray(snapshot.pending) && snapshot.pending.length > 0) return 'pending-intent';
+  return '';
 }
+
+/** Why a custody action (freeze, recovery, revoke) cannot run right now. */
+export function custodyActionBlockers(snapshot, action) {
+  if (!snapshot?.account?.exists) return 'account-missing';
+  if (snapshot.account.marketEscrowActive && action !== 'cancelRecovery') return 'market-escrow';
+  if (action === 'beginRecovery') {
+    if (snapshot.account.ownerOnlyRecovery) return 'owner-only-recovery';
+    if (snapshot.recovery) return 'recovery-active';
+  }
+  if (action === 'executeRecovery') {
+    if (!snapshot.recovery) return 'recovery-missing';
+    if (snapshot.chain.time < Number(snapshot.recovery.matureAt)) return 'recovery-immature';
+  }
+  if (action === 'cancelRecovery' && !snapshot.recovery) return 'recovery-missing';
+  return '';
+}
+
+/** The part of a snapshot a review is bound to (everything but the clock). */
 function snapshotIdentity(snapshot) {
   const { chain, loadedAt, ...state } = snapshot;
   return state;
 }
-export function buildGovernanceAction(snapshot, operation, options = {}) {
-  if (!snapshot?.chain || !snapshot.accountId) throw new Error('Load current governance state first.');
-  const args = [{ type: 'Hash160', value: snapshot.accountId }];
-  if (snapshot.ownerOnlyRecovery) throw new Error('This account permanently uses its backup owner witness. Plugin configuration and further recovery are unavailable.');
-  const match = /^(confirm|cancel)(Verifier|Hook)Update$/.exec(operation);
-  if (match) {
-    const pending = snapshot[`pending${match[2]}`];
-    if (!pending?.exists) throw new Error('No pending update. Refresh state.');
-    if (match[1] === 'confirm') {
-      if (!pending.full) throw new Error('The deployment cannot provide complete pending details; confirmation is unavailable.');
-      if (snapshot.chain.time < pending.matureAt) throw new Error('The plugin timelock is not mature. Refresh node state after the deadline.');
-    }
-  } else if (operation === 'initiateEscape') {
-    if (snapshot.escapeActive) throw new Error('Recovery is already active.');
-  } else if (operation === 'finalizeEscape' || operation === 'finalizeEscapeToOwner') {
-    if (!snapshot.escapeActive) throw new Error('Recovery has not been initiated.');
-    if (snapshot.chain.time < snapshot.escapeTriggeredAt + snapshot.escapeTimelock * 1000) throw new Error('The recovery timelock is not mature. Refresh node state after the deadline.');
-    if (operation === 'finalizeEscapeToOwner') {
-      if (!snapshot.ownerOnlyRecoverySupported) throw new Error('This deployment does not support permanent owner-only recovery.');
-      if (options.irreversibleAcknowledged !== true) throw new Error('Acknowledge the irreversible owner-only recovery before continuing.');
-    } else if (options.mode === 'backup-owner') args.push({ type: 'Hash160', value: ZERO }, { type: 'ByteArray', value: '0x' });
-    else if (options.mode === 'verifier') {
-      const verifier = normalizeHash(options.verifier);
-      if (verifier === ZERO) throw new Error('Choose backup-owner mode to remove the verifier.');
-      args.push({ type: 'Hash160', value: verifier }, { type: 'ByteArray', value: `0x${paramsHex(options.params, options.allowEmptyParams === true)}` });
-    } else throw new Error('Choose a recovery authorization mode.');
-  } else if (operation === 'updateVerifier' || operation === 'updateHook') {
-    const role = operation === 'updateVerifier' ? 'Verifier' : 'Hook';
-    if (snapshot[`pending${role}`].exists) throw new Error('Cancel or confirm the pending update first.');
-    args.push({ type: 'Hash160', value: options.module ? normalizeHash(options.module) : ZERO });
-    if (role === 'Verifier') args.push({ type: 'ByteArray', value: `0x${paramsHex(options.params)}` });
-  } else throw new Error('Unsupported governance operation.');
-  if (!operation.startsWith('cancel') && snapshot.marketEscrow) throw new Error('This account is in market escrow.');
-  return JSON.parse(JSON.stringify({ operation, args, snapshot: snapshotIdentity(snapshot), options }));
+
+/**
+ * Builds the review record a confirmation step shows. `actions` are already
+ * encoded by smartAccountProtocol.js, so the digest the operator reads is the
+ * digest the chain will execute.
+ */
+export function captureConfigurationReview(snapshot, actions) {
+  const blocker = configurationBlockers(snapshot, actions);
+  if (blocker) throw new Error(`Cannot propose this configuration: ${blocker}`);
+  return {
+    accountId: snapshot.accountId,
+    actions: JSON.parse(JSON.stringify(actions)),
+    snapshot: snapshotIdentity(snapshot),
+  };
 }
-export function assertGovernanceReviewCurrent(review, snapshot, wallet) {
-  if (normalizeHash(wallet) !== snapshot.backupOwner) throw new Error('Connect the configured Neo backup owner.');
-  if (JSON.stringify(snapshotIdentity(snapshot)) !== JSON.stringify(review.snapshot)) throw new Error('Governance state changed. Refresh and review again.');
-  const current = buildGovernanceAction(snapshot, review.operation, review.options);
-  if (JSON.stringify(current.args) !== JSON.stringify(review.args)) throw new Error('Governance request changed. Review again.');
+
+/**
+ * A review is only still valid if custody still matches, the account state is
+ * unchanged, and the action list is byte-identical. A matured intent is a new
+ * execution of an already-reviewed action list, so it is checked the same way.
+ */
+export function assertConfigurationReviewCurrent(review, snapshot, wallet, currentActions = review.actions) {
+  if (custodyIssues(snapshot?.account?.custody, wallet)) {
+    throw new Error('Connect the account custody wallet.');
+  }
+  if (snapshot?.accountId !== review.accountId) {
+    throw new Error('Account changed. Load and review again.');
+  }
+  if (JSON.stringify(snapshotIdentity(snapshot)) !== JSON.stringify(review.snapshot)) {
+    throw new Error('Account configuration changed. Refresh and review again.');
+  }
+  if (JSON.stringify(currentActions) !== JSON.stringify(review.actions)) {
+    throw new Error('The configuration request changed. Review again.');
+  }
+}
+
+/** True when a pending intent has matured (or expired) at the sampled clock. */
+export function intentStatus(intent, nowMs) {
+  const matureAt = Number(intent?.matureAt || 0);
+  const expiresAt = Number(intent?.expiresAt || 0);
+  if (!intent) return 'missing';
+  if (expiresAt > 0 && expiresAt <= nowMs) return 'expired';
+  if (matureAt > nowMs) return 'maturing';
+  return 'mature';
 }

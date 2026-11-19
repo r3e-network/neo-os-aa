@@ -24,7 +24,7 @@ class ContextProofTests(unittest.TestCase):
         nef = materialize_nef_fixture(cls.inventory, cls.directory.name)
         cls.inventory['inputs'] = {str(nef):cls.inventory['nef']['sha256']}
         # Portable ABI-only test container, with its own explicit digest.
-        manifest = Path(cls.directory.name) / 'SmartAccountV3.manifest.json'
+        manifest = Path(cls.directory.name) / 'SmartAccount.manifest.json'
         raw = json.dumps({'abi': {'methods': cls.inventory['manifest']['methods']}}, sort_keys=True).encode()
         manifest.write_bytes(raw)
         cls.inventory['manifest']['sha256'] = hashlib.sha256(raw).hexdigest()
@@ -32,9 +32,9 @@ class ContextProofTests(unittest.TestCase):
         cls.program = context.bind_initializer(cls.inventory)
 
     def test_full_initializer_identity(self):
-        self.assertEqual((self.program['start'],self.program['end']), (29996,30678))
-        self.assertEqual(len(self.program['bytes']),682)
-        self.assertEqual(len(self.program['instructions']),182)
+        self.assertEqual((self.program['start'],self.program['end']), (43470,44187))
+        self.assertEqual(len(self.program['bytes']),717)
+        self.assertEqual(len(self.program['instructions']),236)
 
     def test_wrong_entry_descriptor_rejected(self):
         changed=copy.deepcopy(self.inventory)
@@ -43,7 +43,7 @@ class ContextProofTests(unittest.TestCase):
 
     def test_missing_static_descriptor_rejected(self):
         changed=copy.deepcopy(self.inventory)
-        changed['sourceMap']['debug']['static-variables'].remove('Prefix_TransactionReimbursement,ByteArray,38')
+        changed['sourceMap']['debug']['static-variables'].remove('Prefix_TransactionReimbursement,ByteArray,58')
         with self.assertRaises(ValueError): context.bind_initializer(changed)
 
     def test_forged_initializer_bytes_rejected(self):
@@ -102,7 +102,7 @@ class ContextProofTests(unittest.TestCase):
             self.assertTrue(receipt['initializerReferenceVerified'])
             self.assertTrue(receipt['helperContextVerified'])
             self.assertFalse(receipt['fullImplementationVerified'])
-            self.assertEqual(receipt['methodRange'],[18900,19181])
+            self.assertEqual(receipt['methodRange'],[36048,36329])
             self.assertEqual((receipt['methodByteCount'],receipt['methodInstructionCount']),(281,116))
             self.assertEqual(len(receipt['semanticControls']),6)
             self.assertTrue(all(c['refutationKernelChecked'] for c in receipt['semanticControls'][3:]))

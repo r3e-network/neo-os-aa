@@ -1,0 +1,494 @@
+{
+  "vectorId": "sa4-rejection-regression",
+  "kind": "operation-envelope",
+  "constantsRevision": {
+    "custom": "ae220783aa0a303f47332adf135aa44416c58c0e",
+    "native": "0d9ad4f08797f4b2e8ad63c83182fa554ef33fb9"
+  },
+  "rows": [
+    {
+      "error": "SA_ACCOUNT_FROZEN",
+      "input": "any state-changing ABI while the account is frozen",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ExecuteUserOpRuntimeTests.cs",
+        "Fix_accountfreeze_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_ACCOUNT_NOT_FOUND",
+      "input": "operation or migration against an unknown accountId",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ProtocolFixtureTests.cs"
+      ]
+    },
+    {
+      "error": "SA_ACCOUNT_STATUS",
+      "input": "execution attempt on a MigrationRequired account",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_accountfreeze_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_CONFIGURATION_NONCE_STALE",
+      "input": "operation quoting the pre-commit configurationNonce",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ExecuteUserOpRuntimeTests.cs",
+        "Fix_sessionkeyrevocation_repro_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_CREDENTIAL_STALE",
+      "input": "operation quoting the revoked credentialGeneration",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_sessionkeyrevocation_repro_Tests.cs",
+        "Fix_subscriptionsubid_repro_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_DEADLINE_EXPIRED",
+      "input": "operation deadline in the past",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ExecuteUserOpRuntimeTests.cs",
+        "SAFormalCorrespondenceRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_EPOCH_STALE",
+      "input": "operation quoting the pre-freeze/pre-recovery authorityEpoch",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ExecuteUserOpRuntimeTests.cs",
+        "Fix_escape_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_GAS_BUDGET_EXCEEDED",
+      "input": "callback burning past its Plan B budget in Verification, and again in Application",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "a callback that burns past its Plan B budget needs the gas probe harness; the budget suite asserts gas outcomes, not the code"
+    },
+    {
+      "error": "SA_HOOK_DATA_TOO_LARGE",
+      "input": "hook returning 513 bytes of hookData",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "no hook artifact in contracts/bin/public returns 513 bytes of hookData, so the bound has no driver yet"
+    },
+    {
+      "error": "SA_HOOK_REJECTED",
+      "input": "hook preCheck throws or returns false",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "declared by the kernel but never raised: a hook veto propagates the hook’s own ABORTMSG (RejectionCodeCoverageTests asserts that observable instead)"
+    },
+    {
+      "error": "SA_INTENT_CONFLICT",
+      "input": "two parallel intents touching the same module revision",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_moduleabi_Tests.cs",
+        "MultiSigInstanceConfigurationRuntimeTests.cs",
+        "MultiSigSdkVectorTests.cs"
+      ]
+    },
+    {
+      "error": "SA_INTENT_EXPIRED",
+      "input": "confirming a configuration intent after its expiry window",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_moduleabi_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_INTENT_IMMATURE",
+      "input": "confirming a configuration intent before matureAt",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_moduleabi_Tests.cs",
+        "HookInstanceConfigurationRuntimeTests.cs",
+        "MultiSigInstanceConfigurationRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_INTENT_LIMIT",
+      "input": "17th unresolved configuration intent for one account",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "17 unresolved intents need 17 non-conflicting resource sets; no artifact set in the repository supports that"
+    },
+    {
+      "error": "SA_INTENT_NOT_FOUND",
+      "input": "cancelling an intentId that does not exist",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "RejectionCodeCoverageTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MARKET_LOCKED",
+      "input": "settle/cancel against an escaped account's stale epoch binding",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_marketescrow_Tests.cs",
+        "Fix_marketzombie_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_MESSAGE_INVALID",
+      "input": "built-in message signature rejected: the ERC-1271 entry returns the 0xffffffff magic instead of throwing, so this constant is declared but never raised",
+      "observable": "magic",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ProtocolFixtureTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MIGRATION_REQUIRED",
+      "input": "executing a legacy-plugin account that has not been migrated",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ProtocolFixtureTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_CODE_BINDING_MISMATCH",
+      "input": "contractId/updateCounter/NEF/profile drift before or after the callback",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_moduleabi_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_ID_INVALID",
+      "input": "moduleId 0 in a module route, or an id wider than 64 bits",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "propose-time shape failures are mapped uniformly to SA_OPERATION_MALFORMED and read paths return empty, so no ABI path reaches this code"
+    },
+    {
+      "error": "SA_MODULE_INSTANCE_ISOLATION_REQUIRED",
+      "input": "second install of the same module address without instanceIsolation",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "RejectionCodeCoverageTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_LIMIT_ACTIONS",
+      "input": "configuration intent carrying 17 actions",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "RejectionCodeCoverageTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_LIMIT_BATCH",
+      "input": "envelope carrying 33 operations",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "SAFormalCorrespondenceRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_LIMIT_HOOK",
+      "input": "installing the 9th hook instance",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "needs 9 distinct hook artifacts; the repository ships 3 hook implementations"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_INTENTS",
+      "input": "proposing the 17th unresolved configuration intent",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "same driver as SA_INTENT_LIMIT: the per-account unresolved-intent ceiling needs 17 conflict-free proposals"
+    },
+    {
+      "error": "SA_MODULE_LIMIT_MEMBERS",
+      "input": "threshold policy with 11 members",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "VerifierSignatureRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_LIMIT_THRESHOLD",
+      "input": "threshold policy value 11",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "MultiSigInstanceConfigurationRuntimeTests.cs",
+        "VerifierSignatureRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_LIMIT_VALIDATOR",
+      "input": "installing the 33rd validator instance",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "needs 33 distinct validator artifacts; the repository ships far fewer"
+    },
+    {
+      "error": "SA_MODULE_MESSAGE_CAPABILITY_ABSENT",
+      "input": "module route naming a validator whose profile omits messageCapability",
+      "observable": "magic",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_moduleabi_Tests.cs"
+      ],
+      "note": ""
+    },
+    {
+      "error": "SA_MODULE_NOT_INSTALLED",
+      "input": "routing an operation to a module id that was never installed",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_moduleabi_Tests.cs",
+        "HookInstanceConfigurationRuntimeTests.cs",
+        "MultiSigInstanceConfigurationRuntimeTests.cs",
+        "VerifierSignatureRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_NOT_ROUTABLE",
+      "input": "routing directly to a threshold policy member identity",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "MultiSigSdkVectorTests.cs",
+        "VerifierSignatureRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_MODULE_TYPE_UNSUPPORTED",
+      "input": "installModule with type code 2 (executor) or 3 (fallback)",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "CompositeArgumentIsolationRuntimeTests.cs",
+        "Fix_moduleabi_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_NONCE_CHANNEL_COLLISION",
+      "input": "second derivation truncating to an already-open 191-bit channel",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "SourceInvariantTests.cs"
+      ]
+    },
+    {
+      "error": "SA_NONCE_EXHAUSTED",
+      "input": "operation against a channel parked at the 2^64 sentinel",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "needs a channel parked at the 2^64 sentinel plus a signed operation on that channel; the nonce suite pins the derivation only"
+    },
+    {
+      "error": "SA_NONCE_INVALID",
+      "input": "operation sequence different from the channel cursor",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ExecuteUserOpRuntimeTests.cs",
+        "Fix_sessionkeyrevocation_repro_Tests.cs",
+        "ImplementationRefinementPublicRuntimeTests.cs",
+        "SAFormalCorrespondenceRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_OPERATION_FIELD_COUNT",
+      "input": "operation envelope carrying 12 or 14 fields instead of 13",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ProtocolFixtureTests.cs"
+      ]
+    },
+    {
+      "error": "SA_OPERATION_MALFORMED",
+      "input": "Struct in place of the operation Array; oversized args; depth 9; non-canonical integer",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ExecuteUserOpRuntimeTests.cs",
+        "Fix_moduleabi_Tests.cs",
+        "MultiSigInstanceConfigurationRuntimeTests.cs",
+        "SAFormalCorrespondenceRuntimeTests.cs",
+        "VerifierSignatureRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_PHASE_VIOLATION",
+      "input": "module writing post/configuration state during the validation phase",
+      "observable": "throw",
+      "status": "uncovered",
+      "coveringTestFiles": [],
+      "note": "needs a module that calls a phase-gated ABI from the wrong phase; no such artifact exists"
+    },
+    {
+      "error": "SA_PROOF_INVALID",
+      "input": "duplicate hookId proof, unsorted proofs, or aggregate proof bytes > 4096",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "RejectionCodeCoverageTests.cs"
+      ]
+    },
+    {
+      "error": "SA_PROTOCOL_VERSION",
+      "input": "operation envelope with version 3 instead of 4",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "SAFormalCorrespondenceRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_RECOVERY_LOCKED",
+      "input": "recovery execution before the recovery timelock elapses",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_escape_Tests.cs",
+        "Fix_marketescrow_Tests.cs",
+        "Fix_marketnotify_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_RECOVERY_PENDING",
+      "input": "configuration change while a recovery is pending",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_escape_Tests.cs",
+        "Fix_marketescrow_Tests.cs",
+        "Fix_marketnotify_Tests.cs",
+        "Fix_recoverycleanup_Tests.cs"
+      ]
+    },
+    {
+      "error": "SA_REENTRANCY_FORBIDDEN",
+      "input": "same-account nested execution, and cross-account nested execution",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ImplementationRefinementPublicRuntimeTests.cs",
+        "SAFormalCorrespondenceRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_UNAUTHORIZED",
+      "input": "caller or subject witness failure",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_accountfreeze_Tests.cs",
+        "Fix_escape_Tests.cs",
+        "Fix_marketescrow_Tests.cs",
+        "HookInstanceConfigurationRuntimeTests.cs",
+        "MultiSigInstanceConfigurationRuntimeTests.cs",
+        "PendingConfigUpdateReadRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_VALIDATION_REJECTED",
+      "input": "validateUserOp returns false",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "ExecuteUserOpRuntimeTests.cs",
+        "Fix_sessionkeyrevocation_repro_Tests.cs",
+        "Fix_subscriptionsubid_repro_Tests.cs",
+        "MultiSigInstanceConfigurationRuntimeTests.cs",
+        "MultiSigSdkVectorTests.cs",
+        "PolicySemanticsRuntimeTests.cs",
+        "VerifierSignatureRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "SA_VALIDATOR_NOT_FOUND",
+      "input": "routing to a validator that was uninstalled",
+      "observable": "throw",
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_sessionkeyrevocation_repro_Tests.cs",
+        "MultiSigInstanceConfigurationRuntimeTests.cs",
+        "SAFormalCorrespondenceRuntimeTests.cs"
+      ]
+    },
+    {
+      "error": "LEGACY_REPLAY_SESSION_KEY_REVOCATION",
+      "input": "seed of Fix_sessionkeyrevocation_repro_Tests.cs: a revoked session key must never authorise again",
+      "observable": "throw",
+      "seed": [
+        "Fix_sessionkeyrevocation_repro_Tests.cs"
+      ],
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_sessionkeyrevocation_repro_Tests.cs"
+      ]
+    },
+    {
+      "error": "LEGACY_REPLAY_SUBSCRIPTION_SUBID",
+      "input": "seed of Fix_subscriptionsubid_repro_Tests.cs: a re-created subId must not replay the old signature",
+      "observable": "throw",
+      "seed": [
+        "Fix_subscriptionsubid_repro_Tests.cs"
+      ],
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_subscriptionsubid_repro_Tests.cs"
+      ]
+    },
+    {
+      "error": "LEGACY_REPLAY_RECOVERY_TICKET",
+      "input": "unconsumed recovery ticket replayed across clear/setup (the F-11 regression seed)",
+      "observable": "throw",
+      "seed": [
+        "Fix_recoverycleanup_Tests.cs"
+      ],
+      "status": "covered",
+      "coveringTestFiles": [
+        "Fix_recoverycleanup_Tests.cs"
+      ]
+    }
+  ],
+  "notes": "Coverage is recomputed by ProtocolFixtureTests.RejectionTableMatchesTheDeclaredCodes: a declared code is covered when a suite in tests/SmartAccount.Contracts.Tests spells the quoted literal (for a magic surface the literal names the row the case encodes), and a LEGACY_REPLAY_* seed is covered when the fixture it was captured from still exists. `note` explains every row that is still uncovered; a declared code with no note is a driver this table still owes."
+}

@@ -9,34 +9,33 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Audit candidate F-3 (subscription subId permanent failure):
-/// <c>SubscriptionVerifier</c> derives its expected nonce as (SHA256(subId)[0..8] &lt;&lt; 64) +
-/// local counter, while the SA core's channel cursor for that same subTag channel is never
-/// deleted. <c>ClearAccount</c> wipes the verifier's local counter, so after a verifier
-/// uninstall/reinstall (clearAccount via confirmVerifierUpdate) and re-creating the SAME
-/// subscription id, the local counter (0) can never again line up with the surviving core
-/// cursor — every pull faults. The two exact-match checks (core sequence == cursor, verifier
-/// nonce == subTag&lt;&lt;64 + local counter) also mean there is no path where a lowered local
-/// counter lets an already-consumed charge pass again: this is an availability defect, not a
-/// double-spend.
+/// F-3 (subscription subId) regression suite for protocol v4. The retired verifier
+/// kept a local per-subscription counter that <c>clearAccount</c> wiped while the
+/// core's channel cursor survived, so re-creating the same subId could never line
+/// up again. In v4 replay protection is the core's nonce alone (§5): the channel
+/// commits to the instance id, the credential generation and a caller-chosen
+/// nonceSubkey (here SHA-256 of the subId), so uninstall/reinstall or a credential
+/// revocation simply opens a NEW channel while the retired one stays closed.
+/// The billing-period gate is separate and survives re-configuration.
 /// </summary>
 [TestClass]
 public class Fix_SubscriptionSubIdReproTests
 {
-    private static readonly UInt160 BackupOwner =
+    private static readonly UInt160 Custody =
         UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
 
     private static readonly UInt160 Merchant =
         UInt160.Parse("0x2222222222222222222222222222222222222222");
 
-    // Two distinct subscription ids: the affected one and the control.
     private static readonly byte[] SubIdA = { 0xAB, 0xCD, 0xEF, 0x01 };
-    private static readonly byte[] SubIdB = { 0x12, 0x34, 0x56, 0x78 };
 
     private const long Amount = 1000;
-    private const long PeriodSeconds = 3600;
-    private const uint EscapeTimelockSeconds = 2_592_000;
-    private static readonly TimeSpan ConfigUpdateWindow = TimeSpan.FromHours(24);
+
+    private const long PeriodSeconds = 86_400; // one day
+
+    private static readonly BigInteger PeriodMs = (BigInteger)PeriodSeconds * 1000;
+
+    private static int _sequence;
 
     private sealed class Harness
     {
@@ -46,175 +45,193 @@ public class Fix_SubscriptionSubIdReproTests
 
         public UInt160 Token { get; }
 
-        public UInt160 Verifier { get; }
+        public UInt160 Validator { get; }
+
+        public UInt160 AccountId { get; private set; } = UInt160.Zero;
 
         public Harness()
         {
             Wallet = Fx.Deploy("SmartAccount");
             Token = Fx.Deploy("MockTransferTarget");
-            Verifier = Fx.Deploy("verifiers/SubscriptionVerifier", Wallet.ToArray());
+            Validator = Fx.Deploy("validators/SubscriptionValidator", Wallet.ToArray());
         }
 
-        public UInt160 RegisterAccount()
-        {
-            UInt160 accountId = Fx.CallUInt160(
-                Wallet, "computeRegistrationAccountId",
-                Verifier, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(
-                Wallet, "registerAccount",
-                accountId, Verifier, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
-            return accountId;
-        }
-
-        /// <summary>Creates (or re-creates) a subscription through the core's 24h pending-call path.</summary>
-        public void CreateSubscription(UInt160 accountId, byte[] subId)
-        {
-            object?[] config =
+        /// <summary><c>["createSubscription", subId, merchant, token, amount, periodSeconds]</c>.</summary>
+        public object?[] CommandFor(byte[] subId) =>
+            new object?[]
             {
-                accountId, subId, Merchant, Token, (BigInteger)Amount, (BigInteger)PeriodSeconds
+                "createSubscription", subId, Merchant, Token, (BigInteger)Amount, (BigInteger)PeriodSeconds
             };
-            Fx.SetSigners(BackupOwner);
-            Assert.IsFalse(Fx.CallBoolean(Wallet, "callVerifier", accountId, "createSubscription", config),
-                "The first callVerifier invocation must only stage the pending createSubscription call");
-            Fx.AdvanceTime(ConfigUpdateWindow);
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "callVerifier", accountId, "createSubscription", config);
-        }
 
-        public object[] ChargeOpFor(byte[] subId, UInt160 accountId, BigInteger nonce)
+        /// <summary>The channel a subscription pull uses: SHA-256 of the subId (32 bytes).</summary>
+        public static byte[] ChannelKey(byte[] subId) => SHA256.HashData(subId);
+
+        /// <summary>Registers the account with the validator and one subscription committed atomically.</summary>
+        public BigInteger Register(byte[] subId)
         {
-            UInt160 proxy = Fx.CallUInt160(Wallet, "getProxyScriptHash", accountId);
-            return RuntimeFixture.UserOp(
-                Token, "transfer",
-                new object?[] { proxy, Merchant, (BigInteger)Amount, null },
-                nonce, Fx.Now() + 3_600_000, subId);
+            int sequence = System.Threading.Interlocked.Increment(ref _sequence);
+            AccountId = Fx.CreateAccount(
+                Wallet, Custody, RuntimeFixture.Salt("sub-" + sequence + "-" + Custody),
+                RuntimeFixture.MinRecoveryTimelockMs,
+                new object[] { Fx.InstallValidator(Validator, CommandFor(subId)) });
+            BigInteger moduleId = Fx.FindModuleId(
+                Wallet, AccountId, RuntimeFixture.ModuleTypeNameValidator, Validator);
+            Assert.AreNotEqual(BigInteger.Zero, moduleId, "The validator must be installed at registration");
+            return moduleId;
         }
 
-        /// <summary>Merchant pull: executeUserOp with the merchant's witness attached.</summary>
-        public bool Charge(UInt160 accountId, byte[] subId, BigInteger nonce)
+        public BigInteger Generation(BigInteger moduleId) =>
+            ((Neo.VM.Types.Array)Fx.Call(Wallet, "getModule", AccountId, moduleId))[8].GetInteger();
+
+        public BigInteger Sequence(BigInteger moduleId, byte[] subId) =>
+            RuntimeFixture.NonceSequence(
+                Fx.PackedNonce(Wallet, AccountId, moduleId, ChannelKey(subId)));
+
+        public BigInteger LastCharged(BigInteger moduleId, byte[] subId) =>
+            Fx.CallInteger(Validator, "getLastChargedPeriod", AccountId, moduleId, subId);
+
+        /// <summary>Merchant pull: the merchant witnesses, the subId rides in field 11.</summary>
+        public object[] ChargeOp(BigInteger moduleId, BigInteger generation, byte[] subId)
+        {
+            object?[] args =
+            {
+                Fx.CallUInt160(Wallet, "getProxyScriptHash", AccountId), Merchant, (BigInteger)Amount, null
+            };
+            return RuntimeFixture.UserOp(
+                Token, "transfer", args,
+                Fx.PackedNonce(Wallet, AccountId, moduleId, ChannelKey(subId)),
+                Fx.Now() + 3_600_000, subId,
+                validatorId: moduleId, credentialGeneration: generation,
+                configurationNonce: Fx.AccountConfigurationNonce(Wallet, AccountId),
+                nonceSubkey: ChannelKey(subId));
+        }
+
+        public bool Charge(BigInteger moduleId, BigInteger generation, byte[] subId)
         {
             Fx.SetSigners(Merchant);
-            return Fx.CallBoolean(Wallet, "executeUserOp", accountId, ChargeOpFor(subId, accountId, nonce));
+            return Fx.CallBoolean(Wallet, "executeUserOp", AccountId, ChargeOp(moduleId, generation, subId));
         }
 
-        /// <summary>
-        /// Uninstalls the verifier (confirmVerifierUpdate routes clearAccount through the core,
-        /// wiping the subscription config, local nonce counters and last-period markers) and
-        /// reinstalls the same SubscriptionVerifier immediately afterwards.
-        /// </summary>
-        public void ClearVerifierState(UInt160 accountId)
+        /// <summary>Uninstall + built-in-route enable in one intent (last-validator rule).</summary>
+        public void Uninstall(BigInteger moduleId)
         {
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "updateVerifier", accountId, UInt160.Zero, Array.Empty<byte>());
-            Assert.IsTrue(Fx.CallBoolean(Wallet, "hasPendingVerifierUpdate", accountId));
-            Fx.AdvanceTime(ConfigUpdateWindow);
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "confirmVerifierUpdate", accountId);
-            Assert.AreEqual(UInt160.Zero, Fx.CallUInt160(Wallet, "getVerifier", accountId),
-                "The SubscriptionVerifier must be detached");
-
-            // Reinstall: with no verifier bound, updateVerifier takes effect immediately.
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "updateVerifier", accountId, Verifier, Array.Empty<byte>());
-            Assert.AreEqual(Verifier, Fx.CallUInt160(Wallet, "getVerifier", accountId),
-                "The same SubscriptionVerifier must be reinstalled");
+            Fx.ConfigureAfterTimelock(
+                Wallet, AccountId, Custody,
+                new object[] { 2, moduleId, new object[0] },
+                new object[] { 5, true, false });
+            Assert.AreEqual(0, ((Neo.VM.Types.Array)Fx.Call(Wallet, "getModule", AccountId, moduleId)).Count,
+                "The instance must be uninstalled");
         }
 
-        public BigInteger GetNonce(UInt160 accountId, BigInteger channel) =>
-            Fx.CallInteger(Wallet, "getNonce", accountId, channel);
+        public BigInteger Reinstall(byte[] subId)
+        {
+            object[] install = Fx.InstallValidator(Validator, CommandFor(subId));
+            Fx.ConfigureAfterTimelock(Wallet, AccountId, Custody, new object[] { install });
+            BigInteger moduleId = Fx.FindModuleId(
+                Wallet, AccountId, RuntimeFixture.ModuleTypeNameValidator, Validator);
+            Assert.AreNotEqual(BigInteger.Zero, moduleId, "The validator must be reinstalled");
+            return moduleId;
+        }
+
+        public void Revoke(BigInteger moduleId)
+        {
+            Fx.SetSigners(Custody);
+            Fx.CallVoid(Wallet, "revokeCredentials", AccountId, moduleId);
+        }
+
+        public void AdvancePeriod() =>
+            Fx.AdvanceTime(TimeSpan.FromMilliseconds((double)PeriodMs) + TimeSpan.FromMinutes(1));
     }
 
     /// <summary>
-    /// Reproduces the verifier's channel derivation: the first eight bytes of SHA-256(subId),
-    /// read big-endian, form the per-subscription nonce channel.
-    /// </summary>
-    private static BigInteger SubTag(byte[] subId)
-    {
-        byte[] digest = SHA256.HashData(subId);
-        BigInteger tag = 0;
-        for (int i = 0; i < 8; i++)
-        {
-            tag = (tag << 8) + digest[i];
-        }
-        return tag;
-    }
-
-    /// <summary>
-    /// F-3 main repro: one successful charge leaves the core's subTag channel cursor at 1;
-    /// clearAccount (verifier uninstall) resets the verifier's local counter to 0; re-creating
-    /// the SAME subId then leaves the two sides permanently misaligned. Sequence 0 (what the
-    /// verifier demands) is rejected by the core cursor; sequence 1 (what the core demands) is
-    /// rejected by the verifier's reset counter. The subscription id is bricked forever.
+    /// F-3 main regression: a subId charged on one instance charges again on the
+    /// reinstalled instance, because the nonce channel is keyed by the new instance
+    /// id instead of a surviving counter. There is no permanently bricked subId.
     /// </summary>
     [TestMethod]
-    public void SameSubId_IsPermanentlyUnusableAfterClearAccount()
+    public void SameSubId_ChargesAgainOnReinstalledInstance()
     {
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount();
-        h.CreateSubscription(accountId, SubIdA);
+        BigInteger module1 = h.Register(SubIdA);
+        Assert.IsTrue(h.Charge(module1, 1, SubIdA), "The first charge must succeed");
+        Assert.AreEqual(BigInteger.One, h.Sequence(module1, SubIdA));
+        Assert.IsTrue(h.LastCharged(module1, SubIdA) > BigInteger.Zero,
+            "Completion must book the billing period");
 
-        BigInteger subTag = SubTag(SubIdA);
-        BigInteger nonce0 = subTag << 64;
+        h.Uninstall(module1);
+        BigInteger module2 = h.Reinstall(SubIdA);
+        Assert.AreNotEqual(module1, module2, "Reinstall allocates a new instance id");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(module2, SubIdA),
+            "The reinstalled instance starts a fresh channel for the same subId");
 
-        // Charge #1 succeeds: both the core cursor and the verifier's local counter become 1.
-        Assert.IsTrue(h.Charge(accountId, SubIdA, nonce0), "The first charge must succeed");
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, subTag),
-            "Core cursor for the subTag channel is now 1");
-
-        // clearAccount via verifier uninstall wipes the local counter/last-period markers.
-        h.ClearVerifierState(accountId);
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, subTag),
-            "The core nonce cursor must survive clearAccount — it is never deleted anywhere");
-
-        // Re-create the SAME subscription id on the reinstalled verifier.
-        h.CreateSubscription(accountId, SubIdA);
-
-        // Merchant pull with the verifier's fresh local counter (sequence 0): the core rejects it
-        // because the channel cursor is already 1.
-        TestException counterZero = Assert.ThrowsExactly<TestException>(
-            () => h.Charge(accountId, SubIdA, nonce0),
-            "The local counter's expected nonce must be refused by the surviving core cursor");
-        StringAssert.Contains(counterZero.Message, "Invalid sequence for channel");
-
-        // Merchant pull adapted to the core cursor (sequence 1): the core accepts the sequence but
-        // the verifier's reset local counter demands sequence 0.
-        TestException cursorOne = Assert.ThrowsExactly<TestException>(
-            () => h.Charge(accountId, SubIdA, nonce0 + 1),
-            "The core cursor's expected nonce must be refused by the reset local counter");
-        StringAssert.Contains(cursorOne.Message, "Subscription nonce mismatch");
-
-        // No path advances: the subId channel is permanently stuck between the two exact matches,
-        // and the already-consumed charge (nonce0) cannot be replayed either — fail-safe.
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, subTag),
-            "Neither failed pull may move the cursor; the subId can never charge again");
+        Assert.IsTrue(h.Charge(module2, 1, SubIdA),
+            "F-3: the same subId must charge again instead of being permanently unusable");
+        Assert.AreEqual(BigInteger.One, h.Sequence(module2, SubIdA));
     }
 
     /// <summary>
-    /// Control: a DIFFERENT subscription id created after the clearAccount gets a fresh core
-    /// channel (cursor 0) and a fresh local counter (0), so it keeps working. Only the subId
-    /// that was live across the clear is affected.
+    /// The billing-period gate is independent of the nonce: a second pull in the
+    /// same period is rejected without consuming a nonce, and the next period accepts
+    /// one. The nonce cursor advances only on success.
     /// </summary>
     [TestMethod]
-    public void DifferentSubId_StillWorksAfterClearAccount()
+    public void SecondChargeInSamePeriod_IsRejected_NextPeriodAccepted()
     {
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount();
-        h.CreateSubscription(accountId, SubIdA);
+        BigInteger moduleId = h.Register(SubIdA);
 
-        BigInteger subTagA = SubTag(SubIdA);
-        Assert.IsTrue(h.Charge(accountId, SubIdA, subTagA << 64), "The first charge must succeed");
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, subTagA));
+        Assert.IsTrue(h.Charge(moduleId, 1, SubIdA));
+        BigInteger booked = h.LastCharged(moduleId, SubIdA);
+        Assert.IsTrue(booked > BigInteger.Zero);
 
-        h.ClearVerifierState(accountId);
+        TestException samePeriod = Assert.ThrowsExactly<TestException>(
+            () => h.Charge(moduleId, 1, SubIdA),
+            "A second charge inside the same billing period must be rejected");
+        StringAssert.Contains(samePeriod.Message, "SA_VALIDATION_REJECTED");
+        Assert.AreEqual(BigInteger.One, h.Sequence(moduleId, SubIdA),
+            "A rejected pull must not consume the channel");
 
-        h.CreateSubscription(accountId, SubIdB);
-        BigInteger subTagB = SubTag(SubIdB);
-        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId, subTagB),
-            "A fresh subId gets a fresh core channel");
+        h.AdvancePeriod();
+        Assert.IsTrue(h.Charge(moduleId, 1, SubIdA), "The next billing period accepts a fresh pull");
+        Assert.IsTrue(h.LastCharged(moduleId, SubIdA) > booked,
+            "Completion must book the later period");
+        Assert.AreEqual((BigInteger)2, h.Sequence(moduleId, SubIdA));
+    }
 
-        Assert.IsTrue(h.Charge(accountId, SubIdB, subTagB << 64),
-            "Only the previously-charged subId is affected; a new subId must keep working");
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId, subTagB));
+    /// <summary>
+    /// <c>revokeCredentials</c> bumps the instance generation, which both the core
+    /// routing gate and the stored subscription record check. The same subId must be
+    /// re-created under the new generation before it can charge again, and it then
+    /// bills in the new generation's channel.
+    /// </summary>
+    [TestMethod]
+    public void Revocation_RequiresRecreatingTheSubscriptionUnderTheNewGeneration()
+    {
+        Harness h = new();
+        BigInteger moduleId = h.Register(SubIdA);
+        Assert.IsTrue(h.Charge(moduleId, 1, SubIdA));
+
+        h.Revoke(moduleId);
+        Assert.AreEqual((BigInteger)2, h.Generation(moduleId));
+
+        // The pre-revocation authorization is dead at the core's routing gate.
+        TestException stale = Assert.ThrowsExactly<TestException>(() => h.Charge(moduleId, 1, SubIdA));
+        StringAssert.Contains(stale.Message, "SA_CREDENTIAL_STALE");
+
+        // Re-create the subscription under generation 2: the record is re-stamped.
+        object[] action = RuntimeFixture.ConfigureModule(moduleId, h.CommandFor(SubIdA));
+        h.Fx.ConfigureAfterTimelock(h.Wallet, h.AccountId, Custody, new object[] { action });
+        Neo.VM.Types.Array record = (Neo.VM.Types.Array)h.Fx.Call(
+            h.Validator, "getSubscription", h.AccountId, moduleId, SubIdA);
+        Assert.AreEqual((BigInteger)2, record[4].GetInteger(),
+            "A re-created subscription records the generation it was issued under");
+
+        // The channel rotated with the generation, and the period already booked
+        // still gates a second charge in the same period.
+        h.AdvancePeriod();
+        Assert.IsTrue(h.Charge(moduleId, 2, SubIdA),
+            "The re-created subscription must charge under the new generation");
+        Assert.AreEqual(BigInteger.One, h.Sequence(moduleId, SubIdA),
+            "The new generation's channel is independent of the revoked one");
     }
 }

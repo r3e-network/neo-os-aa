@@ -96,19 +96,21 @@ test('extractInvocationShape reads the operation methods of every relayable entr
   assert.deepEqual(shared.extractInvocationShape(sponsored), { methods: ['transfer'], batch: false });
   const sponsoredBatch = { ...executeUserOpsInvocation([op('transfer')]), operation: 'executeSponsoredUserOps' };
   assert.deepEqual(shared.extractInvocationShape(sponsoredBatch), { methods: ['transfer'], batch: true });
-  for (const operation of ['executeUnified', 'executeUnifiedByAddress']) {
+  // The V1/V2 wrappers and the recovery entry point are not user-operation envelopes the relay reads.
+  for (const operation of ['executeUnified', 'executeUnifiedByAddress', 'executeRecovery']) {
     assert.deepEqual(
-      shared.extractInvocationShape({ operation, args: [{ type: 'Hash160', value: '0x01' }, { type: 'Hash160', value: '0x02' }, { type: 'String', value: 'transfer' }] }),
-      { methods: ['transfer'], batch: false },
+      shared.extractInvocationShape({ operation, args: [{ type: 'Hash160', value: `0x${PROXY_HASH}` }, { type: 'String', value: 'transfer' }] }),
+      { methods: [], batch: false },
     );
   }
 
   const bytes = executeUserOpInvocation(op('transfer'));
-  bytes.args[1].value[1] = { type: 'ByteArray', value: `0x${Buffer.from('transfer').toString('hex')}` };
+  // §4.1 field 2 is the method.
+  bytes.args[1].value[2] = { type: 'ByteArray', value: `0x${Buffer.from('transfer').toString('hex')}` };
   assert.deepEqual(shared.extractInvocationShape(bytes).methods, ['transfer'], 'ByteArray method');
-  bytes.args[1].value[1] = { type: 'Any', value: Buffer.from('transfer').toString('hex') };
+  bytes.args[1].value[2] = { type: 'Any', value: Buffer.from('transfer').toString('hex') };
   assert.deepEqual(shared.extractInvocationShape(bytes).methods, ['transfer'], 'Any carries hex, like ByteArray');
-  bytes.args[1].value[1] = { type: 'Integer', value: '1' };
+  bytes.args[1].value[2] = { type: 'Integer', value: '1' };
   assert.deepEqual(shared.extractInvocationShape(bytes).methods, [''], 'a method that is not text or hex is not decoded');
   const asArray = executeUserOpInvocation(op('transfer'));
   asArray.args[1] = { ...asArray.args[1], type: 'Array' };

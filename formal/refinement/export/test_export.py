@@ -12,7 +12,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[3]
 PROJECT = Path(__file__).with_name('RefinementExport.csproj')
 COMPILER = Path.home() / '.dotnet/tools/.store/neo.compiler.csharp/3.9.1/neo.compiler.csharp/3.9.1/tools/net10.0/any'
-NEF = ROOT / 'contracts/bin/public/SmartAccountV3.nef'
+NEF = ROOT / 'contracts/bin/public/SmartAccount.nef'
 MANIFEST = NEF.with_suffix('.manifest.json')
 
 

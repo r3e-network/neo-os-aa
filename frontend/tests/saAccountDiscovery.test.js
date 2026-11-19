@@ -25,7 +25,7 @@ const OWNER_ADDRESS = "NXV7ZhHiyM1aHXwpVsRZC6BwNFP2jghXAq";
 // The connected wallet's address and its script hash are the same owner.
 const OWNER = `0x${getScriptHashFromAddress(OWNER_ADDRESS)}`;
 const OTHER_OWNER = "0x1514131211100f0e0d0c0b0a0908070605040302";
-const VERIFIER = "0x161514131211100f0e0d0c0b0a09080706050403";
+const VALIDATOR = "0x161514131211100f0e0d0c0b0a09080706050403";
 const HOOK_ID = "0x17161514131211100f0e0d0c0b0a090807060504";
 const REGISTRY_TX = "0x5f873503cfbd113dadde69029128008f67818f71cac90140acea7ae816212b90";
 
@@ -36,7 +36,8 @@ const ACCOUNT_ROW = {
   contract_hash: SA_CORE,
   account_id: ACCOUNT_ID,
   backup_owner: OWNER,
-  verifier: VERIFIER,
+  // The read API row still names this column `verifier`.
+  verifier: VALIDATOR,
   hook_id: HOOK_ID,
   registry_block_index: 42,
   registry_tx_hash: REGISTRY_TX,
@@ -183,7 +184,7 @@ test("the wallet lists the accounts the read API serves for its owner", async ()
       assert.deepEqual(accounts[0], {
         accountIdHash: ACCOUNT_ID,
         backupOwner: OWNER,
-        verifier: VERIFIER,
+        validator: VALIDATOR,
         hookId: HOOK_ID,
         registryBlockIndex: 42,
         registryTxHash: REGISTRY_TX,

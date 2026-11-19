@@ -4,6 +4,13 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 
 import { EC } from '../src/config/errorCodes.js';
+import {
+  decodeAccountDescriptor,
+  decodeHookOrder,
+  decodeModuleDescriptor,
+  decodeModulePage,
+  decodePendingConfiguration,
+} from '../src/services/smartAccountProtocol.js';
 import { buildSaActionId, requireSaSigningText, toNeoInternalHex } from '../src/services/saTicketService.js';
 
 const core = '000102030405060708090a0b0c0d0e0f10111213';
@@ -48,11 +55,16 @@ function createService({ invokeReadFunction = async () => { throw new Error('une
     encryptJsonWithMorpheusOracleKey: async () => 'encrypted-params',
     walletService: { invoke: async (...args) => { signerCalls.push(args); return {}; } },
     getSmartAccountHash: () => { defaultCoreReads += 1; return core; },
-    buildZkLoginVerifierParamsHex: () => '',
-    formatZkLoginTicket: (value) => value,
-    normalizeZkLoginProvider: (value) => value,
+    buildDelegatedIdentityParamsHex: () => '',
+    formatDelegatedIdentityTicket: (value) => value,
+    normalizeDelegatedIdentityProvider: (value) => value,
     connectedDidProfile: { value: { provider: 'web3auth', idToken: 'id-token' } },
     decodeStackHash160,
+    decodeAccountDescriptor,
+    decodeHookOrder,
+    decodeModuleDescriptor,
+    decodeModulePage,
+    decodePendingConfiguration,
     createAccountIdentityReader: () => async () => { throw new Error('not used'); },
     buildSaActionId,
     requireSaSigningText,
@@ -64,7 +76,7 @@ function createService({ invokeReadFunction = async () => { throw new Error('une
     .replaceAll('export async function ', 'async function ')
     .replaceAll('export function ', 'function ')
     .replaceAll('export const ', 'const ');
-  const setup = new Function(...Object.keys(bindings), `${source}\nreturn { morpheusDidService, fetchUnifiedVerifierState };`);
+  const setup = new Function(...Object.keys(bindings), `${source}\nreturn { morpheusDidService, fetchAccountRecoveryState };`);
   const exports = setup(...Object.values(bindings));
   return {
     ...exports,
@@ -207,19 +219,57 @@ test('recovery and action previews reject zero Hash160 fields before any externa
 const byteString = (value) => ({ state: 'HALT', stack: [{ type: 'ByteString', value: Buffer.from(value).toString('base64') }] });
 const hash160 = (hex) => ({ state: 'HALT', stack: [{ type: 'ByteString', value: Buffer.from(hex, 'hex').reverse().toString('base64') }] });
 const integer = (value = '0') => ({ state: 'HALT', stack: [{ type: 'Integer', value }] });
-const array = () => ({ state: 'HALT', stack: [{ type: 'Array', value: [] }] });
+const bool = (value) => ({ state: 'HALT', stack: [{ type: 'Boolean', value }] });
+// Stack items nest inside decoded records, so they stay separate from HALT results.
+const boolItem = (value) => ({ type: 'Boolean', value });
+const intItem = (value = '0') => ({ type: 'Integer', value: String(value) });
+const bytesItem = (value) => ({ type: 'ByteString', value: Buffer.from(value).toString('base64') });
+const hashItem = (hex) => ({ type: 'ByteString', value: Buffer.from(hex, 'hex').reverse().toString('base64') });
+const arrayItem = (items = []) => ({ type: 'Array', value: items });
+const array = (items = []) => ({ state: 'HALT', stack: [arrayItem(items)] });
+
+// The installed ActionSessionValidator instance and the recovery service it
+// delegates to are distinct contracts, so the reads stay separable.
+const validatorModule = '7b7c7d7e7f808182838485868788898a8b8c8d8e';
+
+function accountControl() {
+  return array([
+    boolItem(true), intItem('1'), hashItem(account), hashItem(verifier), intItem('1'), intItem('3'), intItem('86400000'),
+    boolItem(true), boolItem(true), boolItem(false), intItem('0'), intItem('4'), boolItem(false), intItem('0'), boolItem(false), boolItem(false),
+  ]);
+}
+
+function modulePage(ids) {
+  return array([arrayItem(ids.map((id) => intItem(id))), intItem('0'), intItem('3')]);
+}
+
+function moduleDescriptor(id) {
+  return array([
+    intItem(id), intItem('1'), hashItem(validatorModule), intItem('5'), intItem('0'),
+    bytesItem(Buffer.alloc(32, 0xaa)), bytesItem(Buffer.alloc(32, 0xbb)),
+    intItem('1'), intItem('1'), boolItem(false), boolItem(true), boolItem(true),
+  ]);
+}
 
 function stateRpc(calls, { network, accountIdText, faults = [] }) {
   return async (...args) => {
     calls.push(args);
     const operation = args[2];
     if (faults.includes(operation)) throw new Error(`${operation} unavailable`);
+    if (operation === 'getAccount') return accountControl();
+    if (operation === 'getModules') {
+      return modulePage(args[3]?.[1]?.value === 'validator' ? [1] : []);
+    }
+    if (operation === 'getModule') return moduleDescriptor(1);
+    if (operation === 'getHookOrder') return array([arrayItem([]), intItem('0')]);
+    if (operation === 'getPendingConfigurationIntentIds') return array([]);
+    if (operation === 'getRecoveryService') return hash160(verifier);
     if (operation === 'getNetwork') return byteString(network);
     if (operation === 'getAccountIdText') return byteString(accountIdText);
-    if (operation === 'getAAContract') return hash160(core);
+    if (operation === 'getSAContract') return hash160(core);
     if (operation === 'getAccountAddress') return hash160(accountAddress);
     if (operation === 'getOwner' || operation === 'getMorpheusOracle') return hash160(verifier);
-    if (operation === 'getPendingRecovery' || operation === 'getActiveSession') return array();
+    if (operation === 'getPendingRecovery' || operation === 'getActiveSession') return array([]);
     return integer();
   };
 }
@@ -230,29 +280,33 @@ for (const size of [20, 32]) {
     const network = 'n'.repeat(size);
     const accountIdText = 'a'.repeat(size);
     const harness = createService({ invokeReadFunction: stateRpc(calls, { network, accountIdText }) });
-    const state = await harness.fetchUnifiedVerifierState({ rpcUrl: 'http://rpc.test', verifierHash: verifier, accountIdHex: account });
+    const state = await harness.fetchAccountRecoveryState({ rpcUrl: 'http://rpc.test', saContractHash: core, accountIdHex: account });
     assert.equal(state.network, network);
     assert.equal(state.accountIdText, accountIdText);
     assert.equal(state.saContract, core);
     assert.equal(state.accountAddress, accountAddress);
+    assert.equal(state.recoveryServiceHash, verifier);
+    assert.equal(state.control.custody, account);
+    assert.deepEqual(state.validatorIds, ['1']);
     assert.ok(!state.accountIdText.startsWith('0x'));
-    assert.equal(calls.length, 15);
-    for (const call of calls) {
+    const serviceCalls = calls.filter((call) => call[1] === verifier);
+    assert.equal(serviceCalls.length, 15);
+    for (const call of serviceCalls) {
       assert.deepEqual(call[3], call[2] === 'getActionProtocolVersion' ? [] : [{ type: 'Hash160', value: `0x${account}` }]);
     }
   });
 }
 
 test('failed network, core, and account-text reads fail closed instead of fabricating preview context', async () => {
-  for (const fault of ['getNetwork', 'getAAContract', 'getAccountIdText']) {
+  for (const fault of ['getNetwork', 'getSAContract', 'getAccountIdText']) {
     const calls = [];
     const harness = createService({
       invokeReadFunction: stateRpc(calls, { network: 'neo3-testnet', accountIdText: 'real-text', faults: [fault] }),
     });
-    const state = await harness.fetchUnifiedVerifierState({ rpcUrl: 'http://rpc.test', verifierHash: verifier, accountIdHex: account });
-    const field = fault === 'getNetwork' ? 'network' : fault === 'getAAContract' ? 'saContract' : 'accountIdText';
+    const state = await harness.fetchAccountRecoveryState({ rpcUrl: 'http://rpc.test', saContractHash: core, accountIdHex: account });
+    const field = fault === 'getNetwork' ? 'network' : fault === 'getSAContract' ? 'saContract' : 'accountIdText';
     assert.equal(state[field], '');
-    assert.notEqual(state[field], fault === 'getNetwork' ? 'neo_n3' : fault === 'getAAContract' ? core : account);
+    assert.notEqual(state[field], fault === 'getNetwork' ? 'neo_n3' : fault === 'getSAContract' ? core : account);
     const input = { ...recoveryInput(), [field]: state[field] };
     await assert.rejects(harness.morpheusDidService.previewRecoveryTicket(input));
     assert.equal(harness.requests.length, 0);
@@ -373,10 +427,10 @@ test('actual enrollment/reauthorization UI handlers are inert until explicit act
   const calls = [], state = { actionProtocolVersion: '4', activeSession: { active: true, executor, actionId: 'sa_proxy:fixture', expiresAt: '1800000000000', actionNullifier: 'cd'.repeat(32) } };
   let fresh = true;
   const bindings = {
-    proxyVerifierState: { value: state }, proxyVerifierStateContext: { value: {} }, effectiveProxyVerifierHash: { value: verifier },
-    resolvedAccountId: { value: account }, actionMasterNullifier: { value: 'ab'.repeat(32) }, zkloginMasterNullifier: { value: '' },
+    proxyRecoveryState: { value: state }, proxyRecoveryStateContext: { value: {} }, recoveryServiceHash: { value: verifier },
+    resolvedAccountId: { value: account }, actionMasterNullifier: { value: 'ab'.repeat(32) }, delegatedIdentityMasterNullifier: { value: '' },
     busy: { value: '' }, resultJson: { value: '' }, sanitizeHex: v => String(v || '').replace(/^0x/i, ''),
-    hasVerifierPreviewContext: () => fresh,
+    hasRecoveryPreviewContext: () => fresh,
     morpheusDidService: { setActionIdentity: async p => { calls.push(['enroll', p]); return {}; }, reauthorizeActiveActionSession: async p => { calls.push(['reauthorize', p]); return {}; } },
     toast: { error: error => { throw new Error(error); } }, translateError: x => x, t: x => x,
   };
@@ -402,7 +456,7 @@ test('stored session executor is decoded as Hash160 while nullifier stays raw by
       { type: 'Integer', value: '1800000000000' }, { type: 'Boolean', value: true },
     ] }] };
   } });
-  const state = await h.fetchUnifiedVerifierState({ rpcUrl: 'http://rpc.test', verifierHash: verifier, accountIdHex: account });
+  const state = await h.fetchAccountRecoveryState({ rpcUrl: 'http://rpc.test', saContractHash: core, accountIdHex: account });
   assert.equal(state.activeSession.executor, executor);
   assert.equal(state.activeSession.actionNullifier, `0x${'cd'.repeat(32)}`);
   assert.equal(state.activeSession.actionId, 'sa_proxy:' + 'ef'.repeat(32));

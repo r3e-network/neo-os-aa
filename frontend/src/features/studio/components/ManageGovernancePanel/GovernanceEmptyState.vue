@@ -12,7 +12,7 @@
       {{
         t(
           "studioPanels.loadAccountHint",
-          'Enter an accountId hash above and click "Load V3 State" to get started.',
+          'Enter an accountId hash above and click "Load State" to get started.',
         )
       }}
     </p>

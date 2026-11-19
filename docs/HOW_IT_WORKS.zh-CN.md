@@ -45,10 +45,10 @@ flowchart LR
 
 ### 账户发现与批量操作
 
-V3 没有管理员、经理、阈值状态，也没有反向索引：这套 V1/V2 角色模型在 V3 重写中已被移除，SDK 中保留的 `getAccountsByAdmin` / `getAccountsByManager` 只是抛出 `LEGACY_V3_REMOVED` 的存根。账户状态通过 `getAccountState(accountIdHash)` 逐账户读取。
+V3 没有管理员、经理、阈值状态，也没有反向索引：这套 V1/V2 角色模型在 V3 重写中已被移除，SDK 中保留的 `getAccountsByAdmin` / `getAccountsByManager` 只是抛出 `LEGACY_V3_REMOVED` 的存根。账户状态通过 `getAccount(accountId)` 逐账户读取。
 
-- **批量创建：** 主合约上的 `registerAccounts` 在一个交易中注册多个账户；SDK 没有批量载荷构造器，因此按账户分别构造 `createAccountPayload`，再通过该入口提交。
-- **注册权限：** `registerAccount` 要求 `backupOwner` 参数（`contracts/custom/SmartAccount.Accounts.cs:75`）的见证，而不是交易发送者的见证。
+- **批量创建：** `createAccounts(UInt160[] accountIds, UInt160 custody, ByteString[] salts, Integer recoveryTimelockMs)` 在一个交易中为同一托管权创建多个账户（1-64 项，全有或全无）；批量入口不安装任何模块，因此其后的配置都走 24 小时意图路径。
+- **创建权限：** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` 要求 `custody` 的见证（`contracts/custom/SmartAccount.Accounts.cs`）。初始配置动作对新账户原子安装；此后每次变更都是 `proposeConfiguration` → 24 小时 → `confirmConfiguration` 意图。
 
 ## 3. 选择正确的路径
 
@@ -118,7 +118,7 @@ sequenceDiagram
 
 ## 7. 人类可读的域名访问
 
-前端可以使用 `.matrix` 域名作为发现层。创建账户时，兼容的 Neo 钱包可以提交一笔批量交易，同时创建 SA 并把 `.matrix` 域名注册到签名钱包。之后前端把域名解析回控制钱包地址。V3 不保留反向索引，因此域名不会列出它控制的 SA 账户：逐个用 `getAccountState(accountIdHash)` 读取。
+前端可以使用 `.matrix` 域名作为发现层。创建账户时，兼容的 Neo 钱包可以提交一笔批量交易，同时创建 SA 并把 `.matrix` 域名注册到签名钱包。之后前端把域名解析回控制钱包地址。V3 不保留反向索引，因此域名不会列出它控制的 SA 账户：逐个用 `getAccount(accountId)` 读取。
 
 ## 8. 用户如何使用网站
 
@@ -223,8 +223,8 @@ Paymaster 从不替代验证器或备份所有者——它只在操作被完整�
 - **运营链接** —— 用于中继、广播、回执与链接轮换的作用域链接
 - **中继预检** —— 提交前对可中继调用做服务端模拟
 - **元调用** —— 由 EVM 类型化数据签名生成的 SA 载荷，目标是 `executeUserOp`
-- **账户发现** —— 用 `getAccountState(accountIdHash)` 读取单个账户状态；V1/V2 反向索引已移除
-- **批量注册** —— 用 `registerAccounts` 在一笔交易中注册多个账户（无共享治理：每个账户自带验证器、钩子与备份所有者）
+- **账户发现** —— 用 `getAccount(accountId)` 读取单个账户状态；V1/V2 反向索引已移除
+- **批量创建** —— 用 `createAccounts` 在一笔交易中为同一托管权创建多个账户（无共享治理：每个账户自带 validator 实例、hook 顺序与恢复时间锁）
 - **Paymaster** —— 持有赞助方 GAS 存款、并在执行成功后为报销中继的链上合约（`SAPaymaster`）
 - **赞助方** —— 向 Paymaster 存款并为其他账户的操作创建资助策略的地址
 - **赞助策略** —— 定义资助哪些账户、合约、方法与预算的配置

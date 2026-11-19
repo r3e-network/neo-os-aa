@@ -8,25 +8,22 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Regression coverage for the "clean shell" finding: both ownership-handoff paths —
-/// <c>settleMarketEscrow</c> (sale to a buyer) and <c>finalizeEscape</c> (backup-owner escape) —
-/// advertise that the resulting account is a genuinely fresh shell. They must therefore wipe the
-/// stale per-account markers the prior owner could have left behind: in-flight timelocked plugin
-/// calls (<c>Prefix_PendingVerifierCall</c>/<c>Prefix_PendingHookCall</c>), the escape-cooldown
-/// stamp (<c>Prefix_EscapeLastInitiated</c>) that would otherwise lock the new owner out of
-/// <c>initiateEscape</c>, and the off-chain metadata URI (<c>Prefix_MetadataUri</c>).
+/// Regression coverage for the "clean shell" finding under the v4 handoff paths:
+/// <c>settleMarketEscrow</c> (sale to a buyer) and <c>executeRecovery</c> (custody
+/// rotation) both advertise that the resulting account is a genuinely fresh shell.
 /// </summary>
+/// <remarks>
+/// Protocol v4 deleted the verifier/hook cleanup callback entirely: the handoff runs
+/// <c>SweepAccountModulesAndPolicies</c> in-core, so a "cleanup failure" cannot strand
+/// a dirty shell. These tests therefore pin two things instead: (1) the stale
+/// per-account state the previous owner could leave behind — installed module
+/// instances, pending configuration intents, the metadata URI and the 0x57 message
+/// subjects — is gone for the new custody; and (2) the sweep never calls a plugin,
+/// which is exactly why no plugin can veto or half-complete the handoff.
+/// </remarks>
 [TestClass]
 public class Fix_CleanShell_Tests
 {
-    private const uint EscapeTimelockSeconds = 604_800;
-
-    // Verifier/hook config confirmation timelock used by callHook/callVerifier (24h, in ms).
-    private static readonly TimeSpan ConfigUpdateWindow = TimeSpan.FromHours(24);
-
-    private static readonly TimeSpan EscapeWindow =
-        TimeSpan.FromSeconds(EscapeTimelockSeconds) + TimeSpan.FromHours(1);
-
     private static readonly UInt160 Seller =
         UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
 
@@ -38,19 +35,8 @@ public class Fix_CleanShell_Tests
 
     private static readonly BigInteger Price = 100_000_000; // 1 GAS
 
-    private static byte[] OldPubKey() => MakePubKey(0xA1);
-    private static byte[] NewPubKey() => MakePubKey(0xB2);
-
-    private static byte[] MakePubKey(byte tag)
-    {
-        byte[] pubKey = new byte[65];
-        pubKey[0] = 0x04; // uncompressed prefix
-        for (int i = 1; i < 65; i++)
-        {
-            pubKey[i] = (byte)(tag + i);
-        }
-        return pubKey;
-    }
+    private static readonly TimeSpan RecoveryWindow =
+        TimeSpan.FromMilliseconds((long)RuntimeFixture.MinRecoveryTimelockMs) + TimeSpan.FromMinutes(1);
 
     private sealed class Harness
     {
@@ -60,67 +46,65 @@ public class Fix_CleanShell_Tests
 
         public UInt160 Market { get; }
 
-        public UInt160 OldVerifier { get; }
-
-        public UInt160 NewVerifier { get; }
+        public UInt160 Validator { get; }
 
         public UInt160 Hook { get; }
+
+        public UInt160 SpareValidator { get; }
+
+        private int _registrations;
 
         public Harness()
         {
             Wallet = Fx.Deploy("SmartAccount");
             Market = Fx.Deploy("SAAddressMarket");
-            // The verifiers/hook trust this wallet as their SA core (passed as deploy data). Two
-            // distinct verifier contracts give distinct deploy hashes; both accept a 65-byte
-            // uncompressed public key through setPublicKey/getPublicKey/clearAccount.
-            OldVerifier = Fx.Deploy("verifiers/Web3AuthVerifier", Wallet.ToArray());
-            NewVerifier = Fx.Deploy("verifiers/TEEVerifier", Wallet.ToArray());
+            Validator = Fx.Deploy("validators/SessionKeyValidator", Wallet.ToArray());
+            SpareValidator = Fx.Deploy("validators/P256Validator", Wallet.ToArray());
             Hook = Fx.Deploy("hooks/WhitelistHook", Wallet.ToArray());
             Fx.CallVoid(Market, "setAllowedSA", Wallet, true);
             // Phase 1b: the core admin registers the market as an approved escrow service.
             Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
 
-        public UInt160 RegisterAccount(byte[] verifierParams)
+        /// <summary>
+        /// Registers an account owned by <paramref name="custody"/> with one validator and one
+        /// configured hook installed atomically, so the handoff has modules to sweep.
+        /// </summary>
+        public UInt160 RegisterAccount(UInt160 custody)
         {
-            UInt160 accountId = Fx.CallUInt160(
-                Wallet, "computeRegistrationAccountId",
-                OldVerifier, verifierParams, Hook, Seller, EscapeTimelockSeconds);
+            _registrations += 1;
+            return Fx.CreateAccount(
+                Wallet,
+                custody,
+                RuntimeFixture.Salt("clean-shell-" + _registrations),
+                RuntimeFixture.MinRecoveryTimelockMs,
+                (object)Fx.InstallValidator(Validator),
+                (object)Fx.InstallHook(Hook, "allowTarget", WhitelistTarget));
+        }
 
-            Fx.SetSigners(Seller);
-            Fx.CallVoid(
-                Wallet, "registerAccount",
-                accountId, OldVerifier, verifierParams, Hook, Seller, EscapeTimelockSeconds);
-            return accountId;
+        public BigInteger[] ValidatorIds(UInt160 accountId) =>
+            Fx.ModuleIds(Wallet, accountId, RuntimeFixture.ModuleTypeNameValidator);
+
+        public BigInteger[] HookIds(UInt160 accountId) =>
+            Fx.ModuleIds(Wallet, accountId, RuntimeFixture.ModuleTypeNameHook);
+
+        public BigInteger[] PendingIntentIds(UInt160 accountId)
+        {
+            Neo.VM.Types.Array ids = (Neo.VM.Types.Array)Fx.Call(
+                Wallet, "getPendingConfigurationIntentIds", accountId);
+            BigInteger[] result = new BigInteger[ids.Count];
+            for (int i = 0; i < ids.Count; i++) result[i] = ids[i].GetInteger();
+            return result;
         }
 
         /// <summary>
-        /// Records an in-flight (not yet confirmed) timelocked hook call without completing it,
-        /// leaving a stale <c>Prefix_PendingHookCall</c> marker.
+        /// Leaves an unconfirmed configuration intent behind: the v4 form of the retired
+        /// pending verifier/hook call marker.
         /// </summary>
-        public void ArmPendingHookCall(UInt160 accountId)
+        public BigInteger ArmPendingIntent(UInt160 accountId)
         {
-            Fx.SetSigners(Seller);
-            object[] args = new object[] { accountId, WhitelistTarget, true };
-            Assert.IsFalse(Fx.CallBoolean(Wallet, "callHook", accountId, "setWhitelist", args),
-                "First callHook only schedules the pending module call");
-            Assert.IsTrue(Fx.CallBoolean(Wallet, "hasPendingHookCall", accountId),
-                "A pending hook call must be armed for the test to be meaningful");
-        }
-
-        /// <summary>
-        /// Records an in-flight (not yet confirmed) timelocked verifier call without completing it,
-        /// leaving a stale <c>Prefix_PendingVerifierCall</c> marker.
-        /// </summary>
-        public void ArmPendingVerifierCall(UInt160 accountId)
-        {
-            Fx.SetSigners(Seller);
-            // clearAccount is on the verifier allowlist and is a no-op-shaped call that needs no extra args.
-            object[] args = new object[] { accountId };
-            Assert.IsFalse(Fx.CallBoolean(Wallet, "callVerifier", accountId, "clearAccount", args),
-                "First callVerifier only schedules the pending module call");
-            Assert.IsTrue(Fx.CallBoolean(Wallet, "hasPendingVerifierCall", accountId),
-                "A pending verifier call must be armed for the test to be meaningful");
+            return Fx.ProposeConfiguration(
+                Wallet, accountId, Seller, (object)Fx.InstallValidator(SpareValidator));
         }
 
         public BigInteger CreateListing(UInt160 accountId)
@@ -129,155 +113,118 @@ public class Fix_CleanShell_Tests
             Fx.CallVoid(Market, "createListing", Wallet, accountId, Price, "SA address", "");
             return Fx.CallInteger(Market, "getListingCount");
         }
+
+        public void Buy(BigInteger listingId, UInt160 buyer)
+        {
+            Fx.FundGasFromValidators(buyer, Price * 2);
+            Fx.SetSigners(buyer);
+            Fx.TransferGas(buyer, Market, Price, listingId);
+            Fx.CallVoid(Market, "settleListing", listingId, buyer, buyer);
+        }
+
+        public string Metadata(UInt160 accountId) =>
+            Fx.Call(Wallet, "getMetadataUri", accountId).GetString();
     }
 
     [TestMethod]
     public void SettleMarketEscrow_HandsBuyerShellWithNoStaleMarkers()
     {
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
+        UInt160 accountId = h.RegisterAccount(Seller);
 
         // The seller leaves behind every kind of stale per-account marker before listing.
         h.Fx.SetSigners(Seller);
         h.Fx.CallVoid(h.Wallet, "setMetadataUri", accountId, "ipfs://seller-private-metadata");
-        Assert.AreEqual("ipfs://seller-private-metadata", h.Fx.Call(h.Wallet, "getMetadataUri", accountId).GetString());
-
-        h.ArmPendingVerifierCall(accountId);
-        h.ArmPendingHookCall(accountId);
-
-        // A still-armed escape stamp from before the listing would otherwise impose the
-        // 1-hour escape cooldown on the buyer.
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "initiateEscape", accountId);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+        Assert.AreEqual("ipfs://seller-private-metadata", h.Metadata(accountId));
+        BigInteger intentId = h.ArmPendingIntent(accountId);
+        CollectionAssert.AreEqual(new[] { intentId }, h.PendingIntentIds(accountId),
+            "A pending configuration intent must be armed for the test to be meaningful");
+        Assert.AreEqual(1, h.ValidatorIds(accountId).Length);
+        Assert.AreEqual(1, h.HookIds(accountId).Length);
 
         BigInteger listingId = h.CreateListing(accountId);
+        h.Buy(listingId, Buyer);
 
-        // Buyer pays the price and settles, taking ownership of the shell.
-        h.Fx.FundGasFromValidators(Buyer, Price * 2);
+        Assert.AreEqual(Buyer, h.Fx.AccountCustody(h.Wallet, accountId));
+
+        // The buyer receives a genuinely clean shell: no inherited configuration.
+        Assert.AreEqual(0, h.ValidatorIds(accountId).Length,
+            "Installed validators must not survive the sale");
+        Assert.AreEqual(0, h.HookIds(accountId).Length,
+            "Installed hooks must not survive the sale");
+        Assert.AreEqual(0, h.PendingIntentIds(accountId).Length,
+            "A pending configuration intent must not survive the sale");
+        Assert.AreEqual(string.Empty, h.Metadata(accountId),
+            "The seller's metadata URI must not survive the sale");
+        Assert.AreEqual(0, ((Neo.VM.Types.Array)h.Fx.Call(h.Wallet, "getRecoveryStatus", accountId)).Count,
+            "No recovery record may be inherited");
+
+        // And crucially the buyer is not locked out of their own recovery by the seller's
+        // leftover state: the new custody can open a recovery immediately after the sale.
         h.Fx.SetSigners(Buyer);
-        h.Fx.TransferGas(Buyer, h.Market, Price, listingId);
-        h.Fx.CallVoid(h.Market, "settleListing", listingId, Buyer, Buyer);
+        h.Fx.CallVoid(h.Wallet, "beginRecovery", accountId, UInt160.Zero);
+        Assert.AreEqual(5, ((Neo.VM.Types.Array)h.Fx.Call(h.Wallet, "getRecoveryStatus", accountId)).Count,
+            "The buyer can arm recovery with no stale-state lockout");
 
-        Assert.AreEqual(Buyer, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", accountId));
-
-        // The buyer receives a genuinely clean shell: no inherited markers.
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "hasPendingVerifierCall", accountId),
-            "Stale pending verifier call must not survive the sale");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "hasPendingHookCall", accountId),
-            "Stale pending hook call must not survive the sale");
-        Assert.AreEqual(string.Empty, h.Fx.Call(h.Wallet, "getMetadataUri", accountId).GetString(),
-            "Seller's metadata URI must not survive the sale");
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getEscapeTriggeredAt", accountId),
-            "Escape trigger must be reset for the buyer");
-
-        // And crucially the buyer is not locked out of their own escape hatch by the seller's
-        // stale escape-cooldown stamp: initiateEscape succeeds immediately after the sale.
+        // A stale intent id can never be confirmed against the swept account.
         h.Fx.SetSigners(Buyer);
-        h.Fx.CallVoid(h.Wallet, "initiateEscape", accountId);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId),
-            "Buyer can arm escape with no stale-cooldown lockout");
+        Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Wallet, "confirmConfiguration", accountId, intentId,
+                new object[] { (object)h.Fx.InstallValidator(h.SpareValidator) }),
+            "The seller's pending intent must not be confirmable by the buyer");
     }
 
     [TestMethod]
-    public void FinalizeEscape_LeavesNoStalePendingCallsOrMetadata()
+    public void ExecuteRecovery_LeavesNoStaleIntentsOrMetadata()
     {
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
+        UInt160 accountId = h.RegisterAccount(Seller);
 
         h.Fx.SetSigners(Seller);
         h.Fx.CallVoid(h.Wallet, "setMetadataUri", accountId, "ipfs://stale-metadata");
+        BigInteger intentId = h.ArmPendingIntent(accountId);
+        Assert.AreEqual(1, h.PendingIntentIds(accountId).Length);
 
-        h.ArmPendingVerifierCall(accountId);
-        h.ArmPendingHookCall(accountId);
+        // Run the recovery to completion. The new custody must witness its own election.
+        h.Fx.SetSigners(Seller, Buyer);
+        h.Fx.CallVoid(h.Wallet, "beginRecovery", accountId, Buyer);
+        h.Fx.AdvanceTime(RecoveryWindow);
+        h.Fx.SetSigners(Buyer);
+        h.Fx.CallVoid(h.Wallet, "executeRecovery", accountId);
 
-        // Run the escape to completion.
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "initiateEscape", accountId);
-        h.Fx.AdvanceTime(EscapeWindow);
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier, NewPubKey());
+        Assert.AreEqual(Buyer, h.Fx.AccountCustody(h.Wallet, accountId));
+        Assert.AreEqual(0, h.ValidatorIds(accountId).Length,
+            "Installed validators must be swept by recovery");
+        Assert.AreEqual(0, h.HookIds(accountId).Length,
+            "Installed hooks must be swept by recovery");
+        Assert.AreEqual(0, h.PendingIntentIds(accountId).Length,
+            "A pending configuration intent must be swept by recovery");
+        Assert.AreEqual(string.Empty, h.Metadata(accountId),
+            "Stale metadata URI must be cleared by recovery");
 
-        // The rotated account is a clean slate.
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "hasPendingVerifierCall", accountId),
-            "Stale pending verifier call must be cleared on escape");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "hasPendingHookCall", accountId),
-            "Stale pending hook call must be cleared on escape");
-        Assert.AreEqual(string.Empty, h.Fx.Call(h.Wallet, "getMetadataUri", accountId).GetString(),
-            "Stale metadata URI must be cleared on escape");
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getEscapeTriggeredAt", accountId),
-            "Escape trigger is reset after finalize");
+        h.Fx.SetSigners(Buyer);
+        Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Wallet, "confirmConfiguration", accountId, intentId,
+                new object[] { (object)h.Fx.InstallValidator(h.SpareValidator) }),
+            "The pre-recovery intent must not survive the sweep");
     }
 
     [TestMethod]
-    public void SettleMarketEscrow_CleanupFailureDoesNotTransferDirtyShell()
+    public void Handoff_DoesNotInvokeAnyPluginCallback()
     {
         Harness h = new();
-        UInt160 failingVerifier = h.Fx.Deploy("MockVerifierCore");
-        UInt160 accountId = h.RegisterAccount(Array.Empty<byte>());
-
-        // Replace the normal verifier with a test-only V3 plugin whose clearAccount always faults.
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, failingVerifier, Array.Empty<byte>());
-        h.Fx.AdvanceTime(ConfigUpdateWindow);
-        h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId);
+        UInt160 accountId = h.RegisterAccount(Seller);
+        BigInteger hookId = h.HookIds(accountId)[0];
+        Assert.IsTrue(h.Fx.CallBoolean(h.Hook, "isWhitelisted", accountId, hookId, WhitelistTarget),
+            "The hook instance holds account-scoped state before the handoff");
 
         BigInteger listingId = h.CreateListing(accountId);
-        h.Fx.FundGasFromValidators(Buyer, Price * 2);
-        h.Fx.SetSigners(Buyer);
-        h.Fx.TransferGas(Buyer, h.Market, Price, listingId);
+        h.Buy(listingId, Buyer);
 
-        TestException rejected = Assert.ThrowsExactly<TestException>(
-            () => h.Fx.CallVoid(h.Market, "settleListing", listingId, Buyer, Buyer));
-        StringAssert.Contains(rejected.Message, "Mock plugin cleanup failure");
-
-        // The failed nested call faults the enclosing transaction: escrow, ownership and the
-        // market's active listing remain unchanged, so no buyer receives a dirty shell.
-        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", accountId));
-        Assert.AreEqual(failingVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
-        Neo.VM.Types.Array listing = (Neo.VM.Types.Array)h.Fx.Call(h.Market, "getListing", listingId);
-        Assert.AreEqual((BigInteger)1, listing[7].GetInteger(), "Failed settlement leaves listing Active");
-    }
-
-    [TestMethod]
-    public void ConfirmVerifierUpdate_CleanupFailurePreservesOldVerifier()
-    {
-        Harness h = new();
-        UInt160 failingVerifier = h.Fx.Deploy("MockVerifierCore");
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
-
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, failingVerifier, Array.Empty<byte>());
-        h.Fx.AdvanceTime(ConfigUpdateWindow);
-        h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId);
-
-        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, h.NewVerifier, NewPubKey());
-        h.Fx.AdvanceTime(ConfigUpdateWindow);
-        TestException rejected = Assert.ThrowsExactly<TestException>(
-            () => h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId));
-        StringAssert.Contains(rejected.Message, "Mock plugin cleanup failure");
-        Assert.AreEqual(failingVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "hasPendingVerifierUpdate", accountId));
-    }
-
-    [TestMethod]
-    public void FinalizeEscape_CleanupFailurePreservesOldVerifierAndEscape()
-    {
-        Harness h = new();
-        UInt160 failingVerifier = h.Fx.Deploy("MockVerifierCore");
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
-
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, failingVerifier, Array.Empty<byte>());
-        h.Fx.AdvanceTime(ConfigUpdateWindow);
-        h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId);
-
-        h.Fx.CallVoid(h.Wallet, "initiateEscape", accountId);
-        h.Fx.AdvanceTime(EscapeWindow);
-        TestException rejected = Assert.ThrowsExactly<TestException>(
-            () => h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier, NewPubKey()));
-        StringAssert.Contains(rejected.Message, "Mock plugin cleanup failure");
-        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
-        Assert.AreEqual(failingVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
+        // The core's instance record is gone, but the plugin was never asked to clean up:
+        // the sweep is callback-free, so no plugin can veto or half-complete the handoff.
+        Assert.AreEqual(0, h.HookIds(accountId).Length);
+        Assert.IsTrue(h.Fx.CallBoolean(h.Hook, "isWhitelisted", accountId, hookId, WhitelistTarget),
+            "A callback-free sweep leaves plugin-owned storage untouched");
     }
 }

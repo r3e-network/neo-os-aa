@@ -149,10 +149,10 @@ class NativeSmartAccountSyncTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             sa_root, core_root = build_tree(Path(tmp))
             sync_mod.sync(sa_root, core_root)
-            drifted = core_root / NC_DIR / "SmartAccountState.cs"
+            drifted = core_root / NC_DIR / "SmartAccountRecords.cs"
             drifted.write_text(drifted.read_text(encoding="utf-8").replace("class", "struct"), encoding="utf-8")
             problems = sync_mod.check(sa_root, core_root)
-            self.assertTrue(any("SmartAccountState.cs" in p for p in problems), problems)
+            self.assertTrue(any("SmartAccountRecords.cs" in p for p in problems), problems)
 
     def test_check_detects_missing_copy(self):
         with tempfile.TemporaryDirectory() as tmp:

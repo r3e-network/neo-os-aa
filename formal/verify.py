@@ -59,8 +59,11 @@ NATIVE_CORE_REQUIRED_FILES = {
     "src/Neo/SmartContract/ApplicationEngine.cs", "src/Neo/SmartContract/ApplicationEngine.Contract.cs",
     "src/Neo/SmartContract/ApplicationEngine.Runtime.cs", "src/Neo/SmartContract/Native/NativeContract.cs",
     *{"src/Neo/SmartContract/Native/" + name for name in (
-        "SmartAccountProtocol.cs", "SmartAccountState.cs",
-        "SmartAccountInvocationContext.cs", "SmartAccountEnvelope.cs")},
+        "SmartAccount.cs", "SmartAccountProtocol.cs", "SmartAccountRecords.cs",
+        "SmartAccountEnvelope.cs", "SmartAccountInvocationContext.cs",
+        "SmartAccount.Keys.cs", "SmartAccount.Modules.cs", "SmartAccount.Execution.cs",
+        "SmartAccount.Intents.cs", "SmartAccount.Message.cs",
+        "SmartAccountModulePolicy.cs", "SmartAccountModuleProtocol.cs")},
 }
 
 SOURCE_FILES = {"contracts/compile.sh", "contracts/custom/SmartAccount.csproj",
@@ -78,21 +81,29 @@ SOURCE_FILES = {"contracts/compile.sh", "contracts/custom/SmartAccount.csproj",
                 "contracts/custom/SmartAccount.Escape.cs",
                 "contracts/custom/SmartAccount.Paymaster.cs",
                 "contracts/custom/paymaster/Paymaster.cs",
-                "contracts/plugins/verifiers/VerifierPayload.cs",
-                "contracts/plugins/verifiers/SignerDomain.cs",
-                "contracts/plugins/verifiers/MultiSigVerifier.cs",
+                "contracts/plugins/validators/ValidatorPayload.cs",
+                "contracts/plugins/validators/SignerDomain.cs",
+                "contracts/plugins/validators/MultiSigValidator.cs",
                 "contracts/plugins/hooks/MultiHook.cs",
                 "contracts/plugins/native-profile/NativeAuthority.cs",
-                "contracts/plugins/verifiers/VerifierAuthority.cs",
-                "contracts/plugins/verifiers/NeoNativeVerifier.cs",
-                "contracts/plugins/verifiers/SessionKeyVerifier.cs",
-                "contracts/plugins/verifiers/NativeOperation.cs",
-                "contracts/plugins/verifiers/VerifierClock.cs",
+                "contracts/plugins/validators/ValidatorAuthority.cs",
+                "contracts/plugins/validators/NeoWitnessValidator.cs",
+                "contracts/plugins/validators/SessionKeyValidator.cs",
+                "contracts/plugins/validators/ModuleOperation.cs",
+                "contracts/plugins/validators/ValidatorClock.cs",
                 "contracts/plugins/hooks/HookAuthority.cs",
                 "contracts/plugins/hooks/WhitelistHook.cs",
                 "contracts/plugins/hooks/DailyLimitHook.cs",
                 "contracts/plugins/hooks/TokenRestrictedHook.cs",
                 "contracts/custom/SmartAccount.VerifyContext.cs",
+                "contracts/custom/SmartAccount.Intents.cs",
+                "contracts/custom/SmartAccount.Message.cs",
+                "contracts/custom/SmartAccount.Migration.cs",
+                "contracts/custom/SmartAccount.ModuleProtocol.cs",
+                "contracts/custom/SmartAccount.Modules.cs",
+                "contracts/custom/SmartAccount.Nonce.cs",
+                "contracts/custom/SmartAccount.Proxy.cs",
+                "contracts/custom/SmartAccount.Events.cs",
                 "docs/proposals/smartaccount-native-profile-v2-parameters.json",
                 "docs/proposals/smartaccount-native-profile-v2-vectors.json",
                 "scripts/native_module_profile.py", "scripts/build_native_modules.py",
@@ -105,27 +116,73 @@ SOURCE_FILES.update({"Directory.Build.props", "nuget.config", "contracts/neo-pla
                      "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md",
                      "docs/proposals/validate-native-smartaccount-profile.py"})
-for _module in ("NeoNativeVerifier", "SessionKeyVerifier", "MultiSigVerifier", "WhitelistHook", "DailyLimitHook", "TokenRestrictedHook"):
+for _module in ("NeoWitnessValidator", "SessionKeyValidator", "MultiSigValidator", "WhitelistHook", "DailyLimitHook", "TokenRestrictedHook"):
     SOURCE_FILES.add(f"contracts/plugins/native-profile/{_module}.Native.csproj")
     SOURCE_FILES.add(f"contracts/plugins/native-profile/packages.{_module}.Native.lock.json")
 
-MULTISIG_SOURCE = "contracts/plugins/verifiers/MultiSigVerifier.cs"
-MULTISIG_SOURCE_GUARDS = {
-    "non_empty": "verifiers != null && verifiers.Length > 0",
-    "maximum_size": 'ExecutionEngine.Assert(verifiers.Length <= MaxChildVerifiers, $"Maximum {MaxChildVerifiers} child verifiers allowed")',
-    "threshold_range": "threshold > 0 && threshold <= verifiers.Length",
-    "address_validity": "verifiers[i] != UInt160.Zero && verifiers[i].IsValid",
-    "no_duplicates": "verifiers[i] != verifiers[j]",
-    "post_execute_threshold": "ExecutionEngine.Assert(validCount >= config.Threshold, \"Verifier rejected signature\")",
+# v4 moved threshold policy ownership into the core (docs/SA-MODULE-PROTOCOL.md §5):
+# each co-signer is a MultiSigValidator instance that can never be routed on its
+# own, and the core holds the threshold, the member set and the approval count.
+# The correspondence guards therefore read the core action and routing sites, not
+# the member validator, which keeps no policy state anymore.
+THRESHOLD_POLICY_CONFIG_SOURCE = "contracts/custom/SmartAccount.Modules.cs"
+THRESHOLD_POLICY_ROUTING_SOURCE = "contracts/custom/SmartAccount.Execution.cs"
+THRESHOLD_POLICY_BOUNDS_SOURCE = "contracts/custom/SmartAccount.ModuleProtocol.cs"
+THRESHOLD_POLICY_GUARDS = {
+    "threshold_range": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                         "\n                ExecutionEngine.Assert(threshold >= MinThresholdPolicyValue && threshold <= MaxThresholdPolicyValue,"),
+    "action_shape_threshold_range": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                                     "\n                        ExecutionEngine.Assert(threshold >= MinThresholdPolicyValue && threshold <= MaxThresholdPolicyValue,"),
+    "member_count": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                      "memberIds.Length > 0 && memberIds.Length <= MaxThresholdPolicyMembers"),
+    "action_shape_member_count": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                                 "members.Length > 0 && members.Length <= MaxThresholdPolicyMembers"),
+    "threshold_within_members": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                                 "threshold <= memberIds.Length, ErrorModuleLimitThreshold"),
+    "member_eligibility": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                           "member.ThresholdMemberEligible, ErrorOperationMalformed"),
+    "no_duplicate_members": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                             "memberIds[j] != memberIds[i], ErrorOperationMalformed"),
+    "action_shape_no_duplicate_members": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                                          "\n                                ExecutionEngine.Assert(members[j] != members[i], ErrorOperationMalformed);"),
+    "no_shared_member": (THRESHOLD_POLICY_CONFIG_SOURCE,
+                         "AssertNotMemberOfOtherActivePolicy(member, policyId);"),
+    "member_not_routable": (THRESHOLD_POLICY_ROUTING_SOURCE,
+                            "ExecutionEngine.Assert(!IsMemberOfActivePolicy(validatorModule!), ErrorModuleNotRoutable);"),
+    "policy_active": (THRESHOLD_POLICY_ROUTING_SOURCE,
+                      "\n            ExecutionEngine.Assert(policy != null && policy.Active, ErrorValidatorNotFound);"),
+    "execution_policy_active": (THRESHOLD_POLICY_ROUTING_SOURCE,
+                                "\n                    ExecutionEngine.Assert(policy != null && policy.Active, ErrorValidatorNotFound);"),
+    "approval_threshold": (THRESHOLD_POLICY_ROUTING_SOURCE,
+                           "ExecutionEngine.Assert(approvals >= policy.Threshold, ErrorValidationRejected);"),
 }
-MULTISIG_SOURCE_MUTATIONS = {
-    "non_empty": ("verifiers != null && verifiers.Length > 0", "true"),
-    "maximum_size": ('ExecutionEngine.Assert(verifiers.Length <= MaxChildVerifiers, $"Maximum {MaxChildVerifiers} child verifiers allowed")', 'ExecutionEngine.Assert(true, "Mutation removed roster cap")'),
-    "threshold_range": ("threshold > 0 && threshold <= verifiers.Length", "true"),
-    "address_validity": ("verifiers[i] != UInt160.Zero && verifiers[i].IsValid", "true"),
-    "no_duplicates": ("verifiers[i] != verifiers[j]", "true"),
-    "post_execute_threshold": ("ExecutionEngine.Assert(validCount >= config.Threshold, \"Verifier rejected signature\")",
-                               "ExecutionEngine.Assert(true, \"Verifier rejected signature\")"),
+THRESHOLD_POLICY_MUTATIONS = {
+    "threshold_range": ("\n                ExecutionEngine.Assert(threshold >= MinThresholdPolicyValue && threshold <= MaxThresholdPolicyValue,",
+                        "\n                ExecutionEngine.Assert(threshold >= MinThresholdPolicyValue,"),
+    "action_shape_threshold_range": ("\n                        ExecutionEngine.Assert(threshold >= MinThresholdPolicyValue && threshold <= MaxThresholdPolicyValue,",
+                                     "\n                        ExecutionEngine.Assert(threshold >= MinThresholdPolicyValue,"),
+    "member_count": ("memberIds.Length > 0 && memberIds.Length <= MaxThresholdPolicyMembers",
+                     "memberIds.Length > 0"),
+    "action_shape_member_count": ("members.Length > 0 && members.Length <= MaxThresholdPolicyMembers",
+                                  "members.Length > 0"),
+    "threshold_within_members": ("threshold <= memberIds.Length, ErrorModuleLimitThreshold",
+                                 "threshold >= 0, ErrorModuleLimitThreshold"),
+    "member_eligibility": ("member.ThresholdMemberEligible, ErrorOperationMalformed",
+                           "true, ErrorOperationMalformed"),
+    "no_duplicate_members": ("memberIds[j] != memberIds[i], ErrorOperationMalformed",
+                             "true, ErrorOperationMalformed"),
+    "action_shape_no_duplicate_members": ("\n                                ExecutionEngine.Assert(members[j] != members[i], ErrorOperationMalformed);",
+                                          "\n                                _b = true;"),
+    "no_shared_member": ("AssertNotMemberOfOtherActivePolicy(member, policyId);",
+                         "// mutation removed the shared-member guard"),
+    "member_not_routable": ("ExecutionEngine.Assert(!IsMemberOfActivePolicy(validatorModule!), ErrorModuleNotRoutable);",
+                            "ExecutionEngine.Assert(true, ErrorModuleNotRoutable);"),
+    "policy_active": ("\n            ExecutionEngine.Assert(policy != null && policy.Active, ErrorValidatorNotFound);",
+                      "\n            ExecutionEngine.Assert(policy != null, ErrorValidatorNotFound);"),
+    "execution_policy_active": ("\n                    ExecutionEngine.Assert(policy != null && policy.Active, ErrorValidatorNotFound);",
+                                "\n                    ExecutionEngine.Assert(policy != null, ErrorValidatorNotFound);"),
+    "approval_threshold": ("ExecutionEngine.Assert(approvals >= policy.Threshold, ErrorValidationRejected);",
+                           "ExecutionEngine.Assert(true, ErrorValidationRejected);"),
 }
 COQ_MUTATIONS = {
     "authorization": ("  authorized s op &&", "  true &&"),
@@ -885,6 +942,11 @@ def check_native_core_sources(lock, core_root):
     return current
 
 
+def content_digest(path):
+    """SHA-256 of the committed bytes: a CRLF checkout must never flip a pin."""
+    return hashlib.sha256(Path(path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def check_inventory(root=ROOT):
     found = {p.relative_to(root).as_posix() for d in ("coq", "tla", "smt")
              for p in (root / d).rglob("*") if p.suffix in {".v", ".tla", ".cfg", ".smt2"}}
@@ -894,7 +956,7 @@ def check_inventory(root=ROOT):
     check_profile_scope(lock)
     require(set(lock["sources"]) == SOURCE_FILES, "Source roster changed; explicit review required")
     for name, expected in lock["sources"].items():
-        actual = hashlib.sha256((root.parent / name).read_bytes()).hexdigest()
+        actual = content_digest(root.parent / name)
         require(actual == expected, f"Source drift: {name}; review correspondence before updating pins")
 
 
@@ -916,19 +978,18 @@ def check_custom_governance_correspondence(repo_root=ROOT.parent):
     registrar = (repo_root / "contracts/custom/registrar/PlatformRegistrar.cs").read_text()
     require("bool owner = currentOwner != UInt160.Zero && Runtime.CheckWitness(currentOwner);" in registrar,
             "Custom owner cancellation witness source guard changed")
-    # The core no longer deletes a registrar-owned pending key on escape or market
-    # settlement; ApplyPlatformAccountOwnerRotation instead rejects a record whose
-    # previousOwner no longer matches the live account state, so a stale record can
-    # never be confirmed against a sold or re-registered account.
+    # The core no longer deletes a registrar-owned pending rotation on escape or
+    # market settlement; ApplyPlatformAccountOwnerRotation instead rejects a
+    # record whose previousOwner no longer matches the live custody, so a stale
+    # record can never be confirmed against a sold or re-registered account.
     core_registrar = (repo_root / "contracts/custom/SmartAccount.PlatformRegistrar.cs").read_text()
-    require("previousOwner == state.BackupOwner," in core_registrar
+    require("previousOwner != null && previousOwner == control.Custody," in core_registrar
             and '"Platform owner rotation stale"' in core_registrar,
             "Custom pending rotation staleness guard changed")
-    for name, marker in (("Escape", "// Phase 1b: pending platform owner rotations live in the registrar service's"),
-                         ("MarketEscrow", "// Phase 1b: a pre-sale pending platform owner rotation lives in the registrar")):
+    for name in ("Escape", "MarketEscrow"):
         source = (repo_root / f"contracts/custom/SmartAccount.{name}.cs").read_text()
-        require(marker in source,
-                f"Custom pending rotation registrar-ownership marker missing: {name}")
+        require("Prefix_PendingPlatformRegistrar" not in source,
+                f"Custom {name} may not touch the registrar's pending rotation record")
     return {"delayMilliseconds": source_delay, "ownerWitnessIndependentOfCaller": True,
             "boundary": "Reviewed source fragments and arithmetic equality; binding, witness and VM refinement external"}
 
@@ -954,87 +1015,118 @@ def check_custom_sponsorship_correspondence(repo_root=ROOT.parent):
 def check_custom_recovery_correspondence(repo_root=ROOT.parent):
     """Selected guards only; arbitrary storage/entrypoint refinement remains external."""
     source = (repo_root / "contracts/custom/SmartAccount.Escape.cs").read_text()
-    begin = source.index("public static void FinalizeEscapeToOwner(")
-    end = source.index("public static void InitiateEscape(", begin)
+    begin = source.index("public static void executeRecovery(")
+    end = source.index("\n        public static ", begin + 1)
     recovery = source[begin:end]
-    require("Contract.Call(" not in recovery, "Owner-only recovery may not call old plugins")
-    require("GetConfigurationContextDepth() == 0" in source[
-                source.index("private static void AssertRecoveryIdle("):
-                source.index("public static void FinalizeEscapeToOwner(")],
-            "Custom recovery must reject every active global configuration context")
-    for fragment in ("AssertNoMarketEscrow(accountId);", "AssertRecoveryIdle(accountId);",
-                     "Runtime.CheckWitness(state.BackupOwner)", "state.Verifier = UInt160.Zero;",
-                     "state.HookId = UInt160.Zero;", "Helper.Concat(Prefix_OwnerOnlyRecovery, (byte[])accountId), new byte[] { 1 }"):
+    require("Contract.Call(" not in recovery,
+            "Recovery may not call a validator, hook, Market or oracle")
+    for fragment in ("AssertAccountConfigurationIdle(accountId);",
+                     "SweepAccountModulesAndPolicies(accountId);",
+                     "ExecutionEngine.Assert(Runtime.Time >= pending!.MatureAt, ErrorRecoveryLocked);",
+                     "ExecutionEngine.Assert(pending.AuthorityEpochAtInit == control.AuthorityEpoch, ErrorEpochStale);",
+                     "control.AuthorityEpoch += BigInteger.One;",
+                     "control.ConfigurationNonce += BigInteger.One;"):
         require(fragment in recovery, "Custom callback-free recovery source guard changed: " + fragment)
-    require("module == UInt160.Zero || !HasOwnerOnlyRecovery(accountId)" in source,
-            "Custom irreversible installation latch source guard changed")
+    for fragment in ("private static readonly byte[] Prefix_OwnerOnlyRecovery = new byte[] { 0x22 };",
+                     "control.OwnerOnlyRecovery = HasLegacyOwnerOnlyLatch(accountId);",
+                     "Helper.Concat(Prefix_OwnerOnlyRecovery, (byte[])accountId)) != null;"):
+        require(fragment in source,
+                "Custom permanent owner-only latch source guard changed: " + fragment)
     require("Storage.Delete(Storage.CurrentContext, Helper.Concat(Prefix_OwnerOnlyRecovery" not in source,
-            "Custom recovery source may not remove permanent latch")
-    accounts = (repo_root / "contracts/custom/SmartAccount.Accounts.cs").read_text()
-    for argument in ("newHookId", "pending.NewHookId", "newVerifier", "pending.NewVerifier"):
-        require(f"AssertPluginInstallationAllowed(accountId, {argument});" in accounts,
-                "Custom module installation source guard missing: " + argument)
+            "Custom recovery source may not remove the permanent latch")
+    # A permanently owner-only account may never configure the module model. The
+    # v4 path is the configuration intent, so the latch is checked at proposal and
+    # per-action execution rather than at the retired install entrypoints.
+    intents = (repo_root / "contracts/custom/SmartAccount.Intents.cs").read_text()
+    for fragment in ("control.OwnerOnlyRecovery = control.OwnerOnlyRecovery || ownerOnly;",
+                     "if (!control.OwnerOnlyRecovery) return;",
+                     'ExecutionEngine.Assert(!ActionTouchesModuleModel(action), "Owner-only recovery is permanent");'):
+        require(fragment in intents,
+                "Custom irreversible installation latch source guard changed: " + fragment)
     return {"callbackFree": True, "latch": "irreversibleOwnerOnlyNoEpoch",
             "boundary": "Reviewed source guards; all-entrypoint/storage/nonce/witness/VM refinement external"}
 
 
+def threshold_policy_bounds(repo_root=ROOT.parent):
+    """Read the bounded-model bounds from the core instead of restating them here."""
+    source = (repo_root / THRESHOLD_POLICY_BOUNDS_SOURCE).read_text()
+    members = re.search(r"MaxThresholdPolicyMembers\s*=\s*(\d+)\s*;", source)
+    minimum = re.search(r"MinThresholdPolicyValue\s*=\s*(\d+)\s*;", source)
+    maximum = re.search(r"MaxThresholdPolicyValue\s*=\s*(\d+)\s*;", source)
+    require(members is not None and minimum is not None and maximum is not None,
+            "Threshold policy bounds changed shape")
+    return int(minimum.group(1)), int(maximum.group(1)), int(members.group(1))
+
+
 def multisig_config_valid(verifiers, threshold):
-    """Public V3/platform policy only; native receipt bounds are checked separately."""
+    """Core threshold-policy shape: a 1..10 threshold over 1..10 distinct members."""
     return (0 < len(verifiers) <= 10
             and 0 < threshold <= len(verifiers)
             and all(verifier > 0 for verifier in verifiers)
             and len(set(verifiers)) == len(verifiers))
 
 
-def multisig_accepts(verifier_count, threshold, signature_count, valid_children):
-    """Public V3/platform validation and repeated PostExecute signature gating only."""
-    return signature_count == verifier_count and sum(valid_children) >= threshold
+def multisig_accepts(member_count, threshold, callback_count, valid_children):
+    """Every policy member is invoked; the approval count must reach the threshold."""
+    return callback_count == member_count and sum(valid_children) >= threshold
 
 
 def check_multisig_bounded(repo_root=ROOT.parent):
-    """Check the PUBLIC finite MultiSig policy space and reject guard-removal mutants.
+    """Check the reviewed v4 threshold-policy guards and their bounded model.
 
-    This is deliberately a bounded correspondence aid, not a claim of cryptographic or
-    NeoVM-semantic proof. The concrete VM vectors live in VerifierSignatureRuntimeTests.
+    This is deliberately a bounded correspondence aid, not a claim of cryptographic
+    or NeoVM-semantic proof. The concrete VM vectors live in the validator runtime
+    tests; the policy shape itself is owned by the core (spec §5).
     """
-    source = (repo_root / MULTISIG_SOURCE).read_text()
-    for name, fragment in MULTISIG_SOURCE_GUARDS.items():
-        require(fragment in source, f"Missing MultiSig source guard: {name}")
+    sources = {}
+    for path in sorted({THRESHOLD_POLICY_CONFIG_SOURCE, THRESHOLD_POLICY_ROUTING_SOURCE}):
+        sources[path] = (repo_root / path).read_text()
+    for name, (path, fragment) in THRESHOLD_POLICY_GUARDS.items():
+        require(fragment in sources[path], f"Missing threshold-policy source guard: {name}")
 
-    for name, (old, new) in MULTISIG_SOURCE_MUTATIONS.items():
-        mutant = replace_once(source, old, new)
-        require(any(fragment not in mutant for fragment in MULTISIG_SOURCE_GUARDS.values()),
-                f"MultiSig guard mutation escaped source gate: {name}")
+    for name, (old, new) in THRESHOLD_POLICY_MUTATIONS.items():
+        path, fragment = THRESHOLD_POLICY_GUARDS[name]
+        mutant = replace_once(sources[path], old, new)
+        require(fragment not in mutant,
+                f"Threshold-policy guard mutation escaped source gate: {name}")
+
+    min_threshold, max_threshold, max_members = threshold_policy_bounds(repo_root)
+    require((min_threshold, max_threshold, max_members) == (1, 10, 10),
+            "Threshold policy bounds no longer match the bounded model")
 
     config_cases = 0
-    # Past MaxChildVerifiers on purpose: counts 11 and 12 enumerate the rejection
+    # Past the member cap on purpose: counts past it enumerate the rejection
     # boundary instead of leaving it to the three spot checks below.
-    for count in range(0, 13):
+    for count in range(0, max_members + 3):
         verifiers = list(range(1, count + 1))
         for threshold in range(0, count + 2):
-            expected = 1 <= count <= 10 and 0 < threshold <= count
+            expected = (min_threshold <= count <= max_members
+                        and min_threshold <= threshold <= min(count, max_threshold))
             require(multisig_config_valid(verifiers, threshold) == expected,
-                    f"MultiSig config model mismatch: count={count}, threshold={threshold}")
+                    f"Threshold policy config model mismatch: count={count}, threshold={threshold}")
             config_cases += 1
 
-    require(not multisig_config_valid([1] * 2, 1), "Duplicate verifier accepted by model")
-    require(not multisig_config_valid([0, 1], 1), "Zero verifier accepted by model")
-    require(not multisig_config_valid(list(range(1, 12)), 1), "Oversized verifier set accepted by model")
+    require(not multisig_config_valid([1] * 2, 1), "Duplicate member accepted by model")
+    require(not multisig_config_valid([0, 1], 1), "Zero member accepted by model")
+    require(not multisig_config_valid(list(range(1, 12)), 1), "Oversized member set accepted by model")
 
     acceptance_cases = 0
-    for count in range(1, 11):
+    for count in range(1, max_members + 1):
         for threshold in range(1, count + 1):
-            for signature_count in range(0, count + 2):
+            for callback_count in range(0, count + 2):
                 for mask in range(1 << count):
                     valid_children = [(mask >> index) & 1 == 1 for index in range(count)]
-                    expected = signature_count == count and sum(valid_children) >= threshold
-                    require(multisig_accepts(count, threshold, signature_count, valid_children) == expected,
-                            f"MultiSig acceptance model mismatch: count={count}, threshold={threshold}, "
-                            f"signature_count={signature_count}, mask={mask}")
+                    expected = callback_count == count and sum(valid_children) >= threshold
+                    require(multisig_accepts(count, threshold, callback_count, valid_children) == expected,
+                            f"Threshold policy acceptance model mismatch: count={count}, threshold={threshold}, "
+                            f"callbacks={callback_count}, mask={mask}")
                     acceptance_cases += 1
-    return {"profiles": ["public", "platform"], "configCases": config_cases, "acceptanceCases": acceptance_cases,
-            "sourceGuards": len(MULTISIG_SOURCE_GUARDS),
-            "sourceMutationsRejected": list(MULTISIG_SOURCE_MUTATIONS)}
+    return {"profiles": ["public", "platform"], "configCases": config_cases,
+            "acceptanceCases": acceptance_cases,
+            "bounds": {"minThreshold": min_threshold, "maxThreshold": max_threshold,
+                       "maxMembers": max_members},
+            "sourceGuards": len(THRESHOLD_POLICY_GUARDS),
+            "sourceMutationsRejected": list(THRESHOLD_POLICY_MUTATIONS)}
 
 
 NATIVE_COMPOSITE_CAPS = {"children": 3, "threshold": 2, "approved": 2, "domains": 3}

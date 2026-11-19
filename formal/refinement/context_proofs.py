@@ -15,7 +15,8 @@ import method_proofs as method
 import nef_decode
 
 ROOT = Path(__file__).resolve().parent
-START, END = 29996, 30678
+# v4 artifact: the initializer moved independently of the helper.
+START, END = 43470, 44187
 SCOPE = "complete-initializer-reference-refinement"
 # The kernel is the long pole and this host is shared with unrelated workloads.
 # The old 1800s budget was exceeded on 2026-10-20 by a loaded host rather than by
@@ -44,7 +45,7 @@ def bind_initializer(inventory):
     entries = [m for m in inventory["manifest"]["methods"] if m["name"] == "_initialize"]
     require(entries == [dict(name="_initialize", parameters=[], returntype="Void", offset=START, safe=False)],
             "Initializer manifest entry mismatch")
-    require("Prefix_TransactionReimbursement,ByteArray,38" in inventory["sourceMap"]["debug"]["static-variables"],
+    require("Prefix_TransactionReimbursement,ByteArray,58" in inventory["sourceMap"]["debug"]["static-variables"],
             "Reimbursement static descriptor mismatch")
     script = bytes.fromhex(inventory["nef"]["scriptHex"])
     require(len(script) == END, "Initializer is not the full terminal byte range")
@@ -52,7 +53,7 @@ def bind_initializer(inventory):
     region = [i for i in instructions if START <= i["offset"] < END]
     require(region and region[0]["offset"] == START and region[-1]["offset"] + region[-1]["size"] == END,
             "Initializer range is not an instruction boundary")
-    require(len(region) == 182 and region[-1]["name"] == "RET", "Initializer coverage mismatch")
+    require(len(region) == 236 and region[-1]["name"] == "RET", "Initializer coverage mismatch")
     return dict(start=START, end=END, bytes=list(script[START:END]), instructions=region,
                 nefSha256=bound["nefSha256"], scriptSha256=bound["scriptSha256"],
                 initializerSha256=digest(script[START:END]))
@@ -61,14 +62,14 @@ def bind_initializer(inventory):
 PROOFS = r"""
 Theorem actual_initializer_complete : forall hp st,
  exists final first second,
- run_init 182 initializer_code (initializer_entry hp st) = InitReturned final /\
+ run_init 236 initializer_code (initializer_entry hp st) = InitReturned final /\
  init_heap final = hp ++ [first;second] /\
  init_stack final = st /\
- init_pc final = 681%nat /\
- lookup_init_static final 38 = Some (VBuffer [33%nat]) /\
+ init_pc final = 716%nat /\
+ lookup_init_static final 58 = Some (VBuffer [33%nat]) /\
  lookup_init_static final 19 = Some (VRef (length hp)) /\
  lookup_init_static final 21 = Some (VRef (length (hp++[first]))) /\
- (exists slots, init_slots final = Some slots /\ length slots = 57%nat).
+ (exists slots, init_slots final = Some slots /\ length slots = 79%nat).
 Proof.
  intros hp st. vm_compute.
  eexists. eexists. eexists. repeat split; try reflexivity.
@@ -78,7 +79,7 @@ Qed.
 
 
 Theorem actual_initializer_preserves_existing : forall hp st final index,
- run_init 182 initializer_code (initializer_entry hp st) = InitReturned final ->
+ run_init 236 initializer_code (initializer_entry hp st) = InitReturned final ->
  (index < length hp)%nat ->
  nth_error (init_heap final) index = nth_error hp index.
 Proof.
@@ -88,7 +89,7 @@ Proof.
  rewrite Hheap. apply heap_append_preserves_existing. exact Hindex.
 Qed.
 Theorem actual_initializer_fresh_arrays : forall hp st final,
- run_init 182 initializer_code (initializer_entry hp st) = InitReturned final ->
+ run_init 236 initializer_code (initializer_entry hp st) = InitReturned final ->
  exists first second,
  nth_error (init_heap final) (length hp) = Some first /\
  nth_error (init_heap final) (S (length hp)) = Some second /\
@@ -109,22 +110,22 @@ Proof.
  - intro H. inversion H. lia.
 Qed.
 Theorem actual_initializer_static_entry : forall hp st final,
- run_init 182 initializer_code (initializer_entry hp st) = InitReturned final ->
- lookup_init_static final 38 = Some (VBuffer [33%nat]) /\ init_stack final = st.
+ run_init 236 initializer_code (initializer_entry hp st) = InitReturned final ->
+ lookup_init_static final 58 = Some (VBuffer [33%nat]) /\ init_stack final = st.
 Proof.
  intros hp st final Hrun.
  destruct (actual_initializer_complete hp st) as [f [a [b [Hf [Hheap [Hstack [Hpc [Hslot Hrest]]]]]]]].
  rewrite Hrun in Hf. inversion Hf; subst f. split; assumption.
 Qed.
 Theorem actual_initializer_no_fault_or_timeout : forall hp st,
- run_init 182 initializer_code (initializer_entry hp st) <> InitFaulted /\
- run_init 182 initializer_code (initializer_entry hp st) <> InitTimedOut.
+ run_init 236 initializer_code (initializer_entry hp st) <> InitFaulted /\
+ run_init 236 initializer_code (initializer_entry hp st) <> InitTimedOut.
 Proof.
  intros hp st. destruct (actual_initializer_complete hp st) as [f [a [b [Hrun Hrest]]]].
  rewrite Hrun. split; discriminate.
 Qed.
 Theorem actual_initializer_rejects_existing_statics : forall hp st slots,
- run_init 182 initializer_code (init_state 0 st hp (Some slots)) = InitFaulted.
+ run_init 236 initializer_code (init_state 0 st hp (Some slots)) = InitFaulted.
 Proof. intros. reflexivity. Qed.
 """
 
@@ -142,10 +143,10 @@ def semantic_controls(program, work):
     changes = []
     # The initializer stores Prefix_TransactionReimbursement by pushing the
     # one-byte data [33] with PUSHDATA1, converting it to a Buffer, and storing
-    # it with STSFLD 38. The mutations retarget the stored buffer (33 -> 34)
-    # and the destination slot (38 -> 39); both offsets are absolute pcs of the
-    # operand bytes in the current initializer (30499/30503).
-    for name, offset, value in [("WrongStaticSlot",30503,39), ("WrongKey",30499,34)]:
+    # it with STSFLD 58. The mutations retarget the stored buffer (33 -> 34)
+    # and the destination slot (58 -> 59); both offsets are absolute pcs of the
+    # operand bytes in the current initializer (44028/44032).
+    for name, offset, value in [("WrongStaticSlot",44032,59), ("WrongKey",44028,34)]:
         changed=copy.deepcopy(program)
         changed["bytes"][offset-START]=value
         changes.append((name, changed, model))
@@ -230,8 +231,8 @@ def run_proofs(inventory, output_dir, controls=False):
                 manifestSha256=inventory["manifest"]["sha256"],
                 kernelDirectory=str(work),assumptionDeclarations=declarations,closedAssumptionCount=closed,
                 theoremNames=THEOREM_NAMES,semanticControls=controls_result,
-                established=[f"all {len(program['instructions'])} initializer instructions halt", "static slot 38 is Buffer[33]",
-                             f"{static_slots} source-mapped static slots; the certificate pins the helper slot 38 and allocated slots 18 and 20",
+                established=[f"all {len(program['instructions'])} initializer instructions halt", "static slot 58 is Buffer[33]",
+                             f"{static_slots} source-mapped static slots; the certificate pins the helper slot 58 and allocated slots 18 and 20",
                              "arbitrary existing heap objects preserved", "two fresh array references", "arbitrary stack suffix preserved"],
                 excludedCorrespondence=["actual ApplicationEngine and resource/gas behavior", "mutable Buffer identity",
                                         "helper arbitrary caller context and fresh GetScriptContainer allocations", "all 109 public ABI entrypoints"])
@@ -281,7 +282,7 @@ Ltac drive sf nf q r Heq Hstatic Hfits := repeat (first [ progress norm | progre
  | progress (rewrite (vm_leb_margin_of_fits r (Z.min q (Z.max (sf+nf-r) 0+(1-Z.min (sf+nf) 1)*q)) Hfits))
  ]).
 Theorem context_same_hash_classified : forall hash old sf nf q r kind static_values hp tail,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q r ->
  integer_fits (r + charge_expression (sf+nf) q r) ->
  bytes_eqb old hash = true ->
@@ -310,7 +311,7 @@ Qed.
 Print Assumptions context_same_hash_classified.
 
 Theorem context_different_hash_classified : forall hash old sf nf q r kind static_values hp tail,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  bytes_eqb old hash = false ->
@@ -338,7 +339,7 @@ Qed.
 Print Assumptions context_different_hash_classified.
 
 Theorem context_absent_classified : forall hash sf nf q static_values hp tail,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  observe_context (run_context 110 artifact hash sf nf (context_entry q VNull static_values hp tail)) =
@@ -372,7 +373,7 @@ CONTEXT_COMPOSITION = r"""
 
 Theorem context_method_classified : forall hash sf nf q input static_values hp tail,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  observe_context (run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail)) =
  contextual_classified hp tail static_values hash hash sf nf q
  (effective_reserved hash input) (input_kind input) (stored_value input) (input_trace input).
@@ -395,7 +396,7 @@ Proof.
 Qed.
 Theorem complete_context_observation : forall hash sf nf q input static_values hp tail,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  observe (run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail)) =
  contract_observation hash sf nf q input.
 Proof.
@@ -405,7 +406,7 @@ Proof.
 Qed.
 Theorem complete_context_frame : forall hash sf nf q input static_values hp tail,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  exists final,
  ((exists value, run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail) = Halt value final /\ stack final = value::tail) \/
   (exists message, run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail) = Aborted message final /\ stack final = tail)) /\
@@ -422,7 +423,7 @@ Proof.
 Qed.
 Theorem complete_context_existing_object_unchanged : forall hash sf nf q input static_values hp tail final index,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  (index < length hp)%nat ->
  ((exists value, run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail) = Halt value final) \/
   (exists message, run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail) = Aborted message final)) ->
@@ -438,7 +439,7 @@ Proof.
 Qed.
 Theorem complete_context_return_stack : forall hash sf nf q input static_values hp tail final value,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail) = Halt value final ->
  stack final = value::tail.
 Proof.
@@ -450,7 +451,7 @@ Proof.
 Qed.
 Theorem complete_context_fresh_allocations : forall hash sf nf q input static_values hp tail,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  exists final,
  ((exists value, run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail) = Halt value final) \/
   (exists message, run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail) = Aborted message final)) /\
@@ -471,7 +472,7 @@ Qed.
 
 Theorem complete_context_refines_isolated_vm : forall hash sf nf q input static_values hp tail,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  observe (run_context 110 artifact hash sf nf (context_entry q (stored_value input) static_values hp tail)) =
  observe (run_vm 130 CapContextIsolatedArtifact.artifact
    (initial_vm hash sf nf q (stored_value input) static_values)).
@@ -480,7 +481,7 @@ Proof.
  symmetry. apply CapContextIsolatedArtifact.vm_method_classified; assumption.
 Qed.
 Theorem initialized_helper_context : forall hp tail initialized hash sf nf q input,
- run_init 182 CapContextArtifact.initializer_code (initializer_entry hp tail) = InitReturned initialized ->
+ run_init 236 CapContextArtifact.initializer_code (initializer_entry hp tail) = InitReturned initialized ->
  legal_inputs hash sf nf q input ->
  exists final,
  ((exists value, run_context 110 artifact hash sf nf
@@ -530,7 +531,7 @@ def render_context_certificate(program):
 
 
 COUNTER_DEFINITIONS = r"""
-Definition frame_statics (slot : nat) := if Nat.eqb slot 38 then Some (VBuffer [33%nat]) else None.
+Definition frame_statics (slot : nat) := if Nat.eqb slot 58 then Some (VBuffer [33%nat]) else None.
 Definition frame_hash := repeat 1%nat 32.
 Definition caller_heap := [obj ArrayKind [VInt 111];obj StructKind [VRef 0]].
 Definition caller_tail := [VRef 1;VInt 7].
@@ -553,12 +554,12 @@ CONTEXT_THEOREM_NAMES.append("actual_nonempty_caller_frame")
 def contextual_semantic_controls(program, work):
     model=(work/"CapContext.v").read_bytes().decode()
     dropped=copy.deepcopy(program)
-    # The write that installs the updated reservation is the SETITEM at 19159;
+    # The write that installs the updated reservation is the SETITEM at 36307;
     # replacing it with DROP leaves the caller heap object at its stored value.
     # The pre-sweep target (18021) predates the 2026-11-16 design-phase legacy
     # sweep, which moved the helper to [18900,19181); applying the old offset
     # now lands outside the method body, and the control would prove nothing.
-    dropped["bytes"][19159-method.START]=0x45
+    dropped["bytes"][36307-method.START]=0x45
     return_site="Halt value (with_stack s (pc s+width)%nat (value::rest))"
     getter_site="Continue (with_stack allocated (pc s+width)%nat (reference::stack s))"
     require(model.count(return_site)==1 and model.count(getter_site)==1,"Context control sites changed")

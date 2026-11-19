@@ -882,11 +882,11 @@ import {
   buildDraftShareUrl,
 } from "@/features/operations/shareLinks.js";
 import {
-  assertV3AccountExists,
+  assertAccountExists,
   buildExecuteUserOpInvocation,
 } from "@/features/operations/metaTx.js";
 import {
-  prepareV3UserOpContext,
+  prepareUserOpRoute,
   signUserOpWithEvm,
 } from "@/features/operations/useUserOpSigning.js";
 import { useDraftPersistence } from "@/features/operations/useDraftPersistence.js";
@@ -898,11 +898,9 @@ import {
 } from "@/services/walletService.js";
 import { morpheusDidService } from "@/services/morpheusDidService.js";
 import {
-  createVerifyScript,
+  deriveAccountAddress,
   getAddressFromScriptHash,
   getScriptHashFromAddress,
-  hash160,
-  reverseHex,
 } from "@/utils/neo.js";
 import { sanitizeHex } from "@/utils/hex.js";
 import { EC, translateError } from "@/config/errorCodes.js";
@@ -1264,7 +1262,7 @@ const operatorUrl = computed(() => {
 });
 const canClientBroadcast = computed(() =>
   Boolean(
-    workspace.transactionBody.value?.clientInvocation &&
+    workspace.transactionBody.value?.operationBody &&
     walletConnection.isConnected.value,
   ),
 );
@@ -1832,8 +1830,8 @@ async function loadAccount(overrideAddress = "") {
   if (lookup.startsWith("N") || isMatrixDomain(lookup)) {
     toast.error(
       t(
-        "operations.v3AccountCannotBeDiscovered",
-        "V3 accounts cannot be discovered from a Neo address or .matrix domain. Load them from the 20-byte accountId hash.",
+        "operations.accountCannotBeDiscovered",
+        "An account cannot be discovered from a Neo address or .matrix domain. Load it from the 20-byte account id.",
       ),
     );
     return;
@@ -1848,19 +1846,20 @@ async function loadAccount(overrideAddress = "") {
 
   const resolvedAccountIdHash = sanitizeHex(lookup);
 
-  const verifyScript = createVerifyScript(
-    getSmartAccountHash(),
-    resolvedAccountIdHash,
-  );
-  const resolvedAddressScriptHash = reverseHex(hash160(verifyScript));
+  // v4: the account is named by its 20-byte id; its address is hash160 of the
+  // proxy verification script the core derives for that id.
+  const resolvedAddressScriptHash = deriveAccountAddress({
+    accountId: resolvedAccountIdHash,
+    coreContractHash: getSmartAccountHash(),
+  });
   const resolvedAddress = getAddressFromScriptHash(resolvedAddressScriptHash);
 
   loadingAccount.value = true;
   try {
-    await assertV3AccountExists({
+    await assertAccountExists({
       rpcUrl: walletService.rpcUrl,
       saContractHash: getSmartAccountHash(),
-      accountIdHash: resolvedAccountIdHash,
+      accountId: resolvedAccountIdHash,
     });
     accountAddressScriptHash.value = resolvedAccountIdHash;
 
@@ -1875,11 +1874,11 @@ async function loadAccount(overrideAddress = "") {
       createActivityEvent({
         type: "account_loaded",
         actor: "workspace",
-        detail: t("operations.activityAccountLoaded", "V3 account loaded"),
+        detail: t("operations.activityAccountLoaded", "Account loaded"),
       }),
     );
     toast.success(
-      `${t("operations.v3AccountLoadedPrefix", "V3 account loaded. Virtual address:")} ${resolvedAddress}`,
+      `${t("operations.accountLoadedPrefix", "Account loaded. Virtual address:")} ${resolvedAddress}`,
     );
   } catch (error) {
     toast.error(translateError(error?.message, t));
@@ -1912,7 +1911,6 @@ function stageOperation() {
       rawTransaction: rawTransaction.value,
       notes: notes.value,
       morpheusNetwork: runtime.morpheusNetwork,
-      networkMagic: runtime.networkMagic,
       createdAt: nextOperationBody.createdAt,
     }),
   );
@@ -2060,21 +2058,19 @@ async function signWithEvmWallet() {
     const { signatureRecord, metaInvocation } = await signUserOpWithEvm({
       rpcUrl: walletService.rpcUrl,
       saContractHash: getSmartAccountHash(),
-      accountIdHash: workspace.account.value.accountIdHash,
+      accountId: workspace.account.value.accountIdHash,
       operationBody: workspace.operationBody.value,
       signerId: evmAddress.value,
-      chainId: runtime.networkMagic,
+      networkMagic: runtime.networkMagic,
       signTypedData: (typedData) => walletService.signTypedDataWithEvm(typedData),
-      missingAccountError: EC.v3AccountIdHashMissing,
-      missingVerifierError: EC.noVerifierConfigured,
+      missingAccountError: EC.accountIdHashMissing,
     });
     // Persisted drafts have an immutable transaction body; the broadcast path
     // reads metaInvocation from the signature metadata instead.
     if (!workspace.isDraftImmutable.value) {
       workspace.setTransactionBody({
         ...workspace.transactionBody.value,
-        clientInvocation: metaInvocation,
-        v3Invocation: metaInvocation,
+        metaInvocation,
       });
       workspace.setTransactionBody(
         applyPaymasterConfig(workspace.transactionBody.value),
@@ -2115,15 +2111,19 @@ async function signWithZkLogin() {
     }
 
     const saContractHash = getSmartAccountHash();
-    const { argsHashHex, verifierHash, nonce, deadline } =
-      await prepareV3UserOpContext({
+    // One route read gives the validator instance the operation routes to, the
+    // packed nonce in that instance's namespace, the deadline and the unsigned
+    // operation whose §4.3 digest binds the zkLogin proof to this envelope.
+    const { argsHashHex, route, nonce, deadline, operation } =
+      await prepareUserOpRoute({
         rpcUrl: walletService.rpcUrl,
         saContractHash,
-        accountIdHash: workspace.account.value.accountIdHash,
+        accountId: workspace.account.value.accountIdHash,
         operationBody: workspace.operationBody.value,
-        missingAccountError: EC.v3AccountIdHashMissing,
-        missingVerifierError: EC.noVerifierConfigured,
+        networkMagic: runtime.networkMagic,
+        missingAccountError: EC.accountIdHashMissing,
       });
+    const verifierHash = route.verifyingContract;
 
     const zkLoginTicket = await morpheusDidService.previewZkLoginTicket({
       verifierContract: verifierHash,
@@ -2138,21 +2138,18 @@ async function signWithZkLogin() {
 
     const metaInvocation = buildExecuteUserOpInvocation({
       saContractHash,
-      accountIdHash: workspace.account.value.accountIdHash,
-      targetContract: workspace.operationBody.value?.targetContract,
-      method: workspace.operationBody.value?.method,
-      methodArgs: workspace.operationBody.value?.args || [],
-      nonce,
-      deadline,
-      signatureHex: zkLoginTicket.proof_hex,
+      accountId: workspace.account.value.accountIdHash,
+      operation: {
+        ...operation,
+        signature: sanitizeHex(zkLoginTicket.proof_hex),
+      },
     });
     // Persisted drafts have an immutable transaction body; the broadcast path
     // reads metaInvocation from the signature metadata instead.
     if (!workspace.isDraftImmutable.value) {
       workspace.setTransactionBody({
         ...workspace.transactionBody.value,
-        clientInvocation: metaInvocation,
-        v3Invocation: metaInvocation,
+        metaInvocation,
       });
       workspace.setTransactionBody(
         applyPaymasterConfig(workspace.transactionBody.value),

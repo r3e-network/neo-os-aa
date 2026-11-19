@@ -166,9 +166,9 @@
                 >{{ t("operations.registeredAtBlock", "Registered at block") }}
                 {{ account.registryBlockIndex }}</span
               >
-              <span v-if="account.verifier" class="text-xs text-sa-muted"
-                >{{ t("operations.verifierShort", "Verifier") }}:
-                {{ truncateHash(account.verifier) }}</span
+              <span v-if="account.validator" class="text-xs text-sa-muted"
+                >{{ t("operations.validatorShort", "Validator") }}:
+                {{ truncateHash(account.validator) }}</span
               >
             </div>
           </div>
@@ -211,9 +211,9 @@
               <span v-if="listing.price_gas" class="text-xs text-sa-text"
                 >{{ listing.price_gas }} GAS</span
               >
-              <span v-if="listing.backup_owner" class="text-xs text-sa-muted"
-                >{{ t("operations.backupOwnerShort", "Backup") }}:
-                {{ truncateHash(listing.backup_owner) }}</span
+              <span v-if="listing.custody" class="text-xs text-sa-muted"
+                >{{ t("operations.custodyShort", "Custody") }}:
+                {{ truncateHash(listing.custody) }}</span
               >
             </div>
           </div>

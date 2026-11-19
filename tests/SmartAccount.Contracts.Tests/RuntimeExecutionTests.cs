@@ -1,185 +1,118 @@
-using System.IO;
 using System.Numerics;
-using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
-using Neo.Extensions;
-using Neo.SmartContract;
-using Neo.SmartContract.Manifest;
-using Neo.SmartContract.Testing;
 using Neo.SmartContract.Testing.Exceptions;
-using Neo.SmartContract.Testing.Extensions;
-using Neo.VM;
-using Neo.VM.Types;
 
 namespace SmartAccount.Contracts.Tests;
 
+/// <summary>
+/// Registration identity and v4 account creation (spec §16.1): custody‖salt is
+/// the identity, the initial configuration installs atomically, and the legacy
+/// registration helper survives only as the platform-registrar identity source.
+/// </summary>
 [TestClass]
 public class RuntimeExecutionTests
 {
-    private static readonly string RepoRoot =
-        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+    private static readonly UInt160 Custody =
+        UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
 
-    private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "public");
+    private static readonly UInt160 Verifier =
+        UInt160.Parse("0x5be915aea3ce85e4752d522632f0a9520e377aaf");
 
-    private static readonly FieldInfo FeeAmountField =
-        typeof(ApplicationEngine).GetField("_feeAmount", BindingFlags.Instance | BindingFlags.NonPublic)!;
-
-    private static readonly UInt160 ContractManagementHash =
-        UInt160.Parse("0xfffdc93764dbaddd97c48f252a53ea4643faa3fd");
-
-    private static readonly NefFile WalletNef =
-        NefFile.Parse(File.ReadAllBytes(Path.Combine(CompiledContractsDir, "SmartAccount.nef")), verify: true);
-
-    private static readonly string WalletManifestText =
-        File.ReadAllText(Path.Combine(CompiledContractsDir, "SmartAccount.manifest.json"));
-
-    private static readonly ContractManifest WalletManifest = ContractManifest.Parse(WalletManifestText);
+    private static readonly BigInteger SevenDaysMs = 7L * 24 * 60 * 60 * 1000;
 
     [TestMethod]
     public void ComputeRegistrationAccountId_MatchesFrontendVectorInRuntime()
     {
-        RuntimeWalletHarness harness = new();
+        RuntimeFixture fx = new();
+        UInt160 core = fx.Deploy("SmartAccount");
 
-        UInt160 accountId = harness.GetUInt160(
-            "computeRegistrationAccountId",
-            UInt160.Parse("0x5be915aea3ce85e4752d522632f0a9520e377aaf"),
+        UInt160 accountId = fx.CallUInt160(
+            core, "computeRegistrationAccountId",
+            Verifier,
             new byte[] { 0x11, 0x22, 0x33, 0x44 },
             UInt160.Zero,
-            UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a"),
+            Custody,
             2_592_000u);
 
         Assert.AreEqual(UInt160.Parse("0x27c01243fca45e1b821dc3bb45267a579762d530"), accountId);
     }
 
     [TestMethod]
-    public void RegisterAccount_PersistsSelectedAccountStateInRuntime()
+    public void CreateAccount_PersistsSelectedAccountStateInRuntime()
     {
-        RuntimeWalletHarness harness = new();
-        UInt160 backupOwner = UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
-        uint escapeTimelock = 2_592_000;
-        UInt160 accountId = harness.GetUInt160(
-            "computeRegistrationAccountId",
-            UInt160.Zero,
-            System.Array.Empty<byte>(),
-            UInt160.Zero,
-            backupOwner,
-            escapeTimelock);
+        RuntimeFixture fx = new();
+        UInt160 core = fx.Deploy("SmartAccount");
+        byte[] salt = RuntimeFixture.Salt("runtime-registration");
 
-        harness.SetSigner(backupOwner);
-        harness.ExecuteVoid(
-            "registerAccount",
-            accountId,
-            UInt160.Zero,
-            System.Array.Empty<byte>(),
-            UInt160.Zero,
-            backupOwner,
-            escapeTimelock);
+        UInt160 expected = fx.CallUInt160(core, "computeAccountIdentity", Custody, salt);
+        UInt160 accountId = fx.CreateAccount(core, Custody, salt, SevenDaysMs, new object[0]);
 
-        Assert.AreEqual(backupOwner, harness.GetUInt160("getBackupOwner", accountId));
-        Assert.AreEqual(UInt160.Zero, harness.GetUInt160("getVerifier", accountId));
-        Assert.AreEqual(UInt160.Zero, harness.GetUInt160("getHook", accountId));
-        Assert.AreEqual(escapeTimelock, harness.GetUInt32("getEscapeTimelock", accountId));
+        Assert.AreEqual(expected, accountId);
+        Assert.IsTrue(fx.AccountControl(core, accountId)[0].GetBoolean(), "The account must exist after creation");
+        // 0 = active.
+        Assert.AreEqual(BigInteger.Zero, fx.AccountStatus(core, accountId));
+        Assert.AreEqual(Custody, fx.AccountCustody(core, accountId));
+        Assert.AreEqual(SevenDaysMs, fx.AccountRecoveryTimelockMs(core, accountId));
+        Assert.AreEqual(BigInteger.One, fx.AccountAuthorityEpoch(core, accountId));
+        Assert.AreEqual(BigInteger.Zero, fx.AccountConfigurationNonce(core, accountId));
+        // With no validator installed the built-in route stays authorized.
+        Assert.IsTrue(fx.AccountDefaultOperationAuthorization(core, accountId));
+        // The custody witness is what authorized creation; nothing is delegated yet.
+        Assert.AreNotEqual(Custody, accountId);
     }
 
     [TestMethod]
-    public void RegisterAccount_RejectsDuplicateRegistrationInRuntime()
+    public void CreateAccount_RejectsDuplicateRegistrationInRuntime()
     {
-        RuntimeWalletHarness harness = new();
-        UInt160 backupOwner = UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
-        UInt160 accountId = harness.GetUInt160(
-            "computeRegistrationAccountId",
-            UInt160.Zero,
-            System.Array.Empty<byte>(),
-            UInt160.Zero,
-            backupOwner,
-            2_592_000u);
+        RuntimeFixture fx = new();
+        UInt160 core = fx.Deploy("SmartAccount");
+        byte[] salt = RuntimeFixture.Salt("runtime-duplicate");
 
-        harness.SetSigner(backupOwner);
-        harness.ExecuteVoid(
-            "registerAccount",
-            accountId,
-            UInt160.Zero,
-            System.Array.Empty<byte>(),
-            UInt160.Zero,
-            backupOwner,
-            2_592_000u);
+        fx.CreateAccount(core, Custody, salt, SevenDaysMs, new object[0]);
 
         TestException exception = Assert.ThrowsExactly<TestException>(() =>
-            harness.ExecuteVoid(
-                "registerAccount",
-                accountId,
-                UInt160.Zero,
-                System.Array.Empty<byte>(),
-                UInt160.Zero,
-                backupOwner,
-                2_592_000u));
+            fx.CreateAccount(core, Custody, salt, SevenDaysMs, new object[0]));
 
         StringAssert.Contains(exception.Message, "Account already exists");
     }
 
     [TestMethod]
-    public void RegisterAccount_RejectsMismatchedAccountIdInRuntime()
+    public void CreateAccount_RejectsMismatchedAccountIdInRuntime()
     {
-        RuntimeWalletHarness harness = new();
-        UInt160 backupOwner = UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
+        RuntimeFixture fx = new();
+        UInt160 core = fx.Deploy("SmartAccount");
 
-        harness.SetSigner(backupOwner);
-
+        fx.SetSigners(Custody);
         TestException exception = Assert.ThrowsExactly<TestException>(() =>
-            harness.ExecuteVoid(
-                "registerAccount",
+            fx.CallVoid(
+                core, "createAccount",
                 UInt160.Parse("0x27c01243fca45e1b821dc3bb45267a579762d530"),
-                UInt160.Zero,
-                System.Array.Empty<byte>(),
-                UInt160.Zero,
-                backupOwner,
-                2_592_000u));
+                Custody,
+                RuntimeFixture.Salt("runtime-mismatch"),
+                SevenDaysMs,
+                new object[0]));
 
         StringAssert.Contains(exception.Message, "Account id does not match registration parameters");
     }
 
-    private sealed class RuntimeWalletHarness
+    [TestMethod]
+    public void ExecuteUserOp_BuiltInRouteExecutesWithCustodySignature()
     {
-        public TestEngine Engine { get; } = new();
+        RuntimeFixture fx = new();
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
+        UInt160 core = fx.Deploy("SmartAccount");
+        UInt160 target = fx.Deploy("MockTransferTarget");
+        UInt160 accountId = fx.CreateAccount(core, custody, "exec-builtin");
 
-        public UInt160 ContractHash { get; }
+        BigInteger nonce = fx.PackedNonce(core, accountId, 0);
+        object[] op = RuntimeFixture.UserOp(
+            target, "supportsV3", new object?[0], nonce, fx.Now() + 60_000, new byte[] { 0x00 });
+        op[11] = fx.SignBuiltIn(core, accountId, op, key);
 
-        public RuntimeWalletHarness()
-        {
-            Engine.SetTransactionSigners(Engine.ValidatorsAddress);
-            ContractHash = Engine.GetDeployHash(WalletNef, WalletManifest);
-            ExecuteRaw(ContractManagementHash, "deploy", WalletNef.ToArray(), WalletManifestText, null!);
-        }
-
-        public void SetSigner(UInt160 signer)
-        {
-            Engine.SetTransactionSigners(signer);
-        }
-
-        public void ExecuteVoid(string method, params object[] args)
-        {
-            _ = ExecuteRaw(ContractHash, method, args);
-        }
-
-        public UInt160 GetUInt160(string method, params object[] args)
-        {
-            return (UInt160)TestExtensions.ConvertTo(ExecuteRaw(ContractHash, method, args), typeof(UInt160))!;
-        }
-
-        public uint GetUInt32(string method, params object[] args)
-        {
-            return (uint)TestExtensions.ConvertTo(ExecuteRaw(ContractHash, method, args), typeof(uint))!;
-        }
-
-        private StackItem ExecuteRaw(UInt160 targetHash, string method, params object[] args)
-        {
-            using ScriptBuilder scriptBuilder = new();
-            scriptBuilder.EmitDynamicCall(targetHash, method, args);
-            return Engine.Execute(
-                new Script(scriptBuilder.ToArray()),
-                0,
-                applicationEngine => FeeAmountField.SetValue(applicationEngine, new BigInteger(long.MaxValue)));
-        }
+        Assert.IsTrue(fx.CallBoolean(core, "executeUserOp", accountId, op));
+        Assert.AreEqual(nonce + 1, fx.PackedNonce(core, accountId, 0),
+            "A successful built-in operation consumes exactly one sequence");
     }
 }

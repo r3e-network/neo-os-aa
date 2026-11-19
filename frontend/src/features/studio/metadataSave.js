@@ -10,7 +10,7 @@ function text(value) {
 export function captureMetadataSaveIntent({
   accountAddress,
   accountIdHash,
-  backupOwner,
+  custody,
   wallet,
   rpcUrl,
   coreHash,
@@ -24,7 +24,7 @@ export function captureMetadataSaveIntent({
   return Object.freeze({
     accountAddress: text(accountAddress).toLowerCase(),
     accountIdHash: text(accountIdHash).toLowerCase(),
-    backupOwner: text(backupOwner).toLowerCase(),
+    custody: text(custody).toLowerCase(),
     wallet: text(wallet),
     rpcUrl: text(rpcUrl),
     coreHash: text(coreHash).toLowerCase(),
@@ -41,7 +41,7 @@ export function metadataIntentMatchesCurrent(intent, current) {
   if (!intent || !current) return false;
   return intent.accountAddress === text(current.accountAddress).toLowerCase()
     && intent.accountIdHash === text(current.accountIdHash).toLowerCase()
-    && intent.backupOwner === text(current.backupOwner).toLowerCase()
+    && intent.custody === text(current.custody).toLowerCase()
     && intent.wallet === text(current.wallet)
     && intent.rpcUrl === text(current.rpcUrl)
     && intent.coreHash === text(current.coreHash).toLowerCase()

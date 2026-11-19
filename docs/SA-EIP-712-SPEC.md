@@ -111,14 +111,15 @@ below rather than by a generic EIP-712 implementation.
 
 ## SDK builders
 
-- `buildV3UserOperationTypedData(options)` — wallet/display-facing typed data
+- `buildUserOperationTypedData(options)` — wallet/display-facing typed data
   (domain + types + message) for the layout above.
-- `buildContractCompatibleDomainSeparator(network, verifyingContract)` —
-  byte-exact domain separator.
-- `buildContractCompatibleStructHash(options)` — byte-exact struct hash,
-  including the `bytes20` right-padding and `StdLib.Serialize` args hash.
-- `buildWeb3AuthSigningPayload(options)` — the complete 66-byte
-  `0x1901`-enveloped payload ready for a raw secp256k1 signer.
+- `buildUserOperationSigningPayload(options)` — the complete 66-byte
+  `0x1901`-enveloped payload ready for a raw secp256k1 signer. The domain
+  separator and the struct hash are `ethers.TypedDataEncoder` outputs inside
+  that payload: the v4 SDK exposes the payload and its digest, not the two
+  intermediate hashes as separate builders.
+- `buildUserOperationSigningDigest(options)` — `keccak256` of that payload:
+  the 32 bytes a raw secp256k1 signer signs.
 - `SmartAccountClient.computeArgsHash(args)` — asks the core for the
   canonical `argsHash` instead of re-implementing the serialization.
 

@@ -28,10 +28,10 @@ namespace SmartAccount
         };
 
         // Canonical N3 P-256 verification script shape (40 bytes):
-        //   PUSHDATA1(0x0C) 0x21 <33-byte compressed point> SYSCALL(0x41) 74 74 76 AA
-        // where 747476aa = first 4 bytes of SHA256("Neo.Crypto.CheckSig").
+        //   PUSHDATA1(0x0C) 0x21 <33-byte compressed point> SYSCALL(0x41) 56 E7 B3 27
+        // where 56e7b327 is the little-endian interop hash of "System.Crypto.CheckSig".
         private const int CanonicalP256ScriptSize = 40;
-        private static readonly byte[] CheckSigSyscallHash = new byte[] { 0x74, 0x74, 0x76, 0xAA };
+        private static readonly byte[] CheckSigSyscallHash = new byte[] { 0x56, 0xE7, 0xB3, 0x27 };
 
         /// <summary>4-byte little-endian encoding of the network magic.</summary>
         private static byte[] U32LEBytes(uint value)
@@ -318,10 +318,10 @@ namespace SmartAccount
             // message digest and the sanitized signature pairs. The call is
             // read-only and the callback is declared safe, so message
             // validation can never write.
-            AssertCallbackGasBudget(ValidationAggregateGasLimit);
+            AssertCallbackGasBudget(ValidationPerCallGasLimit);
             long gasBefore = Runtime.GasLeft;
-            bool accepted = (bool)CallModuleGasCapped(
-                module.ContractHash, "isValidSignature", CallFlags.ReadOnly, ValidationAggregateGasLimit,
+            object reply = CallModuleGasCapped(
+                module.ContractHash, "isValidSignature", CallFlags.ReadOnly, ValidationPerCallGasLimit,
                 new object[]
                 {
                     accountId,
@@ -331,8 +331,10 @@ namespace SmartAccount
                     moduleMessageDigest,
                     CloneOperationArguments(signaturePairs)
                 });
-            ChargeCallbackGas(null, GasPoolNone, gasBefore, ValidationAggregateGasLimit);
-            return accepted ? ValidSignatureMagic() : InvalidSignatureMagic();
+            ChargeCallbackGas(null, GasPoolNone, gasBefore, ValidationPerCallGasLimit);
+            // ERC-1271 must fail closed, never fault: a reply that is not a
+            // Boolean is treated exactly like Boolean false.
+            return reply is bool accepted && accepted ? ValidSignatureMagic() : InvalidSignatureMagic();
         }
     }
 }

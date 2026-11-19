@@ -448,7 +448,7 @@ class GateAgreementTests(unittest.TestCase):
     def test_gate_pins_agree_with_this_lane(self):
         gate = self.gate()
         self.assertEqual(gate.SCOPES['load-admission'],source.SCOPE)
-        self.assertEqual(len(gate.SCOPES),22)
+        self.assertEqual(len(gate.SCOPES),21)
         self.assertEqual(gate.CERTIFICATES['load-admission'],
                          ('certificateSha256','LoadAdmissionArtifact.v'))
         self.assertEqual(tuple(gate.LOAD_ADMISSION_CONTROLS),source.EXPECTED_CONTROLS)

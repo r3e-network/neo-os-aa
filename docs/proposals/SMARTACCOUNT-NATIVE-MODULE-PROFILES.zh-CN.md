@@ -4,11 +4,11 @@
 
 ## 兼容性边界
 
-已部署合约配置档与原生 SmartAccount 配置档是不同的构建目标。当前原生工件要求 `native-v2` 与 `extra.smartAccount.abiVersion = 2`；ABI 1 工件不兼容。身份派生仍为版本 1。每个账户自有模块键都是 `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`，其中 policyPrefix 为一个字节。纪元在每次访问时取自 safe 原生 getter，且必须落在 UInt64 范围内；不可用或非法的读取失败关闭。不存在旧命名空间回退。这包括密钥、授权、冷却、支出、配置、子级名单与瞬态快照。恢复会改变纪元并撤销根与依赖，不调用旧模块回调，使旧字节不可达。重新安装模块会从空的当前代次状态开始。普通配置保留存储纪元并推进 configurationNonce。
+已部署合约配置档与原生 SmartAccount 配置档是不同的构建目标。当前原生工件要求 `native-v4`；能力集由 safe 的 `getModuleProfile()` 返回的模块配置档声明，核心在安装时校验该配置档的摘要。协议参数见 `docs/proposals/smartaccount-native-profile-v4-parameters.json`（`profileVersion` 与 `abiVersion` 均为 4）。ABI 1 与 native-v2 工件不兼容。身份派生仍为版本 1。每个账户自有模块键都是 `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`，其中 policyPrefix 为一个字节。纪元在每次访问时取自 safe 原生 getter，且必须落在 UInt64 范围内；不可用或非法的读取失败关闭。不存在旧命名空间回退。这包括密钥、授权、冷却、支出、配置、子级名单与瞬态快照。恢复会改变纪元并撤销根与依赖，不调用旧模块回调，使旧字节不可达。重新安装模块会从空的当前代次状态开始。普通配置保留存储纪元并推进 configurationNonce。
 
 既有验证器工件声明 `Any` 回调参数并使用 `canConfigureVerifier` / `canExecuteVerifier`；原生准入要求精确的 `Array` 参数与已认证的 `hasModuleContext` 阶段。既有钩子权威查询同样面向已部署合约配置档。通过旧版部署测试并不确立原生兼容性。
 
-原生构建不得放宽原生合约 ABI、模拟托管见证、使用只认哈希的调用方捷径，或回退到旧版授权。原生合约身份由原生配置档固定。配置、清理、校验、preExecute 与 postExecute 各自需要其自己的精确账户、模块角色与调用阶段授权。独立的模块管理绝不替代这一按账户作用域的授权。
+原生构建不得放宽原生合约 ABI、模拟托管见证、使用只认哈希的调用方捷径，或回退到旧版授权。原生合约身份由原生配置档固定。配置、清理、校验（`validateUserOp`）、完成（`onUserOpComplete`）与 `preCheck` / `postCheck` 各自需要其自己的精确账户、模块角色与调用阶段授权。独立的模块管理绝不替代这一按账户作用域的授权。
 
 ## 初始配置档
 

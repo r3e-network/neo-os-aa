@@ -7,12 +7,12 @@
 ```bash
 cd sdk/js
 cp .env.example .env
-# 填入 TEST_WIF（有余额的测试网账户）
+# 填入 TEST_WIF 或 NEO_TESTNET_WIF（有余额的测试网账户）
 npm run testnet:validate:dry-run
 ```
 
-干跑会打印计划执行的校验阶段，以及哪些可选阶段会因为缺少环境变量而被跳过，
-不会广播任何交易。
+干跑会打印计划执行的校验阶段，在缺少必需环境变量时把该阶段标记为 `blocked`，
+并列出会被跳过的可选阶段，不会广播任何交易。
 
 干跑结果没有问题后，再执行真实的校验套件：
 

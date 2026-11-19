@@ -34,12 +34,12 @@ python3 formal/refinement/entrypoint_inventory.py \
   --json-report /tmp/aa-entrypoint-closure-current.json
 ```
 
-The current artifact identity is NEF SHA256
-`9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`
-(script `909ba759b66a4d84a4bd2aa2a2a78ef611c8b27e834b460a90f8ff83d387e1cd`,
-manifest `a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31`),
+The current pinned artifact identity is NEF SHA256
+`2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb`
+(script `6eef7f70838b1bb3b8bed9a6a515152a6b0d86a102a11ba489d74c422cbf715f`,
+manifest `f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f`),
 accounted against inventory SHA256
-`65a73399659594d72b8ae063f14fc64ed18120719111165b69f03785f81d7195`.
+`1cfeed33a34cc80d87fe95c68df8f3c94c00a6e4c1ffa106993ccef271b29df6`.
 This targets ordinary Neo 3.10.1 source commit
 `d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d` and Neo.VM source commit
 `004cd6070a940405818d9357638277dd44407e2e`.
@@ -53,19 +53,19 @@ unstable across rebuilds of a byte-identical artifact because
 `compiler.loadedAssemblies` entry) moves. Compare those fields, not the inventory
 digest, when deciding whether two builds are the same artifact.
 
-The current result accounts for 109 manifest entries, 197 byte methods, 953
-typed source methods, 371 exported source initializers and all 10,594
-instructions / 30,678 script bytes. All 197 debug identities uniquely match
-typed method display names, and 108 source-backed ABI descriptors match their
+The current result accounts for 81 manifest entries, 276 byte methods, 400
+typed source methods, 378 exported source initializers and all 18,045
+instructions / 44,187 script bytes. All 276 debug identities uniquely match
+typed method display names, and 80 source-backed ABI descriptors match their
 manifest descriptors. The remaining manifest entry, `_initialize/0`, has no
-typed/debug method mapping. Its exact interval is `[29996,30678)`: 682 bytes and
-182 instructions, and remains source-unbound.
+typed/debug method mapping. Its exact interval is `[43470,44187)`: 717 bytes and
+236 instructions, and remains source-unbound.
 
-There are 426 direct-call sites, 625 external-effect sites (77 token calls and
-548 syscalls), 20 local control-flow cycle components, one call-recursion
-component, no `CALLA`, and no `PUSHA`. The 1,118 bytes outside source/debug method
-intervals are kept in 41 generated/unmapped ranges. The initializer accounts for
-682 structurally reachable bytes; the other 436 bytes in 40 ranges have no path
+There are 640 direct-call sites, 579 external-effect sites (91 token calls and
+488 syscalls), 69 local control-flow cycle components, one call-recursion
+component, no `CALLA`, and no `PUSHA`. The 1,230 bytes outside source/debug method
+intervals are kept in 43 generated/unmapped ranges. The initializer accounts for
+717 structurally reachable bytes; the other 513 bytes in 42 ranges have no path
 from the conservative root set through explicit decoded edges. They are marked
 `structurallyUnreachable`, with `semanticDead:false`. Future indirect calls disable
 this conclusion. This result makes no claim about execution introduced by an
@@ -73,10 +73,16 @@ external host bypassing the normal manifest dispatch rules.
 
 The former artifacts with NEF
 `4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`
-(`[13557,13838)` helper, slot 34, 100 entries) and
+(`[13557,13838)` helper, slot 34, 100 entries),
 `6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3`
-(`[17762,18043)` helper, slot 38, 105 entries) are historical. Their layouts,
-slots and counts must not be applied to the current artifact.
+(`[17762,18043)` helper, slot 38, 105 entries) and
+`9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`
+(`[18900,19181)` helper, slot 38, 109 entries) are historical. Their layouts,
+slots and counts must not be applied to the current artifact. The v3 private helper
+`BuildHookOperationParams` (`[15136,15160)`, 24 bytes / 21 instructions) has no
+counterpart in this artifact at all: no method of that name exists in the v4 source
+or in the decoded method table, so the interval it used to occupy no longer exists
+and the lane that pinned it is retired rather than renumbered.
 
 The source graph is separate from the byte graph: it records bound method,
 constructor, operator and conversion references, property/field references,
@@ -84,7 +90,7 @@ source loops and unexported metadata. Compiler inlining or intrinsic lowering
 does not justify equating those graphs. Missing external source bodies and
 unexported metadata stay open. Each ABI closure contains its body/callee byte
 ranges, transitively referenced source members and the common initializer
-dependency. The full count remains `fullUnprovedCount:109`.
+dependency. The full count remains `fullUnprovedCount:81`.
 External/static/indirect effects are explicitly reported for the full body plus
 initializer scope; separate `body*` and `initialization*` fields preserve their
 origin without letting pure body selection hide common initialization effects.
@@ -103,37 +109,39 @@ entry bodies its selected lanes refine, in the non-overlapping
 `entrypointCoverage` buckets `fullyClosed`, `bodyLevelRefined` and
 `dispatchLevelOnly`. Those buckets describe the gate's own selected scopes only.
 This inventory still requires every manifest entry to retain all of its
-obligations, and its current `fullUnprovedCount` is `109`.
+obligations, and its current `fullUnprovedCount` is `81`.
 
 The automatic first public candidates are:
 
 | ABI entry | Exact body interval | Bytes / instructions | Remaining body work |
 | --- | --- | --- | --- |
-| `getAccountImplementationId/0` | `[22447,22480)` | 33 / 3 | Source string/ABI observation and VM body theorem |
-| `supportsExecutionMode/1` | `[22480,22531)` | 51 / 18 | Boolean `PUSHT`, string comparison bounds/faults and source projection |
-| `supportsModuleType/1` | `[22531,22580)` | 49 / 18 | Same requirements |
+| `getAccountImplementationId/0` | `[39563,39596)` | 33 / 3 | Source string/ABI observation and VM body theorem |
+| `supportsModuleType/1` | `[39947,39979)` | 32 / 12 | Boolean `PUSHT`, string comparison bounds/faults and source projection |
+| `supportsExecutionMode/1` | `[39979,40030)` | 51 / 18 | Same requirements |
 
 All have no static fields, external effects, internal calls or graph loops. Their
 body proofs are developed separately in [SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md#public-pure-method-reference-refinement).
 Their full entrypoint dependencies remain open here.
 
-Automatic selection also finds seven private source helpers with no explicit
-external effect or graph loop. The current `CapMethodVm.v` decoder text recognizes
-all byte opcodes of `BuildHookOperationParams`, `[15136,15160)`, 24 bytes / 21
-instructions, source `SmartAccount.Execution.cs:298–309`. This is the next
-smallest useful pure helper candidate: it builds a packed argument array from a
-`UserOperation` and caller arguments using existing argument/heap/frame opcodes.
-Textual decoder recognition alone does not prove its values, aliasing, faults,
-source projection or universal frame behavior.
+Automatic selection also finds 29 private source helpers with no explicit
+external effect or graph loop, and seven of them need no extension to
+`CapMethodVm.v`'s decoder text. The smallest useful candidate is
+`IsMemberOfActivePolicy`, `[10685,10694)`, 9 bytes / 7 instructions, source
+`SmartAccount.Modules.cs:333–334`, which asks whether one module instance is a
+member of the active policy — a boolean read over already-materialised state; the
+next is `ExpectBool`, `[4114,4121)`, 7 bytes / 4 instructions,
+`SmartAccount.Modules.cs:1472–1475`. Textual decoder recognition alone does not
+prove their values, aliasing, faults, source projection or universal frame
+behavior.
 
 | Additional helper | Interval | Bytes / instructions | Opcodes missing from current CapMethodVm decoder text |
 | --- | --- | --- | --- |
-| `UInt32ToLittleEndianBytes` | `[293,404)` | 111 / 71 | AND, JMPGE, JMPLE, NEWBUFFER, PUSHINT8, SHR |
-| `ValidateAccountId` | `[6155,6234)` | 79 / 27 | ISTYPE, NUMEQUAL, PUSHF, PUSHINT8, SIZE |
-| `AssertTargetIsNotProtocolOwned` | `[13687,14021)` | 334 / 32 | none |
-| `IsUnsignedIntegerWithinBytes` | `[14377,14594)` | 217 / 101 | AND, CONVERT, DEC, JMPGE, JMPLE, JMP_L, LT, PUSHF, PUSHINT32/64, PUSHT, SIZE |
-| `ValidatePlatformAccountBinding` | `[20225,20317)` | 92 / 24 | PUSHF, SIZE |
-| `DataPushInstructionSize` | `[27609,29009)` | 1400 / 568 | AND, GE, JMPGE, JMPIFNOT_L, JMPLE, JMP_L, PUSHF, PUSHINT8/32/64, PUSHT |
+| `UInt32ToLittleEndianBytes` | `[491,602)` | 111 / 71 | AND, JMPGE, JMPLE, NEWBUFFER, PUSHINT8, SHR |
+| `ValidateAccountId` | `[1467,1546)` | 79 / 27 | ISTYPE, NUMEQUAL, PUSHF, PUSHINT8, SIZE |
+| `AssertTargetIsNotProtocolOwned` | `[5772,6106)` | 334 / 32 | none |
+| `IsUnsignedIntegerWithinBytes` | `[20806,21023)` | 217 / 101 | AND, CONVERT, DEC, JMPGE, JMPLE, JMP_L, LT, PUSHF, PUSHINT32/64, PUSHT, SIZE |
+| `ValidatePlatformAccountBinding` | `[37302,37394)` | 92 / 24 | PUSHF, SIZE |
+| `DataPushInstructionSize` | `[41978,43378)` | 1400 / 568 | AND, GE, JMPGE, JMPIFNOT_L, JMPLE, JMP_L, PUSHF, PUSHINT8/32/64, PUSHT |
 
 The machine profile is derived from the current reference decoder text, attests
 that model's hash and explicitly reports its limited scope. It is not a supported
@@ -141,8 +149,8 @@ instruction semantics proof. The separate public-pure model extends `PUSHT`; thi
 inventory does not silently treat that extension as part of `CapMethodVm`.
 
 The only additional public candidate without static-field effects or cycles is
-`computeArgsHash/1`, `[23686,23739)`, 53 bytes / 13 instructions, source
-`SmartAccount.State.cs:274–283`. It requires `StdLib.serialize` and
+`computeArgsHash/1`, `[40407,40460)`, 53 bytes / 13 instructions, source
+`SmartAccount.State.cs:301–310`. It requires `StdLib.serialize` and
 `System.Contract.Call` handler correspondence, so it is classified as requiring
 an external environment specification. A method name or apparent source purity
 cannot remove those actual byte dependencies.
@@ -217,11 +225,11 @@ plugin: the platform-registrar channel and the market escrow both assert that th
 caller is a contract, so the registrar service contract itself, a forwarder and a
 paymaster are installed, and the account's own registrar-gated and market-gated
 entries run behind them.
-Together on the pinned artifact: 228 calls, 186 halted and 42 faults with the
-reasons the files predict, 228 of 228 frames byte-identical to an encoder written
-against the opcode table, 228 of 228 at their declared time and signer,
-thirty-eight read links holding byte for byte, and every declared integer, boolean
-and array length matching.
+Together on the 109-entry artifact these four files were last driven against: 228
+calls, 186 halted and 42 faults with the reasons the files predict, 228 of 228
+frames byte-identical to an encoder written against the opcode table, 228 of 228
+at their declared time and signer, thirty-eight read links holding byte for byte,
+and every declared integer, boolean and array length matching.
 
 On the 105-entry artifact this gate last measured, two entries' declared return
 types — `Any` and `Array` — were declared only by methods that fault on zero
@@ -235,18 +243,20 @@ transitions), 5 more reached through the plugin-facing callback paths, and 3
 declared unreached: `_deploy/2` and `_initialize/0`, which
 `System.Contract.Call` refuses to invoke at all because their names begin with an
 underscore, and `rotatePlatformAccountOwner/3`, a one-line alias whose target the
-mock calls instead. The current artifact carries 109 entries; the closure run
-re-measures this decomposition against it rather than inheriting the 105-entry
-split. Re-measured on the current artifact: 88 entries are named by a step in one
-of the four files (both `finalizeEscape` arities among them), 6 more execute
-behind a caller and are evidenced by the state they change — the two platform
+mock calls instead. The 109-entry artifact re-measured this decomposition instead
+of inheriting the 105-entry split: 88 entries are named by a step in one of the
+four files (both `finalizeEscape` arities among them), 6 more execute behind a
+caller and are evidenced by the state they change — the two platform
 registrations and the owner-rotation application behind the registrar, the three
 escrow transitions behind the market — 1 more is reached through a plugin
 callback (`clearHookDependencies/1`, which `MultiHook`'s `clearAccount` calls
 unconditionally), and 14 are declared unreached: the two engine entry points plus
 twelve operational entries no scenario drives (the freeze lifecycle, the
 dependency writers, the child-hook forwarder, the simulation read and four safe
-reads; the correspondence document names them). A shape that matches still says
+reads; the correspondence document names them). The 81-entry artifact in this
+inventory has not been driven through the four files: the scenario lane needs a
+fresh exporter dump of it, and its own receipts are the only place that split can
+come from, so no decomposition is claimed for it here. A shape that matches still says
 nothing about
 which value it carried. The boundary pairs are the same kind of statement about time
 — the receipt shows the harness was at two instants and the endings differ, and it
@@ -309,7 +319,7 @@ That leaves two coherent programmes, and they claim different things:
   what `implementationVerified` means today, and it is research-scale: a
   semantics for the subset of C# the compiler accepts, plus its code generation.
 - **Route B (bytecode-trust).** Drop the compiler obligation from the claim and
-  prove refinement from the NEF bytes and the reviewed debug mapping for all 109
+  prove refinement from the NEF bytes and the reviewed debug mapping for all 81
   entrypoints. The existing lanes already work this way — they decode the pinned
   script and never trust the source for semantics — so this route is reachable by
   repetition rather than by a new theory. It yields a *weaker* statement about the
@@ -324,42 +334,67 @@ with it. Until that decision is recorded, the honest status stays
 
 ### The fourteen read-only entries are not a cheap win
 
-Rendering each remaining read-only region through the storage-getter lane's own
-pinned model (`storage_getter_proofs.render_vm_program`, with the pinned
-`StdLib.deserialize` token admitted) fails closed for all fourteen, and the
-reasons matter more than the verdict:
+Fourteen read-only ABI entries remain on this artifact — thirteen method names,
+because `getNonce` has two arities. The v3 pending-update getters
+`getPendingVerifierUpdate` and `getPendingHookUpdate` no longer exist (the
+control record answers `getPendingConfiguration` instead), and
+`isValidSignature/3` is now a 28-byte wrapper over a separate
+`IsValidSignatureCore` body at `[33325,34216)` — 891 bytes, 409 instructions,
+fourteen direct callees, the `sha256` and `verifyWithECDsa` tokens and the
+`System.Runtime.GasLeft` / `System.Runtime.GetCallingScriptHash` syscalls.
 
-- Five call more than one helper and stop at `CALL/CALL_L target N is not the
-  pinned shared callee`: `isOwnerOnlyRecovery` calls three (`GetAccountState`
-  `3471`, `HasOwnerOnlyRecovery` `3603`, `ValidateAccountId` `6155`);
-  `isAccountFrozen` (`HasAccountFrozen` `3654`, `ValidateAccountId`),
-  `isMarketEscrowActive` (`GetMarketEscrowContract` `3764`,
-  `GetMarketEscrowListingId` `3830`), `getNonce` (`ValidateAccountId`,
-  `IsUnsignedIntegerWithinBytes` `14377`) and `isValidSignature`
-  (`ModuleExposesSafeMethod` `1756`, `GetAccountState`) call two each. The lane
-  binds exactly one shared callee per getter, so these need multi-callee
-  composition before any proof can be written — a structural extension, not
-  another table row.
-- `isModuleInstalled` and the multi-callee `isValidSignature` also read
-  `LDARG2`/`LDARG1`, outside the pinned single-operand callee parameter
-  binding, so that binding has to widen together with the composition work.
-- `getPendingVerifierUpdate`, `getPendingHookUpdate` and
-  `getPlatformAccountBinding` fail on an `INITSLOT` shape outside the pinned
+| Read-only entry | Exact body interval | Bytes / instructions | Direct callees |
+| --- | --- | --- | --- |
+| `isOwnerOnlyRecovery/1` | `[17700,17718)` | 18 / 7 | `ValidateAccountId` `1467`, `HasOwnerOnlyRecovery` `17204` |
+| `isAccountFrozen/1` | `[17663,17700)` | 37 / 20 | `ValidateAccountId` `1467`, `GetAccountControl` `1566`, `HasLegacyFrozenLatch` `17156` |
+| `isMarketEscrowActive/1` | `[14388,14430)` | 42 / 14 | `GetMarketEscrowContract` `14430`, `GetMarketEscrowListingId` `14496` |
+| `getNonce/3` | `[35916,36022)` | 106 / 47 | `ValidateAccountId` `1467`, `RequireAccountControl` `30206`, `ResolveCredentialGeneration` `35797`, `ReadNonceCursor` `24023` and three more |
+| `getNonce/2` | `[40313,40407)` | 94 / 47 | `ValidateAccountId` `1467`, `IsUnsignedIntegerWithinBytes` `20806` |
+| `isModuleInstalled/4` | `[40220,40286)` | 66 / 26 | `ValidateAccountId` `1467`, `FindModuleIdByContract` `8613`, `ModuleTypeCodeFromName` `40030` |
+| `getPendingConfiguration/2` | `[31368,31422)` | 54 / 40 | `ValidateAccountId` `1467`, `GetConfigurationIntent` `27334` |
+| `isMarketService/1` | `[33147,33196)` | 49 / 17 | `IsRegisteredMarketService` `32012` |
+| `isValidSignature/3` | `[33297,33325)` | 28 / 14 | `IsValidSignatureCore` `33325`, `InvalidSignatureMagic` `34216` |
+| `isUserOpExecutionActive/0` | `[31440,31500)` | 60 / 35 | none |
+| `getAccountIdByProxy/1` | `[38688,38832)` | 144 / 51 | none |
+| `getPlatformAccountBinding/1` | `[38832,38858)` | 26 / 10 | `ValidateAccountId` `1467` |
+| `getProxyScriptHash/1` | `[37830,37914)` | 84 / 29 | `BuildProxyVerificationScript` `37914` |
+| `getAccountImplementationId/0` | `[39563,39596)` | 33 / 3 | none |
+
+Rendering each region through the storage-getter lane's own pinned model
+(`storage_getter_proofs.render_vm_program`, with the pinned `StdLib.deserialize`
+token admitted) fails closed for all fourteen, and the reasons matter more than
+the verdict:
+
+- Eight call more than one helper and stop at `CALL/CALL_L target N is not the
+  pinned shared callee`: `isAccountFrozen/1` and `isModuleInstalled/4` call
+  three each, `getNonce/3` calls seven, and `isOwnerOnlyRecovery/1`,
+  `isMarketEscrowActive/1`, `getNonce/2`, `getPendingConfiguration/2` and
+  `isValidSignature/3` call two each. The lane binds exactly one shared callee
+  per getter, so these need multi-callee composition before any proof can be
+  written — a structural extension, not another table row.
+- `isModuleInstalled/4`, `getNonce/3`, `getPendingConfiguration/2` and
+  `isValidSignature/3` also read `LDARG1`/`LDARG2`, outside the pinned
+  single-operand callee parameter binding, so that binding has to widen
+  together with the composition work.
+- `getPlatformAccountBinding/1` fails on an `INITSLOT` shape outside the pinned
   frame layout — a frame-shape extension, not new semantics.
-- `isUserOpExecutionActive` issues a syscall outside the pinned
-  GetContext/StorageGet pair; `getProxyScriptHash` calls the CryptoLib
-  `sha256` token, and the lane pins only the `StdLib.deserialize` token
-  identity. Each is one more pinned external identity, not a new model.
-- `isMarketService` fails on `PUSHT`, which the pinned model does not render.
-- `getAccountImplementationId` is a three-instruction jump thunk with no
+- `isUserOpExecutionActive/0` issues `System.Runtime.GetScriptContainer` and
+  reads a `deserialize`d in-flight record, outside the pinned
+  GetContext/StorageGet pair; `getProxyScriptHash/1` calls both the CryptoLib
+  `sha256` and `ripemd160` tokens, and the lane pins only the
+  `StdLib.deserialize` token identity. Each is one more pinned external
+  identity, not a new model.
+- `isMarketService/1` and `isModuleInstalled/4` fail on `PUSHT`, which the
+  pinned model does not render.
+- `getAccountImplementationId/0` is a two-instruction jump thunk with no
   `INITSLOT` of its own; its body belongs to the public-pure lane instead.
-- `getAccountIdByProxy` fails on `Expected exactly one cast width witness`: its
-  nullable `UInt160` read carries the `DUP / ISNULL / SIZE / JMPEQ / THROW`
+- `getAccountIdByProxy/1` fails on `Expected exactly one cast width witness`:
+  its nullable `UInt160` read carries the `DUP / ISNULL / SIZE / JMPEQ / THROW`
   guard as well as the cast, so the `direct` family's single-witness assumption
   does not cover it. It also needs an inline key concatenation and a tolerated
   leading `ExecutionEngine.Assert`.
 
 So the read-only entries are one multi-callee extension, a callee-parameter
-widening, two more pinned external identities and several frame/cast-witness
+widening, three more pinned external identities and several frame/cast-witness
 shapes, not fourteen independent one-liners. Anyone scheduling this should
 price it as lane work first and entry work second.

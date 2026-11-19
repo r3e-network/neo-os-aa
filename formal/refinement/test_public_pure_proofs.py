@@ -50,7 +50,7 @@ class PublicPureProofTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'manifest'): proofs.bind_methods(changed)
 
     def test_nef_hash_and_decoding_share_one_immutable_read(self):
-        nef_path = next(Path(name) for name in self.inventory['inputs'] if name.endswith('SmartAccountV3.nef'))
+        nef_path = next(Path(name) for name in self.inventory['inputs'] if name.endswith('SmartAccount.nef'))
         original_read = Path.read_bytes
         original = original_read(nef_path)
         changed = bytearray(original)

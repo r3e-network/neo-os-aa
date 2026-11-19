@@ -434,7 +434,6 @@ SCOPES = {
     'public': 'public-pure-reference-refinement', 'runtime': 'runtime-instruction-source-bridge',
     'codec': 'ledger-codec', 'gas': 'source-derived-add-fee-and-metered-traces',
     'helper-gas': 'exact-CFG-parameterized-helper-price-bound',
-    'hook': 'private-hook-params-reference-refinement',
     'runtime-collections': 'runtime-collection-source-bridge',
     'storage-getters': 'storage-getter-source-refinement',
     'entry-dispatch': 'ordinary-safe-public-abi-entry-frame-source-bridge',
@@ -444,7 +443,7 @@ SCOPES = {
     'interop-fee-order': 'interop-descriptor-charge-order',
     'exception-identity': 'exception-identity-and-catchability',
     'load-admission': 'load-time-manifest-and-token-admission'}
-ARTIFACT_LANES = {'arithmetic', 'method', 'context', 'initializer', 'public', 'hook', 'entry-dispatch',
+ARTIFACT_LANES = {'arithmetic', 'method', 'context', 'initializer', 'public', 'entry-dispatch',
                   'storage-getters'}
 CERTIFICATES = {'method': ('certificateSha256', 'CapMethodArtifact.v'),
                 'context': ('certificateSha256', 'CapContextArtifact.v'),
@@ -453,7 +452,6 @@ CERTIFICATES = {'method': ('certificateSha256', 'CapMethodArtifact.v'),
                 'runtime': ('generatedCertificateSha256', 'RuntimeSourceCertificate.v'),
                 'gas': ('certificateSha256', 'GasArtifact.v'),
                 'helper-gas': ('certificateSha256', 'HelperGasArtifact.v'),
-                'hook': ('certificateSha256', 'HookArtifact.v'),
                 'runtime-collections': ('generatedCertificateSha256', 'RuntimeCollectionCertificate.v'),
                 'entry-dispatch': ('certificateSha256', 'EntryDispatchArtifact.v'),
                 'syscall-dispatch': ('certificateSha256', 'SyscallDispatchArtifact.v'),
@@ -532,7 +530,7 @@ def tool_paths():
                'prove.py', 'numeric_proofs.py', 'reservation_proofs.py', 'method_proofs.py',
                'context_proofs.py', 'initializer_proofs.py', 'composition_proofs.py',
                'public_pure_proofs.py', 'runtime_bridge_proofs.py', 'codec_proofs.py',
-               'gas_proofs.py', 'gas_trace_proofs.py', 'hook_params_proofs.py', 'runtime_collection_proofs.py',
+               'gas_proofs.py', 'gas_trace_proofs.py', 'runtime_collection_proofs.py',
                'storage_getter_proofs.py',
                'entry_dispatch_proofs.py', 'syscall_dispatch_proofs.py',
                'contract_handoff_proofs.py', 'interop_convert_proofs.py',
@@ -839,18 +837,6 @@ def join_scopes(inventory, receipts, native_vector_sha=None):
         + ', '.join(STORAGE_GETTER_SHARED_CALLEES)]
     summaries['storage-getters']['unproved'] = getters.get('unproved', [])
     summaries['storage-getters']['openObligations'] = getters['openObligations']
-    hook = receipts['hook']
-    hook_span = hook.get('methodRange')
-    require(hook.get('referenceRefinementVerified') is True and hook.get('vmCorrespondenceProven') is False
-            and hook.get('fullUnprovedEntrypointCount') == len(inventory['manifest']['methods'])
-            and identity(hook.get('sourceProjection', {}).get('sourceProjectionSha256')),
-            'private hook overclaimed/missing source scope')
-    require(isinstance(hook_span,list) and len(hook_span)==2 and all(type(v) is int for v in hook_span)
-            and 0 <= hook_span[0] < hook_span[1] <= len(raw) and hook.get('byteCount') == hook_span[1]-hook_span[0]
-            and type(hook.get('instructionCount')) is int and hook['instructionCount'] > 0
-            and hook.get('methodSha256') == sha(raw[hook_span[0]:hook_span[1]]), 'private hook range/bytes mismatch')
-    summaries['hook']['methodRange'] = hook_span
-    summaries['hook']['sourceProjectionSha256'] = hook['sourceProjection']['sourceProjectionSha256']
     runtime, gas = receipts['runtime'], receipts['gas']
     require(runtime.get('productionSourceBound') is True and runtime.get('sourceCommit') == VM_COMMIT
             and runtime.get('runtimeImplementationProven') is False and identity(runtime.get('sourceProjectionSha256')),
@@ -2104,8 +2090,8 @@ def main(argv=None):
         gas_runtime_dir = output/'helper-gas-runtime'
         gas_runtime_snapshot = capture_files(gas_runtime_paths, gas_runtime_dir, args.helper_gas_runtime_receipts.resolve())
         snapshot.update(gas_runtime_snapshot)
-        snapshot.update(capture_files([REPO/'contracts/bin/public/SmartAccountV3.nef',
-                                       REPO/'contracts/bin/public/SmartAccountV3.manifest.json'], output/'snapshot', REPO))
+        snapshot.update(capture_files([REPO/'contracts/bin/public/SmartAccount.nef',
+                                       REPO/'contracts/bin/public/SmartAccount.manifest.json'], output/'snapshot', REPO))
         (output/'snapshot.json').write_text(json.dumps(snapshot, indent=2)+'\n')
         base = output/'base'
         results['base'] = run_command([sys.executable, str(stage/'verify.py'), '--source-root', str(REPO),
@@ -2113,8 +2099,8 @@ def main(argv=None):
                                      output/'base.log', args.timeout_seconds)
         require(results['base']['exitCode'] == 0 and not results['base']['timedOut'], 'fresh base verifier failed')
         inventory, inventory_sha = receipt_file(base/'inventory.json')
-        gate.validate_inventory(inventory, REPO/'contracts/bin/public/SmartAccountV3.nef',
-                                REPO/'contracts/bin/public/SmartAccountV3.manifest.json', REPO)
+        gate.validate_inventory(inventory, REPO/'contracts/bin/public/SmartAccount.nef',
+                                REPO/'contracts/bin/public/SmartAccount.manifest.json', REPO)
         receipts = {}
         raw_receipt_hashes = {}
         receipt_paths = {'arithmetic': base/'proof.json', **{name: base/(name+'-proof.json') for name in ('numeric','reservation','method')}}
@@ -2124,7 +2110,7 @@ def main(argv=None):
         for name, filename in (('context','context_proofs.py'), ('initializer','initializer_proofs.py'),
                                ('composition','composition_proofs.py'), ('public','public_pure_proofs.py'),
                                ('runtime','runtime_bridge_proofs.py'), ('codec','codec_proofs.py'), ('gas','gas_proofs.py'),
-                               ('hook','hook_params_proofs.py'), ('runtime-collections','runtime_collection_proofs.py'),
+                               ('runtime-collections','runtime_collection_proofs.py'),
                                ('entry-dispatch','entry_dispatch_proofs.py'),
                                ('syscall-dispatch','syscall_dispatch_proofs.py'),
                                ('contract-handoff','contract_handoff_proofs.py'),
@@ -2135,7 +2121,7 @@ def main(argv=None):
                                ('storage-getters','storage_getter_proofs.py')):
             work, report = output/name, output/(name+'-proof.json')
             command = [sys.executable, str(stage/filename), '--output-dir', str(work), '--json-report', str(report)]
-            if name in {'context','initializer','public','hook','entry-dispatch','storage-getters'}:
+            if name in {'context','initializer','public','entry-dispatch','storage-getters'}:
                 command += ['--inventory', str(base/'inventory.json')]
             if name in {'context','composition'}: command.append('--controls')
             if name == 'composition': command += ['--helper-proof-report', str(base/'method-proof.json')]
@@ -2270,16 +2256,6 @@ def main(argv=None):
                     admission_lane, evidence_dirs['load-admission'])
                 == admission_lane.get('controlProofSha256'),
                 'load-admission regenerated control inventory mismatch')
-        hook_source = load_module(stage/'hook_params_source.py', 'closure_hook_projector')
-        hook_projection = hook_source.project_method(inventory)
-        require(hook_projection == receipts['hook']['sourceProjection'], 'private hook typed source projection mismatch')
-        hook_runner = load_module(stage/'hook_params_proofs.py', 'closure_hook_binding')
-        hook_bound = hook_runner.bind_method(inventory)
-        require(hook_bound['methodSha256'] == receipts['hook']['methodSha256']
-                and [hook_bound['start'],hook_bound['end']] == receipts['hook']['methodRange']
-                and hook_bound['instructionCount'] == receipts['hook']['instructionCount'], 'private hook complete method binding mismatch')
-        require(sha(hook_runner.render_certificate(hook_bound).encode()) == receipts['hook']['certificateSha256'],
-                'private hook generated certificate/data mismatch')
         getter_receipt = receipts['storage-getters']
         require(getter_receipt.get('inventorySha256') == inventory_sha,
                 'storage getter fresh inventory identity mismatch')
@@ -2383,15 +2359,15 @@ def main(argv=None):
         dispatch_result = run_command(
             ['dotnet', str(stage/'export/bin/Debug/net10.0/RefinementExport.dll'),
              '--abi-dispatch', str(dispatch_dump),
-             '--nef', str(REPO/'contracts/bin/public/SmartAccountV3.nef'),
-             '--manifest', str(REPO/'contracts/bin/public/SmartAccountV3.manifest.json')],
+             '--nef', str(REPO/'contracts/bin/public/SmartAccount.nef'),
+             '--manifest', str(REPO/'contracts/bin/public/SmartAccount.manifest.json')],
             output/'abi-dispatch.log', args.timeout_seconds)
         require(dispatch_result['exitCode'] == 0 and not dispatch_result['timedOut'],
                 'ABI dispatch dump failed')
         results['abi-dispatch'] = dispatch_result
         abi_receipt = dispatch.correspond(dispatch_dump,
-                                          REPO/'contracts/bin/public/SmartAccountV3.manifest.json',
-                                          REPO/'contracts/bin/public/SmartAccountV3.nef')
+                                          REPO/'contracts/bin/public/SmartAccount.manifest.json',
+                                          REPO/'contracts/bin/public/SmartAccount.nef')
         require(dispatch.agrees(abi_receipt),
                 'actual ApplicationEngine ABI dispatch mismatch: '
                 + json.dumps(abi_receipt['problems'][:3]
@@ -2485,16 +2461,16 @@ def main(argv=None):
                 ['dotnet', str(stage/'export/bin/Debug/net10.0/RefinementExport.dll'),
                  '--abi-scenario', str(scenario_dump),
                  '--scenario', str(scenario_path),
-                 '--nef', str(REPO/'contracts/bin/public/SmartAccountV3.nef'),
-                 '--manifest', str(REPO/'contracts/bin/public/SmartAccountV3.manifest.json')],
+                 '--nef', str(REPO/'contracts/bin/public/SmartAccount.nef'),
+                 '--manifest', str(REPO/'contracts/bin/public/SmartAccount.manifest.json')],
                 output/(dump_name[:-len('.json')] + '.log'), args.timeout_seconds)
             require(scenario_result['exitCode'] == 0 and not scenario_result['timedOut'],
                     'ABI scenario dump failed: ' + scenario_file)
             results[dump_name[:-len('.json')]] = scenario_result
             receipt = scenario_face.correspond(
                 scenario_path, scenario_dump,
-                REPO/'contracts/bin/public/SmartAccountV3.manifest.json',
-                REPO/'contracts/bin/public/SmartAccountV3.nef')
+                REPO/'contracts/bin/public/SmartAccount.manifest.json',
+                REPO/'contracts/bin/public/SmartAccount.nef')
             require(scenario_face.agrees(receipt),
                     'the engine did not do what ' + scenario_file + ' declares: '
                     + json.dumps(receipt['problems'][:3]
@@ -2569,8 +2545,8 @@ def main(argv=None):
         require(declared_returns <= measured_returns,
                 'return types the manifest declares and no measured call produced: '
                 + json.dumps(sorted(declared_returns - measured_returns)))
-        gate.validate_inventory(inventory, REPO/'contracts/bin/public/SmartAccountV3.nef',
-                                REPO/'contracts/bin/public/SmartAccountV3.manifest.json', REPO)
+        gate.validate_inventory(inventory, REPO/'contracts/bin/public/SmartAccount.nef',
+                                REPO/'contracts/bin/public/SmartAccount.manifest.json', REPO)
         require(gate.project_snapshot(REPO) == project_before, 'compilation input membership drift')
         require(tool_paths() == paths, 'tool/model input membership drift')
         require(sha((base/'inventory.json').read_bytes()) == inventory_sha, 'fresh inventory drift')

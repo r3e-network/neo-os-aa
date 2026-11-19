@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
@@ -8,26 +9,31 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Audit candidate F-2 (revocation replay): <c>VerifierPayload.BuildPayload</c> binds only
-/// network / verifier / core / account / target / method / args / nonce / deadline — there is no
-/// configuration epoch or revocation generation in the signed payload. A session-key signature
-/// produced while a key was authorized therefore stays cryptographically valid after the key is
-/// revoked, provided the SAME key is later re-granted and the op's nonce channel cursor has not
-/// moved. These tests execute the compiled V3 contracts through the real engine.
+/// F-2 (revocation replay) regression suite for protocol v4. Revocation is a
+/// core-defined, callback-free one-way commit: <c>revokeCredentials</c> bumps the
+/// instance's credential generation and the account's configuration nonce, and
+/// both values are bound into the signed operation digest while the generation is
+/// also bound into the session grant digest. An authorization produced before
+/// revocation therefore cannot be replayed after the same key is re-granted —
+/// unlike the retired v3 payload, which carried no epoch at all and left the
+/// unconsumed-nonce window open.
 /// </summary>
 [TestClass]
 public class Fix_SessionKeyRevocationReproTests
 {
-    private static readonly UInt160 BackupOwner =
+    private static readonly UInt160 Custody =
         UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
-
-    private static readonly UInt160 Stranger =
-        UInt160.Parse("0x9999999999999999999999999999999999999999");
 
     private static readonly UInt160 Recipient =
         UInt160.Parse("0x4444444444444444444444444444444444444444");
 
-    private const uint EscapeTimelockSeconds = 2_592_000;
+    /// <summary>Session lifetime that outlives every configuration window these tests use.</summary>
+    private static readonly BigInteger SessionLifetimeMs = 25L * 24 * 60 * 60 * 1000;
+
+    /// <summary>Deadline that outlives the two 24 h configuration windows of the longer tests.</summary>
+    private static readonly BigInteger OperationDeadlineMs = 10L * 24 * 60 * 60 * 1000;
+
+    private static int _sequence;
 
     private sealed class Harness
     {
@@ -37,216 +43,290 @@ public class Fix_SessionKeyRevocationReproTests
 
         public UInt160 Target { get; }
 
+        public UInt160 Verifier { get; }
+
+        public UInt160 AccountId { get; private set; } = UInt160.Zero;
+
+        public P256SessionKey Key { get; } = new();
+
         public Harness()
         {
             Wallet = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
+            Verifier = Fx.Deploy("validators/SessionKeyValidator", Wallet.ToArray());
         }
 
-        public UInt160 DeploySessionKeyVerifier() => Fx.Deploy("verifiers/SessionKeyVerifier", Wallet.ToArray());
-
-        public UInt160 RegisterAccount(UInt160 verifier)
-        {
-            UInt160 accountId = Fx.CallUInt160(
-                Wallet, "computeRegistrationAccountId",
-                verifier, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(
-                Wallet, "registerAccount",
-                accountId, verifier, Array.Empty<byte>(), UInt160.Zero, BackupOwner, EscapeTimelockSeconds);
-            return accountId;
-        }
-
-        /// <summary>Grants (or re-grants) a session key through the core's 24h pending-call path.</summary>
-        public void GrantSessionKey(UInt160 verifier, UInt160 accountId, P256SessionKey key)
-        {
-            BigInteger validUntil = Fx.Now() + 25L * 24 * 60 * 60 * 1000;
-            object?[] config =
+        /// <summary>The §9 <c>setSessionKey</c> command bound to this harness's key.</summary>
+        public object?[] GrantCommand() =>
+            new object?[]
             {
-                accountId, key.CompressedPublicKey, Target, "transfer", validUntil, BigInteger.Zero, "F-2 repro"
+                "setSessionKey", Key.CompressedPublicKey, Target, "transfer",
+                Fx.Now() + SessionLifetimeMs, (BigInteger)0, "F-2 v4 regression"
             };
-            Fx.SetSigners(BackupOwner);
-            Assert.IsFalse(Fx.CallBoolean(Wallet, "callVerifier", accountId, "setSessionKey", config),
-                "The first callVerifier invocation must only stage the pending session-key call");
-            Fx.AdvanceTime(TimeSpan.FromHours(24));
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "callVerifier", accountId, "setSessionKey", config);
-        }
 
-        /// <summary>Revokes the session key through the core's 24h pending-call path.</summary>
-        public void RevokeSessionKey(UInt160 accountId)
+        /// <summary>
+        /// Registers the account with the validator installed and its grant
+        /// committed atomically, so no configuration window precedes the test.
+        /// </summary>
+        public BigInteger Register()
         {
-            object?[] config = { accountId };
-            Fx.SetSigners(BackupOwner);
-            Assert.IsFalse(Fx.CallBoolean(Wallet, "callVerifier", accountId, "clearSessionKey", config),
-                "The first callVerifier invocation must only stage the pending clearSessionKey call");
-            Fx.AdvanceTime(TimeSpan.FromHours(24));
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "callVerifier", accountId, "clearSessionKey", config);
+            int sequence = System.Threading.Interlocked.Increment(ref _sequence);
+            AccountId = Fx.CreateAccount(
+                Wallet, Custody, RuntimeFixture.Salt("revocation-" + sequence + "-" + Custody),
+                RuntimeFixture.MinRecoveryTimelockMs,
+                new object[] { Fx.InstallValidator(Verifier, GrantCommand()) });
+            BigInteger moduleId = Fx.FindModuleId(
+                Wallet, AccountId, RuntimeFixture.ModuleTypeNameValidator, Verifier);
+            Assert.AreNotEqual(BigInteger.Zero, moduleId,
+                "The session-key validator must be installed at registration");
+            return moduleId;
         }
 
-        /// <summary>Uninstalls and reinstalls the verifier via updateVerifier/confirmVerifierUpdate.</summary>
-        public void UninstallAndReinstallVerifier(UInt160 accountId, UInt160 verifier)
+        /// <summary>The <c>getModule</c> projection: index 8 is the credential generation.</summary>
+        public Neo.VM.Types.Array ModuleRecord(BigInteger moduleId) =>
+            (Neo.VM.Types.Array)Fx.Call(Wallet, "getModule", AccountId, moduleId);
+
+        public BigInteger Generation(BigInteger moduleId) => ModuleRecord(moduleId)[8].GetInteger();
+
+        public BigInteger ConfigurationNonce => Fx.AccountConfigurationNonce(Wallet, AccountId);
+
+        public BigInteger Sequence(BigInteger moduleId) =>
+            RuntimeFixture.NonceSequence(Fx.PackedNonce(Wallet, AccountId, moduleId));
+
+        public byte[] GrantDigest(BigInteger moduleId) =>
+            Fx.CallBytes(Verifier, "getGrantDigest", AccountId, moduleId);
+
+        /// <summary>
+        /// Canonical v4 transfer op for this account, routed through the given
+        /// instance under the given generation and configuration nonce. The
+        /// nonce is read live, so it always matches the channel the core derives
+        /// for that (validatorId, credentialGeneration) pair.
+        /// </summary>
+        public object[] Operation(
+            BigInteger moduleId, BigInteger generation, BigInteger configurationNonce, BigInteger deadline, object signature)
         {
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "updateVerifier", accountId, UInt160.Zero, Array.Empty<byte>());
-            Assert.IsTrue(Fx.CallBoolean(Wallet, "hasPendingVerifierUpdate", accountId));
-            Fx.AdvanceTime(TimeSpan.FromHours(24));
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "confirmVerifierUpdate", accountId);
-            Assert.AreEqual(UInt160.Zero, Fx.CallUInt160(Wallet, "getVerifier", accountId),
-                "The verifier must be detached");
-
-            // Reinstall: with no verifier bound, updateVerifier takes effect immediately.
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "updateVerifier", accountId, verifier, Array.Empty<byte>());
-            Assert.AreEqual(verifier, Fx.CallUInt160(Wallet, "getVerifier", accountId));
+            object?[] args =
+            {
+                Fx.CallUInt160(Wallet, "getProxyScriptHash", AccountId), Recipient, (BigInteger)1000, null
+            };
+            BigInteger nonce = Fx.PackedNonce(Wallet, AccountId, moduleId);
+            return RuntimeFixture.UserOp(
+                Target, "transfer", args, nonce, deadline, signature,
+                validatorId: moduleId, credentialGeneration: generation,
+                configurationNonce: configurationNonce);
         }
 
-        public object?[] TransferArgs(UInt160 accountId)
+        /// <summary>
+        /// Session route signature (§5/§9): <c>grantDigest(32) ‖ raw P-256 signature</c>
+        /// over the core's operation digest for the exact current routing state.
+        /// </summary>
+        public byte[] Sign(object[] op, BigInteger moduleId)
         {
-            UInt160 proxy = Fx.CallUInt160(Wallet, "getProxyScriptHash", accountId);
-            return new object?[] { proxy, Recipient, (BigInteger)1000, null };
+            object[] probe = (object[])op.Clone();
+            probe[11] = new byte[] { 0x00 };
+            byte[] digest = Fx.CallBytes(Wallet, "getOperationDigest", AccountId, probe);
+            byte[] grant = GrantDigest(moduleId);
+            Assert.AreEqual(32, grant.Length, "A live grant publishes a 32-byte grant digest");
+            return grant.Concat(Key.Sign(digest)).ToArray();
         }
 
-        public byte[] SignTransferOp(
-            P256SessionKey key, UInt160 verifier, UInt160 accountId, BigInteger nonce, BigInteger deadline)
+        public bool Execute(object[] op) => Fx.CallBoolean(Wallet, "executeUserOp", AccountId, op);
+
+        /// <summary><c>revokeCredentials</c> is custody-authorized and callback-free.</summary>
+        public BigInteger Revoke(BigInteger moduleId)
         {
-            byte[] payload = Fx.CallBytes(
-                verifier, "getPayload", accountId, Target, "transfer", TransferArgs(accountId), nonce, deadline);
-            return key.Sign(payload);
+            Fx.SetSigners(Custody);
+            Fx.CallVoid(Wallet, "revokeCredentials", AccountId, moduleId);
+            Neo.VM.Types.Array revoked = Fx.SingleNotificationState(Wallet, "CredentialRevoked");
+            Assert.AreEqual(3, revoked.Count, "CredentialRevoked carries [accountId, moduleId, generation]");
+            Assert.AreEqual(moduleId, revoked[1].GetInteger());
+            return revoked[2].GetInteger();
         }
 
-        public object[] TransferOp(UInt160 accountId, BigInteger nonce, BigInteger deadline, byte[] signature) =>
-            RuntimeFixture.UserOp(Target, "transfer", TransferArgs(accountId), nonce, deadline, signature);
+        /// <summary>Re-grants the same key through the core's 24 h configuration intent.</summary>
+        public void Regrant(BigInteger moduleId)
+        {
+            // A single-action intent is an array OF actions, hence the wrapper.
+            object[] action = RuntimeFixture.ConfigureModule(moduleId, GrantCommand());
+            Fx.ConfigureAfterTimelock(Wallet, AccountId, Custody, new object[] { action });
+        }
 
-        public bool ExecuteUserOp(UInt160 accountId, object[] op) =>
-            Fx.CallBoolean(Wallet, "executeUserOp", accountId, op);
+        public void Uninstall(BigInteger moduleId)
+        {
+            // Last-validator rule (§10): removing the only validator must enable
+            // the built-in route inside the same intent.
+            Fx.ConfigureAfterTimelock(
+                Wallet, AccountId, Custody,
+                new object[] { 2, moduleId, new object[0] },
+                new object[] { 5, true, false });
+        }
 
-        public BigInteger GetNonce(UInt160 accountId) =>
-            Fx.CallInteger(Wallet, "getNonce", accountId, BigInteger.Zero);
+        public BigInteger Reinstall()
+        {
+            object[] action = Fx.InstallValidator(Verifier, GrantCommand());
+            Fx.ConfigureAfterTimelock(Wallet, AccountId, Custody, new object[] { action });
+            BigInteger moduleId = Fx.FindModuleId(
+                Wallet, AccountId, RuntimeFixture.ModuleTypeNameValidator, Verifier);
+            Assert.AreNotEqual(BigInteger.Zero, moduleId, "The validator must be reinstalled");
+            return moduleId;
+        }
     }
 
     /// <summary>
-    /// F-2 main repro: a session key signs a legitimate op that is NOT submitted, the key is then
-    /// revoked, and the SAME key is re-granted. The pre-revocation signature still executes: the
-    /// signed payload contains no revocation epoch, so revocation never invalidates unconsumed
-    /// authorizations — it only removes the key until it is re-granted.
+    /// F-2 main regression: a session key signs a legitimate op that is never
+    /// submitted, the key is then revoked and the SAME key re-granted. In v4 the
+    /// pre-revocation authorization is dead on three independent bindings — the
+    /// configuration nonce, the credential generation and the grant digest — while
+    /// a fresh authorization under the new generation still executes.
     /// </summary>
     [TestMethod]
-    public void RevokedSessionKey_OldUnconsumedSignature_ExecutesAfterSameKeyRegrant()
+    public void RevokedSessionKey_OldUnconsumedSignature_IsDeadAfterSameKeyRegrant()
     {
         Harness h = new();
-        using P256SessionKey key = new();
-        UInt160 verifier = h.DeploySessionKeyVerifier();
-        UInt160 accountId = h.RegisterAccount(verifier);
-        h.GrantSessionKey(verifier, accountId, key);
+        BigInteger moduleId = h.Register();
+        BigInteger deadline = h.Fx.Now() + OperationDeadlineMs;
+        Assert.AreEqual(BigInteger.One, h.Generation(moduleId));
 
-        // Sign a legitimate op with the session key, but do NOT submit it (nonce 0 unconsumed).
-        // The deadline must outlive the two 24h config windows that follow.
-        BigInteger deadline = h.Fx.Now() + 10L * 24 * 60 * 60 * 1000;
-        byte[] staleSignature = h.SignTransferOp(key, verifier, accountId, 0, deadline);
-        object[] staleOp = h.TransferOp(accountId, 0, deadline, staleSignature);
+        // Signed while authorized, never submitted: sequence 0 stays unconsumed.
+        object[] staleOp = h.Operation(moduleId, 1, h.ConfigurationNonce, deadline, new byte[] { 0x00 });
+        staleOp[11] = h.Sign(staleOp, moduleId);
+        byte[] staleSignature = (byte[])staleOp[11];
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(moduleId));
 
-        // Revoke the session key.
-        h.RevokeSessionKey(accountId);
-        Assert.AreEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", accountId),
-            "Revocation must actually remove the session key");
-        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId),
-            "The never-submitted op must not have consumed its nonce");
+        // Revocation is a security configuration commit: generation 1 -> 2 plus a
+        // configuration-nonce bump, both bound into the operation digest.
+        BigInteger nonceBeforeRevoke = h.ConfigurationNonce;
+        Assert.AreEqual((BigInteger)2, h.Revoke(moduleId));
+        Assert.AreEqual((BigInteger)2, h.Generation(moduleId));
+        Assert.AreEqual(nonceBeforeRevoke + 1, h.ConfigurationNonce);
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(moduleId),
+            "Revocation must not consume or advance the never-submitted operation");
 
-        // While revoked the stale signature is correctly rejected (revocation itself works).
-        h.Fx.SetSigners(Stranger);
-        TestException whileRevoked = Assert.ThrowsExactly<TestException>(
-            () => h.ExecuteUserOp(accountId, staleOp),
-            "A revoked session key must not validate the old signature");
-        StringAssert.Contains(whileRevoked.Message, "No session key active");
+        // The stale op also carries the pre-revocation configuration nonce.
+        TestException staleConfig = Assert.ThrowsExactly<TestException>(() => h.Execute(staleOp));
+        StringAssert.Contains(staleConfig.Message, "SA_CONFIGURATION_NONCE_STALE");
 
-        // Re-grant the SAME key on the SAME verifier.
-        h.GrantSessionKey(verifier, accountId, key);
+        // With the current configuration nonce the credential generation gate
+        // rejects the pre-revocation authorization on its own.
+        object[] staleGeneration = (object[])staleOp.Clone();
+        staleGeneration[10] = h.ConfigurationNonce;
+        TestException staleGen = Assert.ThrowsExactly<TestException>(() => h.Execute(staleGeneration));
+        StringAssert.Contains(staleGen.Message, "SA_CREDENTIAL_STALE");
 
-        // F-2: the pre-revocation signature now executes — no owner witness is attached.
-        h.Fx.SetSigners(Stranger);
-        Assert.IsTrue(h.ExecuteUserOp(accountId, staleOp),
-            "F-2: a pre-revocation signature must execute once the same key is re-granted");
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId),
-            "The stale op consumed the still-fresh nonce channel");
+        // Re-grant the SAME key. The grant is re-issued under generation 2, so the
+        // grant digest it publishes is not the digest the old signature carries.
+        byte[] oldGrant = staleSignature.Take(32).ToArray();
+        h.Regrant(moduleId);
+        byte[] newGrant = h.GrantDigest(moduleId);
+        Assert.AreEqual(32, newGrant.Length, "The re-grant must publish a fresh grant digest");
+        Assert.AreNotEqual(Convert.ToHexString(oldGrant), Convert.ToHexString(newGrant),
+            "The grant digest commits to the credential generation");
+        Assert.AreEqual((BigInteger)2, h.Generation(moduleId),
+            "Re-configuration keeps the revoked generation; it does not reset it");
+
+        // Replay the old signature under the current routing state: the module
+        // refuses because the grant digest it now publishes is a different one.
+        object[] replay = h.Operation(moduleId, 2, h.ConfigurationNonce, deadline, new byte[] { 0x00 });
+        replay[11] = staleSignature;
+        TestException rejected = Assert.ThrowsExactly<TestException>(() => h.Execute(replay));
+        StringAssert.Contains(rejected.Message, "SA_VALIDATION_REJECTED");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(moduleId),
+            "A rejected replay must not consume the channel");
+
+        // A fresh authorization under the new generation executes normally.
+        object[] fresh = h.Operation(moduleId, 2, h.ConfigurationNonce, deadline, new byte[] { 0x00 });
+        fresh[11] = h.Sign(fresh, moduleId);
+        Assert.IsTrue(h.Execute(fresh), "A fresh authorization under the re-granted key executes");
+        Assert.AreEqual(BigInteger.One, h.Sequence(moduleId));
     }
 
     /// <summary>
-    /// Control: with the nonce already consumed, revoke + re-grant the same key cannot resurrect
-    /// the old op. The core's per-channel cursor is the only thing standing between a re-granted
-    /// key and the pre-revocation signature — proving the cursor itself works and F-2 is exactly
-    /// the unconsumed-nonce window.
+    /// Control: the per-channel sequence cursor still rejects an exact replay before
+    /// any revocation, and after a revoke/re-grant cycle the channel itself rotates
+    /// (it commits to the generation), so the cursor is not the defense that kills
+    /// the pre-revocation signature — the generation-bound grant digest is.
     /// </summary>
     [TestMethod]
-    public void RevokedSessionKey_OldSignatureWithConsumedNonce_FailsAfterRegrant()
+    public void ConsumedNonce_ThenRevokeAndRegrant_ReplayStaysDead()
     {
         Harness h = new();
-        using P256SessionKey key = new();
-        UInt160 verifier = h.DeploySessionKeyVerifier();
-        UInt160 accountId = h.RegisterAccount(verifier);
-        h.GrantSessionKey(verifier, accountId, key);
+        BigInteger moduleId = h.Register();
+        BigInteger deadline = h.Fx.Now() + OperationDeadlineMs;
 
-        BigInteger deadline = h.Fx.Now() + 10L * 24 * 60 * 60 * 1000;
-        byte[] signature = h.SignTransferOp(key, verifier, accountId, 0, deadline);
-        object[] op = h.TransferOp(accountId, 0, deadline, signature);
+        object[] first = h.Operation(moduleId, 1, h.ConfigurationNonce, deadline, new byte[] { 0x00 });
+        first[11] = h.Sign(first, moduleId);
+        Assert.IsTrue(h.Execute(first));
+        Assert.AreEqual(BigInteger.One, h.Sequence(moduleId));
 
-        // Consume nonce 0 first.
-        h.Fx.SetSigners(Stranger);
-        Assert.IsTrue(h.ExecuteUserOp(accountId, op));
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId));
+        // Control: the same generation channel refuses the identical op.
+        TestException replayed = Assert.ThrowsExactly<TestException>(() => h.Execute(first));
+        StringAssert.Contains(replayed.Message, "SA_NONCE_INVALID");
 
-        // Revoke and re-grant the same key.
-        h.RevokeSessionKey(accountId);
-        h.GrantSessionKey(verifier, accountId, key);
+        h.Revoke(moduleId);
+        h.Regrant(moduleId);
 
-        // The old op now fails on the channel cursor, not on the signature.
-        h.Fx.SetSigners(Stranger);
-        TestException replay = Assert.ThrowsExactly<TestException>(
-            () => h.ExecuteUserOp(accountId, op),
-            "A consumed nonce must not validate again after a revoke/re-grant cycle");
-        StringAssert.Contains(replay.Message, "Invalid sequence for channel");
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId),
-            "The rejected replay must not advance the cursor");
+        // The channel commits to the credential generation, so the account is back
+        // at sequence 0 on a fresh channel — the signature itself must fence.
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(moduleId),
+            "Revocation opens a new nonce channel because the generation is part of it");
+
+        object[] stale = h.Operation(moduleId, 2, h.ConfigurationNonce, deadline, new byte[] { 0x00 });
+        stale[11] = first[11];
+        TestException dead = Assert.ThrowsExactly<TestException>(() => h.Execute(stale));
+        StringAssert.Contains(dead.Message, "SA_VALIDATION_REJECTED");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(moduleId),
+            "The dead replay must not consume the fresh channel");
     }
 
     /// <summary>
-    /// F-2 variant via the verifier lifecycle path: uninstalling the verifier (confirmVerifierUpdate
-    /// routes clearAccount through the core, which for SessionKeyVerifier is clearSessionKey) and
-    /// reinstalling the same verifier + same key also leaves the old unconsumed signature valid.
+    /// Lifecycle variant: uninstalling the validator retires the instance id and
+    /// wipes its grant storage, and reinstalling allocates a new instance. The old
+    /// signature cannot be routed to a missing instance and cannot satisfy a new
+    /// one, because the grant digest names the instance it was issued for.
     /// </summary>
     [TestMethod]
-    public void UninstalledVerifier_OldUnconsumedSignature_ExecutesAfterReinstallAndSameKeyRegrant()
+    public void UninstalledValidator_OldSignature_IsDeadAfterReinstall()
     {
         Harness h = new();
-        using P256SessionKey key = new();
-        UInt160 verifier = h.DeploySessionKeyVerifier();
-        UInt160 accountId = h.RegisterAccount(verifier);
-        h.GrantSessionKey(verifier, accountId, key);
+        BigInteger moduleId = h.Register();
+        BigInteger deadline = h.Fx.Now() + OperationDeadlineMs;
 
-        BigInteger deadline = h.Fx.Now() + 10L * 24 * 60 * 60 * 1000;
-        byte[] staleSignature = h.SignTransferOp(key, verifier, accountId, 0, deadline);
-        object[] staleOp = h.TransferOp(accountId, 0, deadline, staleSignature);
+        object[] staleOp = h.Operation(moduleId, 1, h.ConfigurationNonce, deadline, new byte[] { 0x00 });
+        staleOp[11] = h.Sign(staleOp, moduleId);
+        byte[] staleGrant = ((byte[])staleOp[11]).Take(32).ToArray();
 
-        // Uninstall and reinstall the same verifier; the uninstall's clearAccount wipes the key.
-        h.UninstallAndReinstallVerifier(accountId, verifier);
-        Assert.AreEqual(Neo.VM.Types.StackItem.Null, h.Fx.Call(verifier, "getSessionKey", accountId),
-            "clearAccount must have removed the session key");
-        Assert.AreEqual(BigInteger.Zero, h.GetNonce(accountId));
+        // Uninstall: onUninstall wipes the instance storage; the id is retired.
+        h.Uninstall(moduleId);
+        Assert.AreEqual(0, h.ModuleRecord(moduleId).Count, "The instance must be uninstalled");
+        Assert.AreEqual(0, h.GrantDigest(moduleId).Length,
+            "onUninstall must wipe the session grant");
 
-        h.Fx.SetSigners(Stranger);
-        TestException whileUninstalled = Assert.ThrowsExactly<TestException>(
-            () => h.ExecuteUserOp(accountId, staleOp),
-            "With the key cleared the old signature must be rejected");
-        StringAssert.Contains(whileUninstalled.Message, "No session key active");
+        // The stale op is routed at a retired instance.
+        object[] staleCurrentConfig = (object[])staleOp.Clone();
+        staleCurrentConfig[10] = h.ConfigurationNonce;
+        TestException gone = Assert.ThrowsExactly<TestException>(() => h.Execute(staleCurrentConfig));
+        StringAssert.Contains(gone.Message, "SA_VALIDATOR_NOT_FOUND");
 
-        // Re-grant the same key on the reinstalled verifier.
-        h.GrantSessionKey(verifier, accountId, key);
+        // Reinstall: a new instance id at generation 1 with a grant for the same key.
+        BigInteger reinstalled = h.Reinstall();
+        Assert.AreNotEqual(moduleId, reinstalled, "Reinstall allocates a new instance id");
+        Assert.AreEqual(BigInteger.One, h.Generation(reinstalled));
+        byte[] freshGrant = h.GrantDigest(reinstalled);
+        Assert.AreEqual(32, freshGrant.Length);
+        Assert.AreNotEqual(Convert.ToHexString(staleGrant), Convert.ToHexString(freshGrant),
+            "The grant digest names the instance, so the old DTO cannot satisfy the new one");
 
-        h.Fx.SetSigners(Stranger);
-        Assert.IsTrue(h.ExecuteUserOp(accountId, staleOp),
-            "F-2: reinstall + same-key re-grant must accept the pre-revocation signature");
-        Assert.AreEqual(BigInteger.One, h.GetNonce(accountId));
+        // The old signature cannot be pointed at the reinstalled instance either.
+        object[] replay = h.Operation(reinstalled, 1, h.ConfigurationNonce, deadline, new byte[] { 0x00 });
+        replay[11] = staleOp[11];
+        TestException rejected = Assert.ThrowsExactly<TestException>(() => h.Execute(replay));
+        StringAssert.Contains(rejected.Message, "SA_VALIDATION_REJECTED");
+        Assert.AreEqual(BigInteger.Zero, h.Sequence(reinstalled));
+
+        // A fresh grant on the reinstalled instance executes.
+        object[] fresh = h.Operation(reinstalled, 1, h.ConfigurationNonce, deadline, new byte[] { 0x00 });
+        fresh[11] = h.Sign(fresh, reinstalled);
+        Assert.IsTrue(h.Execute(fresh), "The reinstalled instance must authorize a fresh op");
+        Assert.AreEqual(BigInteger.One, h.Sequence(reinstalled));
     }
 }

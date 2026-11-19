@@ -12,9 +12,14 @@ independently re-design anything in this document. Where a difference between th
 two runtimes is unavoidable (e.g. caller/phase enforcement mechanics), it is
 explicitly listed as a disclosed capability difference, never as a divergent DTO.
 
-Status: **specification + shared constants + fixture skeletons delivered; kernels
-not yet implemented.** Nothing here claims on-chain deployment or protocol
-conformance of the current contract source.
+Status: **specification + shared constants + fixtures + both kernels delivered.**
+`contracts/custom` and `contracts/native/SmartAccount` implement the surface
+described here; `tests/SmartAccount.Contracts.Tests` and
+`tests/SmartAccount.Native.Tests` cover them, and both assert the shared vectors in
+`tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json`.
+`tests/SmartAccount.Contracts.Tests/CrossCoreVectorTests.cs` is that assertion on
+the custom side. Nothing here claims on-chain deployment of this source, and the
+formal models are reported separately in `docs/SA-FORMAL-VERIFICATION.md`.
 
 Companion documents:
 
@@ -171,7 +176,7 @@ the two serializers emit identical bytes for these shapes, and golden vectors
 domain := UTF8("NeoSmartAccount/UserOperation")        // 29 bytes
          || U1 (version = 4)
          || U32LE (network magic)
-         || coreHash (20 raw bytes, the *actual* executing core hash;
+         || coreHash, 20 raw bytes, the *actual* executing core hash;
                        the custom kernel must NOT substitute the native
                        ServiceHash constant, and vice versa)
          || accountId (20 raw UInt160 bytes)
@@ -224,7 +229,12 @@ keeps approval receipts in core-local invocation state, and — in `postCheck` �
 runs completion only for the members approved in the validation phase.
 Members are scalar validators only; one member may not join two active
 policies; a member referenced by a policy cannot be uninstalled while
-referenced.
+referenced. The member side carries the back-pointer to its active policy in its
+own 0x52 record (`activePolicyId`, §7.1), which the policy executor rewrites on
+every activation, reshape and deactivation. Routing and uninstall checks
+therefore read one instance record instead of scanning every policy of the
+account; a deactivated policy clears the pointer, releasing its members without
+a second pass.
 
 ## 6. Nonce channels and namespace derivation
 
@@ -265,7 +275,7 @@ fixed-width big-endian. 0x5F is reserved and unallocated.
 | --- | --- | --- |
 | 0x50 | bare | protocol version, layout version, activation state, profile summary |
 | 0x51 | +acctId | account control metadata (§7.2) |
-| 0x52 | +acctId+moduleId[8 BE] | module instance record (type[1], contractHash, contractId, updateCounter, nefSha256, profileSha256, moduleRevision, credentialGeneration, capability flags) |
+| 0x52 | +acctId+moduleId[8 BE] | module instance record (type[1], contractHash, contractId, updateCounter, nefSha256, profileSha256, moduleRevision, credentialGeneration, capability flags, activePolicyId) |
 | 0x53 | +acctId+type[1]+moduleId[8 BE] | installed-instance enumeration index (marker rows; per-type ascending-moduleId scan) |
 | 0x54 | +acctId | core-owned hookOrder list + hookOrderRevision |
 | 0x55 | +acctId+intentId[8 BE] | configuration intent record |
@@ -298,7 +308,10 @@ contractHash, ContractId, UpdateCounter, SHA256(NEF bytes), SHA256(canonical
 module profile JSON). ContractId blocks destroy-and-redeploy; UpdateCounter
 catches manifest-only updates; NEF hash pins code; profile hash pins interface
 capability. Binding is checked before and after every module callback and before
-commit; an address re-deploy does not inherit authorization.
+commit; an address re-deploy does not inherit authorization. The per-callback
+check compares `(ContractId, UpdateCounter)` only — the pair names exactly one
+(deployment slot, revision), so it proves the same thing the record's install-time
+NEF hash pins, without re-hashing the NEF on every callback.
 
 ### 7.4 Legacy regions
 
@@ -322,7 +335,7 @@ the new module model.
 
 - 0x06 / 0x07 / 0x1D stay **Market-only physical marker writes** (Market
   entrances write or delete them; nothing else does — the current
-  owner-side `InitiateMarketEscrowCancel` direct 0x1D write and the
+  owner-side `initiateMarketEscrowCancel` direct 0x1D write and the
   ForceCancel/FinalizeEscapeToOwner marker deletions are kernel-batch bugs to
   fix, see §16).
 - 0x5D binds, per account: the escrow lock, its custody/control epoch, and the
@@ -369,9 +382,9 @@ Message digest domain:
 domain := UTF8("NeoSmartAccount/Message")
          || U1 (4)
          || U32LE (network)
-         || coreHash (20 raw bytes)
-         || accountId (20 raw bytes)
-         || originalSender (20 raw bytes)
+         || coreHash, 20 raw bytes
+         || accountId, 20 raw bytes
+         || originalSender, 20 raw bytes
          || U64BE (validatorId)
          || U64BE (credentialGeneration)
          || U64BE (authorityEpoch)
@@ -423,9 +436,8 @@ verification, structured result), `executeUserOp(accountId, operation)`,
 `executeRecovery(accountId)`.
 
 The immutable-identity witness entry `verify(accountId)` (embedded in the proxy
-script) remains a real witness gate, not a legacy API alias. Old
-`getVerifier`/`getHook`/`CallVerifier`/`CallHook`/`*Child` surfaces are removed
-without aliases in both kernels.
+script) remains a real witness gate, not a legacy API alias. The old
+`getVerifier`/`getHook`/`CallVerifier`/`CallHook`/`*Child` surfaces are removed without aliases in both kernels.
 
 Lifecycle module callbacks (core→module): `onInstall(accountId, moduleId,
 generation, initData)`, `onUninstall(accountId, moduleId, generation,
@@ -460,6 +472,16 @@ methods fail before the instance is written; `getModuleProfile` and the
 validation/message callbacks must be declared `safe`, so a caller passing write
 flags still cannot write from them. Hook pre/post are write-capable by design
 (they meter balances) but run with the hook's own instance keys only.
+
+Replies are typed, not coerced (§11). `validateUserOp` approves only when it
+returns exactly `Boolean true`; any other reply type is an ABI violation and
+faults with `SA_MODULE_TYPE_UNSUPPORTED`, in the execution path and in the
+read-only preview alike. `isValidSignature` must never fault — ERC-1271 has to
+fail closed — so a reply that is not a `Boolean` counts exactly like
+`Boolean false`. `preCheck` replies must be `ByteArray` (the same violation
+otherwise), `getModuleProfile` replies must be `String` or installation fails
+with `SA_MODULE_CODE_BINDING_MISMATCH`, and every `Void` callback must leave the
+evaluation stack empty.
 
 ### 9.2 Instance authentication (module side)
 
@@ -557,11 +579,14 @@ owner-only flags survive migration.
 Unit: **datoshi**, 1 GAS = 100 000 000 datoshi (same unit as the existing
 `System.Contract.CallWithGasLimit` usage). Values identical in both kernels:
 
-| Callback | Per-call hard budget |
+| Callback | Hard budget |
 | --- | --- |
-| validation aggregate (per account, per transaction; shared by the routed validator and all threshold members) | 100 000 000 (1 GAS) |
+| each `validateUserOp` call (routed validator or one threshold member) | 100 000 000 (1 GAS) |
+| validation aggregate (per account, per transaction; shared by the routed validator and every threshold member) | 100 000 000 × (1 + 10) = 1 100 000 000 (11 GAS) |
+| each `onUserOpComplete` call (routed validator or one approved member) | 100 000 000 (1 GAS) |
+| completion aggregate (routed validator + approved threshold members) | 100 000 000 × (1 + 10) = 1 100 000 000 (11 GAS) |
 | each hook `preCheck` / `postCheck` | 250 000 000 (2.5 GAS) |
-| validator completion aggregate (routed validator + approved threshold members) | 100 000 000 (1 GAS) |
+| hook aggregate (per account, per transaction) | 250 000 000 × 8 = 2 000 000 000 (20 GAS) |
 | each lifecycle / configuration callback (`onInstall`, `onUninstall`, `configure`) | 250 000 000 (2.5 GAS) |
 
 Semantics: budgets include **all descendant calls** (no whitelist bypass);
@@ -569,19 +594,37 @@ enforced via `System.Contract.CallWithGasLimit`; threshold validation shares the
 parent budget (member budgets are never summed into a larger envelope); core
 scheduling and serialization GAS is accounted separately from the callback
 budgets. The budgets are caps, not guarantees — worst-case legal combinations
-must be measured (fixture matrix, §15) before release. The 1 GAS validation
-aggregate deliberately leaves headroom under the 1.5 GAS overall verification
-ceiling for core dispatch. Any budget overrun fails the whole transaction
-fail-closed; there is no try-and-continue.
+must be measured (fixture matrix, §15) before release.
+
+**Why the aggregates are cap × multiplicity.** An aggregate must always admit
+one *maximal* legal round, otherwise the multiplicity the core advertises is
+unreachable. A flat 1 GAS validation aggregate made every policy with two
+P-256 members unusable: measured one member callback already spends more than
+half of it, and a two-member round faulted with `SA_GAS_BUDGET_EXCEEDED` while
+the core allows `MaxThresholdPolicyMembers = 10` co-signers. Both validator
+aggregates are therefore sized `per-call cap × (1 + MaxThresholdPolicyMembers)`,
+the same rule the hook pool already used (`HookCallbackGasLimit ×
+MaxHookModuleInstances`). Because a single callback can never be charged more
+than its per-call cap, a maximal round charges at most `(1 + 10) × 1 GAS` — the
+pool can never be exhausted by a legal configuration, and the per-call cap,
+not the pool, remains the bound on an individual module. Measured end-to-end
+cost of a full `executeUserOp` (core dispatch included) on the reference build:
+1 member 3.0 GAS, 2 members 4.4 GAS, 3 members 5.8 GAS, 10 members 15.4 GAS.
+
+Any budget overrun fails the whole transaction fail-closed; there is no
+try-and-continue.
 
 ### 11.1 Where the numbers live and what they cover
 
-Both kernels pin the four values as private constants in their protocol constant
-files (`contracts/custom/SmartAccount.ModuleProtocol.cs` and
+Both kernels pin the per-call caps as private constants in their protocol
+constant files (`contracts/custom/SmartAccount.ModuleProtocol.cs` and
 `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`):
-`ValidationAggregateGasLimit = 100_000_000`, `HookCallbackGasLimit =
-250_000_000`, `ValidatorCompletionGasLimit = 100_000_000`,
-`LifecycleCallbackGasLimit = 250_000_000`.
+`ValidationPerCallGasLimit = 100_000_000`, `CompletionPerCallGasLimit =
+100_000_000`, `HookCallbackGasLimit = 250_000_000`, `LifecycleCallbackGasLimit
+= 250_000_000`. The two validator aggregates are computed from those caps and
+`MaxThresholdPolicyMembers` (`ValidationAggregateGasLimit()` /
+`CompletionAggregateGasLimit()` in the custom kernel's module section; the hook
+aggregate is `HookAggregateGasBudget()`).
 
 Bounds that shape the worst case are pinned in the same files: `HookDataBytesMax
 = 512`, `ModuleProfileBytesMax = 2048`, `ArgsCountMax = 64`,
@@ -765,7 +808,7 @@ the same key builders: `UInt64ToBigEndian`, per-prefix composite key builders).
 | constants | consume `SmartAccountModuleProtocol.cs` (this batch; then run `scripts/sync_native_smartaccount.py` to materialize the neo-native-core copy) |
 | §4/§5 envelope/digest | `SmartAccountProtocol.cs` (v4 domain, 13-field serialize), `SmartAccountEnvelope.cs` (13-field operations) |
 | §6 nonce | `SmartAccountProtocol.cs` + nonce storage partial (0x56/0x5C; legacy 0x20 merge) |
-| §7 state | `SmartAccountState.cs` (new 0x51 record; legacy 14-slot decoder kept for migration only) |
+| §7 state | `SmartAccountRecords.cs` (new 0x51 record and its codec; legacy 14-slot decoder kept for migration only) |
 | §2/§3 collections | `SmartAccount.Modules.cs` (instance records, enumeration, hookOrder, threshold policies), `SmartAccountModulePolicy.cs` (new limits) |
 | §9/§10 lifecycle & intents | `SmartAccount.Modules.cs`, new intents partial (0x55/0x5E) |
 | §8 message | `SmartAccount.Keys.cs` (P-256 subjects), `SmartAccount.cs` (`isValidSignature` ABI) |

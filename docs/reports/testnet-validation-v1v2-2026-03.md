@@ -7,9 +7,8 @@
 > controls, dome/oracle unlock) that the V3 rewrite removed. The
 > `sdk/js/tests/sa_testnet_*` validators referenced below were deleted with
 > that rewrite and no longer exist in the repo, and the contract hashes refer
-> to pre-V3 testnet deployments. None of this describes the shipping V3
-> system — for the current verified surface see the V3 Plugin Matrix in
-> `README.md` and `docs/PLUGIN_MATRIX.md`.
+> to pre-V3 testnet deployments. None of this describes the shipping v4
+> system — for the current module surface see `docs/SA-MODULE-PROTOCOL.md`.
 
 ## Verified Testnet Status (V1/V2, archived)
 

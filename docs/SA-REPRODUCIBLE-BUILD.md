@@ -79,8 +79,8 @@ keep their explicit NOT RUN messages when they are not selected.
 ### Public and private profiles
 
 The default core in `contracts/bin/public` uses published `System.Contract.Call`: signature validation
-is read-only, while verifier `postExecute` retains write access for accounting. It emits no
-`System.Contract.CallWithGasLimit`. The four verifier-callback tests run on the published TestEngine;
+is read-only, while a hook's `postCheck` retains write access for accounting. It emits no
+`System.Contract.CallWithGasLimit`. The module-callback tests run on the published TestEngine;
 `tests/localchain/test_public_profile.py` exercises a signed operation on disposable published neoxp.
 
 `bash contracts/compile.sh` also builds the private core separately in `contracts/bin/platform`.
@@ -96,10 +96,10 @@ budget. Unrestricted sponsored admission remains unsafe. `contracts/build` remai
 deployed-artifact fixture. Public deploy/upgrade helpers select `contracts/bin/public` and reject paths
 escaping that directory; `contracts/bin/platform` is never a public release source.
 
-### Public verifier release selection
+### Public validator release selection
 
-`scripts/deploy_latest_aa_verifiers.js` selects SessionKeyVerifier from
-`contracts/bin/public/verifiers/` and SocialRecoveryVerifier from `contracts/bin/public/`
+`scripts/deploy_latest_sa_validators.js` selects SessionKeyValidator from
+`contracts/bin/public/validators/` and SocialRecoveryService from `contracts/bin/public/`
 through the same constrained artifact-path helper as the other public deployment
 scripts. It must fail if that reviewed public NEF/manifest pair is absent; it
 must never fall back to historical `contracts/build` fixtures or a private/native

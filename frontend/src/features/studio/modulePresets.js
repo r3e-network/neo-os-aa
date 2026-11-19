@@ -1,59 +1,52 @@
-// Public V3 configuration templates. Typed placeholders must be replaced before
-// submission; native profile configuration has its own discovery and ABI checks.
-export function createModuleConfigurationPresets(t = (_, fallback) => fallback, now = Date.now()) {
+// v4 module read templates. v4 configuration is callback-bound: the core calls
+// onInstall / configure / onUninstall, so a screen may only read an installed
+// module's own safe methods. The core passes `(accountId, moduleId)` as the
+// first two arguments of every read, so a preset only carries what follows.
+export function createModuleReadPresets(t = (_, fallback) => fallback) {
   const arg = (type, value) => ({ type, value });
-  const account = () => arg('Hash160', '0x<accountId>');
-  const preset = (role, module, labelKey, descriptionKey, description, method, args) => ({
-    role, module, label: t(labelKey, module), description: t(descriptionKey, description), method, args,
+  const read = (module, labelKey, descriptionKey, description, method, args = []) => ({
+    module,
+    label: t(labelKey, module),
+    description: t(descriptionKey, description),
+    method,
+    args,
   });
-  const verifierPresets = [
-    preset('verifier', 'SessionKeyVerifier', 'studioPanels.presetSessionKeyLabel', 'studioPanels.presetSessionKeyDesc',
-      'Temporary delegated signer with a transfer spending limit.', 'setSessionKey', [
-        account(), arg('ByteArray', '0x<sessionPubKey>'), arg('Hash160', '0x<targetContract>'),
-        arg('String', 'transfer'), arg('Integer', String(now + 7 * 86400000)),
-        arg('Integer', '1000000'), arg('String', 'Limited transfer session'),
+  const validatorReads = [
+    read('Any validator', 'studioPanels.readProfileLabel', 'studioPanels.readProfileDesc',
+      'Read the module profile JSON the core checks on install.', 'getModuleProfile'),
+    read('NeoWitnessValidator', 'studioPanels.readConfigLabel', 'studioPanels.readConfigDesc',
+      'Read the instance configuration for this account and module id.', 'getConfig'),
+    read('SessionKeyValidator', 'studioPanels.readSessionKeyLabel', 'studioPanels.readSessionKeyDesc',
+      'Read the session key grant, its target, method and spending limit.', 'getSessionKey'),
+    read('NeoWitnessValidator', 'studioPanels.readThresholdLabel', 'studioPanels.readThresholdDesc',
+      'Read the witness threshold this instance enforces.', 'getThreshold'),
+    read('P256Validator', 'studioPanels.readPublicKeyLabel', 'studioPanels.readPublicKeyDesc',
+      'Read the P-256 public key bound to this instance.', 'getPublicKey'),
+  ];
+  const hookReads = [
+    read('DailyLimitHook', 'studioPanels.readDailyLimitLabel', 'studioPanels.readDailyLimitDesc',
+      'Read the daily limit for one token on this instance.', 'getDailyLimit', [
+        arg('Hash160', '0x<token>'),
       ]),
-    preset('verifier', 'SubscriptionVerifier', 'studioPanels.presetSubscriptionLabel', 'studioPanels.presetSubscriptionDesc',
-      'Recurring approvals for scheduled pull-style flows.', 'createSubscription', [
-        account(), arg('ByteArray', '0x<subscriptionId>'), arg('Hash160', '0x<merchant>'),
-        arg('Hash160', '0x<token>'), arg('Integer', '1000000'), arg('Integer', '86400'),
+    read('NeoDIDCredentialHook', 'studioPanels.readDIDProviderLabel', 'studioPanels.readDIDProviderDesc',
+      'Read the provider this hook requires for one target contract.', 'getRequiredProvider', [
+        arg('Hash160', '0x<targetContract>'),
       ]),
-    preset('verifier', 'MultiSigVerifier', 'studioPanels.presetMultiSigLabel', 'studioPanels.presetMultiSigDesc',
-      'A threshold of verifier modules. Modules may share keys or controllers; this does not prove independent signers.',
-      'setConfig', [
-        account(), arg('Array', [arg('Hash160', '0x<childVerifier1>'), arg('Hash160', '0x<childVerifier2>')]),
-        arg('Integer', '2'),
+    read('NeoDIDCredentialHook', 'studioPanels.readDIDClaimLabel', 'studioPanels.readDIDClaimDesc',
+      'Read the claim type this hook requires for one target contract.', 'getRequiredClaimType', [
+        arg('Hash160', '0x<targetContract>'),
       ]),
   ];
-  const hookPresets = [
-    preset('hook', 'WhitelistHook', 'studioPanels.presetWhitelistLabel', 'studioPanels.presetWhitelistDesc',
-      'Allow one target contract.', 'setWhitelist', [account(), arg('Hash160', '0x<targetContract>'), arg('Boolean', true)]),
-    preset('hook', 'DailyLimitHook', 'studioPanels.presetDailyLimitLabel', 'studioPanels.presetDailyLimitDesc',
-      'Cap daily token outflow.', 'setDailyLimit', [
-        account(), arg('Hash160', '0x<token>'), arg('Integer', '1000000'), arg('Boolean', true),
-      ]),
-    preset('hook', 'NeoDIDCredentialHook', 'studioPanels.presetDIDLabel', 'studioPanels.presetDIDDesc',
-      'Require an active NeoDID registry binding before target access.', 'requireCredentialCommitmentForContract', [
-        account(), arg('Hash160', '0x<targetContract>'), arg('String', 'github'),
-        arg('String', 'Github_VerifiedUser'), arg('ByteArray', '0x<32-byte-commitment>'),
-      ]),
-    preset('hook', 'MultiHook', 'studioPanels.presetMultiHookLabel', 'studioPanels.presetMultiHookDesc',
-      'Compose multiple policy hooks behind one slot.', 'setHooks', [
-        account(), arg('Array', [arg('Hash160', '0x<childHook>')]),
-      ]),
-  ];
-  const commonExamples = [hookPresets[0], hookPresets[1], verifierPresets[0], hookPresets[2]].map(value => ({
-    ...value, code: `method: ${value.method}\nargs: ${JSON.stringify(value.args, null, 2)}`,
+  const commonExamples = [validatorReads[0], validatorReads[2], hookReads[0], hookReads[1]].map((value) => ({
+    ...value,
+    code: `method: ${value.method}\nargs after (accountId, moduleId): ${JSON.stringify(value.args, null, 2)}`,
   }));
-  return { verifierPresets, hookPresets, commonExamples };
+  return { validatorReads, hookReads, commonExamples };
 }
 
-export function applyModuleConfigurationPreset(form, preset, now = Date.now()) {
-  if (!['verifier', 'hook'].includes(preset.role)) throw new TypeError('Unknown module role');
-  const args = JSON.parse(JSON.stringify(preset.args));
-  const accountId = String(form.accountAddress || '').trim();
-  if (/^(?:0x)?[0-9a-fA-F]{40}$/.test(accountId)) args[0].value = accountId;
-  if (preset.module === 'SessionKeyVerifier') args[4].value = String(now + 7 * 86400000);
-  form[`${preset.role}Method`] = preset.method;
-  form[`${preset.role}ArgsJson`] = JSON.stringify(args, null, 2);
+export function applyModuleReadPreset(form, preset) {
+  if (!preset || typeof preset.method !== 'string') throw new TypeError('Unknown module read preset');
+  const args = JSON.parse(JSON.stringify(preset.args ?? []));
+  form.method = preset.method;
+  form.argsJson = JSON.stringify(args, null, 2);
 }

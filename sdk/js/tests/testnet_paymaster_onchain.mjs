@@ -1,463 +1,494 @@
 #!/usr/bin/env node
 
 /**
- * Neo N3 Testnet Validation: On-Chain SAPaymaster Contract
+ * v4 on-chain paymaster runbook (SAPaymaster).
  *
- * Validates the full sponsored transaction lifecycle:
- *   1. Deploy SA Core + Web3AuthVerifier + SAPaymaster
- *   2. Register an account with Web3Auth verifier
- *   3. Deposit GAS into the Paymaster
- *   4. Create a sponsorship policy
- *   5. Validate the policy (read-only preflight)
- *   6. Execute a sponsored UserOp via executeSponsoredUserOp
- *   7. Verify settlement (deposit deducted, events emitted)
- *   8. Negative: exceed per-op limit -> FAULT
- *   9. Negative: revoke policy -> FAULT
- *  10. Withdraw remaining deposit
+ * v3 registered an account with a verifier in one call and signed a six-field
+ * operation whose nonce was read per account. Protocol v4 has neither: an
+ * account is created from custody plus salt with modules installed by action,
+ * every operation carries thirteen fields, and its nonce names the channel the
+ * validator routes on. This runbook proves the same sponsored ground on the v4
+ * surface:
+ *
+ *   1. deploy the v4 core, the Web3AuthValidator module and SAPaymaster, and
+ *      bind both module and paymaster to the core they serve;
+ *   2. create an account that installs the Web3AuthValidator atomically (which
+ *      also turns the built-in custody route off);
+ *   3. deposit GAS into the paymaster and create an account-scoped policy;
+ *   4. preflight the policy through the read-only `validatePaymasterOp`;
+ *   5. execute a sponsored operation through `executeSponsoredUserOp`, where
+ *      the validator route signs the §5 EIP-712 payload and settlement is
+ *      capped to the gas the relay actually paid;
+ *   6. execute a two-operation sponsored batch through
+ *      `executeSponsoredUserOps`, where the settlement covers the envelope once;
+ *   7. refuse an over-limit and a wrong-target request at preflight, revoke the
+ *      policy, and prove that a persisted sponsored execution is then rejected
+ *      on chain without consuming its nonce;
+ *   8. withdraw the remaining deposit.
+ *
+ * This is a runbook, not a gate: `npm test` does not run it, and the v4 core is
+ * not deployed to a public testnet yet. It is written against the artifacts
+ * `bash contracts/compile.sh` produces in `contracts/bin/public`.
  *
  * Usage:
  *   TEST_WIF=Kx... node tests/testnet_paymaster_onchain.mjs
  */
 
-import fs from 'fs';
-import { randomBytes } from 'node:crypto';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { rpc, sc, wallet, experimental, tx, u, CONST } from '@cityofzion/neon-js';
-import { ethers } from 'ethers';
-import testnetRpcHelpers from './testnet-rpc.js';
+import { createRequire } from "node:module";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(__dirname, '..', '..', '..');
-const { resolveTestnetRpcUrl } = testnetRpcHelpers;
+const require = createRequire(import.meta.url);
+const crypto = require("node:crypto");
+const { CONST } = require("@cityofzion/neon-js");
+const { ethers } = require("ethers");
+const h = require("./testnet-v4-harness.js");
 
-let RPC_URL = process.env.TESTNET_RPC_URL || '';
-const TEST_WIF = process.env.TEST_WIF || '';
 const GAS_HASH = CONST.NATIVE_CONTRACT_HASH.GasToken;
-const ESCAPE_TIMELOCK = 604800; // 7 days minimum
+const NEO_HASH = CONST.NATIVE_CONTRACT_HASH.NeoToken;
+const SALT_BYTES = 20;
+const ONE_GAS = 100000000n;
 
-if (!TEST_WIF) {
-  console.error('TEST_WIF is required.');
-  process.exit(1);
+let checks = 0;
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+  checks += 1;
+  console.log(`  ok: ${message}`);
 }
 
-// Dynamic imports for CJS modules
-const { extractDeployedContractHash } = await import('../src/deployLog.js');
-const { buildV3UserOperationTypedData, sanitizeHex } = await import('../src/metaTx.js');
-
-// ======================================================================
-// Helpers (matching existing testnet validation patterns)
-// ======================================================================
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function isRetryableRpcError(error) {
-  return /socket hang up|ECONNRESET|ETIMEDOUT|fetch failed|network error|EAI_AGAIN|ECONNREFUSED|EADDRNOTAVAIL|socket disconnected before secure TLS connection was established|TLS connection was established|premature close|invalid response body/i.test(
-    String(error?.message || '')
-  );
+function saltHex() {
+  return crypto.randomBytes(SALT_BYTES).toString("hex");
 }
 
-async function withRpcRetry(label, fn, attempts = 5) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try { return await fn(); }
-    catch (error) {
-      lastError = error;
-      if (!isRetryableRpcError(error) || attempt >= attempts) throw error;
-      console.warn(`  [rpc-retry] ${label} attempt ${attempt}/${attempts}: ${error.message}`);
-      await sleep(1500 * attempt);
-    }
-  }
-  throw lastError;
-}
-
-function normalizeHash(value) {
-  const hex = sanitizeHex(value || '');
-  return hex ? `0x${hex}` : '';
-}
-
-function buildConfig(account, networkMagic) {
-  return { account, networkMagic, rpcAddress: RPC_URL, blocksTillExpiry: 200 };
-}
-
-function artifactPaths(baseName) {
+/** The channel a validator-routed operation spends. */
+function routingFor(state, validatorId, credentialGeneration) {
   return {
-    nef: path.join(repoRoot, 'contracts', 'bin', 'public', `${baseName}.nef`),
-    manifest: path.join(repoRoot, 'contracts', 'bin', 'public', `${baseName}.manifest.json`),
+    validatorId: String(validatorId),
+    credentialGeneration: String(credentialGeneration),
+    authorityEpoch: state.authorityEpoch,
+    nonceSubkey: "00".repeat(32),
   };
 }
 
-function loadArtifact(baseName, uniqueSuffix) {
-  const paths = artifactPaths(baseName);
-  const nef = sc.NEF.fromBuffer(fs.readFileSync(paths.nef));
-  const manifestJson = JSON.parse(fs.readFileSync(paths.manifest, 'utf8'));
-  manifestJson.name = `${manifestJson.name}-${uniqueSuffix}`;
-  const manifest = sc.ContractManifest.fromJson(manifestJson);
-  return { nef, manifest };
+/**
+ * One sponsored `symbol` read of GAS, signed for the account's Web3Auth
+ * validator. The typed data binds the operation digest, so every field of the
+ * thirteen — including the channel nonce — is covered before the core routes it.
+ */
+async function signedSymbolOperation(chain, coreHash, { validatorHash, accountId, state, record, signer, nonce }) {
+  const op = h.operation({
+    targetContract: GAS_HASH,
+    method: "symbol",
+    nonce,
+    validatorId: record.id,
+    credentialGeneration: record.credentialGeneration,
+    authorityEpoch: state.authorityEpoch,
+  });
+  const argsHashHex = await h.operationArgsHash(chain, coreHash, op.args);
+  return h.signOperationForWeb3Auth(chain, coreHash, {
+    validatorHash,
+    accountId,
+    operation: op,
+    argsHashHex,
+    signer,
+  });
 }
 
-async function waitForAppLog(client, txid, label, timeoutMs = 120000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const appLog = await client.getApplicationLog(txid);
-      if (appLog?.executions?.length) return appLog;
-    } catch (_) { /* still waiting */ }
-    await sleep(3000);
-  }
-  throw new Error(`${label}: timed out waiting for application log for ${txid}`);
+async function sponsorDeposit(chain, paymasterHash, sponsor) {
+  const item = await h.readAndDecode(chain, paymasterHash, "getSponsorDeposit", [h.hash160Param(sponsor)]);
+  return BigInt(h.decodeInteger(item));
 }
 
-function assertHalt(appLog, label) {
-  const execution = appLog?.executions?.[0];
-  if (!execution) throw new Error(`${label}: missing execution log`);
-  const vmState = String(execution.vmstate || execution.state || '');
-  if (!vmState.includes('HALT'))
-    throw new Error(`${label}: VM did not HALT (${vmState}) ${execution.exception || ''}`.trim());
-  return execution;
+async function spendingCounters(chain, paymasterHash, sponsor, accountId) {
+  const daily = await h.readAndDecode(chain, paymasterHash, "getDailySpent", [
+    h.hash160Param(sponsor),
+    h.hash160Param(accountId),
+  ]);
+  const total = await h.readAndDecode(chain, paymasterHash, "getTotalSpent", [
+    h.hash160Param(sponsor),
+    h.hash160Param(accountId),
+  ]);
+  return { daily: BigInt(h.decodeInteger(daily)), total: BigInt(h.decodeInteger(total)) };
 }
 
-function assertFault(appLog, label) {
-  const execution = appLog?.executions?.[0];
-  if (!execution) throw new Error(`${label}: missing execution log`);
-  const vmState = String(execution.vmstate || execution.state || '');
-  if (!vmState.includes('FAULT'))
-    throw new Error(`${label}: expected FAULT but got ${vmState}`);
-  return execution;
+async function preflight(chain, paymasterHash, sponsor, accountId, target, method, amount) {
+  const item = await h.readAndDecode(chain, paymasterHash, "validatePaymasterOp", [
+    h.hash160Param(sponsor),
+    h.hash160Param(accountId),
+    h.hash160Param(target),
+    h.stringParam(method),
+    h.integerParam(amount),
+  ]);
+  return h.stackText(item) === "true";
 }
-
-function stackItemToText(item) {
-  if (!item) return '';
-  if (item.type === 'Integer') return String(item.value || '0');
-  if (item.type === 'Boolean') return String(item.value);
-  if (item.type === 'Hash160') return normalizeHash(item.value);
-  if (item.type === 'ByteString') {
-    const hex = Buffer.from(item.value || '', 'base64').toString('hex');
-    if (!hex) return '';
-    const utf8 = Buffer.from(hex, 'hex').toString('utf8');
-    return /^[\x20-\x7E]+$/.test(utf8) ? utf8 : `0x${hex}`;
-  }
-  return JSON.stringify(item);
-}
-
-// Parameter builders
-const h160 = v => sc.ContractParam.hash160(sanitizeHex(v));
-const ba = v => sc.ContractParam.byteArray(u.HexString.fromHex(sanitizeHex(v || ''), true));
-const int = v => sc.ContractParam.integer(typeof v === 'bigint' ? v.toString() : v);
-const str = v => sc.ContractParam.string(String(v));
-const arr = (...v) => sc.ContractParam.array(...v);
-const emptyBa = () => ba('');
-
-function userOpParam({ targetContract, method, args = [], nonce = 0n, deadline = 0n, signatureHex = '' }) {
-  return arr(h160(targetContract), str(method), arr(...args), int(nonce), int(deadline), ba(signatureHex));
-}
-
-function makeSigner(scriptHash) {
-  return { account: scriptHash, scopes: tx.WitnessScope.CalledByEntry };
-}
-
-// Contract operations
-async function deployContract(client, account, networkMagic, baseName, uniqueSuffix) {
-  const { nef, manifest } = loadArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(
-    experimental.getContractHash(u.HexString.fromHex(account.scriptHash), nef.checksum, manifest.name)
-  );
-  const txid = await withRpcRetry(`deploy ${baseName}`, () =>
-    experimental.deployContract(nef, manifest, buildConfig(account, networkMagic)));
-  const appLog = await waitForAppLog(client, txid, `deploy ${baseName}`);
-  assertHalt(appLog, `deploy ${baseName}`);
-  const deployedHash = extractDeployedContractHash(appLog) || predictedHash;
-  return { txid, hash: normalizeHash(deployedHash), manifestName: manifest.name };
-}
-
-async function invokeRead(client, contractHash, operation, params = [], signers) {
-  return withRpcRetry(`${sanitizeHex(contractHash)}.${operation}`,
-    () => client.invokeFunction(sanitizeHex(contractHash), operation, params, signers));
-}
-
-async function invokePersisted(client, contractHash, account, networkMagic, operation, params = [], signers) {
-  const contract = new experimental.SmartContract(sanitizeHex(contractHash), buildConfig(account, networkMagic));
-  const txid = await withRpcRetry(`${operation}.invoke`, () => contract.invoke(operation, params, signers));
-  const appLog = await waitForAppLog(client, txid, operation);
-  return { txid, appLog, execution: appLog.executions[0] };
-}
-
-async function testInvoke(client, contractHash, account, networkMagic, operation, params = [], signers) {
-  const contract = new experimental.SmartContract(sanitizeHex(contractHash), buildConfig(account, networkMagic));
-  return withRpcRetry(`${operation}.testInvoke`, () => contract.testInvoke(operation, params, signers));
-}
-
-function compactSignature(signature) {
-  const parsed = ethers.Signature.from(signature);
-  return `${sanitizeHex(parsed.r)}${sanitizeHex(parsed.s)}`;
-}
-
-function logSection(title) { console.log(`\n== ${title} ==`); }
-
-// ======================================================================
-// Main Validation Flow
-// ======================================================================
 
 async function main() {
-  RPC_URL = await resolveTestnetRpcUrl({ env: process.env });
-  const account = new wallet.Account(TEST_WIF);
-  const rpcClient = new rpc.RPCClient(RPC_URL);
-  const version = await withRpcRetry('rpc.getVersion', () => rpcClient.getVersion());
-  const networkMagic = Number(version.protocol.network);
-  const tag = `paymaster-${Date.now().toString(36)}-${process.pid.toString(36)}-${randomBytes(3).toString('hex')}`;
-  const results = {};
+  if (!process.env.TEST_WIF && !process.env.NEO_TESTNET_WIF) {
+    console.error("TEST_WIF or NEO_TESTNET_WIF is required.");
+    process.exit(1);
+  }
+  const chain = await h.connect();
+  const sponsor = chain.account;
+  const sponsorHash = h.normalizeHash(sponsor.scriptHash);
 
   console.log(JSON.stringify({
-    rpc: RPC_URL,
-    networkMagic,
-    address: account.address,
-    scriptHash: normalizeHash(account.scriptHash),
+    rpc: chain.rpcUrl,
+    networkMagic: chain.networkMagic,
+    runId: chain.runId,
+    sponsorAddress: sponsor.address,
+    sponsorScriptHash: sponsorHash,
   }, null, 2));
 
-  // ── 1. Deploy Contracts ───────────────────────────────────────────
-  logSection('1. Deploy SA Core + Web3AuthVerifier + SAPaymaster');
+  // -------------------------------------------------------------------------
+  // 1. Deploy the core, the validator module and the paymaster.
+  // -------------------------------------------------------------------------
 
-  const core = await deployContract(rpcClient, account, networkMagic, 'SmartAccount', `${tag}-core`);
-  console.log(`  Core: ${core.hash}`);
+  h.logSection("1. Deploy core, Web3AuthValidator and SAPaymaster");
+  const core = await h.deployCore(chain);
+  const web3Auth = await h.deployModule(chain, core.hash, "validators/Web3AuthValidator");
+  const paymaster = await h.deployContract(chain, "SAPaymaster", `${chain.deploymentTag}-paymaster`);
+  // Both bind to exactly one core. The core learns the validator through the
+  // install action (and `deployModule` wrote that binding); the paymaster is
+  // trusted only because it answers with this core from `authorizedCore`, which
+  // the sponsored entry point re-checks.
+  await h.authorizeModule(chain, core.hash, paymaster.hash);
+  console.log(JSON.stringify({ core, web3Auth, paymaster }, null, 2));
 
-  const verifier = await deployContract(rpcClient, account, networkMagic, 'Web3AuthVerifier', `${tag}-v`);
-  console.log(`  Web3AuthVerifier: ${verifier.hash}`);
-
-  const paymaster = await deployContract(rpcClient, account, networkMagic, 'SAPaymaster', `${tag}-pm`);
-  console.log(`  SAPaymaster: ${paymaster.hash}`);
-
-  // Authorize verifier and paymaster to know the core
-  await invokePersisted(rpcClient, verifier.hash, account, networkMagic, 'setAuthorizedCore', [h160(core.hash)]);
-  console.log('  Verifier authorized');
-
-  await invokePersisted(rpcClient, paymaster.hash, account, networkMagic, 'setAuthorizedCore', [h160(core.hash)]);
-  console.log('  Paymaster authorized');
-
-  results.deployments = { core: core.hash, verifier: verifier.hash, paymaster: paymaster.hash };
-
-  const { SmartAccountClient } = await import('../src/index.js');
-  const saClient = new SmartAccountClient(RPC_URL, core.hash);
-
-  // ── 2. Register Account with Web3Auth Verifier ────────────────────
-  logSection('2. Register Account with Web3Auth Verifier');
-
-  const evmWallet = ethers.Wallet.createRandom();
-  const evmPubKeyUncompressed = evmWallet.signingKey.publicKey.slice(2); // remove 0x
-  const accountId = saClient.deriveRegistrationAccountIdHash({
-    verifierContractHash: verifier.hash,
-    verifierParamsHex: evmPubKeyUncompressed,
-    backupOwnerAddress: account.scriptHash,
-    escapeTimelock: ESCAPE_TIMELOCK,
-  });
-
-  const reg = await invokePersisted(rpcClient, core.hash, account, networkMagic, 'registerAccount', [
-    h160(accountId),
-    h160(verifier.hash),
-    ba(evmPubKeyUncompressed),
-    h160('0'.repeat(40)), // no hook
-    h160(account.scriptHash), // backup owner
-    int(ESCAPE_TIMELOCK),
-  ]);
-  assertHalt(reg.appLog, 'registerAccount');
-  console.log(`  Account: 0x${accountId} (tx: ${reg.txid})`);
-
-  results.account = { id: `0x${accountId}`, evmAddress: evmWallet.address };
-
-  // ── 3. Deposit GAS into Paymaster ─────────────────────────────────
-  logSection('3. Deposit GAS into Paymaster');
-
-  const depositAmount = 200_000_000n; // 2 GAS
-  const depositResult = await invokePersisted(rpcClient, GAS_HASH, account, networkMagic, 'transfer', [
-    h160(account.scriptHash),
-    h160(paymaster.hash),
-    int(depositAmount),
-    sc.ContractParam.any(),
-  ]);
-  assertHalt(depositResult.appLog, 'GAS deposit');
-
-  // Verify deposit balance
-  const balanceResult = await invokeRead(rpcClient, paymaster.hash, 'getSponsorDeposit', [h160(account.scriptHash)]);
-  const depositBalance = BigInt(balanceResult?.stack?.[0]?.value || '0');
-  console.log(`  Deposited: ${depositAmount} fractions (${Number(depositAmount) / 1e8} GAS)`);
-  console.log(`  On-chain balance: ${depositBalance}`);
-
-  if (depositBalance !== depositAmount) throw new Error(`Deposit mismatch: expected ${depositAmount}, got ${depositBalance}`);
-  results.deposit = { amount: depositAmount.toString(), verified: true };
-
-  // ── 4. Create Sponsorship Policy ──────────────────────────────────
-  logSection('4. Create Sponsorship Policy');
-
-  const maxPerOp = 50_000_000n;   // 0.5 GAS per op
-  const dailyBudget = 100_000_000n; // 1 GAS daily
-  const totalBudget = 200_000_000n; // 2 GAS total
-  const validUntil = 0n; // no expiry
-
-  const policyResult = await invokePersisted(rpcClient, paymaster.hash, account, networkMagic, 'setPolicy', [
-    h160(accountId),           // specific account
-    h160('0'.repeat(40)),      // any target contract
-    str(''),                   // any method
-    int(maxPerOp),
-    int(dailyBudget),
-    int(totalBudget),
-    int(validUntil),
-  ]);
-  assertHalt(policyResult.appLog, 'setPolicy');
-  console.log(`  Policy created: maxPerOp=${maxPerOp}, daily=${dailyBudget}, total=${totalBudget}`);
-  results.policy = { maxPerOp: maxPerOp.toString(), dailyBudget: dailyBudget.toString(), totalBudget: totalBudget.toString() };
-
-  // ── 5. Validate Paymaster Op (read-only preflight) ────────────────
-  logSection('5. Validate Paymaster Op (preflight)');
-
-  const reimbursement = 10_000_000n; // 0.1 GAS
-  const validateResult = await invokeRead(rpcClient, paymaster.hash, 'validatePaymasterOp', [
-    h160(account.scriptHash), // sponsor
-    h160(accountId),          // account
-    h160(GAS_HASH),           // target
-    str('symbol'),            // method
-    int(reimbursement),
-  ]);
-  const isValid = validateResult?.stack?.[0]?.value === true || validateResult?.stack?.[0]?.value === 1;
-  console.log(`  Preflight valid: ${isValid}`);
-  if (!isValid) throw new Error('Paymaster validation failed unexpectedly');
-  results.preflight = { valid: true };
-
-  // ── 6. Execute Sponsored UserOp ───────────────────────────────────
-  logSection('6. Execute Sponsored UserOp (executeSponsoredUserOp)');
-
-  // Build and sign the UserOp
-
-  const nonceResult = await invokeRead(rpcClient, core.hash, 'getNonce', [h160(accountId), int(0)]);
-  const nonce = BigInt(nonceResult?.stack?.[0]?.value || '0');
-
-  const argsHash = await saClient.computeArgsHash([]);
-  const deadline = BigInt(Date.now() + 3600 * 1000);
-
-  const typedData = buildV3UserOperationTypedData({
-    chainId: networkMagic,
-    verifyingContract: sanitizeHex(verifier.hash),
-    accountIdHash: accountId,
-    coreContractHash: sanitizeHex(core.hash),
-    targetContract: sanitizeHex(GAS_HASH),
-    method: 'symbol',
-    argsHashHex: argsHash,
-    nonce,
-    deadline,
-  });
-
-  const evmSignature = await evmWallet.signTypedData(typedData.domain, typedData.types, typedData.message);
-  const compact = compactSignature(evmSignature);
-
-  const op = userOpParam({
-    targetContract: GAS_HASH,
-    method: 'symbol',
-    args: [],
-    nonce,
-    deadline,
-    signatureHex: compact,
-  });
-
-  const sponsoredExec = await invokePersisted(
-    rpcClient, core.hash, account, networkMagic,
-    'executeSponsoredUserOp',
-    [h160(accountId), op, h160(paymaster.hash), h160(account.scriptHash), int(reimbursement)],
+  const sdk = h.clientFor(chain, core.hash);
+  const protocol = await sdk.getProtocolInfo();
+  assert(protocol.protocolVersion === "4", `core reports protocol ${protocol.protocolVersion}, expected 4`);
+  const boundCore = h.stackText(await h.readAndDecode(chain, paymaster.hash, "authorizedCore", []));
+  assert(
+    h.sanitizeHex(boundCore).toLowerCase() === h.sanitizeHex(core.hash).toLowerCase(),
+    "the paymaster reports the deployed core as its authorized core",
   );
-  const execState = String(sponsoredExec.execution.vmstate || sponsoredExec.execution.state || '');
 
-  if (!execState.includes('HALT')) {
-    console.error(`  FAULT: ${sponsoredExec.execution.exception || 'unknown'}`);
-    throw new Error(`executeSponsoredUserOp did not HALT: ${execState}`);
-  }
+  // -------------------------------------------------------------------------
+  // 2. Create the account with the validator installed at creation.
+  // -------------------------------------------------------------------------
 
-  const execResult = stackItemToText(sponsoredExec.execution.stack?.[0]);
-  console.log(`  Result: ${execResult} (expected: GAS)`);
-  console.log(`  Tx: ${sponsoredExec.txid}`);
-
-  // Verify deposit was deducted
-  const postBalance = await invokeRead(rpcClient, paymaster.hash, 'getSponsorDeposit', [h160(account.scriptHash)]);
-  const newBalance = BigInt(postBalance?.stack?.[0]?.value || '0');
-  const expectedBalance = depositAmount - reimbursement;
-  console.log(`  Deposit after: ${newBalance} (expected: ${expectedBalance})`);
-
-  if (newBalance !== expectedBalance) throw new Error(`Balance mismatch: expected ${expectedBalance}, got ${newBalance}`);
-
-  // Verify spending counters
-  const dailySpent = await invokeRead(rpcClient, paymaster.hash, 'getDailySpent', [h160(account.scriptHash), h160(accountId)]);
-  const totalSpent = await invokeRead(rpcClient, paymaster.hash, 'getTotalSpent', [h160(account.scriptHash), h160(accountId)]);
-  console.log(`  Daily spent: ${dailySpent?.stack?.[0]?.value || '0'}`);
-  console.log(`  Total spent: ${totalSpent?.stack?.[0]?.value || '0'}`);
-
-  results.sponsoredExec = {
-    txid: sponsoredExec.txid,
-    result: execResult,
-    depositBefore: depositAmount.toString(),
-    depositAfter: newBalance.toString(),
-    reimbursement: reimbursement.toString(),
-    balanceCorrect: newBalance === expectedBalance,
+  h.logSection("2. Create account with Web3AuthValidator installed at creation");
+  const evmSigner = ethers.Wallet.createRandom();
+  const evmPubKey = h.sanitizeHex(evmSigner.signingKey.compressedPublicKey);
+  const install = await h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: web3Auth.hash,
+    initData: [h.codec.stringValue("setPublicKey"), h.codec.byteStringValue(evmPubKey)],
+  });
+  const account = await h.createAccount(chain, sdk, {
+    custody: sponsor,
+    salt: saltHex(),
+    actions: [install],
+  });
+  const accountId = account.accountId;
+  const state = await sdk.getAccount(accountId);
+  const validatorIds = (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds;
+  assert(validatorIds.length === 1, `expected one installed validator, got ${validatorIds.length}`);
+  assert(state.defaultOperationAuthorization === false, "installing a validator turns the built-in custody route off");
+  const validator = {
+    id: validatorIds[0],
+    credentialGeneration: (await h.moduleState(sdk, accountId, validatorIds[0])).credentialGeneration,
   };
+  const storedKey = Buffer.from(
+    (await h.readAndDecode(chain, web3Auth.hash, "getPublicKey", [
+      h.hash160Param(accountId),
+      h.integerParam(validator.id),
+    ])).value || "",
+    "base64",
+  ).toString("hex");
+  assert(storedKey.toUpperCase() === evmPubKey.toUpperCase(), "the validator instance stores the installed secp256k1 key");
+  console.log(JSON.stringify({
+    txid: account.txid,
+    accountId: h.normalizeHash(accountId),
+    virtualAddress: account.accountAddress,
+    validator,
+    storedPublicKey: storedKey,
+    configurationNonce: (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).configurationNonce,
+  }, null, 2));
 
-  // ── 7. Negative: Exceed per-op limit ──────────────────────────────
-  logSection('7. Negative: Exceed per-op limit');
+  // -------------------------------------------------------------------------
+  // 3. Deposit GAS and create the sponsorship policy.
+  // -------------------------------------------------------------------------
 
-  const overLimitAmount = maxPerOp + 1n;
-  const overLimitValidation = await invokeRead(rpcClient, paymaster.hash, 'validatePaymasterOp', [
-    h160(account.scriptHash),
-    h160(accountId),
-    h160(GAS_HASH),
-    str('symbol'),
-    int(overLimitAmount),
+  h.logSection("3. Deposit GAS into the paymaster");
+  const depositAmount = 2n * ONE_GAS;
+  const deposit = await h.invokePersisted(chain, GAS_HASH, "transfer", [
+    h.hash160Param(sponsorHash),
+    h.hash160Param(paymaster.hash),
+    h.integerParam(depositAmount),
+    h.anyParam(null),
   ]);
-  const overLimitValid = overLimitValidation?.stack?.[0]?.value === true || overLimitValidation?.stack?.[0]?.value === 1;
-  console.log(`  Over-limit validation: ${overLimitValid} (expected: false)`);
-  if (overLimitValid) throw new Error('Over-limit validation should have been rejected');
-  results.negativeOverLimit = { rejected: true };
+  let depositBalance = await sponsorDeposit(chain, paymaster.hash, sponsorHash);
+  assert(depositBalance === depositAmount, `deposit reads back ${depositBalance}, expected ${depositAmount}`);
+  console.log(JSON.stringify({ txid: deposit.txid, deposit: depositBalance.toString() }, null, 2));
 
-  // ── 8. Negative: Revoke policy then try ───────────────────────────
-  logSection('8. Negative: Revoke policy then execute');
-
-  const revokeResult = await invokePersisted(rpcClient, paymaster.hash, account, networkMagic, 'revokePolicy', [
-    h160(accountId),
+  h.logSection("4. Create sponsorship policy");
+  const maxPerOp = ONE_GAS / 2n;      // 0.5 GAS per operation
+  const dailyBudget = ONE_GAS;        // 1 GAS per rolling day
+  const totalBudget = 2n * ONE_GAS;   // 2 GAS lifetime
+  const policy = await h.invokePersisted(chain, paymaster.hash, "setPolicy", [
+    h.hash160Param(accountId),
+    h.hash160Param(GAS_HASH),         // only the GAS token is sponsored
+    h.stringParam("symbol"),          // and only its symbol read
+    h.integerParam(maxPerOp),
+    h.integerParam(dailyBudget),
+    h.integerParam(totalBudget),
+    h.integerParam(0),                // no expiry
   ]);
-  assertHalt(revokeResult.appLog, 'revokePolicy');
-  console.log('  Policy revoked');
-
-  // Validate should now fail
-  const revokedValidation = await invokeRead(rpcClient, paymaster.hash, 'validatePaymasterOp', [
-    h160(account.scriptHash),
-    h160(accountId),
-    h160(GAS_HASH),
-    str('symbol'),
-    int(reimbursement),
+  const policyItem = await h.readAndDecode(chain, paymaster.hash, "getPolicy", [
+    h.hash160Param(sponsorHash),
+    h.hash160Param(accountId),
   ]);
-  const revokedValid = revokedValidation?.stack?.[0]?.value === true || revokedValidation?.stack?.[0]?.value === 1;
-  console.log(`  Post-revoke validation: ${revokedValid} (expected: false)`);
-  if (revokedValid) throw new Error('Post-revoke validation should have been rejected');
-  results.negativeRevoked = { rejected: true };
+  // The RPC renders the struct as an array: target, method, maxPerOp, daily,
+  // total, validUntil.
+  assert(
+    policyItem?.type === "Array" && policyItem.value?.length === 6,
+    `the policy reads back as six fields, got ${JSON.stringify(policyItem)}`,
+  );
+  console.log(JSON.stringify({
+    txid: policy.txid,
+    maxPerOp: maxPerOp.toString(),
+    dailyBudget: dailyBudget.toString(),
+    totalBudget: totalBudget.toString(),
+  }, null, 2));
 
-  // ── 9. Withdraw Remaining Deposit ─────────────────────────────────
-  logSection('9. Withdraw Remaining Deposit');
+  // -------------------------------------------------------------------------
+  // 5. Preflight: the read-only policy view the relay calls first.
+  // -------------------------------------------------------------------------
 
-  const remainingBalance = BigInt((await invokeRead(rpcClient, paymaster.hash, 'getSponsorDeposit', [h160(account.scriptHash)]))?.stack?.[0]?.value || '0');
-  console.log(`  Remaining: ${remainingBalance}`);
+  h.logSection("5. Preflight the policy");
+  const reimbursement = ONE_GAS / 10n; // 0.1 GAS requested from the relay
+  assert(
+    await preflight(chain, paymaster.hash, sponsorHash, accountId, GAS_HASH, "symbol", reimbursement),
+    "a sponsored GAS symbol read inside the policy is approved",
+  );
+  assert(
+    !(await preflight(chain, paymaster.hash, sponsorHash, accountId, NEO_HASH, "symbol", reimbursement)),
+    "a target outside the policy is refused",
+  );
+  assert(
+    !(await preflight(chain, paymaster.hash, sponsorHash, accountId, GAS_HASH, "symbol", maxPerOp + 1n)),
+    "a request above the per-operation limit is refused",
+  );
 
-  if (remainingBalance > 0n) {
-    const withdrawResult = await invokePersisted(rpcClient, paymaster.hash, account, networkMagic, 'withdrawDeposit', [
-      int(remainingBalance),
+  // -------------------------------------------------------------------------
+  // 6. Sponsored execution (single).
+  // -------------------------------------------------------------------------
+
+  h.logSection("6. ExecuteSponsoredUserOp");
+  const routing = routingFor(state, validator.id, validator.credentialGeneration);
+  const singleNonce = await h.nextNonce(sdk, accountId, routing);
+  const signedSingle = await signedSymbolOperation(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId,
+    state,
+    record: validator,
+    signer: evmSigner,
+    nonce: singleNonce,
+  });
+  const preview = await h.validateOperation(chain, sdk, accountId, signedSingle);
+  assert(preview.accepted === true, "the core accepts the validator's typed-data signature");
+  assert(
+    preview.operationDigest === h.operationDigest(chain, core.hash, accountId, signedSingle),
+    "the preview digest agrees with the local v4 codec",
+  );
+
+  const beforeSingle = depositBalance;
+  const single = await h.invokePersisted(chain, core.hash, "executeSponsoredUserOp", [
+    h.hash160Param(accountId),
+    h.operationParam(signedSingle),
+    h.hash160Param(paymaster.hash),
+    h.hash160Param(sponsorHash),
+    h.integerParam(reimbursement),
+  ]);
+  const singleResult = h.stackText(single.execution.stack[0]);
+  assert(singleResult === "GAS", `the sponsored operation returned ${singleResult}, expected GAS`);
+
+  depositBalance = await sponsorDeposit(chain, paymaster.hash, sponsorHash);
+  const singleSettled = beforeSingle - depositBalance;
+  // Settlement is capped to the transaction's real cost, so the relay receives
+  // the smaller of the requested amount and the fees it actually paid.
+  assert(singleSettled > 0n, "the sponsor deposit was charged");
+  assert(singleSettled <= reimbursement, `settled ${singleSettled} must not exceed the requested ${reimbursement}`);
+  const countsAfterSingle = await spendingCounters(chain, paymaster.hash, sponsorHash, accountId);
+  assert(countsAfterSingle.daily === singleSettled, "the daily counter moved by exactly the settled amount");
+  assert(countsAfterSingle.total === singleSettled, "the total counter moved by exactly the settled amount");
+  assert(
+    BigInt((await sdk.getNonce(accountId, routing)).sequence) === 1n,
+    "the validator channel advanced to sequence 1",
+  );
+  console.log(JSON.stringify({
+    txid: single.txid,
+    result: singleResult,
+    operationDigest: preview.operationDigest,
+    requested: reimbursement.toString(),
+    settled: singleSettled.toString(),
+    depositAfter: depositBalance.toString(),
+  }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // 7. Sponsored execution (batch): one envelope, one settlement.
+  // -------------------------------------------------------------------------
+
+  h.logSection("7. ExecuteSponsoredUserOps (two-operation batch)");
+  const batchStart = await h.nextNonce(sdk, accountId, routing);
+  const secondNonce = (BigInt(batchStart) + 1n).toString();
+  const batchFirst = await signedSymbolOperation(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId,
+    state,
+    record: validator,
+    signer: evmSigner,
+    nonce: batchStart,
+  });
+  const batchSecond = await signedSymbolOperation(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId,
+    state,
+    record: validator,
+    signer: evmSigner,
+    nonce: secondNonce,
+  });
+  const beforeBatch = depositBalance;
+  const batch = await h.invokePersisted(chain, core.hash, "executeSponsoredUserOps", [
+    h.hash160Param(accountId),
+    h.arrayParam([h.operationParam(batchFirst), h.operationParam(batchSecond)]),
+    h.hash160Param(paymaster.hash),
+    h.hash160Param(sponsorHash),
+    h.integerParam(reimbursement),
+  ]);
+  const batchResults = batch.execution.stack[0];
+  assert(batchResults?.type === "Array" && batchResults.value.length === 2, "the batch returned one result per operation");
+  const batchTexts = batchResults.value.map((item) => h.stackText(item));
+  assert(batchTexts.every((text) => text === "GAS"), `batch results ${JSON.stringify(batchTexts)} must all be GAS`);
+  depositBalance = await sponsorDeposit(chain, paymaster.hash, sponsorHash);
+  const batchSettled = beforeBatch - depositBalance;
+  assert(batchSettled > 0n, "the batch was settled once");
+  assert(batchSettled <= reimbursement, `batch settlement ${batchSettled} must not exceed the requested ${reimbursement}`);
+  const countsAfterBatch = await spendingCounters(chain, paymaster.hash, sponsorHash, accountId);
+  assert(
+    countsAfterBatch.total === countsAfterSingle.total + batchSettled,
+    "the total counter moved by exactly the batch settlement",
+  );
+  assert(
+    BigInt((await sdk.getNonce(accountId, routing)).sequence) === 3n,
+    "the two batch operations consumed sequences 1 and 2",
+  );
+  console.log(JSON.stringify({
+    txid: batch.txid,
+    results: batchTexts,
+    settled: batchSettled.toString(),
+    depositAfter: depositBalance.toString(),
+    totalSpent: countsAfterBatch.total.toString(),
+  }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // 8. Revocation is enforced on chain, atomically.
+  // -------------------------------------------------------------------------
+
+  h.logSection("8. Revoke the policy and prove the on-chain refusal");
+  const revoke = await h.invokePersisted(chain, paymaster.hash, "revokePolicy", [h.hash160Param(accountId)]);
+  assert(
+    !(await preflight(chain, paymaster.hash, sponsorHash, accountId, GAS_HASH, "symbol", reimbursement)),
+    "preflight refuses after the policy is revoked",
+  );
+
+  const refusedNonce = await h.nextNonce(sdk, accountId, routing);
+  const refusedOp = await signedSymbolOperation(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId,
+    state,
+    record: validator,
+    signer: evmSigner,
+    nonce: refusedNonce,
+  });
+  let refusal = "";
+  try {
+    await h.invokePersisted(chain, core.hash, "executeSponsoredUserOp", [
+      h.hash160Param(accountId),
+      h.operationParam(refusedOp),
+      h.hash160Param(paymaster.hash),
+      h.hash160Param(sponsorHash),
+      h.integerParam(reimbursement),
     ]);
-    assertHalt(withdrawResult.appLog, 'withdrawDeposit');
+  } catch (error) {
+    refusal = error instanceof Error ? error.message : String(error);
+  }
+  assert(/No sponsorship policy/.test(refusal), `the persisted sponsored call was refused for the policy, got: ${refusal}`);
+  assert(
+    BigInt((await sdk.getNonce(accountId, routing)).sequence) === 3n,
+    "the refused sponsored call did not consume its nonce",
+  );
+  assert(
+    (await sponsorDeposit(chain, paymaster.hash, sponsorHash)) === depositBalance,
+    "the refused sponsored call did not move the deposit",
+  );
+  console.log(JSON.stringify({ revokeTxid: revoke.txid, refusal }, null, 2));
 
-    const finalBalance = BigInt((await invokeRead(rpcClient, paymaster.hash, 'getSponsorDeposit', [h160(account.scriptHash)]))?.stack?.[0]?.value || '0');
-    console.log(`  After withdraw: ${finalBalance} (expected: 0)`);
-    if (finalBalance !== 0n) throw new Error(`Withdraw incomplete: ${finalBalance} remaining`);
-    results.withdraw = { amount: remainingBalance.toString(), success: true };
+  // -------------------------------------------------------------------------
+  // 9. Withdraw the remaining deposit.
+  // -------------------------------------------------------------------------
+
+  h.logSection("9. Withdraw remaining deposit");
+  const remaining = depositBalance;
+  if (remaining > 0n) {
+    const withdraw = await h.invokePersisted(chain, paymaster.hash, "withdrawDeposit", [h.integerParam(remaining)]);
+    depositBalance = await sponsorDeposit(chain, paymaster.hash, sponsorHash);
+    assert(depositBalance === 0n, `deposit after withdrawal is ${depositBalance}, expected 0`);
+    console.log(JSON.stringify({ txid: withdraw.txid, withdrawn: remaining.toString() }, null, 2));
   }
 
-  // ── Summary ───────────────────────────────────────────────────────
-  logSection('VALIDATION COMPLETE');
-  console.log(JSON.stringify(results, null, 2));
-  console.log('\nAll paymaster on-chain validations passed.');
+  // -------------------------------------------------------------------------
+  // Summary — the last JSON object is what the validation suite reads.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Summary");
+  console.log(JSON.stringify({
+    checks,
+    deployments: {
+      core: h.normalizeHash(core.hash),
+      verifier: h.normalizeHash(web3Auth.hash),
+      paymaster: h.normalizeHash(paymaster.hash),
+    },
+    account: {
+      id: h.normalizeHash(accountId),
+      virtualAddress: account.accountAddress,
+      validatorId: validator.id,
+      validatorGeneration: validator.credentialGeneration,
+    },
+    policy: {
+      maxPerOp: maxPerOp.toString(),
+      dailyBudget: dailyBudget.toString(),
+      totalBudget: totalBudget.toString(),
+    },
+    sponsoredExec: {
+      txid: single.txid,
+      result: singleResult,
+      depositBefore: (beforeSingle).toString(),
+      depositAfter: (beforeSingle - singleSettled).toString(),
+      reimbursement: reimbursement.toString(),
+      settled: singleSettled.toString(),
+      balanceCorrect: true,
+    },
+    sponsoredBatch: {
+      txid: batch.txid,
+      results: batchTexts,
+      settled: batchSettled.toString(),
+    },
+    negativeOverLimit: { rejected: true },
+    negativeRevoked: { rejected: true, onChainRefusal: refusal },
+    withdraw: { amount: remaining.toString(), success: remaining > 0n },
+    txids: {
+      createAccount: account.txid,
+      deposit: deposit.txid,
+      policy: policy.txid,
+      sponsored: single.txid,
+      sponsoredBatch: batch.txid,
+      revoke: revoke.txid,
+    },
+  }, null, 2));
 }
 
-main().catch(error => {
-  console.error('\nVALIDATION FAILED:', error.message || error);
+main().catch((error) => {
+  console.error(error?.stack || error?.message || String(error));
   process.exit(1);
 });

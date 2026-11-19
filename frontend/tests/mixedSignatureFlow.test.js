@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { CORE_HASH, executeUserOpInvocation } from './fixtures/saChainFixtures.js';
+import { CORE_HASH, GAS_HASH, ACCOUNT_ID, executeUserOpInvocation } from './fixtures/saChainFixtures.js';
 import { EC } from '../src/config/errorCodes.js';
 
 import {
@@ -84,9 +84,8 @@ test('transaction draft export includes body, signatures, and share metadata', (
   assert.equal(exported.broadcast.mode, 'relay');
 });
 
-test('buildStagedTransactionBody refuses an account without a V3 id instead of wrapping through a V1/V2 envelope', () => {
-  // CU-209: this used to stage a V1/V2 invocation naming an entrypoint no deployed contract
-  // exports. The V3 guard now refuses the input that produced it.
+test('buildStagedTransactionBody refuses an account without an account id instead of staging an anonymous draft', () => {
+  // A v4 operation is authorized for exactly one account; a body that cannot name it has no subject.
   assert.throws(
     () => buildStagedTransactionBody({
       saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
@@ -102,12 +101,11 @@ test('buildStagedTransactionBody refuses an account without a V3 id instead of w
       },
       signerAddress: 'NdzSignerAddress',
     }),
-    (error) => error?.message === EC.v3AccountRequired,
+    (error) => error?.message === EC.accountRequired,
   );
 });
 
-test('buildStagedTransactionBody prefers executeUserOp when accountIdHash is present', () => {
-  const before = Date.now();
+test('buildStagedTransactionBody keeps the approved intent and stages no invocation', () => {
   const body = buildStagedTransactionBody({
     saContractHash: '5be915aea3ce85e4752d522632f0a9520e377aaf',
     account: {
@@ -121,15 +119,17 @@ test('buildStagedTransactionBody prefers executeUserOp when accountIdHash is pre
       args: [{ type: 'Hash160', value: '0x13ef519c362973f9a34648a9eac5b71250b2a80a' }],
     },
     signerAddress: 'NdzSignerAddress',
+    morpheusNetwork: 'testnet',
   });
 
-  assert.equal(body.clientInvocation.operation, 'executeUserOp');
-  assert.equal(body.v3Invocation.operation, 'executeUserOp');
+  // The envelope is built when a route has been read, never at staging time: guessing the validator
+  // instance and the account's epochs would produce exactly the envelope the selector must refuse.
+  for (const field of ['clientInvocation', 'v3Invocation', 'legacyInvocation', 'metaInvocation']) {
+    assert.equal(Object.hasOwn(body, field), false, `a staged body must not carry a ${field}`);
+  }
   assert.equal(body.accountIdHash, 'f951cd3eb5196dacde99b339c5dcca37ac38cc22');
-  assert.equal(Object.hasOwn(body, 'legacyInvocation'), false);
-  const deadline = Number(body.v3Invocation.args[1].value[4].value);
-  assert.ok(deadline >= before + 3_599_000, 'V3 fallback deadline should use Runtime.Time milliseconds');
-  assert.ok(deadline <= Date.now() + 3_601_000, 'V3 fallback deadline should be one hour from now');
+  assert.equal(body.operationBody.targetContract, 'd2a4cff31913016155e38e474a2c06d08be276cf');
+  assert.equal(body.operationBody.method, 'balanceOf');
 });
 
 test('buildStagedTransactionBody labels the network from the active morpheus network', () => {
@@ -198,6 +198,26 @@ test('buildDraftApprovalTypedData creates an EVM-friendly approval payload from 
   assert.equal(typedData.types.DraftApproval[0].name, 'draftId');
 });
 
+function stagedBody(overrides = {}) {
+  return buildStagedTransactionBody({
+    saContractHash: CORE_HASH,
+    account: { accountIdHash: ACCOUNT_ID },
+    operationBody: { kind: 'invoke', targetContract: GAS_HASH, method: 'transfer', args: [] },
+    morpheusNetwork: 'testnet',
+    ...overrides,
+  });
+}
+
+/** One staged draft whose signed v4 envelope is what the wallet is asked to submit. */
+function signedDraft({ operationBody = { kind: 'invoke', targetContract: GAS_HASH, method: 'transfer', args: [] }, ...rest } = {}) {
+  const opOptions = { target: operationBody.targetContract, method: operationBody.method, args: operationBody.args };
+  const body = { ...stagedBody({ operationBody, ...rest }), v4Invocation: executeUserOpInvocation(opOptions) };
+  return {
+    body,
+    signatures: [{ signerId: 'evm:bob', kind: 'evm', metadata: { metaInvocation: executeUserOpInvocation(opOptions) } }],
+  };
+}
+
 test('broadcast helpers route client broadcasts through the wallet and relay broadcasts through the relay endpoint', async () => {
   const calls = [];
   const wallet = {
@@ -214,9 +234,8 @@ test('broadcast helpers route client broadcasts through the wallet and relay bro
   const clientResult = await executeBroadcast({
     mode: 'client',
     signerAddress: 'NdzSignerAddress',
-    transactionBody: {
-      clientInvocation: executeUserOpInvocation({ target: CORE_HASH, method: 'transfer', args: [] }),
-    },
+    transactionBody: signedDraft({ operationBody: { kind: 'invoke', targetContract: CORE_HASH, method: 'transfer', args: [] } }).body,
+    morpheusNetwork: 'testnet',
     walletService: wallet,
     relayEndpoint: '/api/relay-transaction',
   });
@@ -265,14 +284,8 @@ test('executeBroadcast relay submit can use meta invocation carried by collected
     relayPayloadMode: 'meta',
     relayRawEnabled: false,
     morpheusNetwork: 'testnet',
-    transactionBody: {},
-    signatures: [{
-      signerId: 'evm:bob',
-      kind: 'evm',
-      metadata: {
-        metaInvocation: executeUserOpInvocation(),
-      },
-    }],
+    transactionBody: signedDraft().body,
+    signatures: signedDraft().signatures,
     walletService: wallet,
     relayEndpoint: '/api/relay-transaction',
   });
@@ -303,21 +316,16 @@ test('export bundle adds public and collaborator URLs without mutating the draft
 });
 
 test('buildRelayPayloadOptions exposes raw mode only when raw relay forwarding is enabled', () => {
+  const draft = signedDraft({ rawTransaction: '0xdeadbeef' });
   const enabled = buildRelayPayloadOptions({
-    runtime: { relayRawEnabled: true },
-    transactionBody: { rawTransaction: '0xdeadbeef' },
-    signatures: [{
-      kind: 'evm',
-      metadata: { metaInvocation: executeUserOpInvocation() },
-    }],
+    runtime: { relayRawEnabled: true, morpheusNetwork: 'testnet' },
+    transactionBody: draft.body,
+    signatures: draft.signatures,
   });
   const disabled = buildRelayPayloadOptions({
-    runtime: { relayRawEnabled: false },
-    transactionBody: { rawTransaction: '0xdeadbeef' },
-    signatures: [{
-      kind: 'evm',
-      metadata: { metaInvocation: executeUserOpInvocation() },
-    }],
+    runtime: { relayRawEnabled: false, morpheusNetwork: 'testnet' },
+    transactionBody: draft.body,
+    signatures: draft.signatures,
   });
 
   assert.deepEqual(enabled, ['best', 'raw', 'meta']);
@@ -327,16 +335,13 @@ test('buildRelayPayloadOptions exposes raw mode only when raw relay forwarding i
 });
 
 test('buildRelayBroadcastRequest uses stored meta invocations when raw transaction bytes are absent', () => {
+  const draft = signedDraft();
   const request = buildRelayBroadcastRequest({
     relayEndpoint: '/api/relay-transaction',
     morpheusNetwork: 'testnet',
     relayPayloadMode: 'meta',
-    transactionBody: {},
-    signatures: [{
-      signerId: 'evm:bob',
-      kind: 'evm',
-      metadata: { metaInvocation: executeUserOpInvocation() },
-    }],
+    transactionBody: draft.body,
+    signatures: draft.signatures,
   });
 
   assert.deepEqual(request, {
@@ -360,16 +365,13 @@ test('buildRelayBroadcastRequest rejects raw relay when raw forwarding is disabl
 });
 
 test('buildRelayBroadcastRequest honors explicit meta selection when raw and meta payloads both exist', () => {
+  const draft = signedDraft({ rawTransaction: '0xdeadbeef' });
   const request = buildRelayBroadcastRequest({
     relayEndpoint: '/api/relay-transaction',
     morpheusNetwork: 'testnet',
     relayPayloadMode: 'meta',
-    transactionBody: { rawTransaction: '0xdeadbeef' },
-    signatures: [{
-      signerId: 'evm:bob',
-      kind: 'evm',
-      metadata: { metaInvocation: executeUserOpInvocation() },
-    }],
+    transactionBody: draft.body,
+    signatures: draft.signatures,
   });
 
   assert.deepEqual(request, {
@@ -381,11 +383,13 @@ test('buildRelayBroadcastRequest honors explicit meta selection when raw and met
 });
 
 test('buildRelayBroadcastRequest forwards paymaster metadata when present', () => {
+  const draft = signedDraft();
   const request = buildRelayBroadcastRequest({
     relayEndpoint: '/api/relay-transaction',
     morpheusNetwork: 'testnet',
     relayPayloadMode: 'meta',
     transactionBody: {
+      ...draft.body,
       paymaster: {
         account_id: 'sa-test',
         zerc20Proof: {
@@ -393,13 +397,7 @@ test('buildRelayBroadcastRequest forwards paymaster metadata when present', () =
         },
       },
     },
-    signatures: [{
-      signerId: 'evm:bob',
-      kind: 'evm',
-      metadata: {
-        metaInvocation: executeUserOpInvocation(),
-      },
-    }],
+    signatures: draft.signatures,
   });
 
   assert.deepEqual(request, {
@@ -435,26 +433,19 @@ test('wallet service exposes EVM connect and sign helpers', () => {
 // The route answers a refused broadcast (a simulated transfer that returned false, a VM fault in the preview)
 // with HTTP 200, ok:false and no txid. Reporting that as "Relay Submission Sent" is the silent no-op.
 
-function metaSignature() {
-  return [{
-    signerId: 'evm:bob',
-    kind: 'evm',
-    metadata: {
-      metaInvocation: executeUserOpInvocation(),
-    },
-  }];
-}
-
-const relaySubmit = (walletService) => executeBroadcast({
-  mode: 'relay',
-  relayPayloadMode: 'meta',
-  relayRawEnabled: false,
-  morpheusNetwork: 'testnet',
-  transactionBody: {},
-  signatures: metaSignature(),
-  walletService,
-  relayEndpoint: '/api/relay-transaction',
-});
+const relaySubmit = (walletService) => {
+  const draft = signedDraft();
+  return executeBroadcast({
+    mode: 'relay',
+    relayPayloadMode: 'meta',
+    relayRawEnabled: false,
+    morpheusNetwork: 'testnet',
+    transactionBody: draft.body,
+    signatures: draft.signatures,
+    walletService,
+    relayEndpoint: '/api/relay-transaction',
+  });
+};
 
 test('CU-06: executeBroadcast rejects a relay answer that says ok:false and carries the route reason', async () => {
   const refusal = {

@@ -63,23 +63,30 @@ test('the real npm tarball is a self-contained, reproducible production package'
     const exportedNames = JSON.parse(run(process.execPath, ['--input-type=commonjs', '-e', `
       const assert = require('node:assert/strict');
       const sdk = require('@r3e-network/neo-smart-account');
-      const client = new sdk.SmartAccountClient('http://127.0.0.1:9', '11'.repeat(20));
-      const accountId = client.deriveRegistrationAccountIdHash({ backupOwnerAddress: '22'.repeat(20) });
-      assert.match(accountId, /^[0-9a-f]{40}$/);
-      assert.equal(client.deriveVirtualAccount(accountId).accountIdHash, accountId);
-      const data = sdk.buildV3UserOperationTypedData({
-        chainId: 894710606, verifyingContract: '33'.repeat(20), accountIdHash: accountId,
-        coreContractHash: '11'.repeat(20), targetContract: '44'.repeat(20),
-        method: 'balanceOf', argsHashHex: '55'.repeat(32), nonce: 0, deadline: 2000000000000,
-      });
-      assert.equal(data.message.nonce, '0');
+      const client = new sdk.SmartAccountClient({ rpcUrl: 'http://127.0.0.1:9', networkMagic: 894710606, contractHash: '11'.repeat(20) });
+      const identity = client.deriveIdentity({ custodyAddress: '22'.repeat(20), salt: '33'.repeat(32) });
+      assert.match(identity.accountId, /^[0-9a-f]{40}$/);
+      assert.equal(client.proxyAddress(identity.accountId).length, 40);
+      // A v4 registration is a plan the same client prepares and signs.
+      const registration = client.buildCreateAccountScript({ custodyAddress: '22'.repeat(20), salt: '33'.repeat(32), recoveryTimelockMs: 604800000 });
+      assert.equal(registration.kind, 'registration');
+      assert.equal(client.prepare(registration), registration);
+      const operation = {
+        targetContract: '44'.repeat(20), method: 'transfer', args: [], nonce: '1',
+        nonceSubkey: '00'.repeat(32), deadline: '2000000000000', validatorId: '0',
+        credentialGeneration: '1', authorityEpoch: '0', configurationNonce: '0', signature: 'ab'.repeat(64),
+      };
+      const plan = client.buildExecutionScript({ accountId: identity.accountId, operations: [operation] });
+      assert.equal(plan.method, 'executeUserOp');
+      assert.equal(plan.batch, false);
+      // The 13-field operation is the operand the transfer rules read back.
       assert.deepEqual(sdk.findFailedTransferInInvocation({
-        invocation: { operation: 'executeUnified', args: [{}, {}, { type: 'String', value: 'transfer' }] },
+        invocation: { operation: 'executeUserOp', args: [{ type: 'ByteString', value: 'aa'.repeat(20) }, sdk.codec.operationValue(operation)] },
         stack: [{ type: 'Boolean', value: false }],
       }), [0]);
       assert.equal(typeof sdk.simulateUserOperation, 'function');
       const native = new sdk.NativeSmartAccountClient({rpcUrl:'http://127.0.0.1:9',networkMagic:12345});
-      assert.equal(sdk.NATIVE_ABI_VERSION,2);
+      assert.equal(sdk.NATIVE_ABI_VERSION,4);
       assert.equal(native.deriveIdentity({custodyAddress:'22'.repeat(20),salt:'33'.repeat(32)}).accountId.length,40);
       assert.equal(sdk.nativeCodec.composeNonce(3n,5n),(3n<<64n)|5n);
       for (const [key, value] of Object.entries(sdk)) assert.notEqual(value, undefined, key);
@@ -98,36 +105,32 @@ test('the real npm tarball is a self-contained, reproducible production package'
     `], consumer);
   });
 
-  await t.test('installed custom client builds direct recovery and strictly reads verified permanent mode', async () => {
-    const fixture = JSON.parse(await fs.readFile(path.join(__dirname, 'fixtures', 'custom-owner-only-contract-state.json'), 'utf8'));
+  await t.test('installed package builds v4 plans, session-key commands and member digests offline', () => {
     run(process.execPath, ['--input-type=commonjs', '-e', `
       const assert = require('node:assert/strict');
-      const { SmartAccountClient } = require('@r3e-network/neo-smart-account');
-      const client = new SmartAccountClient('http://127.0.0.1:9', '11'.repeat(20));
-      const state = ${JSON.stringify(fixture)};
-      const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: '22'.repeat(20) });
-      assert.equal(payload.operation, 'finalizeEscapeToOwner');
-      assert.equal(payload.scriptHash, '11'.repeat(20));
-      assert.deepEqual(payload.args.map((arg) => arg.toJSON()), [{ type: 'Hash160', value: '22'.repeat(20) }]);
-      client.rpcClient = {
-        async send(method, params) {
-          assert.equal(method, 'getcontractstate');
-          assert.deepEqual(params, ['0x' + '11'.repeat(20)]);
-          return state;
-        },
-        async invokeFunction(hash, method, params, signers) {
-          assert.equal(hash, '11'.repeat(20));
-          assert.equal(method, 'isOwnerOnlyRecovery');
-          assert.deepEqual(params, [{type:'Hash160', value:'22'.repeat(20)}]);
-          assert.deepEqual(signers, []);
-          return {state:'HALT', stack:[{type:'Boolean', value:true}]};
-        },
+      const { SmartAccountClient, codec, thresholdTools, buildSessionKeyInstallCommand } = require('@r3e-network/neo-smart-account');
+      const client = new SmartAccountClient({ rpcUrl: 'http://127.0.0.1:9', networkMagic: 894710606, contractHash: '11'.repeat(20) });
+      const accountId = '22'.repeat(20);
+      const operation = {
+        targetContract: '44'.repeat(20), method: 'transfer', args: [], nonce: '1',
+        nonceSubkey: '00'.repeat(32), deadline: '2000000000000', validatorId: '0',
+        credentialGeneration: '1', authorityEpoch: '0', configurationNonce: '0', signature: 'ab'.repeat(64),
       };
-      (async () => {
-        assert.deepEqual(await client.getOwnerOnlyRecoveryStatus('22'.repeat(20)), {supported:true, ownerOnlyRecovery:true});
-        state.manifest.abi.methods = [];
-        assert.deepEqual(await client.getOwnerOnlyRecoveryStatus('22'.repeat(20)), {supported:false, ownerOnlyRecovery:null});
-      })().catch((error) => { console.error(error); process.exitCode = 1; });
+      // The operation digest is the §4.3 preimage hashed: stable, and 32 bytes.
+      const context = { networkMagic: 894710606, coreContractHash: '11'.repeat(20), accountId };
+      const digest = codec.operationDigest(context, operation);
+      assert.match(digest, /^[0-9a-f]{64}$/);
+      assert.equal(digest, codec.operationDigest(context, operation));
+      assert.equal(thresholdTools.memberDigest(digest, '1', '1').length, 64);
+      // A session-key command is operation operands, not a registration blob.
+      const command = buildSessionKeyInstallCommand({ publicKeyHex: '02' + '22'.repeat(32), targetContract: '33'.repeat(20), method: 'transfer', validUntilMs: '1900000000000', spendingLimitDatoshi: '1000' });
+      assert.equal(command.length, 7);
+      for (const entry of command) assert.ok(['ByteString', 'Integer'].includes(entry.type), entry.type);
+      const intent = client.buildConfigurationScript({
+        accountId, kind: 'propose',
+        actions: [{ type: 'Array', value: [{ type: 'Integer', value: '3' }, { type: 'Integer', value: '1' }, { type: 'Array', value: command }] }],
+      });
+      assert.equal(intent.method, 'proposeConfiguration');
     `], consumer);
   });
 

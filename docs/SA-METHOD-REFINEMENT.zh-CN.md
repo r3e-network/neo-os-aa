@@ -35,25 +35,26 @@
 这是一份结构性清单与实现计划。它不证明任何 VM、ApplicationEngine、编译器、存储或整方法语义。
 当前算术证书仍是区域证书；它无法确立整方法证书。
 
-### 当前工件摘要（2026-11-17）
+### 当前工件摘要（2026-11-19）
 
-当前 SmartAccount V3 NEF 为
-`9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`，script SHA256 为
-`909ba759b66a4d84a4bd2aa2a2a78ef611c8b27e834b460a90f8ff83d387e1cd`。其
-`CapReimbursementToActualCost` helper 是完整区间 `[18900,19181)`：281 字节、116 条指令、52 个
-不同操作码名称。initializer 是 `[29996,30678)`：682 字节、182 条指令。该 helper 读取静态槽 38；
-initializer 在 30497 处用 `PUSHDATA1 21`、在 30500 处用 `CONVERT Buffer`、在 30502 处用
-`STSFLD 38` 写入报销键。当前编译器工件有 109 个 ABI 条目，而不是历史上的 100 个。
+当前 SmartAccount v4 NEF 为
+`2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb`，script SHA256 为
+`6eef7f70838b1bb3b8bed9a6a515152a6b0d86a102a11ba489d74c422cbf715f`。其
+`CapReimbursementToActualCost` helper 是完整区间 `[36048,36329)`：281 字节、116 条指令、52 个
+不同操作码名称——与 2026-11-17 工件逐字节相同，只是整体后移了 17,148 字节。initializer 是
+`[43470,44187)`：717 字节、236 条指令。该 helper 读取静态槽 58；initializer 在 44026 处用
+`PUSHDATA1 21`、在 44029 处用 `CONVERT Buffer`、在 44031 处用 `STSFLD 58` 写入报销键。当前
+编译器工件有 81 个 ABI 条目。
 
-只有 18900 处的 `INITSLOT` 没有精确的声明源码点；其余 115 条指令都有显式的 debug 源码点。可选的
+只有 36048 处的 `INITSLOT` 没有精确的声明源码点；其余 115 条指令都有显式的 debug 源码点。可选的
 现有算术证书主张 22 条指令，因此该方法还有 94 条指令未被该证书归集。这些都是声明覆盖的计数，
 不是证明接受。
 
-18911 与 19165 处的两条 `LDSFLD` 使用静态索引 38，名称 `Prefix_TransactionReimbursement`。在本
-helper 之外，初始化是 `30497: 0c0121`（PUSHDATA1 包含 `21`）、`30500: db30`（CONVERT 为
-Buffer）、`30502: 6726`（STSFLD 38）。（清理前的构建 `6c347dac…` 形状相同，`INITSLOT` 在 13557、
+36059 与 36313 处的两条 `LDSFLD` 使用静态索引 58，名称 `Prefix_TransactionReimbursement`。在本
+helper 之外，初始化是 `44026: 0c0121`（PUSHDATA1 包含 `21`）、`44029: db30`（CONVERT 为
+Buffer）、`44031: 673a`（STSFLD 58）。（清理前的构建 `6c347dac…` 形状相同，`INITSLOT` 在 13557、
 `LDSFLD` 位置在 13568/13822、initializer 指令在 25432/25435/25437、静态索引为 34；2026-11-16
-设计阶段遗留清理移动了偏移与槽。）因此，helper 入口状态规范必须把槽 38 绑定到 `Buffer([0x21])`，
+设计阶段遗留清理移动了偏移与槽。）因此，helper 入口状态规范必须把槽 58 绑定到 `Buffer([0x21])`，
 并确立初始化已经运行。那三条 initializer 指令不属于这 116 条指令的 helper。
 
 ### 历史候选与作用域
@@ -311,7 +312,7 @@ Buffer 值的存储键一起记录。这些契约参与投影摘要。用户定�
 
 ## 完整报销 helper 参考精化
 
-证书覆盖 `CapReimbursementToActualCost` 在 `[18900,19181)` 的全部 **281 字节／116 条指令／52 个
+证书覆盖 `CapReimbursementToActualCost` 在 `[36048,36329)` 的全部 **281 字节／116 条指令／52 个
 操作码名称**。它把从类型化源码清单独立投影出的完整 14 语句源码程序，与一个解码真实 NEF 字节的
 可执行参考 VM 相比较。没有任何预期结算值被传给原生调用预言机，也没有任何值被用来替代一条字节码
 指令。
@@ -391,23 +392,23 @@ gas 记账、编译器正确性、调用方组合，也不证明 **109 个公开
 
 ## 完整报销 helper 运行时检查
 
-这些测试在经复核的custom NEF 中执行原始私有 `CapReimbursementToActualCost` 方法，从 PC 18900 直到
-PC 19180 的 RET。它们把 22 条指令的算术检查扩展到交易字段、初始存储、默认记录构造、交易哈希重置、
+这些测试在经复核的custom NEF 中执行原始私有 `CapReimbursementToActualCost` 方法，从 PC 36048 直到
+PC 36328 的 RET。它们把 22 条指令的算术检查扩展到交易字段、初始存储、默认记录构造、交易哈希重置、
 真实原生反序列化／序列化、断言、堆更新与 Storage.Put。它们是具体的运行时对应证据，不是全称翻译
 证书，也不是公开部署批准。
 
 ### 入口与工件身份
 
 测试部署未改动的候选 NEF／manifest，并使用公开固定的 `ApplicationEngine.LoadContract` API，配一个
-仅测试用的方法描述符，指向原始私有方法 PC。该 API 执行原始 `_initialize`，它必须把静态槽 38 建立
+仅测试用的方法描述符，指向原始私有方法 PC。该 API 执行原始 `_initialize`，它必须把静态槽 58 建立
 为存储键字节 `0x21`。该描述符不会被加入 manifest。原始字节码、token 与原生调用都被执行；没有源码
 替代物、复制来的算术 script 或替代原生编解码器。这个私有方法接缝不证明两个公开入口点守卫及其完整
 调用方路径。
 
-NEF SHA256：`9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`。
-Manifest SHA256：`a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31`。
-Script SHA256：`909ba759b66a4d84a4bd2aa2a2a78ef611c8b27e834b460a90f8ff83d387e1cd`。
-本文件中的每个偏移都位于 `[18900,19181)` 内，即该 helper 当前 281 字节、116 条指令的区间。当前
+NEF SHA256：`2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb`。
+Manifest SHA256：`f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f`。
+Script SHA256：`6eef7f70838b1bb3b8bed9a6a515152a6b0d86a102a11ba489d74c422cbf715f`。
+本文件中的每个偏移都位于 `[36048,36329)` 内，即该 helper 当前 281 字节、116 条指令的区间。当前
 构建包含 VM 整数余量守卫与扩展后的 helper 帧；更早的 208 字节／96 条指令候选是历史记录，不是本文
 档所固定的工件。更早的修订固定过 NEF
 `083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a` / manifest
@@ -751,10 +752,11 @@ ABORTMSG，都让原始赞助方存款、中继 GAS、nonce、支出计数器与
 
 SmartAccountV3 那一行在表格写下时指的是当前工件。在上述带日期的路径被捕获之后，它移动了三次：改名为
 `SmartAccountV3` 使 script 缩短 10 字节（`083ed325…` / `e79fa049…` → `be43cd05…` / `35fbb188…`），
-helper 的 VM 整数余量断言随后使它增长 73 字节，2026-11-16 的设计阶段遗留兼容性清理又改变了一次
-（当前 NEF `9f714866…`，manifest `a6533d47…`，由重新生成的五形状 helper gas 运行时捕获固定）。这些
-文件在这些改动之后都没有被重新复制，因此它们只是关于更早构建的证据，在为当前 NEF 引用之前必须
-重新生成。SAPaymaster 与 MockTransferTarget 未受这三次改动影响，其行是当前的。
+helper 的 VM 整数余量断言随后使它增长 73 字节，2026-11-16 的设计阶段遗留兼容性清理又改变了一次，
+v4 模块协议再次移动了它（当前 NEF `2887bad3…`，manifest `f44cddeb…`）。五形状 helper gas 运行时
+捕获已于 2026-11-19 针对该 v4 工件重新生成（`formal/refinement/fixtures/helper-gas-runtime-live-
+receipts.json.gz`），因此该捕获是当前的。上面其余行与逐次调用回执仍描述更早的构建，在为当前 NEF
+引用之前必须重新生成。SAPaymaster 与 MockTransferTarget 未受上述改动影响，其行是当前的。
 
 MockTransferTarget 明确是一个编译出的测试目标，不是生产 token。内存中的嵌套对手也是仅测试用的。
 真实的 GAS 报销使用原生 token。被加载的 Neo 与 Neo.VM 程序集都是 3.10.1.0，其 InformationalVersion

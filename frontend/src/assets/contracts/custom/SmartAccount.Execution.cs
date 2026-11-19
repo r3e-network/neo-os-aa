@@ -282,7 +282,7 @@ namespace SmartAccount
             {
                 ExecutionEngine.Assert(module.ModuleType == ModuleTypeCodeValidator, ErrorModuleNotRoutable);
                 // Threshold-policy members are never independently routable.
-                ExecutionEngine.Assert(!IsMemberOfActivePolicy(accountId, validatorId), ErrorModuleNotRoutable);
+                ExecutionEngine.Assert(!IsMemberOfActivePolicy(module!), ErrorModuleNotRoutable);
                 ExecutionEngine.Assert(credentialGeneration == module.CredentialGeneration, ErrorCredentialStale);
                 return module;
             }
@@ -435,7 +435,7 @@ namespace SmartAccount
                     ModuleInstance? module = GetModuleInstance(accountId, validatorId);
                     if (module != null
                         && module.ModuleType == ModuleTypeCodeValidator
-                        && !IsMemberOfActivePolicy(accountId, validatorId)
+                        && !IsMemberOfActivePolicy(module!)
                         && credentialGeneration == module.CredentialGeneration)
                     {
                         accepted = CallValidatorValidateStandalone(accountId, module, op, operationDigest);
@@ -466,12 +466,15 @@ namespace SmartAccount
             UInt160 accountId, ModuleInstance module, object[] operation, ByteString operationDigest)
         {
             AssertCodeBindingUnchanged(module);
-            long gasBefore = PrepareCallbackBudget(null, GasPoolNone, ValidationAggregateGasLimit);
-            bool accepted = (bool)CallModuleGasCapped(
-                module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationAggregateGasLimit,
+            long gasBefore = PrepareCallbackBudget(null, GasPoolNone, ValidationPerCallGasLimit);
+            object reply = CallModuleGasCapped(
+                module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationPerCallGasLimit,
                 new object[] { accountId, operationDigest, BuildCanonicalOperationView(operation) });
-            ChargeCallbackGas(null, GasPoolNone, gasBefore, ValidationAggregateGasLimit);
-            return accepted;
+            ChargeCallbackGas(null, GasPoolNone, gasBefore, ValidationPerCallGasLimit);
+            // Same strict reply rule as the execution path: only Boolean true
+            // approves, any other reply type is an ABI violation.
+            ExecutionEngine.Assert(reply is bool, ErrorModuleTypeUnsupported);
+            return (bool)reply;
         }
 
         // ========================================================================
@@ -540,7 +543,7 @@ namespace SmartAccount
                 if (validatorModule != null)
                 {
                     ExecutionEngine.Assert(validatorModule.ModuleType == ModuleTypeCodeValidator, ErrorModuleNotRoutable);
-                    ExecutionEngine.Assert(!IsMemberOfActivePolicy(accountId, validatorId), ErrorModuleNotRoutable);
+                    ExecutionEngine.Assert(!IsMemberOfActivePolicy(validatorModule!), ErrorModuleNotRoutable);
                     ExecutionEngine.Assert(credentialGeneration == validatorModule.CredentialGeneration,
                         ErrorCredentialStale);
                 }
@@ -577,6 +580,11 @@ namespace SmartAccount
             {
                 // ---- Phase: Validation ----
                 BigInteger[] approvedMembers = new BigInteger[0];
+                // The approval pass keeps the instance it validated next to the
+                // id, so completion addresses the same recorded module without a
+                // second storage round-trip. Configuration is closed for the
+                // whole envelope, so those bytes cannot change in between.
+                ModuleInstance[] approvedModules = new ModuleInstance[0];
                 if (policy != null)
                 {
                     // Threshold policy: every member is invoked under the
@@ -584,6 +592,7 @@ namespace SmartAccount
                     // kept in core-local invocation state.
                     BigInteger[] members = policy.MemberIds;
                     approvedMembers = new BigInteger[members.Length];
+                    approvedModules = new ModuleInstance[members.Length];
                     int approvals = 0;
                     for (int i = 0; i < members.Length; i++)
                     {
@@ -595,6 +604,7 @@ namespace SmartAccount
                         if (memberAccepted)
                         {
                             approvedMembers[approvals] = members[i];
+                            approvedModules[approvals] = memberModule;
                             approvals++;
                         }
                     }
@@ -631,10 +641,12 @@ namespace SmartAccount
                 // that same instance's postCheck.
                 int hookCount = hookOrder.HookIds.Length;
                 ByteString[] hookData = new ByteString[hookCount];
+                ModuleInstance[] hookModules = new ModuleInstance[hookCount];
                 for (int i = 0; i < hookCount; i++)
                 {
                     BigInteger hookId = hookOrder.HookIds[i];
                     ModuleInstance hookModule = RequireModuleInstance(accountId, hookId);
+                    hookModules[i] = hookModule;
                     hookData[i] = CallHookPreCheck(accountId, ctx, hookId, hookModule, op);
                 }
 
@@ -653,9 +665,7 @@ namespace SmartAccount
                 // ---- Phase: HookPost (reverse snapshot order, original set) ----
                 for (int i = hookCount - 1; i >= 0; i--)
                 {
-                    BigInteger hookId = hookOrder.HookIds[i];
-                    ModuleInstance hookModule = RequireModuleInstance(accountId, hookId);
-                    CallHookPostCheck(accountId, ctx, hookId, hookModule, op, result, hookData[i]);
+                    CallHookPostCheck(accountId, ctx, hookOrder.HookIds[i], hookModules[i], op, result, hookData[i]);
                 }
 
                 // ---- Phase: Completion (approved routing subject only) ----
@@ -664,8 +674,10 @@ namespace SmartAccount
                     for (int i = 0; i < approvedMembers.Length; i++)
                     {
                         if (approvedMembers[i] == 0) break;
-                        ModuleInstance memberModule = RequireModuleInstance(accountId, approvedMembers[i]);
-                        CallValidatorOnUserOpComplete(accountId, ctx, approvedMembers[i], memberModule, op, result);
+                        // approvedModules[i] is the instance that approved at
+                        // the same slot: same id, same bytes, same bindings.
+                        CallValidatorOnUserOpComplete(
+                            accountId, ctx, approvedMembers[i], approvedModules[i], op, result);
                     }
                 }
                 else if (validatorModule != null)

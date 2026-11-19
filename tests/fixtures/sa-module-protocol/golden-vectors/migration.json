@@ -1,0 +1,112 @@
+{
+  "vectorId": "sa4-migration",
+  "kind": "migration",
+  "constantsRevision": {
+    "custom": "ae220783aa0a303f47332adf135aa44416c58c0e",
+    "native": "0d9ad4f08797f4b2e8ad63c83182fa554ef33fb9"
+  },
+  "input": {
+    "accountId": "0x4e9ff241e877790d09a174fd4e412904797b235b",
+    "salt": "6262626262626262626262626262626262626262626262626262626262626262",
+    "backupOwner": "0x5151515151515151515151515151515151515151",
+    "legacyRow": {
+      "verifier": "0x6666666666666666666666666666666666666666",
+      "hookId": "0x0000000000000000000000000000000000000000",
+      "backupOwner": "0x5151515151515151515151515151515151515151",
+      "escapeTimelockSeconds": 2592000,
+      "escapeTriggeredAt": 0
+    },
+    "protocolRecord": [
+      4,
+      true
+    ],
+    "manifestDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "secondManifestDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "classification": "no-plugin",
+    "ownerOnlyClassification": "owner-only",
+    "unknownClassification": "unknown-plugin"
+  },
+  "expected": {
+    "inertBeforeUpdate": {
+      "migrationRequired": false,
+      "accountStatus": 2
+    },
+    "unmarked": {
+      "migrationRequired": true,
+      "accountStatus": 2,
+      "migrationRecordStatus": 0,
+      "legacyModuleCount": 1
+    },
+    "executionWhileUnmigratedError": "SA_MIGRATION_REQUIRED",
+    "markWhileModeClosedError": "SA_MIGRATION_REQUIRED",
+    "marked": {
+      "accountStatus": 2,
+      "migrationRecordStatus": 1,
+      "legacyModuleCount": 1,
+      "legacyScopeInvalidated": true
+    },
+    "imported": {
+      "accountStatus": 0,
+      "migrationRecordStatus": 2,
+      "legacyScopeInvalidated": true,
+      "legacyModuleCount": 1,
+      "defaultOperationAuthorization": true,
+      "defaultMessageAuthorization": true
+    },
+    "ownerOnly": {
+      "accountStatus": 0,
+      "ownerOnlyRecovery": true,
+      "defaultOperationAuthorization": true
+    },
+    "unknownClassificationError": "SA_MIGRATION_REQUIRED",
+    "differentDigestReplayError": "SA_OPERATION_MALFORMED",
+    "epochAndNonceMonotonic": true,
+    "events": {
+      "required": "MigrationRequired",
+      "imported": "MigrationImported"
+    }
+  },
+  "matrix": [
+    {
+      "id": "M-1",
+      "status": "pinned",
+      "covers": "five-field legacy row decoded as migration input, 0x01 row kept as evidence, inert until the migration mode opens"
+    },
+    {
+      "id": "M-1",
+      "status": "notPinned",
+      "covers": "the 53/407 real account exports and the native 14-slot legacy decoder: no such export data exists in this repository"
+    },
+    {
+      "id": "M-2",
+      "status": "notPinned",
+      "covers": "MultiHook order / MultiSig threshold preservation: legacy module ids have no v4 instance to map them onto without a real export"
+    },
+    {
+      "id": "M-3",
+      "status": "pinned",
+      "covers": "authorityEpoch / configurationNonce never decrease across materialization and import"
+    },
+    {
+      "id": "M-4",
+      "status": "pinned",
+      "covers": "legacyScopeInvalidated is declared at the mark and stays declared after the import; retirement is a declaration, never authorization"
+    },
+    {
+      "id": "M-5",
+      "status": "pinned",
+      "covers": "owner-only import carries OwnerOnlyRecovery forward"
+    },
+    {
+      "id": "M-5",
+      "status": "notPinned",
+      "covers": "market-locked and recovery-pending imports need a legacy escrow / in-flight escape to exist first"
+    },
+    {
+      "id": "M-6",
+      "status": "pinned",
+      "covers": "repeated identical (accountId, manifestDigest) import is a no-op, a different digest is rejected, and an unmigrated account executes nothing"
+    }
+  ],
+  "notes": "The fixture seeds the post-update 0x50 {4, true} record instead of replaying a ContractManagement update: the update path writes exactly this record and nothing else (spec §14), so the seeded state is the state an update leaves."
+}

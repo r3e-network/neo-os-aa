@@ -337,6 +337,27 @@ test('relay blocks unsponsored broadcasts when no paymaster is configured', asyn
   assert.equal(broadcastAttempted, false);
 });
 
+function v4OperationParam({ targetContract, method = 'transfer', nonce = '1' }) {
+  return {
+    type: 'Array',
+    value: [
+      { type: 'Integer', value: '4' },
+      { type: 'Hash160', value: targetContract },
+      { type: 'ByteArray', value: `0x${Buffer.from(method, 'utf8').toString('hex')}` },
+      { type: 'Array', value: [] },
+      { type: 'Integer', value: nonce },
+      { type: 'ByteArray', value: `0x${'00'.repeat(32)}` },
+      { type: 'Integer', value: String(Date.now() + 3600_000) },
+      { type: 'Integer', value: '1' },
+      { type: 'Integer', value: '1' },
+      { type: 'Integer', value: '0' },
+      { type: 'Integer', value: '0' },
+      { type: 'ByteArray', value: `0x${'11'.repeat(66)}` },
+      { type: 'Array', value: [] },
+    ],
+  };
+}
+
 test('paymaster authorization derives account and operation hash from the sanitized invocation', () => {
   assert.equal(typeof relayModule.buildPaymasterRequest, 'function');
 
@@ -347,13 +368,7 @@ test('paymaster authorization derives account and operation hash from the saniti
     operation: 'executeUserOp',
     args: [
       { type: 'Hash160', value: accountId },
-      {
-        type: 'Struct',
-        value: [
-          { type: 'Hash160', value: targetContract },
-          { type: 'String', value: 'transfer' },
-        ],
-      },
+      v4OperationParam({ targetContract }),
     ],
   };
 
@@ -369,58 +384,16 @@ test('paymaster authorization derives account and operation hash from the saniti
 
   assert.equal(request.account_id, accountId);
   assert.equal(request.userop_target_contract, targetContract);
+  assert.equal(request.userop_method, 'transfer');
   assert.equal(request.operation_hash, `0x${createHash('sha256').update(JSON.stringify(metaInvocation)).digest('hex')}`);
   assert.notEqual(request.account_id, `0x${'cc'.repeat(20)}`);
   assert.notEqual(request.operation_hash, `0x${'dd'.repeat(32)}`);
 });
 
-test('paymaster authorization derives downstream fields for legacy wrapper invocations', () => {
-  const accountId = `0x${'aa'.repeat(20)}`;
-  const targetContract = `0x${'bb'.repeat(20)}`;
-  const metaInvocation = {
-    scriptHash: '11'.repeat(20),
-    operation: 'executeUnifiedByAddress',
-    args: [
-      { type: 'Hash160', value: accountId },
-      { type: 'Hash160', value: targetContract },
-      { type: 'String', value: 'transfer' },
-      { type: 'Array', value: [] },
-      { type: 'Array', value: [{ type: 'ByteArray', value: `0x04${'11'.repeat(64)}` }] },
-      { type: 'ByteArray', value: `0x${'ab'.repeat(32)}` },
-      { type: 'Integer', value: '7' },
-      { type: 'Integer', value: String(Date.now() + 3600_000) },
-      { type: 'Array', value: [{ type: 'ByteArray', value: `0x${'12'.repeat(64)}` }] },
-    ],
-  };
-
-  const request = relayModule.buildPaymasterRequest({
-    metaInvocation,
-    network: 'testnet',
-    paymaster: {
-      account_id: `0x${'cc'.repeat(20)}`,
-      dapp_id: 'client-dapp',
-    },
-  });
-
-  assert.equal(request.account_id, accountId);
-  assert.equal(request.userop_target_contract, targetContract);
-  assert.equal(request.userop_method, 'transfer');
-});
-
 test('paymaster authorization derives downstream fields for homogeneous batch user operations', () => {
   const accountId = `0x${'aa'.repeat(20)}`;
   const targetContract = `0x${'bb'.repeat(20)}`;
-  const userOp = {
-    type: 'Struct',
-    value: [
-      { type: 'Hash160', value: targetContract },
-      { type: 'String', value: 'transfer' },
-      { type: 'Array', value: [] },
-      { type: 'Integer', value: '1' },
-      { type: 'Integer', value: String(Date.now() + 3600_000) },
-      { type: 'ByteArray', value: '0x' },
-    ],
-  };
+  const userOp = v4OperationParam({ targetContract });
   const metaInvocation = {
     scriptHash: '11'.repeat(20),
     operation: 'executeUserOps',
@@ -449,13 +422,7 @@ test('paymaster authorization rejects malformed account or target hashes', () =>
       operation: 'executeUserOp',
       args: [
         { type: 'Hash160', value: 'not-a-hash' },
-        {
-          type: 'Struct',
-          value: [
-            { type: 'Hash160', value: `0x${'bb'.repeat(20)}` },
-            { type: 'String', value: 'transfer' },
-          ],
-        },
+        v4OperationParam({ targetContract: `0x${'bb'.repeat(20)}` }),
       ],
     },
     network: 'testnet',
@@ -468,13 +435,7 @@ test('paymaster authorization rejects malformed account or target hashes', () =>
       operation: 'executeUserOp',
       args: [
         { type: 'Hash160', value: `0x${'aa'.repeat(20)}` },
-        {
-          type: 'Struct',
-          value: [
-            { type: 'Hash160', value: '1234' },
-            { type: 'String', value: 'transfer' },
-          ],
-        },
+        v4OperationParam({ targetContract: '1234' }),
       ],
     },
     network: 'testnet',

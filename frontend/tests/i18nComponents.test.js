@@ -50,16 +50,18 @@ test('studio panels that call t() bind it from useI18n', () => {
   }
 });
 
-test('permissions panel surfaces the value-uncapped session-key warning', () => {
+test('the configure panel surfaces the value-uncapped session-key warning', () => {
+  // A v4 session key is granted by a `setSessionKey` configure command, so the warning lives beside
+  // the configure(data) input; the panel computes it from the shared, unit-tested scope analyzer.
   const source = fs.readFileSync(
-    path.resolve('src/features/studio/components/PermissionsLimitsPanel.vue'),
+    path.resolve('src/features/studio/components/ManageGovernancePanel.vue'),
     'utf8',
   );
-  // The panel computes the warning from the shared, unit-tested scope analyzer and renders it.
   assert.match(source, /analyzeSessionKeyScope/);
   assert.match(source, /sessionKeyValueWarning/);
   assert.match(source, /studioPanels\.sessionKeyUncappedWarning/);
   assert.match(source, /studioPanels\.sessionKeyUncappedNativeWarning/);
+  assert.match(source, /moduleConfigJson/);
 });
 
 test('both locales define the session-key value-uncapped warning keys', () => {

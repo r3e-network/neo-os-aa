@@ -27,9 +27,7 @@ namespace SmartAccount
     [ContractPermission("*", "registerStablePlatformAccount")]
     [ContractPermission("*", "applyPlatformAccountOwnerRotation")]
     [ContractPermission("*", "getPlatformAccountBinding")]
-    [ContractPermission("*", "getBackupOwner")]
-    [ContractPermission("*", "getEscapeTriggeredAt")]
-    [ContractPermission("*", "isMarketEscrowActive")]
+    [ContractPermission("*", "getAccount")]
     [ManifestExtra("Description", "Platform Account Registrar Service for Neo N3 SA")]
     public class PlatformRegistrar : SmartContract
     {
@@ -194,18 +192,14 @@ namespace SmartAccount
             ExecutionEngine.Assert(
                 StdLib.MemoryCompare(storedBinding!, appBinding!) == 0,
                 "Platform account binding mismatch");
-            BigInteger escapeTriggeredAt = (BigInteger)Contract.Call(
-                core, "getEscapeTriggeredAt", CallFlags.ReadOnly,
+            object[] control = (object[])Contract.Call(
+                core, "getAccount", CallFlags.ReadOnly,
                 new object[] { accountId });
-            ExecutionEngine.Assert(escapeTriggeredAt == 0, "Platform account escape active");
-            bool escrowActive = (bool)Contract.Call(
-                core, "isMarketEscrowActive", CallFlags.ReadOnly,
-                new object[] { accountId });
-            ExecutionEngine.Assert(!escrowActive, "Account locked in market escrow");
+            ExecutionEngine.Assert((bool)control[0], "Platform account not registered");
+            ExecutionEngine.Assert(!(bool)control[12], "Platform account recovery active");
+            ExecutionEngine.Assert(!(bool)control[14], "Account locked in market escrow");
 
-            UInt160 previousOwner = (UInt160)Contract.Call(
-                core, "getBackupOwner", CallFlags.ReadOnly,
-                new object[] { accountId });
+            UInt160 previousOwner = (UInt160)control[2];
             ExecutionEngine.Assert(previousOwner != UInt160.Zero, "Platform account not registered");
             ExecutionEngine.Assert(previousOwner != newBackupOwner, "Platform backup owner unchanged");
 
@@ -272,9 +266,10 @@ namespace SmartAccount
             ExecutionEngine.Assert(
                 StdLib.MemoryCompare(pending!.AppBinding, appBinding!) == 0,
                 "Platform account binding mismatch");
-            UInt160 currentOwner = (UInt160)Contract.Call(
-                core, "getBackupOwner", CallFlags.ReadOnly,
+            object[] control = (object[])Contract.Call(
+                core, "getAccount", CallFlags.ReadOnly,
                 new object[] { accountId });
+            UInt160 currentOwner = (UInt160)control[2];
             bool owner = currentOwner != UInt160.Zero && Runtime.CheckWitness(currentOwner);
             UInt160 admin = PlatformRegistrarAuthority.Admin();
             bool registrarAdmin = admin != UInt160.Zero && Runtime.CheckWitness(admin);

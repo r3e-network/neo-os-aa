@@ -8,267 +8,312 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Regression tests for the L1 escape-hatch hardening: <c>finalizeEscape</c> must hand the
-/// backup owner a clean configuration rather than merely swapping the verifier hash. It must
-/// (1) atomically configure the new verifier with the supplied params, (2) clear the old
-/// (possibly compromised) verifier's per-account config, and (3) reset the installed hook —
-/// clearing the old hook's per-account config and removing it from state — so a compromised
-/// hook cannot persist across an escape.
+/// Regression tests for the v4 escape hatch (spec §10): <c>beginRecovery</c> /
+/// <c>executeRecovery</c> replace the retired v3
+/// <c>initiateEscape</c>/<c>finalizeEscape</c> pair, and the finalize step no longer
+/// rotates a verifier or calls any plugin. Recovery must hand the custody a clean
+/// account instead of a half-swapped configuration: the callback-free sweep removes
+/// every installed module instance, the hook order, the pending intents, the
+/// threshold policies, the message-subject set, the metadata URI, the migration
+/// state and the nonce channels, while the moduleId allocator is preserved so ids
+/// are never reused. These tests pin that sweep, the two-stage authorization, the
+/// timelock, the epoch-staleness guard and cancellation.
 /// </summary>
 [TestClass]
-public class Fix_escape_Tests
+public class Fix_Escape_Tests
 {
-    // 7-day minimum escape timelock (seconds).
-    private const uint EscapeTimelockSeconds = 604_800;
+    private static readonly UInt160 NewCustody =
+        UInt160.Parse("0x2222222222222222222222222222222222222222");
 
-    // Verifier/hook config confirmation timelock used by callHook (24h, in ms).
-    private static readonly TimeSpan ConfigUpdateWindow = TimeSpan.FromHours(24);
+    private static readonly UInt160 Stranger =
+        UInt160.Parse("0x9999999999999999999999999999999999999999");
 
-    // Escape timelock advance: the escape timelock is in seconds; convert to a real TimeSpan with margin.
-    private static readonly TimeSpan EscapeWindow = TimeSpan.FromSeconds(EscapeTimelockSeconds) + TimeSpan.FromHours(1);
-
-    private static readonly UInt160 BackupOwner =
-        UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
-
-    private static readonly UInt160 WhitelistTarget =
+    private static readonly UInt160 Target =
         UInt160.Parse("0x4444444444444444444444444444444444444444");
 
-    // 65-byte uncompressed secp256k1 public keys accepted by Web3AuthVerifier.SetPublicKey.
-    private static byte[] OldPubKey() => MakePubKey(0xA1);
-    private static byte[] NewPubKey() => MakePubKey(0xB2);
-
-    private static byte[] MakePubKey(byte tag)
-    {
-        byte[] pubKey = new byte[65];
-        pubKey[0] = 0x04; // uncompressed prefix
-        for (int i = 1; i < 65; i++)
-        {
-            pubKey[i] = (byte)(tag + i);
-        }
-        return pubKey;
-    }
+    private static readonly TimeSpan RecoveryWindow =
+        TimeSpan.FromMilliseconds((long)RuntimeFixture.MinRecoveryTimelockMs);
 
     private sealed class EscapeHarness
     {
         public RuntimeFixture Fx { get; } = new();
 
-        public UInt160 Wallet { get; }
+        public UInt160 Core { get; }
 
-        public UInt160 OldVerifier { get; }
-
-        public UInt160 NewVerifier { get; }
-
-        public UInt160 Hook { get; }
+        private int _registrations;
 
         public EscapeHarness()
         {
-            Wallet = Fx.Deploy("SmartAccount");
-            // The verifiers/hook trust this wallet as their SA core (passed as deploy data).
-            // Two distinct verifier contracts are used so they have distinct deploy hashes; both
-            // accept a 65-byte uncompressed public key through setPublicKey/getPublicKey/clearAccount.
-            OldVerifier = Fx.Deploy("verifiers/Web3AuthVerifier", Wallet.ToArray());
-            NewVerifier = Fx.Deploy("verifiers/TEEVerifier", Wallet.ToArray());
-            Hook = Fx.Deploy("hooks/WhitelistHook", Wallet.ToArray());
+            Core = Fx.Deploy("SmartAccount");
         }
 
-        public UInt160 RegisterAccount(byte[] verifierParams)
+        /// <summary>
+        /// Registers a v4 account. A custody key is used so the account can also run
+        /// built-in operations; the caller supplies the initial action set.
+        /// </summary>
+        public UInt160 RegisterAccount(UInt160 custody, params object[] actions)
         {
-            UInt160 accountId = Fx.CallUInt160(
-                Wallet, "computeRegistrationAccountId",
-                OldVerifier, verifierParams, Hook, BackupOwner, EscapeTimelockSeconds);
-
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(
-                Wallet, "registerAccount",
-                accountId, OldVerifier, verifierParams, Hook, BackupOwner, EscapeTimelockSeconds);
-            return accountId;
+            _registrations += 1;
+            return Fx.CreateAccount(Core, custody, "escape-" + _registrations, actions);
         }
 
-        /// <summary>Seeds per-account hook state via the two-phase timelocked callHook path.</summary>
-        public void SeedHookWhitelist(UInt160 accountId, UInt160 target)
+        public Neo.VM.Types.Array RecoveryStatus(UInt160 accountId) =>
+            (Neo.VM.Types.Array)Fx.Call(Core, "getRecoveryStatus", accountId);
+
+        public BigInteger[] ValidatorIds(UInt160 accountId) =>
+            Fx.ModuleIds(Core, accountId, RuntimeFixture.ModuleTypeNameValidator);
+
+        public BigInteger[] HookIds(UInt160 accountId) =>
+            Fx.ModuleIds(Core, accountId, RuntimeFixture.ModuleTypeNameHook);
+
+        public void Begin(UInt160 accountId, UInt160 newCustody, params UInt160[] signers)
         {
-            Fx.SetSigners(BackupOwner);
-            object[] args = new object[] { accountId, target, true };
-            // First call records the pending module call; second (after the window) applies it.
-            Assert.IsFalse(Fx.CallBoolean(Wallet, "callHook", accountId, "setWhitelist", args),
-                "First callHook only schedules the pending module call");
-            Fx.AdvanceTime(ConfigUpdateWindow);
-            Fx.CallVoid(Wallet, "callHook", accountId, "setWhitelist", args);
+            Fx.SetSigners(signers.Length == 0 ? new[] { newCustody } : signers);
+            Fx.CallVoid(Core, "beginRecovery", accountId, newCustody);
         }
+    }
 
-        public void InitiateAndAdvancePastTimelock(UInt160 accountId)
+    // ============================================================================
+    // The sweep: a recovered account is handed over clean.
+    // ============================================================================
+
+    [TestMethod]
+    public void ExecuteRecovery_SweepsTheModuleModelAndRotatesCustody()
+    {
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
+        EscapeHarness h = new();
+        RuntimeFixture fx = h.Fx;
+        UInt160 sessionKey = fx.Deploy("validators/SessionKeyValidator", h.Core.ToArray());
+        UInt160 hook = fx.Deploy("hooks/WhitelistHook", h.Core.ToArray());
+
+        object?[] command =
         {
-            Fx.SetSigners(BackupOwner);
-            Fx.CallVoid(Wallet, "initiateEscape", accountId);
-            Fx.AdvanceTime(EscapeWindow);
-        }
+            "setSessionKey", key.CompressedPublicKey, Target, "transfer",
+            fx.Now() + 3_600_000, (BigInteger)0, "escape suite"
+        };
+        UInt160 accountId = h.RegisterAccount(
+            custody,
+            fx.InstallValidator(sessionKey, command),
+            fx.InstallHook(hook, "allowTarget", Target));
+
+        // Preconditions: a validator instance, a hook in the core hook order and metadata.
+        BigInteger validatorId = fx.FindModuleId(
+            h.Core, accountId, RuntimeFixture.ModuleTypeNameValidator, sessionKey);
+        Assert.AreNotEqual(BigInteger.Zero, validatorId, "Precondition: validator installed");
+        Assert.AreEqual(1, fx.HookOrderIds(h.Core, accountId).Length, "Precondition: hook in the order");
+        fx.SetSigners(custody);
+        fx.CallVoid(h.Core, "setMetadataUri", accountId, "ipfs://escape");
+        BigInteger epochBefore = fx.AccountAuthorityEpoch(h.Core, accountId);
+
+        h.Begin(accountId, NewCustody, custody, NewCustody);
+        Neo.VM.Types.Array pending = h.RecoveryStatus(accountId);
+        Assert.AreEqual(5, pending.Count, "A pending recovery is observable");
+        Assert.IsTrue(pending[0].GetBoolean());
+        Assert.AreEqual(NewCustody, new UInt160(pending[4].GetSpan()));
+        Assert.IsTrue(pending[2].GetInteger() > fx.Now(), "The core record carries its own maturity");
+
+        // The core timelock is enforced independently of the caller's diligence.
+        TestException early = Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(h.Core, "executeRecovery", accountId));
+        StringAssert.Contains(early.Message, "SA_RECOVERY_LOCKED");
+        Assert.AreEqual(NewCustody, new UInt160(h.RecoveryStatus(accountId)[4].GetSpan()),
+            "A premature execute must not consume the record");
+
+        fx.AdvanceTime(RecoveryWindow);
+        // Settlement is permissionless once matured: no old plugin is consulted.
+        fx.SetSigners(Stranger);
+        fx.CallVoid(h.Core, "executeRecovery", accountId);
+        Neo.VM.Types.Array executed = fx.SingleNotificationState(h.Core, "RecoveryExecuted");
+        Assert.AreEqual(accountId, new UInt160(executed[0].GetSpan()));
+        Neo.VM.Types.Array finalized = fx.SingleNotificationState(h.Core, "EscapeFinalized");
+        Assert.AreEqual(NewCustody, new UInt160(finalized[1].GetSpan()), "The legacy escape feed mirrors recovery");
+
+        Assert.AreEqual(NewCustody, fx.AccountCustody(h.Core, accountId), "Custody rotated on the core");
+        Assert.AreEqual(0, h.ValidatorIds(accountId).Length, "Every validator instance is swept");
+        Assert.AreEqual(0, h.HookIds(accountId).Length, "Every hook instance is swept");
+        Assert.AreEqual(0, fx.HookOrderIds(h.Core, accountId).Length, "The hook order is dropped");
+        Assert.AreEqual(string.Empty, fx.Call(h.Core, "getMetadataUri", accountId).GetString(), "Metadata is dropped");
+        Assert.AreEqual(0, h.RecoveryStatus(accountId).Count, "The record is consumed");
+        Assert.AreEqual(BigInteger.Zero, fx.AccountStatus(h.Core, accountId), "The account is Active");
+        Assert.IsTrue(fx.AccountDefaultOperationAuthorization(h.Core, accountId),
+            "Recovery re-enables the built-in operation route");
+        Assert.IsTrue(fx.AccountControl(h.Core, accountId)[8].GetBoolean(),
+            "Recovery re-enables the default message route");
+        Assert.AreEqual(epochBefore + 1, fx.AccountAuthorityEpoch(h.Core, accountId),
+            "Recovery advances the authority epoch exactly once");
+        Assert.AreEqual(0, ((Neo.VM.Types.Array)fx.Call(h.Core, "getPendingConfigurationIntentIds", accountId)).Count,
+            "No intent survives the sweep");
+
+        // The moduleId allocator survives on purpose: ids are never reused.
+        UInt160 second = fx.Deploy("validators/SessionKeyValidator", h.Core.ToArray());
+        fx.ConfigureAfterTimelock(h.Core, accountId, NewCustody, (object)fx.InstallValidator(second));
+        BigInteger secondId = fx.FindModuleId(
+            h.Core, accountId, RuntimeFixture.ModuleTypeNameValidator, second);
+        Assert.IsTrue(secondId > validatorId, "A post-recovery install must not reuse a swept module id");
     }
 
     [TestMethod]
-    public void FinalizeEscape_ConfiguresNewVerifierClearsOldAndResetsHook()
+    public void ExecuteRecovery_WithZeroCustody_ClearsTheAccountAndKeepsTheCustody()
     {
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
         EscapeHarness h = new();
-        byte[] oldKey = OldPubKey();
-        byte[] newKey = NewPubKey();
+        RuntimeFixture fx = h.Fx;
+        UInt160 hook = fx.Deploy("hooks/WhitelistHook", h.Core.ToArray());
+        UInt160 accountId = h.RegisterAccount(custody, (object)fx.InstallHook(hook, "allowTarget", Target));
 
-        UInt160 accountId = h.RegisterAccount(oldKey);
+        h.Begin(accountId, UInt160.Zero, custody);
+        Assert.AreEqual(UInt160.Zero, new UInt160(h.RecoveryStatus(accountId)[4].GetSpan()),
+            "The record names no replacement custody");
+        fx.AdvanceTime(RecoveryWindow);
+        fx.CallVoid(h.Core, "executeRecovery", accountId);
 
-        // Preconditions: old verifier configured, hook installed and holding per-account state.
-        CollectionAssert.AreEqual(oldKey, h.Fx.CallBytes(h.OldVerifier, "getPublicKey", accountId),
-            "Old verifier holds the registered public key");
-        Assert.AreEqual(h.Hook, h.Fx.CallUInt160(h.Wallet, "getHook", accountId), "Hook installed at registration");
-
-        h.SeedHookWhitelist(accountId, WhitelistTarget);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Hook, "isWhitelisted", accountId, WhitelistTarget),
-            "Hook holds per-account whitelist state before escape");
-
-        h.InitiateAndAdvancePastTimelock(accountId);
-
-        h.Fx.SetSigners(BackupOwner);
-        h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier, newKey);
-
-        // 1. The new verifier is rotated in AND configured with the supplied params atomically.
-        Assert.AreEqual(h.NewVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId),
-            "Verifier rotated to the new verifier");
-        CollectionAssert.AreEqual(newKey, h.Fx.CallBytes(h.NewVerifier, "getPublicKey", accountId),
-            "New verifier is configured with the supplied params");
-
-        // 2. The old (possibly compromised) verifier's per-account config is cleared.
-        CollectionAssert.AreEqual(Array.Empty<byte>(), h.Fx.CallBytes(h.OldVerifier, "getPublicKey", accountId),
-            "Old verifier config is cleared so a compromised verifier cannot still validate");
-
-        // 3. The installed hook is reset: removed from state and its per-account config cleared.
-        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getHook", accountId),
-            "Hook is removed from account state on escape");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Hook, "isWhitelisted", accountId, WhitelistTarget),
-            "Compromised hook's per-account config is cleared on escape");
-
-        // Escape state is reset so the flow can be re-armed.
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Wallet, "getEscapeTriggeredAt", accountId),
-            "Escape trigger is reset after finalize");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
+        Assert.AreEqual(custody, fx.AccountCustody(h.Core, accountId), "Custody is kept when none is named");
+        Assert.AreEqual(0, h.HookIds(accountId).Length, "The sweep still runs");
+        Assert.AreEqual(0, fx.HookOrderIds(h.Core, accountId).Length);
+        Assert.AreEqual(0, h.RecoveryStatus(accountId).Count);
     }
 
+    // ============================================================================
+    // Authorization: custody or the recorded recovery authority, plus the new
+    // custody when one is named.
+    // ============================================================================
+
     [TestMethod]
-    public void FinalizeEscape_LegacyTwoArgumentPathRemainsAvailable()
+    public void BeginRecovery_RequiresCustodyOrRecoveryAuthority()
     {
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
         EscapeHarness h = new();
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
-        h.InitiateAndAdvancePastTimelock(accountId);
+        RuntimeFixture fx = h.Fx;
+        UInt160 accountId = h.RegisterAccount(custody);
 
-        h.Fx.SetSigners(BackupOwner);
-        h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier);
-
-        Assert.AreEqual(h.NewVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
-        CollectionAssert.AreEqual(
-            Array.Empty<byte>(),
-            h.Fx.CallBytes(h.NewVerifier, "getPublicKey", accountId),
-            "The legacy entrypoint preserves its historical no-verifier-params behavior");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
-    }
-
-    [TestMethod]
-    [DataRow("MarkerOnlyModule", "Verifier V3 validation ABI missing")]
-    [DataRow("WrongLifecycleAbiModule", "Verifier V3 validation ABI missing")]
-    public void FinalizeEscape_RejectsInvalidReplacementWithoutChangingAccount(string artifact, string expectedError)
-    {
-        // Exercise both ABI overloads: the legacy two-argument path must not bypass validation.
-        foreach (bool withParams in new[] { false, true })
-        {
-            EscapeHarness h = new();
-            UInt160 invalidVerifier = h.Fx.Deploy(artifact);
-            byte[] oldKey = OldPubKey();
-            UInt160 accountId = h.RegisterAccount(oldKey);
-            h.SeedHookWhitelist(accountId, WhitelistTarget);
-            h.InitiateAndAdvancePastTimelock(accountId);
-            BigInteger triggeredAt = h.Fx.CallInteger(h.Wallet, "getEscapeTriggeredAt", accountId);
-
-            TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            {
-                if (withParams)
-                    h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, invalidVerifier, NewPubKey());
-                else
-                    h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, invalidVerifier);
-            });
-            StringAssert.Contains(fault.Message, expectedError);
-            Assert.AreEqual(h.OldVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
-            Assert.AreEqual(h.Hook, h.Fx.CallUInt160(h.Wallet, "getHook", accountId));
-            Assert.AreEqual(triggeredAt, h.Fx.CallInteger(h.Wallet, "getEscapeTriggeredAt", accountId));
-            CollectionAssert.AreEqual(oldKey, h.Fx.CallBytes(h.OldVerifier, "getPublicKey", accountId));
-            Assert.IsTrue(h.Fx.CallBoolean(h.Hook, "isWhitelisted", accountId, WhitelistTarget));
-        }
-    }
-
-    [TestMethod]
-    public void FinalizeEscape_ValidatesReplacementBeforeCallingFaultingOldPlugin()
-    {
-        EscapeHarness h = new();
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
-        UInt160 faultingVerifier = h.Fx.Deploy("MockVerifierCore");
-        UInt160 invalidVerifier = h.Fx.Deploy("MarkerOnlyModule");
-        h.Fx.CallVoid(h.Wallet, "updateVerifier", accountId, faultingVerifier, Array.Empty<byte>());
-        h.Fx.AdvanceTime(ConfigUpdateWindow);
-        h.Fx.CallVoid(h.Wallet, "confirmVerifierUpdate", accountId);
-        h.InitiateAndAdvancePastTimelock(accountId);
-
-        TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, invalidVerifier));
-
-        StringAssert.Contains(fault.Message, "Verifier V3 validation ABI missing");
-        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
-        Assert.AreEqual(faultingVerifier, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
-    }
-
-    [TestMethod]
-    public void FinalizeEscape_ZeroVerifierRestoresBackupOwnerAuthorization()
-    {
-        EscapeHarness h = new();
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
-        h.InitiateAndAdvancePastTimelock(accountId);
-
-        h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, UInt160.Zero);
-
-        Assert.AreEqual(UInt160.Zero, h.Fx.CallUInt160(h.Wallet, "getVerifier", accountId));
-        Assert.AreEqual(BackupOwner, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", accountId));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isEscapeActive", accountId));
-    }
-
-    [TestMethod]
-    public void FinalizeEscape_WithoutInitiation_Faults()
-    {
-        EscapeHarness h = new();
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
-
-        h.Fx.SetSigners(BackupOwner);
-        TestException notInitiated = Assert.ThrowsExactly<TestException>(
-            () => h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier, NewPubKey()));
-        StringAssert.Contains(notInitiated.Message, "Escape not initiated");
-    }
-
-    [TestMethod]
-    public void FinalizeEscape_BeforeTimelock_Faults()
-    {
-        EscapeHarness h = new();
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
-
-        h.Fx.SetSigners(BackupOwner);
-        h.Fx.CallVoid(h.Wallet, "initiateEscape", accountId);
-
-        TestException locked = Assert.ThrowsExactly<TestException>(
-            () => h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier, NewPubKey()));
-        StringAssert.Contains(locked.Message, "Timelock active");
-    }
-
-    [TestMethod]
-    public void FinalizeEscape_OnlyBackupOwnerMayFinalize()
-    {
-        EscapeHarness h = new();
-        UInt160 accountId = h.RegisterAccount(OldPubKey());
-        h.InitiateAndAdvancePastTimelock(accountId);
-
-        h.Fx.SetSigners(WhitelistTarget); // some other account, not the backup owner
+        fx.SetSigners(Stranger);
         TestException unauthorized = Assert.ThrowsExactly<TestException>(
-            () => h.Fx.CallVoid(h.Wallet, "finalizeEscape", accountId, h.NewVerifier, NewPubKey()));
-        StringAssert.Contains(unauthorized.Message, "Only backup owner can finalize");
+            () => fx.CallVoid(h.Core, "beginRecovery", accountId, NewCustody));
+        StringAssert.Contains(unauthorized.Message, "SA_UNAUTHORIZED");
+        Assert.AreEqual(0, h.RecoveryStatus(accountId).Count, "A refused request writes no record");
+    }
+
+    [TestMethod]
+    public void BeginRecovery_RequiresTheNewCustodysWitness()
+    {
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
+        EscapeHarness h = new();
+        RuntimeFixture fx = h.Fx;
+        UInt160 accountId = h.RegisterAccount(custody);
+
+        // Naming a replacement custody is itself a custody change: that subject must sign.
+        fx.SetSigners(custody);
+        TestException unauthorized = Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(h.Core, "beginRecovery", accountId, NewCustody));
+        StringAssert.Contains(unauthorized.Message, "SA_UNAUTHORIZED");
+        Assert.AreEqual(0, h.RecoveryStatus(accountId).Count);
+
+        // With both witnesses the same request is accepted.
+        h.Begin(accountId, NewCustody, custody, NewCustody);
+        Assert.IsTrue(h.RecoveryStatus(accountId).Count > 0, "The request is recorded");
+    }
+
+    [TestMethod]
+    public void BeginRecovery_RejectsASecondRecordWhileOneIsPending()
+    {
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
+        EscapeHarness h = new();
+        RuntimeFixture fx = h.Fx;
+        UInt160 accountId = h.RegisterAccount(custody);
+
+        h.Begin(accountId, NewCustody, custody, NewCustody);
+        BigInteger initiatedAt = h.RecoveryStatus(accountId)[1].GetInteger();
+
+        fx.AdvanceTime(TimeSpan.FromHours(1));
+        TestException repeated = Assert.ThrowsExactly<TestException>(
+            () => h.Begin(accountId, NewCustody, custody, NewCustody));
+        StringAssert.Contains(repeated.Message, "SA_RECOVERY_PENDING");
+        Assert.AreEqual(initiatedAt, h.RecoveryStatus(accountId)[1].GetInteger(),
+            "A pending record is never restarted");
+    }
+
+    // ============================================================================
+    // Guards: no record, epoch staleness, cancellation and re-arming.
+    // ============================================================================
+
+    [TestMethod]
+    public void ExecuteRecovery_WithoutInitiation_Faults()
+    {
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
+        EscapeHarness h = new();
+        RuntimeFixture fx = h.Fx;
+        UInt160 accountId = h.RegisterAccount(custody);
+
+        TestException notInitiated = Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(h.Core, "executeRecovery", accountId));
+        StringAssert.Contains(notInitiated.Message, "SA_RECOVERY_PENDING");
+        Assert.AreEqual(custody, fx.AccountCustody(h.Core, accountId));
+    }
+
+    [TestMethod]
+    public void ExecuteRecovery_AfterAFreeze_FaultsOnTheStaleEpoch()
+    {
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
+        EscapeHarness h = new();
+        RuntimeFixture fx = h.Fx;
+        UInt160 accountId = h.RegisterAccount(custody);
+
+        h.Begin(accountId, NewCustody, custody, NewCustody);
+        // Freezing advances the authority epoch, which is bound into the record: the
+        // pre-freeze approval can never settle afterwards.
+        fx.SetSigners(custody);
+        fx.CallVoid(h.Core, "freezeAccount", accountId);
+
+        fx.AdvanceTime(RecoveryWindow);
+        TestException stale = Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(h.Core, "executeRecovery", accountId));
+        StringAssert.Contains(stale.Message, "SA_EPOCH_STALE");
+        Assert.AreEqual(custody, fx.AccountCustody(h.Core, accountId), "A stale record cannot rotate custody");
+        Assert.AreEqual(NewCustody, new UInt160(h.RecoveryStatus(accountId)[4].GetSpan()),
+            "The stale record is left for an explicit cancellation");
+
+        // Cancellation is reachable while frozen and re-arms the flow.
+        fx.SetSigners(custody);
+        fx.CallVoid(h.Core, "cancelRecovery", accountId);
+        Neo.VM.Types.Array cancelled = fx.SingleNotificationState(h.Core, "RecoveryCancelled");
+        Assert.AreEqual(accountId, new UInt160(cancelled[0].GetSpan()));
+        Assert.AreEqual(0, h.RecoveryStatus(accountId).Count);
+    }
+
+    [TestMethod]
+    public void CancelRecovery_ClearsTheRecordAndKeepsEverythingElse()
+    {
+        using P256SessionKey key = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(key);
+        EscapeHarness h = new();
+        RuntimeFixture fx = h.Fx;
+        UInt160 hook = fx.Deploy("hooks/WhitelistHook", h.Core.ToArray());
+        UInt160 accountId = h.RegisterAccount(custody, (object)fx.InstallHook(hook, "allowTarget", Target));
+
+        h.Begin(accountId, NewCustody, custody, NewCustody);
+        fx.AdvanceTime(TimeSpan.FromHours(1));
+        fx.SetSigners(custody);
+        fx.CallVoid(h.Core, "cancelRecovery", accountId);
+
+        Assert.AreEqual(0, h.RecoveryStatus(accountId).Count, "Cancellation consumes the record");
+        Assert.AreEqual(custody, fx.AccountCustody(h.Core, accountId));
+        Assert.AreEqual(1, h.HookIds(accountId).Length, "Cancellation sweeps nothing");
+        Assert.AreEqual(1, fx.HookOrderIds(h.Core, accountId).Length);
+
+        TestException cancelled = Assert.ThrowsExactly<TestException>(
+            () => fx.CallVoid(h.Core, "cancelRecovery", accountId));
+        StringAssert.Contains(cancelled.Message, "SA_RECOVERY_PENDING");
+
+        // The old record is gone, so a fresh request starts a fresh timelock.
+        BigInteger now = fx.Now();
+        h.Begin(accountId, NewCustody, custody, NewCustody);
+        Assert.AreEqual(now, h.RecoveryStatus(accountId)[1].GetInteger());
     }
 }

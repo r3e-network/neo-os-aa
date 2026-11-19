@@ -127,7 +127,7 @@ public class SourceInvariantTests
         // Strict Array, never a Struct: canonical serialization of the top level
         // must begin with 0x40.
         StringAssert.Contains(executionSource, "rawHeader[0] == 0x40", "Top-level Array (0x40) header check");
-        StringAssert.Contains(executionSource, "AssertTargetIsNotProtocolOwned(target)", "Protocol-owned target ban");
+        StringAssert.Contains(executionSource, "AssertTargetIsNotProtocolOwned(target", "Protocol-owned target ban");
         // Non-negative NeoVM integers are signed 256-bit values. The canonical
         // uint-like field guard must reject a full-width value whose sign bit is
         // set instead of accepting it merely because its magnitude fits.
@@ -205,6 +205,7 @@ public class SourceInvariantTests
     public void SourceInvariant_ExecuteUserOp_AuthorizationPaths()
     {
         var executionSource = Read("SmartAccount.Execution.cs");
+        var modulesSource = Read("SmartAccount.Modules.cs");
         var verifyContextSource = Read("SmartAccount.VerifyContext.cs");
 
         // v4 routing is explicit by validatorId (spec §3.5): the routed
@@ -213,15 +214,16 @@ public class SourceInvariantTests
         StringAssert.Contains(executionSource, "GetModuleInstance(accountId, validatorId)", "Explicit validatorId routing resolves installed instances");
         StringAssert.Contains(executionSource, "GetThresholdPolicy(accountId, validatorId)", "Threshold-policy routing resolves installed policies");
         StringAssert.Contains(executionSource, "CallModuleGasCapped(", "Module callbacks run under the gas hard budget");
-        StringAssert.Contains(executionSource, "\"validateSignature\"", "Validator method");
-        StringAssert.Contains(executionSource, "ValidationAggregateGasLimit", "Validation aggregate gas cap");
+        StringAssert.Contains(executionSource, "\"validateUserOp\"", "Validator method");
+        StringAssert.Contains(executionSource, "ValidationPerCallGasLimit", "Validation per-call gas cap");
         // F-7 phase gates: each writer phase opens exactly one module authorization
-        // (0x58) and closes it before the next phase opens.
-        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseValidation", "Validation phase gate");
-        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseHookPre", "Hook pre phase gate");
+        // (0x58) and closes it before the next phase opens. The envelope opens the
+        // dispatch phase; each module callback opens its own phase.
+        StringAssert.Contains(modulesSource, "EnterModulePhase(accountId, ctx, PhaseValidation", "Validation phase gate");
+        StringAssert.Contains(modulesSource, "EnterModulePhase(accountId, ctx, PhaseHookPre", "Hook pre phase gate");
         StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseTargetDispatch", "Target dispatch phase gate");
-        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseHookPost", "Hook post phase gate");
-        StringAssert.Contains(executionSource, "EnterModulePhase(accountId, ctx, PhaseCompletion", "Completion phase gate");
+        StringAssert.Contains(modulesSource, "EnterModulePhase(accountId, ctx, PhaseHookPost", "Hook post phase gate");
+        StringAssert.Contains(modulesSource, "EnterModulePhase(accountId, ctx, PhaseCompletion", "Completion phase gate");
         // F-1: the dispatched target's CheckWitness(accountId) resolves through the
         // 0x02 verify context bound around THIS operation's dispatch only.
         StringAssert.Contains(executionSource, "SetVerifyContext(accountId, target)", "F-1 verify context binds the actual dispatched target");
@@ -241,11 +243,16 @@ public class SourceInvariantTests
 
         // Plan B gas hard budget (spec §11): the datoshi constants live in the
         // protocol constants file and every module callback runs through the
-        // GasLeft-wrapped capped caller.
-        StringAssert.Contains(moduleProtocolSource, "ValidationAggregateGasLimit = 100_000_000", "1 GAS validation aggregate cap");
+        // GasLeft-wrapped capped caller. Aggregates are caps × multiplicity so a
+        // maximal threshold round always fits (see ValidationAggregateGasLimit).
+        StringAssert.Contains(moduleProtocolSource, "ValidationPerCallGasLimit = 100_000_000", "1 GAS per validation callback cap");
+        StringAssert.Contains(moduleProtocolSource, "CompletionPerCallGasLimit = 100_000_000", "1 GAS per completion callback cap");
         StringAssert.Contains(moduleProtocolSource, "HookCallbackGasLimit = 250_000_000", "2.5 GAS per hook pre/post cap");
-        StringAssert.Contains(moduleProtocolSource, "ValidatorCompletionGasLimit = 100_000_000", "1 GAS validator completion cap");
         StringAssert.Contains(moduleProtocolSource, "LifecycleCallbackGasLimit = 250_000_000", "2.5 GAS per lifecycle callback cap");
+        StringAssert.Contains(modulesSource, "(BigInteger)ValidationPerCallGasLimit * (1 + MaxThresholdPolicyMembers)",
+            "Validation aggregate scales with the threshold member limit");
+        StringAssert.Contains(modulesSource, "(BigInteger)CompletionPerCallGasLimit * (1 + MaxThresholdPolicyMembers)",
+            "Completion aggregate scales with the threshold member limit");
         StringAssert.Contains(modulesSource, "CallModuleGasCapped", "Shared capped module entrypoint");
         StringAssert.Contains(modulesSource, "AssertCallbackGasBudget", "GasLeft fail-closed budget check");
 
@@ -281,7 +288,7 @@ public class SourceInvariantTests
         StringAssert.Contains(messageSource, "secp256r1SHA256", "secp256r1 curve with SHA256");
         // Module route requires the declared messageCapability.
         StringAssert.Contains(messageSource, "module.MessageCapability", "Module message route is capability-gated");
-        StringAssert.Contains(messageSource, "ValidationAggregateGasLimit", "Module message route runs under the validation budget");
+        StringAssert.Contains(messageSource, "ValidationPerCallGasLimit", "Module message route runs under the validation budget");
         // Message authorization never consumes an operation nonce (spec §8).
         Assert.IsFalse(messageSource.Contains("ConsumeOperationNonce", StringComparison.Ordinal),
             "Message signatures must not consume operation nonces");
@@ -296,14 +303,17 @@ public class SourceInvariantTests
     {
         var rng = Rng();
         var escapeSource = Read("SmartAccount.Escape.cs");
-        var internalSource = Read("SmartAccount.Internal.cs");
 
-        StringAssert.Contains(escapeSource, "Escape not initiated", "Escape not initiated assertion");
-        StringAssert.Contains(escapeSource, "Timelock active", "Timelock active assertion");
-        StringAssert.Contains(escapeSource, "Only backup owner can finalize", "Owner check on finalize");
-        StringAssert.Contains(escapeSource, "Escape cooldown active", "Cooldown check");
-        StringAssert.Contains(internalSource, "EscapeCooldownMs = 60L * 60 * 1000", "1 hour cooldown in Runtime.Time milliseconds");
-        StringAssert.Contains(escapeSource, "state.EscapeTriggeredAt + ((BigInteger)state.EscapeTimelock * 1000)", "Escape timelock seconds converted to Runtime.Time milliseconds");
+        // v4 recovery is core-built-in and callback-free (spec §7.5): a custody or
+        // recovery-authority initiated record matures in Runtime.Time, is bound to
+        // the authority epoch it was opened under, and is executed only by the
+        // custody after the lock. The v3 backup-owner escape hatch is gone.
+        StringAssert.Contains(escapeSource, "ErrorRecoveryPending + \" none in progress\"", "Finalize/cancel requires an in-flight recovery record");
+        StringAssert.Contains(escapeSource, "ErrorRecoveryLocked", "The recovery timelock is enforced on the core record");
+        StringAssert.Contains(escapeSource, "RequireCustodyWitness(control)", "Only the custody may execute the recovery");
+        StringAssert.Contains(escapeSource, "AssertAccountConfigurationIdle(accountId)", "Recovery is refused while configuration is in flight");
+        StringAssert.Contains(escapeSource, "pending.AuthorityEpochAtInit == control.AuthorityEpoch", "A recovery opened under another epoch is dead");
+        StringAssert.Contains(escapeSource, "ErrorEpochStale", "Stale-epoch recovery fails closed");
 
         // Randomized invariant check: verify escape timelock range is 7-90 days
         for (int i = 0; i < Iterations; i++)
@@ -322,18 +332,19 @@ public class SourceInvariantTests
     [TestMethod, Timeout(120_000)]
     public void SourceInvariant_ConfigUpdate_TimelockConsistency()
     {
-        var accountsSource = Read("SmartAccount.Accounts.cs");
-        var internalSource = Read("SmartAccount.Internal.cs");
+        var intentsSource = Read("SmartAccount.Intents.cs");
+        var protocolSource = Read("SmartAccount.ModuleProtocol.cs");
 
-        StringAssert.Contains(accountsSource, "Timelock not elapsed", "Config timelock assertion");
-        StringAssert.Contains(internalSource, "ConfigUpdateTimelockMs = 24L * 60 * 60 * 1000", "24 hours config timelock in Runtime.Time milliseconds");
-
-        // Verify both verifier and hook use the same timelock constant
-        Assert.AreEqual(4, CountOccurrences(accountsSource, "ConfigUpdateTimelockMs"),
-            "ConfigUpdateTimelockMs should be used four times in accounts source (verifier + hook + module call replay + pending-call overwrite guard)");
-
-        Assert.AreEqual(1, CountOccurrences(internalSource, "ConfigUpdateTimelockMs"),
-            "ConfigUpdateTimelockMs should be defined once in internal source");
+        // v4 replaces the verifier/hook pending-call timelocks with one atomic
+        // configuration intent: propose → mature → confirm, re-bound by digest.
+        StringAssert.Contains(intentsSource, "ErrorIntentImmature", "Configuration intents mature before confirmation");
+        StringAssert.Contains(intentsSource, "ErrorIntentExpired", "Configuration intents expire");
+        StringAssert.Contains(intentsSource, "ErrorIntentConflict", "Conflicting intents are rejected");
+        StringAssert.Contains(protocolSource, "ModuleChangeDelayMs = 86_400_000", "24 hours configuration delay in Runtime.Time milliseconds");
+        Assert.AreEqual(1, CountOccurrences(intentsSource, "ModuleChangeDelayMs"),
+            "The delay is applied at proposal time in exactly one place");
+        Assert.AreEqual(1, CountOccurrences(protocolSource, "ModuleChangeDelayMs"),
+            "The delay constant is defined once");
     }
 
     // ========================================================================
@@ -351,7 +362,7 @@ public class SourceInvariantTests
         StringAssert.Contains(marketSource, "New backup owner required", "New owner required for settle");
         StringAssert.Contains(marketSource, "state.Verifier = UInt160.Zero", "Verifier wiped on settle");
         StringAssert.Contains(marketSource, "state.HookId = UInt160.Zero", "Hook wiped on settle");
-        StringAssert.Contains(marketSource, "state.EscapeTriggeredAt = 0", "Escape reset on settle");
+        StringAssert.Contains(marketSource, "state.EscapeTriggeredAt = BigInteger.Zero", "Recovery state reset on settle");
 
         // Verify escrow blocks execution
         var executionSource = Read("SmartAccount.Execution.cs");
@@ -367,19 +378,29 @@ public class SourceInvariantTests
     {
         var rng = Rng();
         var accountsSource = Read("SmartAccount.Accounts.cs");
+        var modulesSource = Read("SmartAccount.Modules.cs");
+        var executionSource = Read("SmartAccount.Execution.cs");
 
-        // Verify setPublicKey is NOT in the verifier method allowlist
-        StringAssert.Contains(accountsSource, "AllowedVerifierMethods");
-        var allowlistStart = accountsSource.IndexOf("AllowedVerifierMethods", StringComparison.Ordinal);
-        var allowlistEnd = accountsSource.IndexOf("};", allowlistStart, StringComparison.Ordinal);
-        var allowlistBlock = accountsSource.Substring(allowlistStart, allowlistEnd - allowlistStart + 2);
-        Assert.IsFalse(allowlistBlock.Contains("\"setPublicKey\"", StringComparison.Ordinal),
-            "setPublicKey must NOT be in the verifier allowlist");
-
-        // Verify hook allowlist exists
-        StringAssert.Contains(accountsSource, "AllowedHookMethods");
-        StringAssert.Contains(accountsSource, "ComputeModuleCallHash");
-        StringAssert.Contains(accountsSource, "Timelock not elapsed");
+        // v4 deleted the v3 free-form callVerifier surface, and with it the
+        // per-verifier method allowlist: configuration is a hash-pinned module
+        // install/configure intent whose positional shape is validated before
+        // anything is written.
+        Assert.IsFalse(accountsSource.Contains("AllowedVerifierMethods", StringComparison.Ordinal),
+            "The v3 verifier method allowlist must stay deleted");
+        Assert.IsFalse(accountsSource.Contains("callVerifier", StringComparison.Ordinal),
+            "The v3 free-form verifier call must stay deleted");
+        StringAssert.Contains(modulesSource, "private static void ValidateActionShape(object[] action)",
+            "Every intent action is shape-validated");
+        StringAssert.Contains(modulesSource, "ValidateActionShapeCore(action)",
+            "The positional shape of each action code is checked");
+        StringAssert.Contains(modulesSource, "\"getModuleProfile\"",
+            "A module is pinned by its canonical profile");
+        StringAssert.Contains(modulesSource, "IsMemberOfActivePolicy(module)",
+            "A policy member never routes standalone");
+        StringAssert.Contains(modulesSource, "member.ActivePolicyId = policyId;",
+            "The policy executor maintains the member back-pointer the routing check reads");
+        StringAssert.Contains(executionSource, "ErrorModuleNotRoutable",
+            "Routing violations fail closed");
 
         // Randomized invariant check: verify method names in allowlist are safe
         string[] safeVerifierMethods = { "clearAccount", "setSessionKey", "clearSessionKey", "setConfig", "createSubscription", "setDKIMRegistry" };
@@ -406,8 +427,6 @@ public class SourceInvariantTests
             (0x01, "Prefix_AccountState"),
             (0x02, "Prefix_VerifyContext"),
             (0x03, "Prefix_Nonce"),
-            (0x04, "Prefix_VerifierConfigContext"),
-            (0x05, "Prefix_HookConfigContext"),
             (0x06, "Prefix_MarketEscrowContract"),
             (0x07, "Prefix_MarketEscrowListing"),
             (0x08, "Prefix_EscapeLastInitiated"),
@@ -417,6 +436,13 @@ public class SourceInvariantTests
             (0x0C, "Prefix_MetadataUri"),
             (0x0D, "Prefix_HookExecutionContext"),
             (0x0E, "Prefix_VerifierExecutionContext"),
+            (0x0F, "Prefix_PendingVerifierCall"),
+            (0x10, "Prefix_PendingHookCall"),
+            (0x23, "Prefix_HookDependencies"),
+            (0x24, "Prefix_VerifierDependencies"),
+            (0x25, "Prefix_DependencyMaintenance"),
+            (0x26, "Prefix_ConfigurationContextDepth"),
+            (0x28, "Prefix_UserOperationInFlight"),
         };
 
         // Verify each prefix is defined and unique
@@ -441,11 +467,16 @@ public class SourceInvariantTests
         string[] requiredEvents =
         {
             "AccountRegistered", "ModuleInstalled", "ModuleUpdateInitiated",
-            "ModuleUpdateConfirmed", "ModuleRemoved", "HookUpdateConfirmed",
-            "HookUpdateInitiated", "VerifierUpdateConfirmed", "VerifierUpdateInitiated",
+            "ModuleUpdateConfirmed", "ModuleRemoved", "MetadataUriUpdated",
             "UserOpExecuted", "EscapeInitiated", "EscapeFinalized",
             "MarketEscrowEntered", "MarketEscrowCancelled", "MarketEscrowSettled",
-            "SponsoredUserOpExecuted",
+            "SponsoredUserOpExecuted", "ModuleInstanceInstalled", "ModuleInstanceConfigured",
+            "ModuleInstanceRemoved", "ModuleCodeRebound", "HookOrderSet",
+            "ThresholdPolicySet", "CredentialRevoked", "ConfigurationIntentProposed",
+            "ConfigurationIntentConfirmed", "ConfigurationIntentCancelled",
+            "NonceChannelOpened", "AccountFrozen", "AccountUnfrozen",
+            "RecoveryInitiated", "RecoveryExecuted", "MigrationRequired",
+            "MigrationImported", "MessageSubjectUpdated",
         };
 
         foreach (var evt in requiredEvents)
@@ -481,8 +512,8 @@ public class SourceInvariantTests
         // Verify specific safe method declarations ([Safe] on separate line from method)
         string[] safeMethodNames =
         {
-            "GetVerifier", "GetHook", "GetBackupOwner", "IsExecutionActive",
-            "GetNonce", "HasPendingVerifierUpdate", "HasPendingHookUpdate",
+            "getAccount", "getModule", "getModules", "getHookOrder", "IsExecutionActive",
+            "GetNonce", "GetMetadataUri",
         };
 
         foreach (var methodName in safeMethodNames)
@@ -642,8 +673,8 @@ public class SourceInvariantTests
 
         StringAssert.Contains(hookSource, "OneDayMs = 24L * 60 * 60 * 1000", "Daily limit windows use Runtime.Time milliseconds");
         Assert.IsFalse(hookSource.Contains("OneDaySeconds", StringComparison.Ordinal), "Daily limit hook must not compare second constants directly to Runtime.Time");
-        StringAssert.Contains(hookSource, "GetRollingWindowRecordCount(accountId, targetContract, currentTime) < MaxHistorySize", "PreExecute refuses unrecordable rolling-window transfers");
-        StringAssert.Contains(hookSource, "GetRollingWindowRecordCount(accountId, token, timestamp) < MaxHistorySize", "PostExecute refuses to evict live rolling-window spend records");
+        StringAssert.Contains(hookSource, "GetRollingWindowRecordCount(accountId, moduleId, targetContract, currentTime) < MaxHistorySize", "PreCheck refuses unrecordable rolling-window transfers");
+        StringAssert.Contains(hookSource, "GetRollingWindowRecordCount(accountId, moduleId, token, currentTime) < MaxHistorySize", "PostCheck refuses to evict live rolling-window spend records");
         StringAssert.Contains(hookSource, "Daily limit history full", "Rolling-window storage cap has an explicit failure mode");
         Assert.IsFalse(hookSource.Contains("EnforceMaxHistorySize", StringComparison.Ordinal), "Rolling-window cap must not delete arbitrary in-window spend records");
         Assert.IsFalse(hookSource.Contains("count - MaxHistorySize", StringComparison.Ordinal), "Rolling-window cap must not trim live records by count");
@@ -706,11 +737,12 @@ public class SourceInvariantTests
     {
         var paymasterPartial = Read("SmartAccount.Paymaster.cs");
 
-        // Sponsored execution calls the standard ExecuteUserOp internally
-        StringAssert.Contains(paymasterPartial, "ExecuteUserOp(accountId");
+        // Sponsored execution enters the core kernel's own executeUserOp, so a
+        // sponsored operation is never a parallel authorization path.
+        StringAssert.Contains(paymasterPartial, "executeUserOp(accountId!");
 
-        // Batch sponsored execution calls the standard ExecuteUserOps internally
-        StringAssert.Contains(paymasterPartial, "ExecuteUserOps(accountId");
+        // Batch sponsored execution enters the core kernel's executeUserOps.
+        StringAssert.Contains(paymasterPartial, "executeUserOps(accountId!");
 
         // Pre-validation uses ReadOnly
         StringAssert.Contains(paymasterPartial, "CallFlags.ReadOnly");
@@ -756,21 +788,21 @@ public class SourceInvariantTests
             StringAssert.Contains(code, "public static void Update(ByteString nef, string manifest) => HookAuthority.Update(nef, manifest);", $"{hook} delegates update");
         }
 
-        string verifierAuthority = ReadRepo("contracts", "plugins", "verifiers", "VerifierAuthority.cs");
+        string verifierAuthority = ReadRepo("contracts", "plugins", "validators", "ValidatorAuthority.cs");
         StringAssert.Contains(verifierAuthority, "internal static void Update(ByteString nef, string manifest)");
         StringAssert.Contains(verifierAuthority, "ValidateAdmin();");
         StringAssert.Contains(verifierAuthority, "ContractManagement.Update(nef, manifest)");
 
-        foreach (string verifier in new[] { "MultiSigVerifier.cs", "NeoNativeVerifier.cs", "SessionKeyVerifier.cs", "SubscriptionVerifier.cs", "TEEVerifier.cs", "Web3AuthVerifier.cs", "WebAuthnVerifier.cs", "ZKEmailVerifier.cs", "ZkLoginVerifier.cs" })
+        foreach (string verifier in new[] { "MultiSigValidator.cs", "NeoWitnessValidator.cs", "SessionKeyValidator.cs", "SubscriptionValidator.cs", "TeeKeyValidator.cs", "Web3AuthValidator.cs", "P256Validator.cs", "ZKEmailVerifier.cs", "DelegatedIdentityValidator.cs" })
         {
-            string code = ReadRepo("contracts", "plugins", "verifiers", verifier);
-            StringAssert.Contains(code, "public static void Update(ByteString nef, string manifest) => VerifierAuthority.Update(nef, manifest);", $"{verifier} delegates update");
+            string code = ReadRepo("contracts", "plugins", "validators", verifier);
+            StringAssert.Contains(code, "public static void Update(ByteString nef, string manifest) => ValidatorAuthority.Update(nef, manifest);", $"{verifier} delegates update");
         }
 
-        // Audit fixes H5 / H6 / SA-04: the two fund-holding auxiliaries (SocialRecoveryVerifier
+        // Audit fixes H5 / H6 / SA-04: the two fund-holding auxiliaries (SocialRecoveryService
         // custodies the per-account oracle-credit GAS pool; SAAddressMarket holds in-flight
         // buyer escrow) must expose the same SA-D-01/SA-D-02 timelocked admin surface as the
-        // VerifierAuthority idiom — proposeUpdate + update/confirmUpdate behind the 7-day
+        // ValidatorAuthority idiom — proposeUpdate + update/confirmUpdate behind the 7-day
         // window, and rotateAdmin/confirmAdminRotation/cancelAdminRotation in place of the
         // removed instant transferAdmin/setAdmin hand-offs.
         string marketSource = ReadRepo("contracts", "custom", "market", "SAAddressMarket.cs");
@@ -781,7 +813,7 @@ public class SourceInvariantTests
         Assert.IsFalse(marketSource.Contains("public static void SetAdmin", StringComparison.Ordinal),
             "H6: the instant setAdmin hand-off must be removed");
 
-        string recoverySource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
+        string recoverySource = ReadRepo("contracts", "plugins", "recovery", "SocialRecoveryService.Fixed.cs");
         StringAssert.Contains(recoverySource, "public static void ProposeUpdate(UInt256 nefHash, UInt256 manifestHash)", "H5: recovery verifier exposes proposeUpdate");
         StringAssert.Contains(recoverySource, "Update timelock not expired", "H5: recovery update enforces the 7-day window");
         StringAssert.Contains(recoverySource, "public static void RotateAdmin(UInt160 newAdmin)", "SA-04: recovery verifier exposes timelocked rotateAdmin");
@@ -806,24 +838,36 @@ public class SourceInvariantTests
         StringAssert.Contains(combined, "public uint EscapeTimelock");
         StringAssert.Contains(combined, "public BigInteger EscapeTriggeredAt");
 
-        // Verify UserOperation fields
-        StringAssert.Contains(combined, "public UInt160 TargetContract");
-        StringAssert.Contains(combined, "public string Method");
-        StringAssert.Contains(combined, "public object[] Args");
-        StringAssert.Contains(combined, "public BigInteger Nonce");
-        StringAssert.Contains(combined, "public BigInteger Deadline");
-        StringAssert.Contains(combined, "public ByteString Signature");
+        // v4 control record: the custody-bearing account metadata (spec §7.2). The
+        // configuration nonce and authority epoch are the replay bindings signed
+        // into every operation digest, so their field names are part of the
+        // protocol contract rather than an implementation detail.
+        StringAssert.Contains(combined, "public class AccountControl");
+        StringAssert.Contains(combined, "public UInt160 Custody");
+        StringAssert.Contains(combined, "public UInt160 RecoveryAuthority");
+        StringAssert.Contains(combined, "public BigInteger AuthorityEpoch");
+        StringAssert.Contains(combined, "public BigInteger ConfigurationNonce");
+        StringAssert.Contains(combined, "public bool DefaultOperationAuthorization");
 
-        // Verify PendingConfigUpdate fields
-        StringAssert.Contains(combined, "public UInt160 NewVerifier");
-        StringAssert.Contains(combined, "public UInt160 NewHookId");
-        StringAssert.Contains(combined, "public ByteString VerifierParams");
-        StringAssert.Contains(combined, "public BigInteger InitiatedAt");
+        // v4 module instance: code binding plus the capability flags read from the
+        // pinned profile digest (spec §7.3).
+        StringAssert.Contains(combined, "public class ModuleInstance");
+        StringAssert.Contains(combined, "public UInt160 ContractHash");
+        StringAssert.Contains(combined, "public BigInteger CredentialGeneration");
+        StringAssert.Contains(combined, "public ByteString ProfileSha256");
+        StringAssert.Contains(combined, "public bool ThresholdMemberEligible");
+
+        // v4 configuration intent: the 24h-timelocked action batch (spec §10).
+        StringAssert.Contains(combined, "public class ConfigurationIntentRecord");
+        StringAssert.Contains(combined, "public BigInteger IntentId");
+        StringAssert.Contains(combined, "public BigInteger MatureAt");
+        StringAssert.Contains(combined, "public ByteString ActionDigest");
+        StringAssert.Contains(combined, "public object[] Actions");
 
         // Randomized invariant check: verify all state-changing methods use CheckWitness
-        string[] protectedMethods = { "RegisterAccount", "UpdateHook", "ConfirmHookUpdate",
-            "UpdateVerifier", "ConfirmVerifierUpdate", "InitiateEscape", "FinalizeEscape",
-            "EnterMarketEscrow", "SetMetadataUri", "CancelVerifierUpdate", "CancelHookUpdate" };
+        string[] protectedMethods = { "createAccount", "proposeConfiguration", "confirmConfiguration",
+            "cancelConfiguration", "revokeCredentials", "executeUserOp", "beginRecovery",
+            "executeRecovery", "EnterMarketEscrow", "SetMetadataUri" };
 
         for (int i = 0; i < Iterations; i++)
         {
@@ -843,14 +887,14 @@ public class SourceInvariantTests
         // Audit fix SA-06: SetupRecovery was first-write-wins with no proof of account
         // control — a squatter witnessing their OWN key could bind a victim's accountId.
         // The fix pins the canonical SA core (contract-admin gated, initial-set-only,
-        // re-pointing timelocked — mirroring the VerifierAuthority M-7 surface) and requires
+        // re-pointing timelocked — mirroring the ValidatorAuthority M-7 surface) and requires
         // the core's getBackupOwner registry to attest the claimed owner at setup.
-        string flowsSource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Flows.cs");
+        string flowsSource = ReadRepo("contracts", "plugins", "recovery", "SocialRecoveryService.Flows.cs");
         StringAssert.Contains(flowsSource, "saContract is not the authorized core", "SA-06: setup pins the authorized core");
-        StringAssert.Contains(flowsSource, "owner does not control account", "SA-06: setup attests the registered backup owner");
-        StringAssert.Contains(flowsSource, "\"getBackupOwner\"", "SA-06: ownership is attested via the core registry");
+        StringAssert.Contains(flowsSource, "owner does not control account", "SA-06: setup attests the registered custody");
+        StringAssert.Contains(flowsSource, "\"getAccount\"", "SA-06: ownership is attested via the core control record");
 
-        string fixedSource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
+        string fixedSource = ReadRepo("contracts", "plugins", "recovery", "SocialRecoveryService.Fixed.cs");
         StringAssert.Contains(fixedSource, "public static void SetAuthorizedCore(UInt160 coreContract)", "SA-06: admin-gated initial core bind exists");
         StringAssert.Contains(fixedSource, "core already set; use ProposeAuthorizedCore", "SA-06: instant core re-pointing is rejected");
         StringAssert.Contains(fixedSource, "public static void ProposeAuthorizedCore(UInt160 coreContract)", "SA-06: timelocked core re-pointing exists");
@@ -865,28 +909,43 @@ public class SourceInvariantTests
     public void SourceInvariant_RecoveryVerifier_LeastPrivilegePermissions()
     {
         // Audit fix SA-03: the wildcard ContractPermission("*", "*") is replaced by
-        // five method-scoped grants covering the verified call surface — any future
+        // method-scoped grants covering the verified v4 call surface — any future
         // wildcard reintroduction or dropped grant must fail here.
-        string fixedSource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Fixed.cs");
+        string fixedSource = ReadRepo("contracts", "plugins", "recovery", "SocialRecoveryService.Fixed.cs");
         Assert.IsFalse(fixedSource.Contains("ContractPermission(\"*\", \"*\")", StringComparison.Ordinal), "SA-03: no wildcard contract permission");
         StringAssert.Contains(fixedSource, "ContractPermission(\"0xfffdc93764dbaddd97c48f252a53ea4643faa3fd\", \"update\")", "SA-03: ContractManagement.update grant (timelocked self-upgrade)");
-        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"getBackupOwner\")", "SA-03: core getBackupOwner grant (SA-06 attestation)");
-        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"canExecuteVerifier\")", "SA-03: V3 verifier execution-context grant");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"getAccount\")", "SA-03: core control-record grant (SA-06 attestation)");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"beginRecovery\")", "SA-03: core beginRecovery grant");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"executeRecovery\")", "SA-03: core executeRecovery grant");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"getRecoveryStatus\")", "SA-03: core getRecoveryStatus grant");
+        StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"cancelRecovery\")", "SA-03: core cancelRecovery grant");
         StringAssert.Contains(fixedSource, "ContractPermission(\"*\", \"request\")", "SA-03: oracle request grant (ticket submission)");
         StringAssert.Contains(fixedSource, "ContractPermission(\"0xd2a4cff31913016155e38e474a2c06d08be276cf\", \"transfer\")", "SA-03: GAS transfer grant (credit forwarding)");
     }
 
     [TestMethod, Timeout(120_000)]
-    public void SourceInvariant_RecoveryVerifier_ImplementsGuardedV3Surface()
+    public void SourceInvariant_RecoveryVerifier_ImplementsV4ModuleSurface()
     {
-        string v3Source = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.V3.cs");
-        StringAssert.Contains(v3Source, "public static bool SupportsV3() => true");
-        StringAssert.Contains(v3Source, "public static bool ValidateSignature(UInt160 accountId, UserOperation op)");
-        StringAssert.Contains(v3Source, "public static void PostExecute(UInt160 accountId, UserOperation op, object result)");
-        Assert.AreEqual(2, v3Source.Split("AssertV3ExecutionCaller(accountId)", StringSplitOptions.None).Length - 1,
-            "Both V3 execution entrypoints must validate the bound SA Core context");
-        StringAssert.Contains(v3Source, "\"canExecuteVerifier\"");
-        StringAssert.Contains(v3Source, "Runtime.CallingScriptHash == core");
+        // The recovery-backed session validator is a v4 module instance: it declares
+        // a profile, validates through the routed digest callback and books the
+        // outcome in the completion callback. Every callback re-derives its
+        // authorization from the core's own phase gates (0x58), so the retired v3
+        // entry points — SupportsV3, ValidateSignature and a caller-guarded
+        // PostExecute — must stay deleted rather than linger as a second surface.
+        string moduleSource = ReadRepo("contracts", "plugins", "recovery", "ActionSessionValidator.cs");
+        StringAssert.Contains(moduleSource, "public static string GetModuleProfile()");
+        StringAssert.Contains(moduleSource, "public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)");
+        StringAssert.Contains(moduleSource, "public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)");
+        StringAssert.Contains(moduleSource, "ValidatorAuthority.RequireValidation(accountId, operation)",
+            "Validation re-derives its phase gate from the core");
+        StringAssert.Contains(moduleSource, "ValidatorAuthority.RequireCompletion(accountId, operation)",
+            "Completion re-derives its phase gate from the core");
+        StringAssert.Contains(moduleSource, "ValidatorAuthority.RequireLifecycle(accountId, moduleId)",
+            "Lifecycle callbacks re-derive their phase gate from the core");
+        Assert.IsFalse(moduleSource.Contains("SupportsV3", StringComparison.Ordinal),
+            "The v3 capability flag must stay removed");
+        Assert.IsFalse(moduleSource.Contains("public static void PostExecute(", StringComparison.Ordinal),
+            "The v3 PostExecute entry point must stay removed");
     }
 
     // ========================================================================
@@ -896,21 +955,29 @@ public class SourceInvariantTests
     [TestMethod, Timeout(120_000)]
     public void SourceInvariant_SignedPayloadsBindAuthorizedAaCore()
     {
-        string sharedPayload = ReadRepo("contracts", "plugins", "verifiers", "VerifierPayload.cs");
-        StringAssert.Contains(sharedPayload, "VerifierAuthority.AuthorizedCore()",
-            "shared verifier payload must bind the authorized SA core");
+        // A threshold-policy member signs a member-scoped digest: the shared
+        // payload domain-separates it and binds the instance's credential
+        // generation, so a revoked member cannot replay an approval inside a
+        // reshaped policy (spec §5.2).
+        string sharedPayload = ReadRepo("contracts", "plugins", "validators", "ValidatorPayload.cs");
+        StringAssert.Contains(sharedPayload, "ThresholdMemberDomain",
+            "shared member payload must be domain separated");
+        StringAssert.Contains(sharedPayload, "ValidatorAuthority.CredentialGeneration(accountId, moduleId)",
+            "shared member payload must bind the instance credential generation");
 
-        string web3Auth = ReadRepo("contracts", "plugins", "verifiers", "Web3AuthVerifier.cs");
-        StringAssert.Contains(web3Auth, "ToBytes20Word(VerifierAuthority.AuthorizedCore())",
+        string web3Auth = ReadRepo("contracts", "plugins", "validators", "Web3AuthValidator.cs");
+        StringAssert.Contains(web3Auth, "ToBytes20Word(ValidatorAuthority.AuthorizedCore())",
             "Web3Auth struct hash must bind the authorized SA core");
         StringAssert.Contains(web3Auth, "UserOperationTypeHash",
             "Web3Auth struct hash must use the core-bound type hash");
-        StringAssert.Contains(web3Auth, "CryptoLib.RecoverSecp256K1(hash, signature!)",
+        StringAssert.Contains(web3Auth, "CryptoLib.RecoverSecp256K1(hash, signature)",
             "Web3Auth ERC-1271 verification must consume the supplied digest directly");
 
-        string zkLogin = ReadRepo("contracts", "plugins", "verifiers", "ZkLoginVerifier.cs");
-        StringAssert.Contains(zkLogin, "(byte[])VerifierAuthority.AuthorizedCore()",
-            "ZkLogin payload must bind the authorized SA core");
+        string zkLogin = ReadRepo("contracts", "plugins", "validators", "DelegatedIdentityValidator.cs");
+        StringAssert.Contains(zkLogin, "IdentityDomain",
+            "Delegated identity payload must be domain separated");
+        StringAssert.Contains(zkLogin, "(byte[])signingDigest",
+            "Delegated identity payload must consume the core-supplied digest");
     }
 
     // ========================================================================
@@ -918,25 +985,30 @@ public class SourceInvariantTests
     // ========================================================================
 
     [TestMethod, Timeout(120_000)]
-    public void SourceInvariant_AllPostExecutePathsValidateCaller()
+    public void SourceInvariant_AllCompletionPathsValidateCaller()
     {
-        // Audit low: several no-op PostExecute bodies previously had no caller guard —
-        // harmless today, but a future edit could add logic to an unguarded path. The
-        // estate invariant is that EVERY PostExecute validates its caller, even a no-op.
+        // Audit low: several no-op post-execution bodies previously had no caller
+        // guard — harmless today, but a future edit could add logic to an unguarded
+        // path. The v4 estate invariant is that EVERY post-execution callback first
+        // re-derives its authorization from the core's phase gate (hook post phase
+        // 0x58 for hooks, completion phase for validator instances), even a no-op.
         string neoDid = ReadRepo("contracts", "plugins", "hooks", "NeoDIDCredentialHook.cs");
-        StringAssert.Contains(neoDid, "HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
-            "NeoDIDCredentialHook.PostExecute validates its caller");
+        StringAssert.Contains(neoDid, "HookAuthority.RequirePostCheck(accountId, operation)",
+            "NeoDIDCredentialHook.PostCheck validates its caller");
         string whitelist = ReadRepo("contracts", "plugins", "hooks", "WhitelistHook.cs");
-        StringAssert.Contains(whitelist, "HookAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
-            "WhitelistHook.PostExecute validates its caller");
-        string neoNative = ReadRepo("contracts", "plugins", "verifiers", "NeoNativeVerifier.cs");
-        StringAssert.Contains(neoNative, "VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
-            "NeoNativeVerifier.PostExecute validates its caller");
-        foreach (string verifier in new[] { "TEEVerifier.cs", "Web3AuthVerifier.cs", "WebAuthnVerifier.cs", "ZKEmailVerifier.cs", "ZkLoginVerifier.cs" })
+        StringAssert.Contains(whitelist, "HookAuthority.RequirePostCheck(accountId, operation)",
+            "WhitelistHook.PostCheck validates its caller");
+        string tokenRestricted = ReadRepo("contracts", "plugins", "hooks", "TokenRestrictedHook.cs");
+        StringAssert.Contains(tokenRestricted, "HookAuthority.RequirePostCheck(accountId, operation)",
+            "TokenRestrictedHook.PostCheck validates its caller");
+        string neoNative = ReadRepo("contracts", "plugins", "validators", "NeoWitnessValidator.cs");
+        StringAssert.Contains(neoNative, "ValidatorAuthority.RequireCompletion(accountId, operation)",
+            "NeoWitnessValidator.OnUserOpComplete validates its caller");
+        foreach (string verifier in new[] { "TeeKeyValidator.cs", "Web3AuthValidator.cs", "P256Validator.cs", "ZKEmailVerifier.cs", "DelegatedIdentityValidator.cs", "MultiSigValidator.cs" })
         {
-            string source = ReadRepo("contracts", "plugins", "verifiers", verifier);
-            StringAssert.Contains(source, "VerifierAuthority.ValidateExecutionCaller(accountId, Runtime.CallingScriptHash, Runtime.ExecutingScriptHash)",
-                $"{verifier}.PostExecute validates its caller");
+            string source = ReadRepo("contracts", "plugins", "validators", verifier);
+            StringAssert.Contains(source, "ValidatorAuthority.RequireCompletion(accountId, operation)",
+                $"{verifier}.OnUserOpComplete validates its caller");
         }
     }
 
@@ -947,12 +1019,12 @@ public class SourceInvariantTests
     [TestMethod, Timeout(120_000)]
     public void SourceInvariant_RecoveryVerifier_TimelockBoundsMatchEstateStandard()
     {
-        // Audit finding (recovery timelock bounds): SocialRecoveryVerifier enforced a 1h
+        // Audit finding (recovery timelock bounds): SocialRecoveryService enforced a 1h
         // minimum and NO maximum, while the estate standard — the SA core escape hatch's
         // 604800–7776000 seconds pinned in section 1/5 — is 7–90 days. The recovery verifier
         // must enforce the same window in Runtime.Time milliseconds (604800000–7776000000)
         // in BOTH SetupRecovery and UpdateRecoveryConfig.
-        string flowsSource = ReadRepo("contracts", "plugins", "recovery", "MorpheusSocialRecoveryVerifier.Flows.cs");
+        string flowsSource = ReadRepo("contracts", "plugins", "recovery", "SocialRecoveryService.Flows.cs");
         StringAssert.Contains(flowsSource, "MIN_TIMELOCK = 604800000", "Recovery min timelock is 7 days in ms");
         StringAssert.Contains(flowsSource, "MAX_TIMELOCK = 7776000000", "Recovery max timelock is 90 days in ms");
         Assert.AreEqual(2, CountOccurrences(flowsSource, "\"Timelock below minimum\""),

@@ -27,7 +27,7 @@ Shared draft metadata stays intentionally bounded here as well: the frontend kee
 
 ## Execution Model
 
-Mixed signing does **not** bypass hardening. The combined authorization still has to execute through the canonical V3 runtime entrypoint `executeUserOp` (or `executeUserOps` for a batch). The V1/V2 wrappers `executeUnified` and `executeUnifiedByAddress` were removed and appear in no deployed manifest and no contract source. Direct proxy-signed external calls remain invalid.
+Mixed signing does **not** bypass hardening. The combined authorization still has to execute through the canonical v4 runtime entrypoint `executeUserOp` (or `executeUserOps` for a batch). The V1/V2 wrappers `executeUnified` and `executeUnifiedByAddress` were removed and appear in no deployed manifest and no contract source. Direct proxy-signed external calls remain invalid.
 
 ## Practical Example
 

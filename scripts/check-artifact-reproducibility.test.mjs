@@ -91,6 +91,8 @@ test("the scratch copy carries the sources, the lock files and the restore polic
     assert.ok(fs.existsSync(path.join(scratch, "tests", "mocks", "MockTransferTarget.csproj")), "compile.sh builds the mocks from tests/mocks");
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "dotnet_env.sh")));
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "check_neo_platform_packages.mjs")));
+    assert.ok(fs.existsSync(path.join(scratch, "scripts", "sync-module-profiles.mjs")),
+      "compile.sh runs the module profile gate, so the scratch copy must carry it");
     assert.equal(fs.readFileSync(path.join(scratch, "contracts", "compile.sh"), "utf8"), fs.readFileSync(new URL("../contracts/compile.sh", import.meta.url), "utf8"));
     for (const output of ["bin", "obj", "build"]) assert.ok(!fs.existsSync(path.join(scratch, "contracts", output)), `contracts/${output} must not be copied`);
   } finally {
@@ -142,6 +144,7 @@ test("certificate inputs include root restore policy, locks, native sources, and
     "contracts/compile.sh": "recipe",
     "Directory.Build.props": "props", "nuget.config": "feed",
     "scripts/dotnet_env.sh": "environment", "scripts/check_neo_platform_packages.mjs": "pins",
+    "scripts/sync-module-profiles.mjs": "module profiles",
   });
   try {
     const snapshot = reproducibility.buildInputSnapshot(expected);
@@ -150,6 +153,7 @@ test("certificate inputs include root restore policy, locks, native sources, and
       "contracts/plugins/native-profile/NativeAuthority.cs",
       "contracts/plugins/native-profile/packages.Verifier.Native.lock.json", "contracts/plugins/native-profile/profiles.json",
       "nuget.config", "scripts/check_neo_platform_packages.mjs", "scripts/dotnet_env.sh",
+      "scripts/sync-module-profiles.mjs",
     ]);
     fs.writeFileSync(path.join(expected, "nuget.config"), "different feed");
     assert.notDeepEqual(reproducibility.buildInputSnapshot(expected), snapshot);

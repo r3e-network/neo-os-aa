@@ -6,10 +6,17 @@ import { sanitizeHex } from '@/utils/hex';
 import { fetchWithTimeout } from '@/utils/fetchWithTimeout.js';
 import { encryptJsonWithMorpheusOracleKey } from '@/utils/morpheusEncryption';
 import { walletService, getSmartAccountHash } from '@/services/walletService';
-import { buildZkLoginVerifierParamsHex, formatZkLoginTicket, normalizeZkLoginProvider } from '@/services/zkLoginVerifierService.js';
+import { buildDelegatedIdentityParamsHex, formatDelegatedIdentityTicket, normalizeDelegatedIdentityProvider } from '@/services/delegatedIdentityService.js';
 import { connectedDidProfile } from '@/utils/did';
 import { decodeStackHash160 } from '@/features/studio/helpers';
 import { createAccountIdentityReader } from './saIdentityReadService.js';
+import {
+  decodeAccountDescriptor,
+  decodeHookOrder,
+  decodeModuleDescriptor,
+  decodeModulePage,
+  decodePendingConfiguration,
+} from './smartAccountProtocol.js';
 import { buildSaActionId, requireSaSigningText, toNeoInternalHex } from './saTicketService.js';
 
 function trim(value) {
@@ -134,8 +141,8 @@ function buildNeoDidSubject(profile = getDidProfile()) {
 
 export const fetchAccountIdentity = createAccountIdentityReader(invokeReadFunction);
 
-async function readVerifierMethod({ rpcUrl, verifierHash, operation, args = [] } = {}) {
-  const result = await invokeReadFunction(rpcUrl, sanitizeHex(verifierHash), operation, args);
+async function readModuleMethod({ rpcUrl, moduleHash, operation, args = [] } = {}) {
+  const result = await invokeReadFunction(rpcUrl, sanitizeHex(moduleHash), operation, args);
   if (result?.state === 'FAULT') {
     const err = new Error(EC.rpcFault);
     err.rpcDetail = result?.exception || null;
@@ -144,7 +151,7 @@ async function readVerifierMethod({ rpcUrl, verifierHash, operation, args = [] }
   if (operation === 'getNetwork' || operation === 'getAccountIdText') {
     return decodeStackText(result?.stack?.[0]);
   }
-  if (operation === 'getAAContract' || operation === 'getAccountAddress') {
+  if (operation === 'getSAContract' || operation === 'getAccountAddress' || operation === 'getRecoveryService') {
     return decodeStackHash160(result?.stack?.[0]);
   }
   if (operation === 'getActiveSession') {
@@ -156,74 +163,150 @@ async function readVerifierMethod({ rpcUrl, verifierHash, operation, args = [] }
   return decodeStackItem(result?.stack?.[0]);
 }
 
-async function readAccountMethod({ rpcUrl, saContractHash, operation, args = [] } = {}) {
+/** Raw safe-entry item, for the decoders that need the stack shape. */
+async function readAccountItem({ rpcUrl, saContractHash, operation, args = [] } = {}) {
   const result = await invokeReadFunction(rpcUrl, sanitizeHex(saContractHash), operation, args);
-  if (result?.state === 'FAULT') {
+  if (result?.state !== 'HALT') {
     const err = new Error(EC.rpcFault);
     err.rpcDetail = result?.exception || null;
     throw err;
   }
-  return decodeStackItem(result?.stack?.[0]);
+  return result.stack?.[0];
 }
 
-export async function fetchAccountMaintenanceState({ rpcUrl, saContractHash, accountIdHex } = {}) {
-  const normalizedSaHash = sanitizeHex(saContractHash);
+const MODULE_PAGE_SIZE = 32;
+const ZERO_HASH160 = '0'.repeat(40);
+
+/**
+ * Pending configuration intents (§10). Every configuration change is one
+ * 24-hour intent, so the UI shows maturity and expiry instead of a verifier or
+ * hook timelock that no longer exists.
+ */
+export async function fetchPendingConfigurationState({ rpcUrl, saContractHash, accountIdHex } = {}) {
+  const core = sanitizeHex(saContractHash);
   const accountIdParam = toHash160Param(accountIdHex);
-  const [
-    hasPendingVerifierUpdate,
-    pendingVerifierUpdateTime,
-    hasPendingHookUpdate,
-    pendingHookUpdateTime,
-    pendingVerifierCall,
-    pendingHookCall,
-  ] = await Promise.all([
-    readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'hasPendingVerifierUpdate', args: [accountIdParam] }).catch(() => false),
-    readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingVerifierUpdateTime', args: [accountIdParam] }).catch(() => '0'),
-    readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'hasPendingHookUpdate', args: [accountIdParam] }).catch(() => false),
-    readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingHookUpdateTime', args: [accountIdParam] }).catch(() => '0'),
-    Promise.all([
-      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'hasPendingVerifierCall', args: [accountIdParam] }).catch(() => false),
-      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingVerifierCallTime', args: [accountIdParam] }).catch(() => '0'),
-      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingVerifierCallModule', args: [accountIdParam] }).catch(() => ''),
-      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingVerifierCallHash', args: [accountIdParam] }).catch(() => ''),
-    ]),
-    Promise.all([
-      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'hasPendingHookCall', args: [accountIdParam] }).catch(() => false),
-      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingHookCallTime', args: [accountIdParam] }).catch(() => '0'),
-      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingHookCallModule', args: [accountIdParam] }).catch(() => ''),
-      readAccountMethod({ rpcUrl, saContractHash: normalizedSaHash, operation: 'getPendingHookCallHash', args: [accountIdParam] }).catch(() => ''),
-    ]),
+  const idItem = await readAccountItem({
+    rpcUrl,
+    saContractHash: core,
+    operation: 'getPendingConfigurationIntentIds',
+    args: [accountIdParam],
+  }).catch(() => null);
+  const intentIds = Array.isArray(idItem?.value)
+    ? idItem.value.map((entry) => Number(entry?.value ?? 0)).filter((id) => id > 0)
+    : [];
+  const intents = [];
+  for (const intentId of intentIds) {
+    const item = await readAccountItem({
+      rpcUrl,
+      saContractHash: core,
+      operation: 'getPendingConfiguration',
+      args: [accountIdParam, toIntegerParam(intentId)],
+    }).catch(() => null);
+    const record = item ? decodePendingConfiguration(item) : null;
+    if (record) intents.push({ ...record, actionCount: record.actions.length });
+  }
+  return { intentIds, intents };
+}
+
+/**
+ * The recovery service an installed validator delegates to. Only the
+ * `ActionSessionValidator` stores one; every other validator returns zero, so
+ * the first non-zero answer names the service the DID console may read.
+ */
+export async function resolveRecoveryService({ rpcUrl, saContractHash, accountIdHex } = {}) {
+  const core = sanitizeHex(saContractHash);
+  const accountIdParam = toHash160Param(accountIdHex);
+  const page = decodeModulePage(await readAccountItem({
+    rpcUrl,
+    saContractHash: core,
+    operation: 'getModules',
+    args: [accountIdParam, toStringParam('validator'), toIntegerParam(0), toIntegerParam(MODULE_PAGE_SIZE)],
+  }));
+  for (const moduleId of page.ids) {
+    const item = await readAccountItem({
+      rpcUrl,
+      saContractHash: core,
+      operation: 'getModule',
+      args: [accountIdParam, toIntegerParam(moduleId)],
+    }).catch(() => null);
+    const descriptor = item ? decodeModuleDescriptor(item) : null;
+    if (!descriptor?.contractHash) continue;
+    const service = await readModuleMethod({
+      rpcUrl,
+      moduleHash: descriptor.contractHash,
+      operation: 'getRecoveryService',
+      args: [accountIdParam, toIntegerParam(moduleId)],
+    }).catch(() => '');
+    const normalizedService = sanitizeHex(service);
+    if (normalizedService && normalizedService !== ZERO_HASH160) {
+      return { moduleId, moduleHash: descriptor.contractHash, recoveryServiceHash: normalizedService };
+    }
+  }
+  return { moduleId: 0, moduleHash: '', recoveryServiceHash: '' };
+}
+
+/**
+ * Reads the account control record, the installed module set, the pending
+ * configuration intents and the recovery service state the DID console renders
+ * (§9, §10, §12.2).
+ *
+ * v4 has no single verifier slot: the recovery console resolves the service the
+ * installed `ActionSessionValidator` instance delegates to
+ * (`getRecoveryService`) and reads that service. Pending configuration lives in
+ * core intents, so the console never polls a retired verifier or hook timelock.
+ */
+export async function fetchAccountRecoveryState({ rpcUrl, saContractHash, accountIdHex } = {}) {
+  const core = sanitizeHex(saContractHash);
+  const accountIdParam = toHash160Param(accountIdHex);
+  const [controlItem, validatorPage, hookPage, hookOrderItem, pendingConfiguration] = await Promise.all([
+    readAccountItem({ rpcUrl, saContractHash: core, operation: 'getAccount', args: [accountIdParam] }),
+    readAccountItem({
+      rpcUrl,
+      saContractHash: core,
+      operation: 'getModules',
+      args: [accountIdParam, toStringParam('validator'), toIntegerParam(0), toIntegerParam(MODULE_PAGE_SIZE)],
+    }).catch(() => null),
+    readAccountItem({
+      rpcUrl,
+      saContractHash: core,
+      operation: 'getModules',
+      args: [accountIdParam, toStringParam('hook'), toIntegerParam(0), toIntegerParam(MODULE_PAGE_SIZE)],
+    }).catch(() => null),
+    readAccountItem({ rpcUrl, saContractHash: core, operation: 'getHookOrder', args: [accountIdParam] }).catch(() => null),
+    fetchPendingConfigurationState({ rpcUrl, saContractHash: core, accountIdHex })
+      .catch(() => ({ intentIds: [], intents: [] })),
   ]);
-
-  const [hasVerifierCall, verifierCallTime, verifierCallModule, verifierCallHash] = pendingVerifierCall;
-  const [hasHookCall, hookCallTime, hookCallModule, hookCallHash] = pendingHookCall;
-
+  const control = decodeAccountDescriptor(controlItem);
+  const validatorIds = validatorPage ? decodeModulePage(validatorPage).ids : [];
+  const hookIds = hookPage ? decodeModulePage(hookPage).ids : [];
+  const hookOrder = hookOrderItem ? decodeHookOrder(hookOrderItem) : { hookIds: [], revision: 0 };
+  const { recoveryServiceHash, moduleId, moduleHash } = await resolveRecoveryService({
+    rpcUrl, saContractHash: core, accountIdHex,
+  });
+  const recovery = recoveryServiceHash
+    ? await readRecoveryServiceState({ rpcUrl, recoveryServiceHash, accountIdHex })
+    : null;
   return {
-    pendingVerifierUpdate: {
-      active: Boolean(hasPendingVerifierUpdate),
-      executeAfter: String(pendingVerifierUpdateTime || '0'),
-    },
-    pendingHookUpdate: {
-      active: Boolean(hasPendingHookUpdate),
-      executeAfter: String(pendingHookUpdateTime || '0'),
-    },
-    pendingVerifierCall: {
-      active: Boolean(hasVerifierCall),
-      executeAfter: String(verifierCallTime || '0'),
-      moduleHash: trim(verifierCallModule || ''),
-      callHash: trim(verifierCallHash || ''),
-    },
-    pendingHookCall: {
-      active: Boolean(hasHookCall),
-      executeAfter: String(hookCallTime || '0'),
-      moduleHash: trim(hookCallModule || ''),
-      callHash: trim(hookCallHash || ''),
-    },
+    accountIdHex: sanitizeHex(accountIdHex),
+    control,
+    validatorIds,
+    hookIds,
+    hookOrder,
+    pendingConfiguration,
+    recoveryServiceHash,
+    recoveryModuleId: moduleId,
+    recoveryModuleHash: moduleHash,
+    ...(recovery || {}),
   };
 }
 
-export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountIdHex } = {}) {
-  const normalizedVerifier = sanitizeHex(verifierHash);
+/**
+ * The recovery service keeps the same safe query surface it had as a plugin, so
+ * only the target changes: the service address resolved from the installed
+ * `ActionSessionValidator`, never a fixed verifier slot.
+ */
+async function readRecoveryServiceState({ rpcUrl, recoveryServiceHash, accountIdHex } = {}) {
+  const normalizedService = sanitizeHex(recoveryServiceHash);
   const accountIdParam = toHash160Param(accountIdHex);
   const [
     owner,
@@ -242,25 +325,25 @@ export async function fetchUnifiedVerifierState({ rpcUrl, verifierHash, accountI
     actionAuthorizationEpoch,
     actionSessionAuthorized,
   ] = await Promise.all([
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getOwner', args: [accountIdParam] }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getMorpheusOracle', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getMorpheusOracle failed:', error?.message); return ''; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getNetwork', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getNetwork failed:', error?.message); return ''; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAAContract', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAAContract failed:', error?.message); return ''; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAccountIdText', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAccountIdText failed:', error?.message); return ''; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getAccountAddress', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAccountAddress failed:', error?.message); return ''; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getRecoveryNonce', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getRecoveryNonce failed:', error?.message); return '0'; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getSessionNonce', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getSessionNonce failed:', error?.message); return '0'; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getThreshold', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getThreshold failed:', error?.message); return '0'; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getTimelock', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getTimelock failed:', error?.message); return '0'; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getPendingRecovery', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getPendingRecovery failed:', error?.message); return []; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActiveSession', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getActiveSession failed:', error?.message); return []; }),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActionProtocolVersion', args: [] }).catch(() => '0'),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'getActionAuthorizationEpoch', args: [accountIdParam] }).catch(() => '0'),
-    readVerifierMethod({ rpcUrl, verifierHash: normalizedVerifier, operation: 'isActionSessionAuthorized', args: [accountIdParam] }).catch(() => false),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getOwner', args: [accountIdParam] }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getMorpheusOracle', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getMorpheusOracle failed:', error?.message); return ''; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getNetwork', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getNetwork failed:', error?.message); return ''; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getSAContract', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getSAContract failed:', error?.message); return ''; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getAccountIdText', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAccountIdText failed:', error?.message); return ''; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getAccountAddress', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getAccountAddress failed:', error?.message); return ''; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getRecoveryNonce', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getRecoveryNonce failed:', error?.message); return '0'; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getSessionNonce', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getSessionNonce failed:', error?.message); return '0'; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getThreshold', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getThreshold failed:', error?.message); return '0'; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getTimelock', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getTimelock failed:', error?.message); return '0'; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getPendingRecovery', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getPendingRecovery failed:', error?.message); return []; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getActiveSession', args: [accountIdParam] }).catch((error) => { if (import.meta.env.DEV) console.error('[morpheusDidService] getActiveSession failed:', error?.message); return []; }),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getActionProtocolVersion', args: [] }).catch(() => '0'),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'getActionAuthorizationEpoch', args: [accountIdParam] }).catch(() => '0'),
+    readModuleMethod({ rpcUrl, moduleHash: normalizedService, operation: 'isActionSessionAuthorized', args: [accountIdParam] }).catch(() => false),
   ]);
 
   return {
-    verifierHash: `0x${normalizedVerifier}`,
+    recoveryServiceHash: normalizedService,
     owner,
     morpheusOracle,
     network,
@@ -386,7 +469,7 @@ class MorpheusDidService {
     });
     return {
       ...response,
-      zklogin_verifier_params_hex: buildZkLoginVerifierParamsHex({
+      zklogin_verifier_params_hex: buildDelegatedIdentityParamsHex({
         publicKey: response.public_key,
         provider: response.provider || subjectPatch.provider,
         masterNullifier: response.master_nullifier,
@@ -486,12 +569,12 @@ class MorpheusDidService {
       args_hash: `0x${sanitizeHex(argsHashHex)}`,
       nonce: String(nonce ?? '0'),
       deadline: String(deadline ?? '0'),
-      provider: normalizeZkLoginProvider(provider),
+      provider: normalizeDelegatedIdentityProvider(provider),
     });
-    const ticket = formatZkLoginTicket(response);
+    const ticket = formatDelegatedIdentityTicket(response);
     return {
       ...response,
-      verifier_params_hex: ticket.verifierParamsHex,
+      verifier_params_hex: ticket.delegatedIdentityParamsHex,
       proof_hex: ticket.proofHex,
       ticket,
     };

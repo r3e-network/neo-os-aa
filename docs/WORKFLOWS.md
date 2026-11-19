@@ -158,7 +158,7 @@ Use the failure mode to decide where to look next:
 
 A compatible Neo wallet can batch two invocations into one transaction during account creation:
 
-1. `registerAccount(accountId, verifier, verifierParams, hookId, backupOwner, escapeTimelock)` on the SA master contract
+1. `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` on the SA master contract, with the initial module installs carried in `actions`
 2. `register(domain, ownerHash160)` on the `.matrix` contract
 
 In this repository, the `.matrix` domain is registered to the signer wallet address. V3 has no admin or manager reverse index: that V1/V2 role model was removed, and per-account state is read with `getAccountState(accountIdHash)`. The V2 account-discovery helper that named the removed `getAccountAddressesByAdmin` / `getAccountAddressesByManager` reads has been deleted, so no frontend path targets those reads any more.

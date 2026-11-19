@@ -585,14 +585,14 @@ one that closes it, and the gate refuses to pass until the *union* of the two fa
 covers every declared type.
 
 A null return is the one case the manifest cannot express. Neo has no nullability
-in its ABI, so `object[]? GetPendingVerifierUpdate(...)` still declares `Array`, and
+in its ABI, so the v3 `object[]? GetPendingVerifierUpdate(...)` (removed in v4) still declares `Array`, and
 a call with no pending update answers null. Requiring a value there would fail a
 correct contract; counting null as a match would let an untested mapping look
 tested. The rule is therefore three-valued: a value of the declared type is a
 match, null where a reference type is declared is allowed and counted in
 `nullReturns` without marking the type exercised, and null where a *value* type is
-declared is a mismatch. This was measured, not decreed — `getPendingVerifierUpdate`
-on a registered account is where the shape rule first met a null.
+declared is a mismatch. This was measured, not decreed — the v3 getter
+`getPendingVerifierUpdate` (removed in v4) on a registered account is where the shape rule first met a null.
 
 Ten mutations are run against the dump on every invocation — a moved declared
 offset, a dispatch landing elsewhere, an entry that never ran, a missing method, a

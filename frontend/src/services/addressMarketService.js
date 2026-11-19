@@ -4,7 +4,7 @@ import { walletService } from '@/services/walletService.js';
 import { connectedAccount } from '@/utils/wallet.js';
 import { sanitizeHex } from '@/utils/hex.js';
 import {
-  createVerifyScript,
+  createProxyScript,
   deriveAccountIdHash,
   getAddressFromScriptHash,
   getScriptHashFromAddress,
@@ -19,6 +19,11 @@ const LISTING_STATUS = {
   1: 'active',
   2: 'sold',
   3: 'cancelled',
+};
+const ACCOUNT_STATUS = {
+  0: 'active',
+  1: 'frozen',
+  2: 'migration-required',
 };
 
 function requireMarketHash() {
@@ -75,7 +80,7 @@ export function resolveListedAccountId(input = '') {
 }
 
 export function deriveVirtualAddressFromListing({ saContractHash, accountIdHash }) {
-  const script = createVerifyScript(saContractHash, accountIdHash);
+  const script = createProxyScript(saContractHash, accountIdHash);
   const scriptHash = reverseHex(hash160(script));
   return getAddressFromScriptHash(scriptHash);
 }
@@ -197,29 +202,39 @@ async function invokeMarketRead(operation, args = []) {
   return result;
 }
 
+// v4 reads the account's control record instead of the removed v3 slots
+// (`getVerifier`, `getHook`, `getBackupOwner`): getAccount returns
+// [exists, status, custody, recoveryAuthority, authorityEpoch, configurationNonce,
+//  recoveryTimelockMs, defaultOperationAuthorization, defaultMessageAuthorization,
+//  ownerOnlyRecovery, hookOrderRevision, controlRevision, recoveryPending,
+//  recoveryMatureAt, marketEscrowActive, legacyRow].
 async function fetchAccountSnapshot(saContractHash, accountIdHash) {
+  const empty = {
+    exists: false,
+    status: '',
+    custody: '',
+    recoveryAuthority: '',
+    escrowActive: null,
+  };
   try {
-    const [verifier, hook, backupOwner, escrowActive] = await Promise.all([
-      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getVerifier', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
-      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getHook', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
-      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getBackupOwner', [{ type: 'Hash160', value: `0x${accountIdHash}` }]),
-      invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'isMarketEscrowActive', [{ type: 'Hash160', value: `0x${accountIdHash}` }]).catch((error) => { if (import.meta.env.DEV) console.error('[addressMarketService] isMarketEscrowActive failed:', error?.message); return null; }),
-    ]);
-
+    const result = await invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getAccount', [{ type: 'Hash160', value: `0x${accountIdHash}` }]);
+    const record = result?.stack?.[0];
+    if (!record || record.type !== 'Array' || !Array.isArray(record.value) || record.value.length < 16) {
+      return empty;
+    }
+    const [existsItem, statusItem, custodyItem, recoveryItem, , , , , , , , , , , escrowItem] = record.value;
+    if (existsItem?.type !== 'Boolean' || existsItem.value !== true) return empty;
+    const escrowActive = escrowItem?.type === 'Boolean' ? Boolean(escrowItem.value) : null;
     return {
-      verifierHash: decodeHash160(verifier?.stack?.[0]),
-      hookHash: decodeHash160(hook?.stack?.[0]),
-      backupOwnerHash: decodeHash160(backupOwner?.stack?.[0]),
-      escrowActive: escrowActive?.stack?.[0]?.type === 'Boolean' ? Boolean(escrowActive.stack[0].value) : null,
+      exists: true,
+      status: ACCOUNT_STATUS[Number(decodeInteger(statusItem))] || 'unknown',
+      custody: decodeHash160(custodyItem),
+      recoveryAuthority: decodeHash160(recoveryItem),
+      escrowActive,
     };
   } catch (error) {
-    if (import.meta.env.DEV) console.error('[addressMarketService] fetchAccountSnapshot failed:', error?.message);
-    return {
-      verifierHash: '',
-      hookHash: '',
-      backupOwnerHash: '',
-      escrowActive: null,
-    };
+    if (import.meta.env.DEV) console.error('[addressMarketService] getAccount failed:', error?.message);
+    return empty;
   }
 }
 
@@ -234,9 +249,9 @@ async function enrichListing(listing) {
     account_address: accountAddress,
     seller_address: listing.sellerScriptHash ? `0x${listing.sellerScriptHash}` : '',
     buyer_address: listing.buyerScriptHash ? `0x${listing.buyerScriptHash}` : '',
-    verifier_profile: snapshot.verifierHash ? `0x${snapshot.verifierHash}` : '',
-    hook_profile: snapshot.hookHash ? `0x${snapshot.hookHash}` : '',
-    backup_owner: snapshot.backupOwnerHash ? `0x${snapshot.backupOwnerHash}` : '',
+    account_status: snapshot.status,
+    custody: snapshot.custody ? `0x${snapshot.custody}` : '',
+    recovery_authority: snapshot.recoveryAuthority ? `0x${snapshot.recoveryAuthority}` : '',
     escrow_active: snapshot.escrowActive,
   };
 }
@@ -252,7 +267,7 @@ export async function findListingsForWallet(walletScriptHash) {
   return all.filter((listing) => {
     if (listing.sellerScriptHash === normalized) return true;
     if (listing.status === 'sold' && listing.buyerScriptHash === normalized) return true;
-    if (listing.backup_owner && sanitizeHex(listing.backup_owner) === normalized) return true;
+    if (listing.custody && sanitizeHex(listing.custody) === normalized) return true;
     return false;
   });
 }

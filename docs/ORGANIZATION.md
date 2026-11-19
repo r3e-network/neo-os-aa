@@ -15,7 +15,7 @@ Smart Accounts.
 
 ## Authority Boundaries
 
-- This repo OWNS: SA user operations, verifier and hook plugin bindings,
+- This repo OWNS: SA user operations, validator and hook module bindings,
   recovery policy, paymaster policy, SA contract behavior, and SA-specific
   frontend and SDK integration.
 - This repo NEVER OWNS: DID eligibility or identity issuance, network identity
@@ -32,12 +32,12 @@ Smart Accounts.
       native/                native ABI 2 implementation
         SmartAccount/        true source of the consensus SmartAccount service
         Runtime/             runtime overlay compiled with it
-      plugins/               plugin contracts shared by both implementations
-        verifiers/           verifier plugins
-        hooks/               hook plugins
-        recovery/            social-recovery verifier
-        templates/           third-party plugin starting points
-        native-profile/      native-profile builds of the shared plugins
+      plugins/               module contracts shared by both implementations
+        validators/          validator modules
+        hooks/               hook modules
+        recovery/            social-recovery service and action-session validator
+        templates/           third-party module starting points
+        native-profile/      native-profile builds of the shared modules
       build/                 pinned artifacts of the public deployments
       compile.sh             builds every contract into contracts/bin/ (ignored)
     tests/                   test suites
@@ -54,8 +54,8 @@ Smart Accounts.
     README.md                public project and boundary documentation
 
 `contracts/custom/` and `contracts/native/` hold the two implementations on
-the same branch; `contracts/plugins/` holds the verifier and hook contracts
-both of them bind. Each implementation directory carries a `profile.json` that
+the same branch; `contracts/plugins/` holds the validator and hook modules
+both of them install. Each implementation directory carries a `profile.json` that
 names its source roots, artifacts and verification commands; source files are
 not duplicated. The custom profile (`contracts/custom/`) is the current
 user-contract delivery path. The native profile (`contracts/native/`) holds the
@@ -67,14 +67,14 @@ owns native VM enforcement.
 
 - Keep contract sources and contract-specific checks under contracts/, in
   exactly one of custom/, native/ or plugins/. A contract only one
-  implementation uses belongs to that implementation; a plugin both can bind
+  implementation uses belongs to that implementation; a module both can install
   belongs to plugins/.
 - Keep mock and probe contracts under tests/mocks/; they are test fixtures, not
   part of either implementation.
-- Keep third-party plugin starting points under contracts/plugins/templates/; templates
-  compile against the shared plugin layer (contracts/plugins/verifiers/Verifier*.cs,
+- Keep third-party module starting points under contracts/plugins/templates/; templates
+  compile against the shared module layer (contracts/plugins/validators/ValidatorAuthority.cs,
   contracts/plugins/hooks/HookAuthority.cs) and scripts/check_plugin_templates.mjs keeps
-  their manifests aligned with the core's bind-time ABI gate.
+  their manifests aligned with the core's install-time ABI gate.
 - Use `contracts/custom/profile.json` and
   `contracts/native/profile.json` to select the implementation profile;
   do not infer profile identity from a deployment label or a shared artifact

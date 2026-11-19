@@ -99,33 +99,46 @@ export function applicationLog(record, { op = {}, stack, notifications } = {}) {
   };
 }
 
-/** A user-operation meta invocation as the wallet and the relay route carry it. */
-export function userOpParam({ target = GAS_HASH, method = 'transfer', args = [], nonce = 0 } = {}) {
+/**
+ * A user operation as protocol v4 carries it: the 13-field array of `docs/SA-MODULE-PROTOCOL.md` §4.1.
+ * Field 11 (the signature) is filled so the envelope is a signed one; the harness never signs and the
+ * chain records below stay the authority on what the deployed bytes returned.
+ */
+export function userOpParam({ target = GAS_HASH, method = 'transfer', args = [], nonce = 0, validatorId = 2, signature = '11'.repeat(64) } = {}) {
   return {
-    type: 'Struct',
+    type: 'Array',
     value: [
-      { type: 'Hash160', value: `0x${target}` },
-      { type: 'String', value: method },
+      { type: 'Integer', value: '4' },
+      { type: 'ByteString', value: reverseHex(target) },
+      { type: 'ByteString', value: Buffer.from(String(method), 'utf8').toString('hex') },
       { type: 'Array', value: args },
       { type: 'Integer', value: String(nonce) },
+      { type: 'ByteString', value: '00'.repeat(32) },
       { type: 'Integer', value: '9999999999999' },
-      { type: 'ByteArray', value: `0x${'11'.repeat(64)}` },
+      { type: 'Integer', value: String(validatorId) },
+      { type: 'Integer', value: '1' },
+      { type: 'Integer', value: '0' },
+      { type: 'Integer', value: '0' },
+      { type: 'ByteString', value: signature },
+      { type: 'Array', value: [] },
     ],
   };
 }
 
+// A NEP-17 transfer as §4.1 carries it: hashes as ByteStrings of the stored byte order, the data
+// argument as an empty byte string. The relay converts this shape, and the node sees the same VM values.
 export const gasTransferArgs = ({ from = PROXY_HASH, to = BUYER_HASH, amount = '100000000' } = {}) => [
-  { type: 'Hash160', value: `0x${from}` },
-  { type: 'Hash160', value: `0x${to}` },
+  { type: 'ByteString', value: reverseHex(from) },
+  { type: 'ByteString', value: reverseHex(to) },
   { type: 'Integer', value: amount },
-  { type: 'ByteArray', value: '0x' },
+  { type: 'ByteString', value: '' },
 ];
 
 export function executeUserOpInvocation(opOptions = {}) {
   return {
     scriptHash: CORE_HASH,
     operation: 'executeUserOp',
-    args: [{ type: 'Hash160', value: `0x${ACCOUNT_ID}` }, userOpParam(opOptions)],
+    args: [{ type: 'ByteString', value: reverseHex(ACCOUNT_ID) }, userOpParam(opOptions)],
   };
 }
 
@@ -134,7 +147,7 @@ export function executeUserOpsInvocation(ops = []) {
     scriptHash: CORE_HASH,
     operation: 'executeUserOps',
     args: [
-      { type: 'Hash160', value: `0x${ACCOUNT_ID}` },
+      { type: 'ByteString', value: reverseHex(ACCOUNT_ID) },
       { type: 'Array', value: ops.map((op) => userOpParam(op)) },
     ],
   };

@@ -3,8 +3,8 @@
 ## Compatibility boundary
 
 The deployed-contract profile and the native SmartAccount profile are
-distinct build targets. Current native artifacts require `native-v2` and
-`extra.smartAccount.abiVersion = 2`; ABI 1 artifacts are incompatible. Identity
+distinct build targets. Current native artifacts require `native-v4`;
+the profile is the one the module returns from the safe `getModuleProfile()` getter, and the core verifies that profile digest at install. The protocol parameter set is `docs/proposals/smartaccount-native-profile-v4-parameters.json` (`profileVersion` / `abiVersion` 4). ABI 1 and native-v2 artifacts are incompatible. Identity
 derivation remains version 1. Every account-owned module key is
 `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`, where
 policyPrefix is one byte. The epoch comes from the safe native getter on every
@@ -97,11 +97,12 @@ artifact byte; ordinary-profile artifacts remain separately checked.
 M-5 output-directory convention: `contracts/build/` is the ordinary-track
 build output directory and is exclusively reserved for ordinary-profile
 artifacts (its byte pins live in `tests/localchain/expected-deployed.json`).
-Native-track packaged artifacts — the NEF plus the packaged manifest carrying
-the `extra.smartAccount` declarations — are produced only by the isolated
+Native-track packaged artifacts — the NEF plus the compiler manifest, published
+unchanged because v4 admission is read-only and never injects a declaration —
+are produced only by the isolated
 native module build into its separate packaging output directory, and MUST
 NOT be copied into `contracts/build/`. A deployment loader therefore can never
-mistake an ordinary-profile build of the same source for a packaged native-v2
+mistake an ordinary-profile build of the same source for a packaged native-v4
 module, and a native packaging failure can never be masked by an ordinary
 artifact sitting at the expected path.
 

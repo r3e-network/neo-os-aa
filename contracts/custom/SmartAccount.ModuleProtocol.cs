@@ -9,7 +9,7 @@ namespace SmartAccount
     ///
     /// This partial intentionally contains NO state, NO storage access and NO
     /// business logic: it only declares the shared protocol constants and the
-    /// fixed-width key builders that both the ordinary kernel (#39) and — via the
+    /// fixed-width key builders that both the custom kernel (#39) and — via the
     /// paired native file — the native kernel (#40) must consume. The authoritative
     /// specification is docs/SA-MODULE-PROTOCOL.md (Chinese counterpart
     /// docs/SA-MODULE-PROTOCOL.zh-CN.md).
@@ -104,9 +104,10 @@ namespace SmartAccount
         // ========================================================================
 
         private const long GasFactorDatoshi = 100_000_000;
-        private const long ValidationAggregateGasLimit = 100_000_000;  // 1 GAS, shared by the routed validator and all threshold members
+        // Per-callback caps: no single validator call may ever exceed this.
+        private const long ValidationPerCallGasLimit = 100_000_000;    // 1 GAS per validateUserOp
+        private const long CompletionPerCallGasLimit = 100_000_000;    // 1 GAS per onUserOpComplete
         private const long HookCallbackGasLimit = 250_000_000;        // 2.5 GAS per preCheck/postCheck
-        private const long ValidatorCompletionGasLimit = 100_000_000; // 1 GAS aggregate
         private const long LifecycleCallbackGasLimit = 250_000_000;    // 2.5 GAS per onInstall/onUninstall/configure
 
         // ========================================================================

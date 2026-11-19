@@ -205,48 +205,48 @@
       <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <p class="text-xs font-semibold uppercase text-sa-muted">
-            {{ t("market.verifier", "Verifier") }}
+            {{ t("market.accountStatus", "Account status") }}
           </p>
           <p class="mt-1 text-sm text-sa-text">
-            {{ listing.verifier_profile || t("market.none", "None") }}
+            {{ listing.account_status || t("market.none", "None") }}
           </p>
         </div>
         <div>
           <p class="text-xs font-semibold uppercase text-sa-muted">
-            {{ t("market.hook", "Hook") }}
+            {{ t("market.recoveryAuthority", "Recovery authority") }}
           </p>
           <p class="mt-1 text-sm text-sa-text">
-            {{ listing.hook_profile || t("market.none", "None") }}
+            {{ listing.recovery_authority || t("market.none", "None") }}
           </p>
         </div>
         <div>
           <p class="text-xs font-semibold uppercase text-sa-muted">
-            {{ t("market.backupOwner", "Backup Owner") }}
+            {{ t("market.custody", "Custody") }}
           </p>
           <div class="mt-1 flex items-center">
             <span class="font-mono text-sm text-sa-text flex-1">{{
-              listing.backup_owner
-                ? listing.backup_owner.slice(0, 8) +
+              listing.custody
+                ? listing.custody.slice(0, 8) +
                   "..." +
-                  listing.backup_owner.slice(-4)
+                  listing.custody.slice(-4)
                 : t("market.unset", "unset")
             }}</span>
             <button
-              v-if="listing.backup_owner"
+              v-if="listing.custody"
               :aria-label="
-                t('market.copyBackupOwner', 'Copy backup owner')
+                t('market.copyCustody', 'Copy custody hash')
               "
               @click="
                 $emit('copy', {
-                  value: listing.backup_owner,
-                  markKey: 'listing-backup-' + listing.id,
+                  value: listing.custody,
+                  markKey: 'listing-custody-' + listing.id,
                 })
               "
               class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
             >
               <svg
                 aria-hidden="true"
-                v-if="copiedKey !== 'listing-backup-' + listing.id"
+                v-if="copiedKey !== 'listing-custody-' + listing.id"
                 xmlns="http://www.w3.org/2000/svg"
                 class="h-3.5 w-3.5"
                 viewBox="0 0 20 20"

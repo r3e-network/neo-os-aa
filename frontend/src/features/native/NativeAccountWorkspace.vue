@@ -2,13 +2,13 @@
   <div class="native-workspace" :aria-busy="busy">
     <header class="native-heading">
       <div>
-        <p class="eyebrow">NEO · NATIVE ABI 2</p>
+        <p class="eyebrow">NEO · NATIVE ABI 4</p>
         <h1>{{ L("Native accounts", "原生智能账户") }}</h1>
         <p>
           {{
             L(
-              "Stable identity. Explicit authority. Verifiable recovery.",
-              "稳定身份，明确权限，可验证的恢复路径。",
+              "Stable identity. Delayed configuration. Verifiable recovery.",
+              "稳定身份，延迟配置，可验证的恢复路径。",
             )
           }}
         </p>
@@ -16,8 +16,8 @@
       <span class="pill" :class="{ verified: profile }">{{
         profile
           ? L(
-              "Node ABI/profile matched · standard implementation pending protocol activation",
-              "节点 ABI/参数匹配 · 标准实现待协议激活",
+              "Protocol v4 profile matched · " + profile.implementationId,
+              "v4 协议配置匹配 · " + profile.implementationId,
             )
           : L("Read only · not verified", "只读 · 尚未验证")
       }}</span>
@@ -27,8 +27,8 @@
       <p>
         {{
           L(
-            "This exact node must prove native activation. Public V3 contracts cannot activate this workspace.",
-            "当前节点必须证明原生服务已激活。公共 V3 合约无法启用本工作区。",
+            "This node must answer protocol v4, the full native ABI and the shipped implementation id. A v3 kernel cannot activate this workspace.",
+            "当前节点必须返回 v4 协议、完整原生 ABI 与已发布实现 ID。v3 内核无法启用本工作区。",
           )
         }}
       </p>
@@ -52,8 +52,10 @@
         </button>
       </div>
       <p v-if="profile" class="small mono">
-        SmartAccount · ABI {{ profile.abiVersion }} · Network
-        {{ profile.networkMagic }}<br />{{ profile.profileParameterDigest }}
+        SmartAccount · protocol {{ profile.protocolVersion }} · network
+        {{ profile.networkMagic }}<br />{{ profile.implementationId }}<br />0x{{
+          profile.contract
+        }}
       </p>
       <p v-else class="callout">
         {{
@@ -134,7 +136,7 @@
           <template v-if="snapshot">
             <div class="account-summary" data-testid="native-account-summary">
               <div class="summary-top">
-                <strong>{{ snapshot.account.status }}</strong
+                <strong>{{ snapshot.account.statusName }}</strong
                 ><span
                   >Epoch {{ snapshot.account.authorityEpoch }} · Config
                   {{ snapshot.account.configurationNonce }}</span
@@ -151,34 +153,50 @@
                 </dd>
                 <dt>{{ L("Custody", "托管权限") }}</dt>
                 <dd class="mono">0x{{ snapshot.account.custodyAddress }}</dd>
-                <dt>{{ L("Recovery", "恢复权限") }}</dt>
+                <dt>{{ L("Recovery authority", "恢复权限") }}</dt>
                 <dd class="mono">
                   {{
-                    snapshot.account.recoveryAddress === ZERO_HASH
+                    snapshot.account.recoveryAuthority === ZERO_HASH
                       ? L("Not configured", "未配置")
-                      : "0x" + snapshot.account.recoveryAddress
+                      : "0x" + snapshot.account.recoveryAuthority
                   }}
                 </dd>
-                <dt>{{ L("Verifier", "验证插件") }}</dt>
-                <dd class="mono">
+                <dt>{{ L("Recovery timelock", "恢复延迟") }}</dt>
+                <dd>{{ timelockText(snapshot.account.recoveryTimelockMs) }}</dd>
+                <dt>{{ L("Modules", "模块") }}</dt>
+                <dd data-testid="native-module-counts">
+                  {{ snapshot.modules.validators.length }}
+                  {{ L("validators", "验证模块") }} ·
+                  {{ snapshot.modules.hooks.length }}
+                  {{ L("hooks", "策略模块") }}
+                </dd>
+                <dt>{{ L("Hook order", "策略顺序") }}</dt>
+                <dd>{{ hookOrderText }}</dd>
+                <dt>{{ L("Built-in route", "内置通道") }}</dt>
+                <dd>
+                  {{ L("operations", "操作") }}
                   {{
-                    snapshot.account.verifier
-                      ? "0x" + snapshot.account.verifier.contract
-                      : L("Custody witness fallback", "托管钱包见证")
+                    snapshot.account.defaultOperationAuthorization
+                      ? L("on", "开")
+                      : L("off", "关")
                   }}
-                </dd>
-                <dt>{{ L("Hook", "策略插件") }}</dt>
-                <dd class="mono">
+                  · {{ L("messages", "消息") }}
                   {{
-                    snapshot.account.hook
-                      ? "0x" + snapshot.account.hook.contract
-                      : L("None", "无")
+                    snapshot.account.defaultMessageAuthorization
+                      ? L("on", "开")
+                      : L("off", "关")
                   }}
                 </dd>
-                <dt>Nonce channel 0</dt>
-                <dd>{{ snapshot.nonce }}</dd>
                 <dt>{{ L("Chain time", "链上时间") }}</dt>
                 <dd>{{ time(snapshot.chainTime) }}</dd>
+                <template v-if="snapshot.account.pendingRecovery">
+                  <dt>{{ L("Pending recovery", "待生效恢复") }}</dt>
+                  <dd class="mono">
+                    0x{{ snapshot.account.pendingRecovery.newCustody }}<br />{{
+                      time(snapshot.account.pendingRecovery.matureAt)
+                    }}
+                  </dd>
+                </template>
               </dl>
             </div>
             <p class="small">
@@ -187,17 +205,16 @@
             <button class="secondary" :disabled="busy || !profile" @click="loadAccount">
               {{ L("Refresh account and chain time", "刷新账户与链上时间") }}
             </button>
-            <div v-if="pendingIntents.length" class="callout">
-              <strong>{{ L("Pending changes", "待生效变更") }}</strong>
-              <p v-for="intent in pendingIntents" :key="intent.key">
-                {{ intent.key }}: {{ time(intent.matureAt) }} ·
+            <div v-if="snapshot.pending.length" class="callout" data-testid="native-pending-intents">
+              <strong>{{ L("Pending configuration intents", "待生效配置意图") }}</strong>
+              <p v-for="intent in snapshot.pending" :key="intent.intentId">
+                #{{ intent.intentId }} · {{ L("matures", "成熟") }}
+                {{ time(intent.matureAt) }} ·
+                {{ intent.mature ? L("mature", "已成熟") : L("waiting", "等待中") }} ·
                 {{
-                  BigInt(intent.matureAt) <= BigInt(snapshot.chainTime)
-                    ? L(
-                        "Separate activation transaction required",
-                        "需要另发激活交易",
-                      )
-                    : L("Waiting for chain time", "等待链上时间")
+                  intent.expired
+                    ? L("expired", "已过期")
+                    : L("expires", "过期") + " " + time(intent.expiresAt)
                 }}
               </p>
             </div>
@@ -215,50 +232,19 @@
               </select></label
             >
             <p class="callout">{{ selectedAction.detail }}</p>
-            <template v-if="action === 'cancelRecovery'">
-              <label>{{ L("Cancellation authority", "取消授权方") }}
-                <select v-model="cancellationAuthority" data-testid="native-cancellation-authority" :aria-label="L('Cancellation authority', '取消授权方')">
-                  <option value="">{{ L("Same as fee payer", "与付费者相同") }}</option>
-                  <option :value="snapshot.account.custodyAddress" :disabled="!custodyCanCancelRecovery">{{ L("Current custody · before maturity only", "当前托管方 · 仅限成熟前") }} · 0x{{ snapshot.account.custodyAddress }}</option>
-                  <option v-if="snapshot.account.recoveryAddress !== ZERO_HASH" :value="snapshot.account.recoveryAddress">{{ L("Current recovery · while pending", "当前恢复方 · 提议仍待处理时") }} · 0x{{ snapshot.account.recoveryAddress }}</option>
-                </select>
-              </label>
-              <p class="small">{{ L("Choose who authorizes cancellation separately from who pays fees. Different wallets use the exact-script SDK path. Custody loses cancellation authority at maturity; recovery may cancel any still-pending recovery. Chain time is checked again before handoff.", "取消授权与费用支付可由不同钱包承担，此时自动使用 SDK 精确脚本签名。到达成熟时间后托管方不可取消；恢复方可取消任何仍待处理的恢复提议。提交前会重新检查链上时间。") }}</p>
-            </template>
-            <div v-if="action === 'freeze' || action === 'unfreeze' || snapshot.account.status === 'Frozen'" class="callout" data-testid="native-freeze-risk">
-              <strong>{{ snapshot.account.status === 'Frozen' ? L("What is needed to unfreeze", "解冻所需条件") : L("Before freezing: plan how to unfreeze", "冻结前：确认如何解冻") }}</strong>
-              <p>{{ L("Unfreezing requires both of these authorities to sign the same transaction:", "解冻需要以下双方共同签署同一笔交易：") }}</p>
-              <dl>
-                <dt>{{ L("Current custody", "当前托管方") }}</dt>
-                <dd class="mono">{{ addressOf(snapshot.account.custodyAddress) }}<br />0x{{ snapshot.account.custodyAddress }}</dd>
-                <dt>{{ L("Current recovery authority", "当前恢复方") }}</dt>
-                <dd class="mono">{{ snapshot.account.recoveryAddress === ZERO_HASH ? L("Not configured", "未配置") : addressOf(snapshot.account.recoveryAddress) }}<br v-if="snapshot.account.recoveryAddress !== ZERO_HASH" /><span v-if="snapshot.account.recoveryAddress !== ZERO_HASH">0x{{ snapshot.account.recoveryAddress }}</span></dd>
-              </dl>
-              <p>{{ L("If recovery can no longer sign while frozen, custody alone cannot unfreeze or replace recovery. Custody recovery keeps the same recovery authority and frozen status. Check that recovery can still sign and that both parties can cooperate before freezing.", "冻结期间若恢复方无法满足签名条件，托管方无法单独解冻或更换恢复方。托管恢复也会保留原恢复方和冻结状态。冻结前请确认恢复方仍能签名，并与托管方约定共同解冻。") }}</p>
-              <p>{{ L("Recovery may use a standard Neo wallet with an m-of-n signature threshold. Keep enough independent signers available to meet that threshold; fewer cannot authorize recovery or unfreeze. This is separate from the account's MultiSigVerifier plugin.", "恢复方可以使用普通 Neo m-of-n 多签钱包。应保留足够的独立签名方以满足阈值；不足阈值时无法授权恢复或解冻。这与账户的 MultiSigVerifier 验证插件是不同机制。") }}</p>
-              <p v-if="snapshot.account.status !== 'Frozen' && !snapshot.account.pendingRecovery">{{ L("If recovery access is at risk while the account is active, custody can propose a replacement recovery authority and activate it after 24 hours. Confirm that change before relying on it.", "账户正常且恢复权限可能丢失时，托管方可先提议更换恢复方，并在 24 小时后激活；请确认变更已上链后再依赖新恢复方。") }}</p>
-              <template v-if="action === 'freeze'">
-                <p>{{ L("Freezing clears pending verifier and hook replacements, recovery-authority replacement, custody recovery, and pending policy calls for both verifier and hook. Active module settings remain installed.", "冻结会清空待生效的验证插件更换、策略插件更换、恢复方更换、托管恢复，以及验证插件和策略插件两类待生效配置调用。当前模块配置仍保留。") }}</p>
-                <p v-if="snapshot.account.pendingRecovery">{{ L("Your pending custody recovery will be cancelled. Starting it again requires a new proposal and a new 7-day delay.", "当前待生效的托管恢复会被取消。重新发起需要新的提议，并重新等待 7 天。") }}</p>
-              </template>
-            </div>
+            <p v-if="action === 'freezeAccount'" class="callout" data-testid="native-freeze-risk">
+              {{ L("Freezing advances the authority epoch: every pending signed operation and every pending configuration intent from before becomes invalid. Installed modules stay; custody can unfreeze through the custody route alone.", "冻结会推进权限代际：此前所有已签操作与待生效配置意图都会失效。已安装模块保留；托管方可通过托管通道单独解冻。") }}
+            </p>
+            <p v-if="action === 'executeRecovery'" class="small">
+              {{ L("Completing recovery removes every module, pending intent and nonce cursor, advances the epoch and re-enables the built-in route. Any fee payer can submit it once mature.", "完成恢复会移除所有模块、待生效意图与 nonce 游标，推进权限代际并重新启用内置通道。成熟后任何付费者都可提交。") }}
+            </p>
             <label v-if="selectedAction.address"
-              >{{
-                action === "proposeRecovery"
-                  ? L(
-                      "New custody Neo address / script hash",
-                      "新托管 Neo 地址 / 脚本哈希",
-                    )
-                  : L(
-                      "New Neo address / contract hash (zero removes optional role)",
-                      "新 Neo 地址 / 合约哈希（全零移除可选角色）",
-                    )
-              }}<input
+              >{{ L("New custody Neo address / script hash", "新托管 Neo 地址 / 脚本哈希") }}<input
                 v-model.trim="actionAddress"
                 spellcheck="false"
                 placeholder="0x…"
             /></label>
-            <p v-if="['proposeRecovery', 'proposeRecoveryAddress'].includes(action)" class="small">{{ L("The new nonzero authority must also witness this proposal. Coordinate both signing paths before continuing. Mature activation needs only a fee payer.", "新增的非零权限地址也必须为本次提议提供 witness。继续前请协调双方签名；到期激活仅需费用支付者。") }}</p>
+            <p v-if="selectedAction.address" class="small">{{ L("The new custody wallet must also witness this recovery start. Maturation follows this account's recovery timelock; completing the recovery is permissionless once mature.", "新的托管钱包也必须为本次恢复发起提供 witness。成熟时间取决于该账户的恢复延迟；成熟后任何人可完成恢复。") }}</p>
             <p v-if="actionBlocked" class="small">{{ actionBlocked }}</p>
             <button
               :disabled="
@@ -269,13 +255,13 @@
               "
               @click="reviewAction"
             >
-              {{ L("Review management action", "审核管理操作") }}
+              {{ L("Review account action", "审核账户操作") }}
             </button>
             <p class="small">
               {{
                 L(
-                  "Recovery detaches old plugins without their callbacks; the funding address and frozen state stay unchanged. Recovery can freeze spending immediately. Unfreezing requires current custody and recovery cooperation. Lost custody access can be replaced through recovery; lost recovery signing access leaves no custody-only unfreeze.",
-                  "恢复无需旧插件回调即可撤销其权限，收款地址和冻结状态保留。恢复方可立即冻结支出；解冻需要当前托管方与恢复方合作。托管权限丢失可通过恢复更换；恢复方无法签名时，托管方无法单独解冻。",
+                  "A pending recovery keeps the current custody in control until it is completed, so custody can still cancel it. Freezing is immediate containment; recovery is the delayed path for lost custody.",
+                  "待生效恢复在完成前仍由当前托管方掌控，因此托管方仍可取消。冻结是即时控制手段；恢复是丢失托管权限后的延迟路径。",
                 )
               }}
             </p>
@@ -286,8 +272,8 @@
           <p>
             {{
               L(
-                "Start with custody witness. Add plugins later through delayed configuration.",
-                "先使用托管钱包见证，后续通过延迟配置添加插件。",
+                "v4 identity is custody + salt. Registration may install the first validator atomically; every later module change is a 24-hour intent.",
+                "v4 身份由托管地址与随机盐确定。注册可原子安装首个验证模块；之后每次模块变更都是 24 小时意图。",
               )
             }}
           </p>
@@ -303,37 +289,23 @@
               spellcheck="false"
               placeholder="N… or 0x…" /></label
           ><label
-            >{{
-              L(
-                "Independent recovery Neo address / script hash",
-                "独立恢复 Neo 地址 / 脚本哈希",
-              )
-            }}<input
-              v-model.trim="registration.recoveryAddress"
-              data-testid="native-recovery"
-              spellcheck="false"
-              placeholder="N… or 0x…"
+            >{{ L("Recovery timelock (days, 7–90)", "恢复延迟（天，7–90）") }}<input
+              v-model.trim="registration.recoveryTimelockDays"
+              data-testid="native-timelock"
+              inputmode="numeric"
           /></label>
           <p class="small">
             {{
               L(
-                "Use a separately controlled Neo wallet you can access. Custody and recovery must both witness registration. Recovery can freeze spending and replace custody after 7 days. Unfreezing needs both authorities, so preserve both signing paths and agree how to cooperate. An Ethereum-shaped hash does not prove Neo wallet control.",
-                "请选择可实际使用、独立保管的 Neo 钱包。注册需要托管方与恢复方共同提供 witness。恢复方可以冻结支出，并在 7 天后更换托管方。解冻需要双方权限，请确保双方签名方式可用并约定协作方式。Ethereum 地址外形并不证明具备 Neo 钱包控制权。",
+                "The recovery authority and the timelock are set by a configuration intent, never at creation. Use a separately controlled Neo wallet for recovery; it can start a custody replacement after this delay and can also cancel a pending recovery.",
+                "恢复权限与延迟由配置意图设置，而非创建时确定。请使用独立保管的 Neo 钱包作为恢复权限；它可在此延迟后发起托管更换，也可取消待生效恢复。",
               )
             }}
-          </p>
-          <label v-if="!registration.recoveryAddress" class="check"
-            ><input v-model="registration.allowNoRecovery" type="checkbox" />{{
-              L(
-                "I understand: without recovery, lost custody keys may permanently lock this account.",
-                "我理解：没有恢复权限时，丢失托管私钥可能永久失去账户。",
-              )
-            }}</label
-          ><label
+          </p><label
             >{{
               L(
-                "Account salt (32 bytes, public)",
-                "账户随机盐（32 字节，公开信息）",
+                "Account salt (1–128 bytes, public)",
+                "账户随机盐（1–128 字节，公开信息）",
               )
             }}<input
               v-model.trim="registration.salt"
@@ -342,6 +314,16 @@
           ><button class="secondary" :disabled="busy" @click="generateSalt">
             {{ L("Generate new salt", "生成新的随机盐") }}
           </button>
+          <details data-testid="native-initial-install">
+            <summary>{{ L("Install the first validator atomically", "原子安装首个验证模块") }}</summary>
+            <label>{{ L("Module contract hash", "模块合约哈希") }}<input v-model.trim="initialInstall.contractHash" spellcheck="false" placeholder="0x…" /></label>
+            <label>{{ L("Module profile digest (32 bytes)", "模块配置摘要（32 字节）") }}<input v-model.trim="initialInstall.profileDigest" spellcheck="false" /></label>
+            <label>{{ L("Module type", "模块类型") }}<select v-model="initialInstall.moduleType" :aria-label="L('Module type', '模块类型')">
+              <option value="validator">{{ L("Validator", "验证模块") }}</option>
+              <option value="hook">{{ L("Hook", "策略模块") }}</option>
+            </select></label>
+            <p class="small">{{ L("Only a validator can be installed at registration, and the first validator disables the built-in custody route on this account. Hooks and later validators always need a 24-hour intent.", "注册时只能安装验证模块；首个验证模块会关闭该账户的内置托管通道。策略模块及后续验证模块都必须通过 24 小时意图安装。") }}</p>
+          </details>
           <div v-if="derived" class="account-summary">
             <dl>
               <dt>{{ L("Account ID", "账户 ID") }}</dt>
@@ -354,22 +336,9 @@
               </dd>
             </dl>
           </div>
-          <p class="callout">
-            {{
-              L(
-                "No verifier or hook is installed at creation. Custody can authorize spending after confirmed registration.",
-                "初始不安装验证或策略插件。注册链上确认后，托管钱包即可授权操作。",
-              )
-            }}
-          </p>
           <div class="actions">
             <button
-              :disabled="
-                !profile ||
-                busy ||
-                !derived ||
-                (!registration.recoveryAddress && !registration.allowNoRecovery)
-              "
+              :disabled="!profile || busy || !derived"
               @click="reviewRegistration"
             >
               {{ L("Review registration", "审核注册") }}</button
@@ -382,255 +351,241 @@
             </button>
           </div>
         </template>
-        <template v-else-if="tab === 'policy'">
-          <h2>2. {{ L("Set bounded permissions", "设置受限权限") }}</h2>
+        <template v-else-if="tab === 'configuration'">
+          <h2>2. {{ L("Configuration intents", "配置意图") }}</h2>
           <p>
             {{
               L(
-                "Load an account first. Inspect a pending verifier or hook policy, activate its exact call after maturity, or cancel it with custody authority.",
-                "请先加载账户。查看待生效验证或策略模块配置，到期后提交相同调用激活，也可由托管方取消。",
+                "Load an account first. One intent carries up to 16 atomic actions, matures after 24 hours and expires seven days after maturity. Nothing changes until the exact matured intent is confirmed.",
+                "请先加载账户。一个意图最多包含 16 个原子操作，24 小时后成熟，成熟后 7 天过期。在确认完全一致的已成熟意图前，任何变更都不会生效。",
               )
             }}
           </p>
-          <label>
-            {{ L("Module role", "模块角色") }}
-            <select v-model="policy.role" :aria-label="L('Module role', '模块角色')">
-              <option value="verifier">{{ L("Verifier", "验证模块") }}</option>
-              <option value="hook">{{ L("Hook", "策略模块") }}</option>
-            </select>
-          </label>
-          <button class="secondary" :disabled="!profile || !snapshot || busy" @click="refreshPolicy">
-            {{ L("Refresh pending policy", "刷新待生效配置") }}
-          </button>
-          <div v-if="pendingPolicy" class="callout" data-testid="native-pending-policy">
-            <p class="small">{{ L("Checked at chain time", "核对时的链上时间") }}: {{ time(pendingPolicy.chainTime) }}</p>
-            <template v-if="pendingPolicy.pending">
-              <dl>
-                <dt>{{ L("Role / method", "角色 / 方法") }}</dt>
-                <dd>{{ pendingPolicy.role }} / {{ pendingPolicy.pending.method }}</dd>
-                <dt>{{ L("Root module", "根模块") }}</dt>
-                <dd class="mono">0x{{ pendingPolicy.pending.root.contract }}</dd>
-                <dt>{{ L("Selected module", "目标模块") }}</dt>
-                <dd class="mono">0x{{ pendingPolicy.pending.selected.contract }}</dd>
-                <dt>{{ L("Activation time", "可激活时间") }}</dt>
-                <dd>{{ time(pendingPolicy.pending.matureAt) }}</dd>
-              </dl>
-              <p>{{ BigInt(pendingPolicy.pending.matureAt) <= BigInt(pendingPolicy.chainTime)
-                ? L("Mature at the checked chain time. A separate custody-authorized activation transaction is required.", "核对时已到期，仍需由托管方另发激活交易。")
-                : L("Waiting for chain time. Refresh before activating.", "等待链上时间到期，请在激活前刷新。") }}</p>
-              <details>
-                <summary>{{ L("Exact typed arguments, including account ID", "完整类型化参数（含账户 ID）") }}</summary>
-                <pre>{{ jsonText(pendingPolicy.pending.invokedArguments) }}</pre>
-              </details>
-              <button class="secondary" :disabled="busy || !profile" @click="cancelPolicy">
-                {{ L("Review policy cancellation", "审核取消配置") }}
-              </button>
-              <p class="small">{{ L("Cancellation checks this exact pending call again on chain before removing it. If another device changes it first, cancellation fails and the replacement stays pending. Active permissions stay unchanged.", "取消交易会在链上再次核对这笔待生效调用。若其他设备先更改了它，取消会失败，新调用仍待生效；当前权限不变。") }}</p>
-            </template>
-            <p v-else>{{ L("No policy call is pending for this role.", "此角色没有待生效配置。") }}</p>
-          </div>
-          <template v-if="policy.role === 'verifier'">
-          <label
-            >{{ L("Policy", "权限类型")
-            }}<select
-              v-model="policy.kind"
-              :aria-label="L('Policy', '权限类型')"
-            >
-              <option value="session">
-                {{ L("Limited token-transfer session", "受限代币转账会话") }}
-              </option>
-              <option value="revoke">
-                {{ L("Revoke session key", "撤销会话密钥") }}
-              </option>
-              <option value="multisig">
-                {{ L("Multiple verifier approvals", "多个验证模块授权") }}
-              </option>
-            </select></label
-          ><label
-            >{{
-              L(
-                "Child verifier hash (empty for root)",
-                "子验证模块哈希（根模块留空）",
-              )
-            }}<input
-              v-model.trim="policy.child"
-              spellcheck="false"
-              placeholder="0x…"
-          /></label>
-          <template v-if="policy.kind === 'session'"
-            ><label
-              >{{
-                L(
-                  "Session public key (compressed P-256)",
-                  "会话公钥（压缩 P-256）",
-                )
-              }}<input
-                v-model.trim="policy.publicKey"
-                spellcheck="false"
-                placeholder="02… / 03…" /></label
-            ><label
-              >{{ L("Token contract", "代币合约")
-              }}<input
-                v-model.trim="policy.target"
-                spellcheck="false"
-                placeholder="0x…"
-            /></label>
-            <div class="form-row">
-              <label
-                >{{ L("Expiry UTC (milliseconds)", "到期时间 UTC（毫秒）")
-                }}<input
-                  v-model.trim="policy.expiresAt"
-                  inputmode="numeric" /></label
-              ><label
-                >{{
-                  L(
-                    "Total spending cap (base units)",
-                    "累计支出上限（最小单位）",
-                  )
-                }}<input
-                  v-model.trim="policy.spendingLimit"
-                  inputmode="numeric"
-                  placeholder="100000000"
-              /></label>
-            </div>
-            <p class="callout">
-              {{
-                L(
-                  "Only transfer on this token. A positive cap is required; zero means unlimited on chain. Keep the session private key in its wallet. Configuration takes 24 hours; expiry must leave time after activation. Freeze is immediate containment.",
-                  "仅允许对此代币调用 transfer。上限必须为正；链上零表示无限。会话私钥由钱包保管。配置需等待 24 小时，到期时间须晚于激活时间；紧急控制请使用冻结。",
-                )
-              }}
-            </p></template
-          >
-          <template v-else-if="policy.kind === 'multisig'"
-            ><label
-              >{{
-                L(
-                  "Ordered verifier child hashes (one per line)",
-                  "有序子验证模块哈希（每行一个）",
-                )
-              }}<textarea
-                v-model.trim="policy.children"
-                rows="4"
-                spellcheck="false"
-              /></label
-            ><label
-              >{{ L("Required modules", "所需模块数")
-              }}<input
-                v-model.trim="policy.threshold"
-                type="number"
-                min="1"
-                :max="NATIVE_MULTISIG_LIMITS.maxThreshold"
-            /></label>
-            <p class="callout">
-              {{
-                L(
-                  "Use 1–3 children and a threshold of 1–2. Thresholds count modules, not independent humans. Configure each child before activating the delayed roster. An empty native-child proof still requires a real transaction witness.",
-                  "可配置 1–3 个子模块，阈值为 1–2。阈值计算模块数量，不证明由不同人控制。先配置子模块，再激活延迟成员列表。原生子模块即使证明为空，也需要真实交易见证。",
-                )
-              }}
-            </p></template
-          >
-          <p v-if="policy.kind === 'revoke'" class="callout">
+          <p class="small" data-testid="native-intent-window">
             {{
               L(
-                "Session revocation is a delayed configuration call. To stop spending immediately, use the recovery authority to freeze the account.",
-                "会话撤销是延迟配置操作；如需立即停止支出，请由恢复权限冻结账户。",
+                `Matures after ${MODULE_CHANGE_DELAY_MS / 3600000} hours and expires ${CONFIGURATION_INTENT_EXPIRY_MS / 86400000} days after maturity.`,
+                `在 ${MODULE_CHANGE_DELAY_MS / 3600000} 小时后成熟，成熟后 ${CONFIGURATION_INTENT_EXPIRY_MS / 86400000} 天过期。`,
               )
             }}
           </p>
-          </template>
-          <p v-else class="small">{{ L("Use the native SDK to stage hook configuration. Existing pending calls can be inspected, activated or cancelled here.", "请使用原生 SDK 提交策略模块配置。已有待生效调用可在此查看、激活或取消。") }}</p>
-          <div class="actions">
+          <template v-if="snapshot">
+            <div class="account-summary" data-testid="native-modules">
+              <strong>{{ L("Installed modules", "已安装模块") }}</strong>
+              <dl v-if="modules.length">
+                <template v-for="module in modules" :key="module.moduleId">
+                  <dt>#{{ module.moduleId }} · {{ module.moduleTypeName }}</dt>
+                  <dd class="mono">
+                    0x{{ module.contractHash }} · {{ L("revision", "版本") }}
+                    {{ module.moduleRevision }} ·
+                    {{ L("credential generation", "凭据代际") }}
+                    {{ module.credentialGeneration }}
+                    <template v-if="module.messageCapability">
+                      · {{ L("messages", "消息") }}</template
+                    ><template v-if="module.thresholdMemberEligible">
+                      · {{ L("threshold member", "可作阈值成员") }}</template
+                    >
+                  </dd>
+                </template>
+              </dl>
+              <p v-else class="small">
+                {{
+                  L(
+                    "No module is installed; the built-in custody route is the only authority.",
+                    "未安装任何模块，仅内置托管通道可用。",
+                  )
+                }}
+              </p>
+              <p class="small">
+                {{ L("Hook order", "策略顺序") }}: {{ hookOrderText }} ·
+                {{ L("revision", "版本") }} {{ snapshot.hookOrder.revision }}
+              </p>
+            </div>
+            <h3>{{ L("Pending intents", "待生效意图") }}</h3>
             <button
-              v-if="policy.role === 'verifier'"
-              :disabled="!profile || !snapshot || busy"
-              @click="reviewPolicy"
-            >
-              {{ L("Review delayed policy", "审核延迟权限配置") }}</button
-            ><button
               class="secondary"
-              :disabled="!profile || !snapshot || busy || !pendingPolicy?.pending"
-              @click="activatePolicy"
+              :disabled=" !profile || !snapshot || busy"
+              @click="refreshConfiguration"
             >
-              {{ L("Review pending activation", "审核待生效配置") }}
+              {{ L("Refresh pending intents", "刷新待生效意图") }}
             </button>
-          </div>
+            <div v-if="inspected" class="callout" data-testid="native-pending-policy">
+              <p class="small">
+                {{ L("Checked at chain time", "核对时的链上时间") }}:
+                {{ time(inspected.chainTime) }}
+              </p>
+              <div
+                v-for="intent in inspected.intents"
+                :key="intent.intentId"
+                class="account-summary"
+              >
+                <strong
+                  >#{{ intent.intentId }} ·
+                  {{
+                    intent.mature ? L("mature", "已成熟") : L("waiting", "等待中")
+                  }}{{ intent.expired ? " · " + L("expired", "已过期") : "" }}</strong
+                >
+                <dl>
+                  <dt>{{ L("Proposed", "提议于") }}</dt>
+                  <dd>{{ time(intent.proposedAt) }}</dd>
+                  <dt>{{ L("Matures", "成熟时间") }}</dt>
+                  <dd>{{ time(intent.matureAt) }}</dd>
+                  <dt>{{ L("Expires", "过期时间") }}</dt>
+                  <dd>{{ time(intent.expiresAt) }}</dd>
+                  <dt>{{ L("Authority epoch", "权限代际") }}</dt>
+                  <dd>{{ intent.authorityEpoch }}</dd>
+                  <dt>{{ L("Actions", "操作") }}</dt>
+                  <dd>
+                    <ul>
+                      <li v-for="(text, index) in intent.descriptions" :key="index">
+                        {{ text }}
+                      </li>
+                    </ul>
+                  </dd>
+                </dl>
+                <div class="actions">
+                  <button
+                    :disabled="busy || !intent.mature || intent.expired"
+                    @click="reviewIntent('confirm', intent)"
+                  >
+                    {{ L("Review confirmation", "审核确认") }}
+                  </button>
+                  <button class="secondary" :disabled="busy" @click="reviewIntent('cancel', intent)">
+                    {{ L("Review cancellation", "审核取消") }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="!inspected.intents.length">
+                {{ L("No configuration intent is pending.", "当前没有待生效配置意图。") }}
+              </p>
+            </div>
+            <h3>{{ L("Build one intent", "构建配置意图") }}</h3>
+            <label>{{ L("Action kind", "操作类型") }}<select v-model="draft.kind" :aria-label="L('Action kind', '操作类型')">
+              <option value="install">{{ L("Install a module", "安装模块") }}</option>
+              <option value="uninstall">{{ L("Uninstall a module", "卸载模块") }}</option>
+              <option value="configure">{{ L("Reconfigure a module", "重配模块") }}</option>
+              <option value="hookOrder">{{ L("Set hook order", "设置策略顺序") }}</option>
+              <option value="defaultPolicy">{{ L("Set the built-in route", "设置内置通道") }}</option>
+              <option value="thresholdPolicy">{{ L("Set a threshold policy", "设置阈值策略") }}</option>
+              <option value="recoveryPolicy">{{ L("Set the recovery policy", "设置恢复策略") }}</option>
+            </select></label>
+            <template v-if="draft.kind === 'install'">
+              <div class="form-row">
+                <label>{{ L("Module type", "模块类型") }}<select v-model="draft.moduleType" :aria-label="L('Module type', '模块类型')">
+                  <option value="validator">{{ L("Validator", "验证模块") }}</option>
+                  <option value="hook">{{ L("Hook", "策略模块") }}</option>
+                </select></label>
+                <label>{{ L("Module contract hash", "模块合约哈希") }}<input v-model.trim="draft.contractHash" spellcheck="false" placeholder="0x…" /></label>
+              </div>
+              <label>{{ L("Module profile digest (32 bytes)", "模块配置摘要（32 字节）") }}<input v-model.trim="draft.profileDigest" spellcheck="false" /></label>
+            </template>
+            <template v-else-if="draft.kind === 'uninstall' || draft.kind === 'configure'">
+              <label>{{ L("Module id", "模块 ID") }}<input v-model.trim="draft.moduleId" inputmode="numeric" /></label>
+            </template>
+            <template v-else-if="draft.kind === 'hookOrder'">
+              <label>{{ L("Hook ids in execution order (comma separated)", "按执行顺序排列的策略模块 ID（逗号分隔）") }}<input v-model.trim="draft.hookIds" spellcheck="false" /></label>
+            </template>
+            <template v-else-if="draft.kind === 'defaultPolicy'">
+              <label class="check"><input v-model="draft.operationAuthorization" type="checkbox" />{{ L("Built-in route authorizes operations", "内置通道可授权操作") }}</label>
+              <label class="check"><input v-model="draft.messageAuthorization" type="checkbox" />{{ L("Built-in route authorizes messages", "内置通道可授权消息") }}</label>
+            </template>
+            <template v-else-if="draft.kind === 'thresholdPolicy'">
+              <div class="form-row">
+                <label>{{ L("Policy id", "策略 ID") }}<input v-model.trim="draft.policyId" inputmode="numeric" /></label>
+                <label>{{ L("Threshold (1–10)", "阈值（1–10）") }}<input v-model.trim="draft.threshold" inputmode="numeric" /></label>
+              </div>
+              <label>{{ L("Member module ids (comma separated, max 10)", "成员模块 ID（逗号分隔，最多 10 个）") }}<input v-model.trim="draft.memberIds" spellcheck="false" /></label>
+              <label class="check"><input v-model="draft.active" type="checkbox" />{{ L("Policy is active", "策略生效") }}</label>
+            </template>
+            <template v-else>
+              <label>{{ L("Recovery authority (zero disables it)", "恢复权限（全零表示不设置）") }}<input v-model.trim="draft.recoveryAuthority" spellcheck="false" placeholder="0x…" /></label>
+              <div class="form-row">
+                <label>{{ L("Recovery timelock (days, 7–90)", "恢复延迟（天，7–90）") }}<input v-model.trim="draft.timelockDays" inputmode="numeric" /></label>
+              </div>
+              <label class="check"><input v-model="draft.ownerOnly" type="checkbox" />{{ L("Only custody may start recovery", "仅托管方可发起恢复") }}</label>
+            </template>
+          </template>
+          <p v-else class="small">
+            {{
+              L(
+                "Load an account to inspect its modules and pending intents.",
+                "加载账户后可查看模块与待生效意图。",
+              )
+            }}
+          </p>
+          <template v-if="snapshot">
+            <ul class="small" data-testid="native-draft-actions">
+              <li v-for="(entry, index) in draftActions" :key="index">
+                {{ describeConfigurationAction(entry) }}
+                <button class="secondary" :disabled="busy" @click="removeDraftAction(index)">
+                  {{ L("Remove", "移除") }}
+                </button>
+              </li>
+            </ul>
+            <div class="actions">
+              <button class="secondary" :disabled="busy" @click="run(addDraftAction)">
+                {{ L("Add to the intent", "加入意图") }}
+              </button>
+              <button
+                :disabled="
+                  busy ||
+                  !draftActions.length ||
+                  draftActions.length > MAX_ACTIONS_PER_INTENT ||
+                  snapshot?.account.statusName !== 'Active'
+                "
+                @click="reviewProposal"
+              >
+                {{ L("Review configuration proposal", "审核配置提议") }}
+              </button>
+            </div>
+            <p class="small">
+              {{
+                L(
+                  "A proposal is one atomic intent and never a wallet invoke. It is simulated exactly like any other transaction, and it can only be confirmed after maturity.",
+                  "提议是一个原子意图，不走钱包 invoke。与其它交易一样需要精确模拟，且只能在成熟后确认。",
+                )
+              }}
+            </p>
+          </template>
         </template>
         <template v-else>
           <h2>2. {{ L("Prepare a native operation", "准备原生业务操作") }}</h2>
           <p>
             {{
               L(
-                "Uses live nonce and authority epoch. The node must agree with the exact operation digest.",
-                "使用实时 Nonce 和权限代际，节点必须确认完全一致的摘要。",
+                "A v4 user operation carries its nonce, subkey, deadline, validator, credential generation, authority epoch, configuration nonce, signature and hook proofs. The proxy witness is the only signer executeUserOp accepts.",
+                "v4 用户操作包含 nonce、子键、截止时间、验证模块、凭据代际、权限代际、配置 nonce、签名与策略证明。executeUserOp 只接受代理 witness。",
               )
             }}
           </p>
-          <div class="form-row">
-            <label
-              >{{ L("Target contract", "目标合约")
-              }}<input
-                v-model.trim="operation.targetContract"
-                spellcheck="false"
-                placeholder="0x…" /></label
-            ><label
-              >{{ L("Method", "方法")
-              }}<input v-model.trim="operation.method" spellcheck="false"
-            /></label>
-          </div>
+          <button class="secondary" :disabled="!snapshot || busy" @click="fillEnvelope">
+            {{ L("Fill the envelope skeleton from chain state", "按链上状态填充信封骨架") }}
+          </button>
           <label
-            >{{
-              L(
-                "Typed NeoVM arguments (JSON array)",
-                "NeoVM 类型化参数（JSON 数组）",
-              )
-            }}<textarea v-model="operation.args" rows="6" spellcheck="false" />
+            >{{ L("Operations (JSON array, 1–32)", "操作（JSON 数组，1–32 个）")
+            }}<textarea v-model="operation.operations" rows="14" spellcheck="false" />
           </label>
           <p class="small">
             {{
               L(
-                "Types: Null, Boolean, Integer, ByteString (hex), Array, Struct. Integers are decimal strings; ByteString hashes use native little-endian bytes.",
-                "类型：Null、Boolean、Integer、ByteString（十六进制）、Array、Struct。整数使用十进制字符串；ByteString 中的哈希使用小端字节。",
+                "Each operation needs targetContract, method, args, nonce, nonceSubkey, deadline, validatorId, credentialGeneration, authorityEpoch, configurationNonce, signature and hookProofs. Types: Null, Boolean, Integer, ByteString (hex), Array, Struct.",
+                "每个操作需要 targetContract、method、args、nonce、nonceSubkey、deadline、validatorId、credentialGeneration、authorityEpoch、configurationNonce、signature 与 hookProofs。类型：Null、Boolean、Integer、ByteString（十六进制）、Array、Struct。",
               )
             }}
           </p>
-          <div class="form-row">
-            <label
-              >{{ L("Nonce channel", "Nonce 通道")
-              }}<input
-                v-model.trim="operation.channel"
-                inputmode="numeric" /></label
-            ><label
-              >{{ L("Deadline UTC (milliseconds)", "截止时间 UTC（毫秒）")
-              }}<input v-model.trim="operation.deadline" inputmode="numeric"
-            /></label>
-          </div>
-          <label
-            >{{
-              L(
-                "Verifier proof hex (empty for custody witness)",
-                "验证证明十六进制（托管见证留空）",
-              )
-            }}<textarea
-              v-model.trim="operation.signature"
-              rows="2"
-              spellcheck="false"
-            />
-          </label>
           <p class="callout">
             {{
               L(
-                "Native sponsorship is unavailable. A fee payer needs GAS. Execution needs an exact-script wallet or SDK with the proxy witness; ordinary invoke cannot safely submit it.",
-                "原生赞助付费不可用，付费者需要 GAS。执行必须使用支持精确脚本和代理见证的钱包或 SDK，普通 invoke 无法安全提交。",
+                "Native sponsorship is unavailable. A fee payer needs GAS. Execution needs an exact-script wallet or the SDK with the proxy witness; ordinary wallet invoke cannot safely submit it.",
+                "原生赞助付费不可用，付费者需要 GAS。执行必须使用支持精确脚本和代理见证的钱包或 SDK，普通钱包 invoke 无法安全提交。",
               )
             }}
           </p>
           <p class="small">
             {{
               L(
-                "Bounds: 64 arguments · 4,096 serialized bytes · 1,024 proof bytes · depth 8 · deadline within 1 hour.",
-                "边界：64 个参数 · 序列化 4,096 字节 · 证明 1,024 字节 · 深度 8 · 截止时间 1 小时内。",
+                "Bounds: 32 operations per envelope · 64 arguments · 4,096 serialized bytes · 8,192 proof bytes · depth 8 · deadline within 1 hour.",
+                "边界：每个信封 32 个操作 · 64 个参数 · 序列化 4,096 字节 · 证明 8,192 字节 · 深度 8 · 截止时间 1 小时内。",
               )
             }}
           </p>
@@ -638,12 +593,12 @@
             :disabled="
               !profile ||
               !snapshot ||
-              snapshot.account.status !== 'Active' ||
+              snapshot.account.statusName !== 'Active' ||
               busy
             "
             @click="reviewOperation"
           >
-            {{ L("Preview exact operation", "预览精确操作") }}
+            {{ L("Preview exact envelope", "预览精确信封") }}
           </button>
         </template>
       </section>
@@ -700,18 +655,29 @@
           <dl>
             <dt>{{ L("Signing path", "签名路径") }}</dt>
             <dd>{{ review.submission }}</dd>
-            <dt>{{ L("Network / ABI", "网络 / ABI") }}</dt>
+            <dt>{{ L("Network / protocol", "网络 / 协议") }}</dt>
             <dd>
               {{ review.profile.networkMagic }} /
-              {{ review.profile.abiVersion }}
+              v{{ review.profile.protocolVersion }}
             </dd>
             <dt>{{ L("Account ID", "账户 ID") }}</dt>
             <dd class="mono">0x{{ review.plan.accountId }}</dd>
             <dt>{{ L("Fee payer", "付费者") }}</dt>
             <dd class="mono">0x{{ review.feePayer }}</dd>
-            <template v-if="review.cancellationAuthority">
-              <dt>{{ L("Cancellation authority", "取消授权方") }}</dt>
-              <dd class="mono" data-testid="native-reviewed-cancellation-authority">0x{{ review.cancellationAuthority }}</dd>
+            <template v-if="review.authority">
+              <dt>{{ L("Authority", "授权方") }}</dt>
+              <dd class="mono" data-testid="native-reviewed-authority">0x{{ review.authority }}</dd>
+            </template>
+            <template v-if="review.newCustody">
+              <dt>{{ L("New custody", "新托管方") }}</dt>
+              <dd class="mono">0x{{ review.newCustody }}</dd>
+            </template>
+            <template v-if="review.intentId">
+              <dt>{{ L("Intent", "意图") }}</dt>
+              <dd data-testid="native-reviewed-intent">
+                #{{ review.intentId }} ·
+                {{ (review.intentActions ?? []).length }} {{ L("actions", "个操作") }}
+              </dd>
             </template>
             <dt>{{ L("Required authorities", "所需权限") }}</dt>
             <dd class="mono" data-testid="native-required-authorities">
@@ -720,8 +686,8 @@
                   .map((h) => "0x" + h)
                   .join(", ") ||
                 L(
-                  "Permissionless executor / verifier proof",
-                  "任何执行者 / 验证证明",
+                  "Permissionless executor / hook proof",
+                  "任何执行者 / 钩子证明",
                 )
               }}
             </dd>
@@ -751,11 +717,11 @@
             <dd>{{ review.plan.script.length / 2 }}</dd>
           </dl>
           <p class="small">{{ L("Consumption is not the admission budget or total transaction fee. Bounded module callbacks can require a larger system fee budget. Confirm final system and network fees before signing.", "执行消耗并非准入预算或交易总费用。有限额的模块回调可能要求更高系统费预算；签名前请核对最终系统费与网络费。") }}</p>
-          <div v-if="review.plan.preparedOperations" class="small mono">
-            <p v-for="p in review.plan.preparedOperations" :key="p.digest">
-              {{ p.operation.method }} · 0x{{ p.operation.targetContract
-              }}<br />Nonce {{ p.operation.nonce }} ·
-              {{ time(p.operation.deadline) }}<br />Digest {{ p.digest }}
+          <div v-if="review.plan.operations" class="small mono">
+            <p v-for="(entry, index) in review.plan.operations" :key="index">
+              {{ entry.method }} · 0x{{ entry.targetContract
+              }}<br />Nonce {{ entry.nonce }} ·
+              {{ time(entry.deadline) }}
             </p>
           </div>
           <div v-if="review.simulationError" role="alert" class="notice error">
@@ -784,15 +750,15 @@
               )
             }}</label
           >
-          <label v-if="review.plan.method === 'freeze'" class="check" data-testid="native-freeze-acknowledgement">
+          <label v-if="review.plan.method === 'freezeAccount'" class="check" data-testid="native-freeze-acknowledgement">
             <input v-model="freezeAccepted" type="checkbox" :disabled="busy" />
-            {{ L("I understand both authorities are needed to unfreeze, losing recovery access can leave funds frozen, and pending changes will be cleared.", "我已了解解冻需要双方合作，恢复权限丢失可能导致资金无法解冻，且待生效变更会被清空。") }}
+            {{ L("I understand freezing advances the authority epoch: every pending operation and pending configuration intent becomes invalid.", "我已了解冻结会推进权限代际：所有待生效操作与待生效配置意图都会失效。") }}
           </label>
           <div class="actions">
             <button
               :disabled="
                 !accepted ||
-                (review.plan.method === 'freeze' && !freezeAccepted) ||
+                (review.plan.method === 'freezeAccount' && !freezeAccepted) ||
                 busy ||
                 !review.walletSupported ||
                 !!review.simulationError ||
@@ -803,7 +769,7 @@
               {{ L("Send to wallet for approval", "交给钱包确认") }}</button
             ><button
               class="secondary"
-              :disabled="!accepted || (review.plan.method === 'freeze' && !freezeAccepted) || busy"
+              :disabled="!accepted || (review.plan.method === 'freezeAccount' && !freezeAccepted) || busy"
               @click="exportRequest"
             >
               {{ L("Export reviewed request", "导出审核请求") }}
@@ -811,12 +777,9 @@
           </div>
           <p v-if="!review.walletSupported" class="callout">
             {{
-              review.plan.requiresExactScript ? L(
-                "This cancellation needs the exact script to preserve its pending-intent check. The connected wallet's invoke interface rebuilds the call and cannot preserve that check. Export the request for exact transaction signing; ordinary wallet invoke is disabled.",
-                "此取消操作必须保留精确脚本中的待生效调用核对。已连接钱包的 invoke 接口会重新组装调用，无法保留这项核对。请导出请求完成精确交易签名；普通钱包 invoke 已禁用。",
-              ) : L(
-                "This needs exact-script or multiple-authority signing. Export it for the native SDK. Ordinary wallet invoke is disabled.",
-                "此请求需要精确脚本或多权限签名，请导出后使用原生 SDK。普通钱包 invoke 已禁用。",
+              L(
+                "This plan needs the exact script the node simulated: a configuration intent, an execution envelope, a multi-authority action or a plan the owner pinned to the SDK. A wallet invoke would rebuild the call and lose that binding, so export the request and sign the exact transaction with the native SDK.",
+                "此计划必须保留节点模拟的精确脚本：配置意图、执行信封、多权限操作，或所有者指定走 SDK 的计划。钱包 invoke 会重新组装调用并丢失这一绑定，请导出请求并使用原生 SDK 签署精确交易。",
               )
             }}
           </p>
@@ -840,7 +803,7 @@
               <button class="secondary" :disabled="busy || signedAttempted" @click="preflightSignedTransaction">{{ L("Check signed transaction", "预检已签交易") }}</button>
               <p v-if="signedPreflight" data-testid="native-signed-preflight">{{ L("Signatures and execution passed at snapshot block", "签名与执行预检通过，快照区块") }} {{ signedPreflight.snapshot.height }}. {{ L("This is not chain confirmation. Submission checks again using fresh state.", "这不代表链上确认。提交前会使用最新状态再次预检。") }}</p>
               <label class="check"><input v-model="signedAccepted" type="checkbox" :disabled="busy || signedAttempted" />{{ L("I approve these exact signed fees and this transaction hash for broadcast.", "我同意广播此交易哈希对应的交易，并接受上述已签费用。") }}</label>
-              <button :disabled="busy || signedAttempted || !signedPreflight || !signedAccepted || !accepted || (review.plan.method === 'freeze' && !freezeAccepted)" @click="broadcastSignedTransaction">{{ L("Broadcast signed transaction", "广播已签交易") }}</button>
+              <button :disabled="busy || signedAttempted || !signedPreflight || !signedAccepted || !accepted || (review.plan.method === 'freezeAccount' && !freezeAccepted)" @click="broadcastSignedTransaction">{{ L("Broadcast signed transaction", "广播已签交易") }}</button>
               <p v-if="signedAttempted">{{ L("Submission was attempted for this hash. Check confirmation; this page will not resend it automatically.", "已尝试提交此哈希对应的交易。请检查确认状态，本页不会自动重发。") }}</p>
               <button class="secondary" :disabled="busy" @click="confirmSignedTransaction">{{ L("Check imported transaction confirmation", "检查导入交易的确认状态") }}</button>
             </template>
@@ -908,12 +871,22 @@ import {
   nativeGasLimit,
   ZERO_HASH,
   NATIVE_ACTIONS,
+  NATIVE_PROXY_CALL_FLAGS,
+  MODULE_CHANGE_DELAY_MS,
+  CONFIGURATION_INTENT_EXPIRY_MS,
+  MAX_ACTIONS_PER_INTENT,
+  MAX_OPERATIONS_PER_ENVELOPE,
   actionBlockReason,
   buildRecoveryDescriptor,
   readRecoveryDescriptor,
-  buildSessionArguments,
-  buildMultiSigArguments,
-  NATIVE_MULTISIG_LIMITS,
+  describeConfigurationAction,
+  installModuleAction,
+  uninstallModuleAction,
+  configureModuleAction,
+  setHookOrderAction,
+  setDefaultPolicyAction,
+  setThresholdPolicyAction,
+  setRecoveryPolicyAction,
   jsonText,
 } from "./nativeWorkspace.js";
 const { locale } = useI18n();
@@ -922,7 +895,7 @@ const endpoint = ref(RUNTIME_CONFIG.rpcUrl),
   network = ref(String(RUNTIME_CONFIG.networkMagic)),
   profile = shallowRef(null),
   snapshot = shallowRef(null),
-  pendingPolicy = shallowRef(null),
+  inspected = shallowRef(null),
   review = shallowRef(null),
   signedTransaction = shallowRef(null),
   signedPreflight = shallowRef(null),
@@ -946,39 +919,44 @@ const receiptFiles = reactive({ review: "", artifact: "", reviewName: "", artifa
 let signedInputVersion = 0;
 const registration = reactive({
   custodyAddress: "",
-  recoveryAddress: "",
+  recoveryTimelockDays: "7",
   salt: "",
-  allowNoRecovery: false,
 });
-const policy = reactive({
-  role: "verifier",
-  kind: "session",
-  child: "",
-  publicKey: "",
-  target: "",
-  expiresAt: String(Date.now() + 2 * 86400000),
-  spendingLimit: "",
-  children: "",
+const initialInstall = reactive({
+  moduleType: "validator",
+  contractHash: "",
+  profileDigest: "",
+});
+const draft = reactive({
+  kind: "install",
+  moduleType: "validator",
+  contractHash: "",
+  profileDigest: "",
+  moduleId: "1",
+  hookIds: "",
+  policyId: "0",
   threshold: "2",
+  memberIds: "",
+  active: true,
+  operationAuthorization: true,
+  messageAuthorization: true,
+  recoveryAuthority: "",
+  timelockDays: "7",
+  ownerOnly: false,
 });
+const draftActions = ref([]);
 const operation = reactive({
-  targetContract: "",
-  method: "transfer",
-  args: "[]",
-  channel: "0",
-  deadline: String(Date.now() + 15 * 60000),
-  signature: "",
+  operations: "[]",
 });
-const action = ref("freeze"),
-  actionAddress = ref(""),
-  cancellationAuthority = ref("");
+const action = ref("freezeAccount"),
+  actionAddress = ref("");
 const workspace = createNativeWorkspace({
   wallet: createNativeWalletAdapter(walletService),
 });
 const tabs = [
   { id: "account", en: "Account & recovery", zh: "账户与恢复" },
   { id: "create", en: "Create account", zh: "创建账户" },
-  { id: "policy", en: "Sessions & approvals", zh: "会话与授权" },
+  { id: "configuration", en: "Configuration intents", zh: "配置意图" },
   { id: "operation", en: "Native operation", zh: "原生操作" },
 ];
 const selectedAction = computed(() =>
@@ -991,42 +969,39 @@ const actionBlocked = computed(() =>
     snapshot.value?.chainTime ?? 0,
   ),
 );
-const custodyCanCancelRecovery = computed(() =>
-  !!snapshot.value?.account.pendingRecovery &&
-  BigInt(snapshot.value.chainTime) < BigInt(snapshot.value.account.pendingRecovery.matureAt),
+const modules = computed(() =>
+  snapshot.value
+    ? [...snapshot.value.modules.validators, ...snapshot.value.modules.hooks]
+    : [],
 );
+const hookOrderText = computed(() => {
+  const ids = snapshot.value?.hookOrder.hookIds ?? [];
+  return ids.length ? ids.join(" → ") : L("none", "无");
+});
 const derived = computed(() => {
   try {
     if (!profile.value) return null;
     return nativeCodec.deriveIdentity({
-      networkMagic: profile.value.networkMagic,
       custodyAddress: nativeAddress(registration.custodyAddress),
       salt: registration.salt,
+      coreContractHash: profile.value.contract,
+      callFlags: NATIVE_PROXY_CALL_FLAGS,
     });
   } catch {
     return null;
   }
 });
-const pendingIntents = computed(() =>
-  snapshot.value
-    ? [
-        "pendingVerifier",
-        "pendingHook",
-        "pendingRecoveryAddress",
-        "pendingRecovery",
-      ].flatMap((key) =>
-        snapshot.value.account[key]
-          ? [{ key, ...snapshot.value.account[key] }]
-          : [],
-      )
-    : [],
-);
 function addressOf(hash) {
   try {
     return getAddressFromScriptHash(hash);
   } catch {
     return "";
   }
+}
+function timelockText(value) {
+  const days = Number(value) / 86400000;
+  if (!Number.isFinite(days)) return String(value) + " ms";
+  return L(`${days} days`, `${days} 天`);
 }
 function formatGas(value) {
   if (typeof value !== "string" || !/^[0-9]+$/.test(value))
@@ -1069,7 +1044,7 @@ function invalidate() {
   workspace.invalidate();
   profile.value = null;
   snapshot.value = null;
-  pendingPolicy.value = null;
+  inspected.value = null;
   clearReview();
   restoredTransaction.value = null;
   notice.value = "";
@@ -1085,11 +1060,12 @@ watch(
 watch(
   [
     () => ({ ...registration }),
-    () => ({ ...policy }),
+    () => ({ ...initialInstall }),
+    () => ({ ...draft }),
+    draftActions,
     () => ({ ...operation }),
     action,
     actionAddress,
-    cancellationAuthority,
     feePayer,
     signingPath,
     tab,
@@ -1101,13 +1077,12 @@ watch(
   accountId,
   () => {
     snapshot.value = null;
-    pendingPolicy.value = null;
-    cancellationAuthority.value = "";
+    inspected.value = null;
+    draftActions.value = [];
     clearReview();
   },
   { flush: "sync" },
 );
-watch(() => policy.role, () => { pendingPolicy.value = null; }, { flush: "sync" });
 function walletChanged() {
   invalidate();
   notice.value = L(
@@ -1138,7 +1113,7 @@ async function run(fn) {
     if (!workspace.profile) {
       profile.value = null;
       snapshot.value = null;
-      pendingPolicy.value = null;
+      inspected.value = null;
       restoredTransaction.value = null;
       workspace.clearArchived();
       clearReview();
@@ -1152,7 +1127,7 @@ async function connectNode() {
   await run(async () => {
     clearReview();
     snapshot.value = null;
-    pendingPolicy.value = null;
+    inspected.value = null;
     profile.value = null;
     restoredTransaction.value = null;
     profile.value = await workspace.connect({
@@ -1160,19 +1135,17 @@ async function connectNode() {
       networkMagic: network.value,
     });
     notice.value = L(
-      "Node ABI 2/profile matched. Standard implementation remains pending protocol activation.",
-      "节点 ABI 2/参数匹配。标准实现仍待协议激活。",
+      "Node answered the v4 native profile, ABI and implementation id.",
+      "节点已返回 v4 原生配置、ABI 与实现 ID。",
     );
   });
 }
 async function loadAccount() {
   await run(async () => {
     clearReview();
-    pendingPolicy.value = null;
+    inspected.value = null;
     snapshot.value = await workspace.load(accountId.value);
     if (!feePayer.value) feePayer.value = snapshot.value.account.custodyAddress;
-    policy.expiresAt = String(snapshot.value.chainTime + 2 * 86400000);
-    operation.deadline = String(snapshot.value.chainTime + 15 * 60000);
     notice.value = L(
       "Account loaded from the selected node.",
       "账户已从验证节点加载。",
@@ -1215,15 +1188,28 @@ function setReview(value) {
   txid.value = "";
 }
 async function reviewRegistration() {
-  await run(async () =>
+  await run(async () => {
+    const actions =
+      initialInstall.contractHash && initialInstall.profileDigest
+        ? [
+            installModuleAction({
+              moduleType: initialInstall.moduleType,
+              contractHash: initialInstall.contractHash,
+              profileDigest: initialInstall.profileDigest,
+            }),
+          ]
+        : [];
     setReview(
       await workspace.registration({
-        ...registration,
+        custodyAddress: registration.custodyAddress,
+        salt: registration.salt,
+        recoveryTimelockDays: registration.recoveryTimelockDays,
+        actions,
         submission: signingPath.value,
         feePayer: feePayer.value,
       }),
-    ),
-  );
+    );
+  });
 }
 async function reviewAction() {
   await run(async () =>
@@ -1232,99 +1218,145 @@ async function reviewAction() {
         accountId: accountId.value,
         action: action.value,
         submission: signingPath.value,
-        address: actionAddress.value,
+        newCustody: selectedAction.value?.address ? actionAddress.value : undefined,
         feePayer: feePayer.value,
-        cancellationAuthority: cancellationAuthority.value,
       }),
     ),
   );
 }
-async function reviewPolicy() {
-  await run(async () => {
-    let args, method;
-    if (policy.kind === "revoke") {
-      args = [];
-      method = "clearSessionKey";
-    } else if (policy.kind === "session") {
-      args = buildSessionArguments(policy, snapshot.value.chainTime);
-      method = "setSessionKey";
-    } else {
-      args = buildMultiSigArguments(
-        policy,
-        L(
-          "Use 1–3 unique modules and a reachable threshold of 1–2.",
-          "请填写 1–3 个不重复模块，并设置 1–2 之间且可满足的阈值。",
-        ),
-      );
-      method = "setConfig";
-    }
-    setReview(
-      await workspace.policy({
-        accountId: accountId.value,
-        role: policy.role,
-        child: policy.child || undefined,
-        method,
-        args,
-        feePayer: feePayer.value,
-      }),
-    );
-  });
-}
-async function refreshPolicy() {
+async function refreshConfiguration() {
   await run(async () => {
     clearReview();
-    pendingPolicy.value = null;
-    pendingPolicy.value = await workspace.inspectPolicy({ accountId: accountId.value, role: policy.role });
-  });
-}
-async function cancelPolicy() {
-  await run(async () => {
-    const inspected = pendingPolicy.value;
-    if (!inspected?.pending) throw Error(L("Refresh the pending policy first.", "请先刷新待生效配置。"));
-    setReview(await workspace.lifecycle({
+    inspected.value = null;
+    inspected.value = await workspace.inspectConfiguration({
       accountId: accountId.value,
-      action: "cancelModuleCall",
-      role: inspected.role,
-      expectedPending: inspected.pending,
-      feePayer: feePayer.value,
-      submission: signingPath.value,
-    }));
+    });
   });
 }
-async function activatePolicy() {
+async function reviewIntent(kind, intent) {
   await run(async () =>
     setReview(
-      await workspace.activatePolicy({
+      await workspace.configuration({
+        kind,
         accountId: accountId.value,
-        role: policy.role,
+        intentId: intent.intentId,
+        expectedIntent: intent,
         feePayer: feePayer.value,
+        submission: signingPath.value,
+      }),
+    ),
+  );
+}
+const numberList = (text) => String(text).split(/[\s,]+/).filter(Boolean);
+function buildDraftAction() {
+  const days = (value) => String(Math.round(Number(value) * 86400000));
+  switch (draft.kind) {
+    case "install":
+      return installModuleAction({
+        moduleType: draft.moduleType,
+        contractHash: draft.contractHash,
+        profileDigest: draft.profileDigest,
+      });
+    case "uninstall":
+      return uninstallModuleAction({ moduleId: draft.moduleId });
+    case "configure":
+      return configureModuleAction({ moduleId: draft.moduleId });
+    case "hookOrder":
+      return setHookOrderAction({ hookIds: numberList(draft.hookIds) });
+    case "defaultPolicy":
+      return setDefaultPolicyAction({
+        operationAuthorization: draft.operationAuthorization,
+        messageAuthorization: draft.messageAuthorization,
+      });
+    case "thresholdPolicy":
+      return setThresholdPolicyAction({
+        policyId: draft.policyId,
+        threshold: draft.threshold,
+        memberIds: numberList(draft.memberIds),
+        active: draft.active,
+      });
+    default:
+      return setRecoveryPolicyAction({
+        recoveryAuthority: draft.recoveryAuthority || ZERO_HASH,
+        recoveryTimelockMs: days(draft.timelockDays),
+        ownerOnlyRecovery: draft.ownerOnly,
+      });
+  }
+}
+function addDraftAction() {
+  draftActions.value = [...draftActions.value, buildDraftAction()];
+}
+function removeDraftAction(index) {
+  draftActions.value = draftActions.value.filter((_, at) => at !== index);
+}
+async function reviewProposal() {
+  await run(async () =>
+    setReview(
+      await workspace.configuration({
+        kind: "propose",
+        accountId: accountId.value,
+        actions: draftActions.value,
+        feePayer: feePayer.value,
+        submission: signingPath.value,
       }),
     ),
   );
 }
 async function reviewOperation() {
   await run(async () => {
-    let args;
+    let operations;
     try {
-      args = JSON.parse(operation.args);
+      operations = JSON.parse(operation.operations);
     } catch {
+      throw Error(L("Operations must be a JSON array.", "操作必须是 JSON 数组。"));
+    }
+    if (
+      !Array.isArray(operations) ||
+      !operations.length ||
+      operations.length > MAX_OPERATIONS_PER_ENVELOPE
+    )
       throw Error(
         L(
-          "Arguments must be a typed JSON array.",
-          "参数必须是类型化 JSON 数组。",
+          `An execution envelope carries 1 to ${MAX_OPERATIONS_PER_ENVELOPE} operations.`,
+          `执行信封包含 1 到 ${MAX_OPERATIONS_PER_ENVELOPE} 个操作。`,
         ),
       );
-    }
     setReview(
       await workspace.operation({
-        ...operation,
         accountId: accountId.value,
-        targetContract: nativeAddress(operation.targetContract),
-        args,
+        operations,
         feePayer: feePayer.value,
       }),
     );
   });
+}
+function fillEnvelope() {
+  const account = snapshot.value?.account;
+  if (!account) return;
+  operation.operations = JSON.stringify(
+    [
+      {
+        targetContract: "00".repeat(20),
+        method: "transfer",
+        args: [],
+        nonce: "1",
+        nonceSubkey: "00".repeat(32),
+        deadline: String(snapshot.value.chainTime + 3600000),
+        validatorId: "0",
+        credentialGeneration: "1",
+        authorityEpoch: account.authorityEpoch,
+        configurationNonce: account.configurationNonce,
+        signature: "",
+        hookProofs: [],
+      },
+    ],
+    null,
+    2,
+  );
+  notice.value = L(
+    "Skeleton filled with the live epoch and configuration nonce. Replace the target, arguments, nonce and signature.",
+    "已按实时权限代际与配置 nonce 填充骨架。请替换目标、参数、nonce 与签名。",
+  );
 }
 function download(name, value) {
   const url = URL.createObjectURL(
@@ -1339,10 +1371,13 @@ function download(name, value) {
 function exportDescriptor() {
   run(async () => {
     const descriptor = buildRecoveryDescriptor({
-      ...profile.value,
-      ...derived.value,
+      networkMagic: profile.value.networkMagic,
+      contract: profile.value.contract,
       custodyAddress: registration.custodyAddress,
       salt: registration.salt,
+      recoveryTimelockMs: String(
+        Math.round(Number(registration.recoveryTimelockDays) * 86400000),
+      ),
     });
     download(
       "neo-native-account-" + descriptor.accountId + ".json",
@@ -1379,6 +1414,9 @@ async function importDescriptor(event) {
     const descriptor = readRecoveryDescriptor(text, reviewedProfile);
     registration.custodyAddress = descriptor.custodyAddress;
     registration.salt = descriptor.salt;
+    registration.recoveryTimelockDays = String(
+      Number(descriptor.recoveryTimelockMs) / 86400000,
+    );
     accountId.value = descriptor.accountId;
     notice.value = L(
       "Descriptor identity verified. Load the account; wallet keys are still required.",

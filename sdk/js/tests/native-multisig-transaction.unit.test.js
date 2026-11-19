@@ -47,20 +47,31 @@ function transactionFixture(role = "guardian", signer = multisig()) {
     async send(method, params) {
       calls.push({ method, params });
       if (method === "getblockcount") return 100;
+      // The v4 transport pins the network magic once, before any signed bytes.
+      if (method === "getversion") return { protocol: { network: 123 } };
       if (method === "calculatenetworkfee") return { networkfee: networkFee };
       throw Error("Unexpected fixture RPC: " + method);
     },
   } });
   let revalidations = 0;
+  // Discovery is its own gate (see native-client.unit.test.js): this fixture is
+  // about witness and fee composition, so it answers as an already-discovered
+  // client instead of restating the whole ABI.
+  client.discover = async () => ({ networkMagic: 123, contractHash: CORE, protocolVersion: 4 });
+  // The plan's authority is the account state, not a list in the plan (v4).
+  client.getAccount = async () => ({ custodyAddress: guardianHash, recoveryAuthority: null });
   client.revalidatePlan = async () => { revalidations++; return true; };
-  client.simulate = async () => ({ state: "HALT", gasConsumed: "10", minimumRequiredFee: "100", stack: [{ type: "Any", value: null }] });
-  const plan = { kind: "lifecycle", accountId: "11".repeat(20),
-    method: role === "payer" ? "activateHook" : role === "custody" ? "unfreeze" : "freeze",
-    requiredAuthorities: role === "payer" ? [] : [guardianHash],
-    script: c.dynamicCall(CORE, "freeze", [c.hashValue("11".repeat(20))]),
+  client.simulate = async () => ({ state: "HALT", gasConsumed: "10", minimumRequiredFee: "100", incompleteTransfers: [], stack: [{ type: "Any", value: null }] });
+  // `executeRecovery` is permissionless by design, so the payer-only role needs
+  // no authority witness; the other two are custody-gated.
+  const method = role === "payer" ? "executeRecovery" : role === "custody" ? "unfreezeAccount" : "freezeAccount";
+  const plan = { kind: "account", accountId: "11".repeat(20), method,
+    signers: [guardianHash],
+    script: c.dynamicCall(CORE, method, [c.hashValue("11".repeat(20))]),
   };
+  const recipe = { method: "buildAccountActionScript", input: { method, accountId: "11".repeat(20) } };
   const options = { feePayer: role === "payer" ? signer : payer,
-    authoritySigners: role === "payer" ? [] : [signer], nonce: 42,
+    authorizers: role === "payer" ? [] : [signer], recipe, nonce: 42,
     maxSystemFee: 1000, maxNetworkFee: 1000, maxTotalFee: 2000 };
   return { client, plan, options, calls, count: () => revalidations, fee(value) { networkFee = value; } };
 }

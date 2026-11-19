@@ -182,21 +182,18 @@ const NO_NAMES = new Set();
 // they are, and CU-212 widened the vocabulary so the entries the shape rule could not read at all
 // are visible. The docs cleanup deleted the 2026-03-29 audit snapshot
 // (docs/SECURITY_AUDIT_RESULTS.md), the 2026-10-08 dependency record and both copies of the
-// March 11, 2026 audit, so their 50 entries left the ledger with them: 5 entries remain
-// (4 `spelling:` + 1 `entrypoint:`) across 3 files, each already justified by the reason its
+// March 11, 2026 audit, so their 50 entries left the ledger with them. Rewriting the rendered custom
+// module guide in v4 terms removed the last entry that described a verifier binding (`Admin`), so
+// 3 entries remain (all `spelling:`) across 2 files, each already justified by the reason its
 // document carries.
 const V2_DEBT = {
   'docs/ACCOUNT_RECOVERY_AND_IDENTITY.md': {
-    names: ['spelling:ClearAccount->clearAccount', 'spelling:VerifyAdmin->verifyAdmin', 'spelling:VerifyExecution->verifyExecution'],
-    reason: 'The sentences analyse how the recovery modules clean up and verify (MultiSigVerifier.ClearAccount, MultiHook.ClearAccount, SocialRecoveryVerifier.VerifyExecution/VerifyAdmin) and qualify each name with a C# class that no manifest exports; the deployed ABI of those modules spells them clearAccount, verifyExecution and verifyAdmin, so the names are the C# spelling of exported members and stay recorded (DS-CU-212 section 4, verdict SOUND, recorded).',
+    names: ['spelling:ClearAccount->clearAccount'],
+    reason: 'The sentences analyse how the recovery modules clean up (MultiSigVerifier.ClearAccount, MultiHook.ClearAccount) and qualify the name with a C# class that no manifest exports; the deployed ABI of those modules spells it clearAccount, so the name is the C# spelling of an exported member and stays recorded (DS-CU-212 section 4, verdict SOUND, recorded).',
   },
-  'docs/ETHEREUM_AA_COMPARISON.md': {
-    names: ['entrypoint:validateUserOp'],
-    reason: 'The name is the Ethereum ERC-4337 validator entry point on the Ethereum side of an explicit mapping (IVerifier.validateSignature is compared with IValidator.validateUserOp), not a Neo entrypoint.',
-  },
-  'frontend/src/assets/docs/custom-verifiers.md': {
-    names: ['spelling:Admin->admin'],
-    reason: 'The sentence binds a custom verifier to an account "by an existing Admin of the account": the role is the ABI method the paymaster, the market and the mock target export as admin (contracts/custom/paymaster/Paymaster.cs:93, contracts/custom/market/SAAddressMarket.cs:83, tests/mocks/MockTransferTarget.cs:36, and the internal HookAuthority.Admin at contracts/plugins/hooks/HookAuthority.cs:63), so the C# spelling is a claim about a name the deployment spells admin and it stays recorded (DS-CU-212 section 4).',
+  'docs/SA-MODULE-PROTOCOL.md': {
+    names: ['spelling:CallHook->callHook', 'spelling:CallVerifier->callVerifier'],
+    reason: 'The sentence records that the v3 callVerifier/callHook surfaces are removed without aliases in both kernels: naming those spellings is what the removal statement is about, and both are the C# spelling of members the pinned v3 manifest exports as callVerifier/callHook, so the entry says what the artifact spelled and stays recorded (DS-CU-211, DEC-DS-5).',
   },
 };
 
@@ -211,7 +208,11 @@ const FRAMEWORK_RECEIVERS = new Set(['Runtime', 'Contract', 'ContractManagement'
 // Inline code that looks like an entrypoint but is a parameter, a field or a service name.
 // callHash is a field of the pending-module-call record (contracts/custom/SmartAccount.Models.cs:65),
 // not a callable; DS-CU-202 section 4.
-const NON_CALLABLES = new Set(['create_sa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash']);
+// getAuthorityEpoch is an ABI 2 read on the pinned private native core (the sibling native-core
+// track), named by the module packager's permission check: it is the one name the native modules are
+// required to be able to call on that core, so it is neither a member nor a dead reference of this
+// repository's deployed manifests.
+const NON_CALLABLES = new Set(['create_sa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash', 'getAuthorityEpoch']);
 
 const ENTRYPOINT = /^(?:execute|register|preview|initiate|finalize|settle|update|cancel|confirm|propose|compute|get|set|is|has|can|withdraw|revoke|rotate|claim|deposit|call|lock|unlock|create|build|derive|validate|query|prepare|sign|broadcast|discover)[A-Z][A-Za-z0-9]*$/;
 // A line that marks a name as gone. The repository's translation copies state removal in Chinese,
@@ -250,7 +251,14 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'obj', 'bin', 'dist', 'covera
 // list of the lanes seen so far: the list missed nuget-isolated-v and let third-party package
 // readmes into the ratchets below. Only a directory matches; no tracked path carries the prefix.
 const ISOLATED_NUGET_CACHE = /^nuget-isolated/;
-const skipped = (entry) => SKIP_DIRS.has(entry.name) || (entry.isDirectory() && ISOLATED_NUGET_CACHE.test(entry.name));
+// `docs/_build_pdf.mjs` concatenates the Chinese documents into `docs/_merged-zh-CN.md` to render the
+// PDF, and the scratch file can survive into the window where the suites run. It is a concatenation of
+// documents already scanned below, not a document of its own: scanning it would report every claim a
+// second time under a path no reviewer opens, and its assertions would be keyed by file position in a
+// merge this guard cannot predict.
+const PDF_MERGE_SCRATCH = '_merged-zh-CN.md';
+const skipped = (entry) => SKIP_DIRS.has(entry.name) || entry.name === PDF_MERGE_SCRATCH
+  || (entry.isDirectory() && ISOLATED_NUGET_CACHE.test(entry.name));
 (function walk(dir) {
   for (const entry of fs.readdirSync(path.join(repoRoot, dir), { withFileTypes: true })) {
     if (skipped(entry) || (entry.name.startsWith('.') && entry.name !== '.')) continue;
@@ -276,6 +284,16 @@ for (const file of tracked) {
   // nativeWorkspace.js calls `provider.getNetworks?.()`.
   for (const match of text.matchAll(/([A-Za-z_]\w*)\s*\??\.?\s*\(/g)) definedNames.add(match[1]);
   for (const match of text.matchAll(/DisplayName\("([^"]+)"\)/g)) definedNames.add(match[1]);
+  // A module configure command is a name a plugin compares against a string, not a callable: the
+  // plugin SDK's `configData` carries `["setMemberKey", publicKey]` and the validator asserts the
+  // literal before dispatching, so the command is part of the module model a document may name.
+  // Reading it from the comparison that implements it keeps the vocabulary derived rather than
+  // listed (the same rule the contract ABI names follow).
+  if (file.endsWith('.cs')) {
+    for (const match of text.matchAll(/(?:ModuleConfig\.Command\([^)]*\)|\bcommand)\s*==\s*"([A-Za-z_]\w*)"/g)) {
+      definedNames.add(match[1]);
+    }
+  }
   // A contract may only call what its permissions name, and the pinned native authority calls the
   // service by string (contracts/plugins/native-profile/NativeAuthority.cs). Both spellings are live names, and the
   // scanner above cannot see them because the method is a string literal, not a call.
@@ -336,6 +354,21 @@ const divergentSpellings = new Set([...sourceDefinitions].filter((name) => {
 // repository) is not divergent; the set above would not carry it, and it needs no widening because
 // `deployedAbi` already holds its exact spelling.
 const exportedInSourceSpelling = new Set([...sourceDefinitions].filter((name) => deployedAbi.has(name)));
+
+// The v4 configuration action codes. An intent's action is an Array whose first element is an
+// integer code, and the core spells each code once, as an `Action<Name>` constant
+// (contracts/custom/SmartAccount.Models.cs). A document names an action by the camelCase form of
+// that constant - `setThresholdPolicy`, `installModule` - and no manifest exports it, because an
+// action is a wire value inside `proposeConfiguration`, not an ABI member. The set is derived from
+// the constants for the same reason the divergent class is derived from the manifests: a new action
+// becomes readable the moment the core defines it, and no document can invent one.
+const actionNames = new Set();
+for (const file of tracked) {
+  if (!file.startsWith('contracts/custom/') || !file.endsWith('.cs')) continue;
+  for (const match of read(file).matchAll(/const int Action([A-Z]\w*)\s*=/g)) {
+    actionNames.add(match[1][0].toLowerCase() + match[1].slice(1));
+  }
+}
 
 // The SDK surface: class methods plus the methods that unconditionally report a V3 removal. The
 // native client lives in shared/nativeSmartAccountClient.mjs and is re-exported by sdk/js/src.
@@ -616,9 +649,10 @@ const HISTORICAL_SNIPPET_SCOPE = /retained as historical security context|as a d
 //     deployment does not carry, so it is debt. This is the half CU-210 finding F6 measured: the
 //     previous rule asked `deployedAbiLower.has(name.toLowerCase())` and therefore judged
 //     `CanExecuteHook` live while every manifest exports `canExecuteHook`;
-//   * a C# definition no manifest exports is live as source. `CallVerifierChild`
-//     (SmartAccount.VerifierChildren.cs, deleted by the core split) was the recorded example: the pinned build
-//     does not export it (DS-CU-202 finding F1), and a document that names it names real code.
+//   * a C# definition no manifest exports is live as source. `GetThresholdPolicy`
+//     (SmartAccount.Modules.cs, the private read behind the threshold-policy actions) is the recorded
+//     example: the pinned build cannot export it because the v4 core deliberately has no policy
+//     getter, and a document that names it names real code.
 //
 // The two halves are why the rule keys on the artifact rather than on letter case: refusing every
 // PascalCase name would kill the second class, and accepting every case variant would keep the
@@ -627,6 +661,7 @@ function isLiveName(name, file) {
   if (deployedAbi.has(name)) return true;
   if (deployedSpelling(name) !== undefined) return false;
   if (sourceDefinitions.has(name) || definedNames.has(name) || sdkMethods.has(name)) return true;
+  if (actionNames.has(name)) return true;
   if (NATIVE_PROFILE_DOCS.includes(docClass(file)) && nativeAbiNames.has(name)) return true;
   return false;
 }
@@ -909,7 +944,7 @@ function failures() {
           }
           continue;
         }
-        if (definedNames.has(name)) continue;
+        if (definedNames.has(name) || actionNames.has(name)) continue;
         if (markedRemoved) continue;
         problems.push(`${where}: ${name} is not defined in any contract, manifest or SDK source and the line does not mark it removed`);
       }
@@ -1219,9 +1254,26 @@ function digestReportInventoryAllowances() {
     // scripts/build_native_modules.py for its path rewrite: 347 digest lines.
     // Re-triaged when the public build profile was renamed v3 -> public and the three
     // coq/Ordinary*.v model keys became coq/Custom*.v: no digest line changed.
+    // Re-triaged for the v4 module protocol: contracts/plugins/verifiers/ became
+    // contracts/plugins/validators/ (Verifier* shared files became Validator*), the
+    // v4 core partials (Intents, Message, Migration, ModuleProtocol, Modules, Nonce,
+    // Proxy, Events) joined the roster, and the external native-core pins were
+    // re-read from the reviewed core HEAD: 354 digest lines.
+    // Re-triaged when the native PAIRED FILE comment and the custom-kernel wording
+    // were corrected in SmartAccount.ModuleProtocol.cs: one pin's value reviewed
+    // and updated.
+    // Re-triaged for the v4 native core roster: SmartAccountState.cs became
+    // SmartAccountRecords.cs, Intents/Message/ModuleProtocol joined, and the ten
+    // rewritten native files plus ApplicationEngine.Runtime.cs were re-pinned from
+    // the reviewed core checkout: 357 digest lines.
+    // Re-triaged for the v4 native packaging: the native-v4 marker replacement in
+    // scripts/native_module_profile.py, the v4 parameter-sheet references in
+    // scripts/build_native_modules.py, and the native-v4 wording in
+    // docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md were reviewed against
+    // the sources and re-pinned; same 357 digest lines, new bytes.
     entry('sa-formal-source-lock-content-digests',
-      'formal/source-lock.json', 347,
-      'e39acc6645667878665734545b080c8011cebe2a05535c50a203973f7d791024'),
+      'formal/source-lock.json', 357,
+      '7f1c643b911c0ab03f7ea14d1d4c6131db39f976c019958d6253eaba8b4bd78a'),
     entry('sa-artifact-reproducibility-20261025-content-digests',
       'docs/reports/sa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
@@ -2135,14 +2187,6 @@ const V2_FENCE_MENTIONS = {
     names: ['ValidateSig', 'validateUserOpLogic'],
     reason: 'Bare mermaid node labels in the diagram that maps the Ethereum validation path onto the Neo one (ValidateSig stands for the signature-check stage, validateUserOpLogic for the Ethereum validator logic); neither is written as a call, and the solidity blocks of the same document are already declared illustrative.',
   },
-  'docs/NATIVE_ACCOUNT_TRANSACTION_GUARDS.md': {
-    names: ['cancelModuleCall'],
-    reason: 'The native account work landed on the default branch after this chain forked; its text fence is the NeoVM script the signed application runs, and the name is the SmartAccount method that script pushes as a string, so the document names the call rather than making it.',
-  },
-  'frontend/src/assets/docs/data-flow.md': {
-    names: ['CallCustom', 'HasID'],
-    reason: 'The rendered copy of the same flowchart; the rendered documents are required to stay in step with their source, so its mention list stands or falls with docs/DATA_FLOW.md.',
-  },
 };
 
 
@@ -2215,14 +2259,14 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
   const mutants = [
     {
       rule: 'a dead call inside a fenced code block is reported (the drift that was invisible before CU-210)',
-      file: 'frontend/src/assets/docs/custom-verifiers.md',
-      plant: (text) => text.replace("  operation: 'updateVerifier',", "  operation: 'setLegacyVerifierAddress',"),
-      claim: 'setLegacyVerifierAddress',
+      file: 'frontend/src/assets/docs/custom-modules.md',
+      plant: (text) => text.replace("const script = buildConfigurationScript({", "const script = buildLegacyVerifierConfig({"),
+      claim: 'buildLegacyVerifierConfig',
     },
     {
       rule: 'a fenced block cannot show a removed entrypoint as current, and a marked removal silences it',
-      file: 'frontend/src/assets/docs/custom-verifiers.md',
-      plant: (text) => text.replace("  operation: 'updateVerifier',", "  operation: 'setLegacyVerifierAddress', // removed call, kept as the before example"),
+      file: 'frontend/src/assets/docs/custom-modules.md',
+      plant: (text) => text.replace("const script = buildConfigurationScript({", "const script = buildLegacyVerifierConfig({ // removed call, kept as the before example"),
       claim: null,
     },
     {
@@ -2240,8 +2284,8 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
     },
     {
       rule: 'a dead call spelled the way the build spells an exported member is reported (the drift the camel-case filter made invisible; F7)',
-      file: 'frontend/src/assets/docs/custom-verifiers.md',
-      plant: (text) => text.replace("  operation: 'updateVerifier',", "  operation: 'updateVerifier',\n  preflight: await listDeployedVerifiers(masterContractHash),"),
+      file: 'frontend/src/assets/docs/custom-modules.md',
+      plant: (text) => text.replace("const script = buildConfigurationScript({", "const script = buildConfigurationScript({\n  preflight: await listDeployedVerifiers(masterContractHash),"),
       claim: 'listDeployedVerifiers',
     },
     {
@@ -2262,9 +2306,9 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
     {
       rule: 'the same dead camel-case call is a claim in code position and silent inside a comment (F9)',
       file: 'docs/MULTISIG_SDK.md',
-      plant: (text) => text.replace('const bundle = await multisig.validateBundle({ context, operation, childProofs });', 'const bundle = await multisig.validateBundle({ context, operation, childProofs });\nconst packets = await gatherChildProofPackets(context, operation);'),
+      plant: (text) => text.replace('const session = createThresholdSession({ rpcUrl });', 'const session = createThresholdSession({ rpcUrl });\nconst packets = await gatherChildProofPackets(context, operation);'),
       claim: 'gatherChildProofPackets',
-      commentedOut: (text) => text.replace('const bundle = await multisig.validateBundle({ context, operation, childProofs });', 'const bundle = await multisig.validateBundle({ context, operation, childProofs });\n  // gatherChildProofPackets(context, operation)'),
+      commentedOut: (text) => text.replace('const session = createThresholdSession({ rpcUrl });', 'const session = createThresholdSession({ rpcUrl });\n// gatherChildProofPackets(context, operation)'),
     },
     {
       rule: 'the illustrative-language annotation must carry a reason, so it cannot be a bare silence',
@@ -2417,7 +2461,7 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
 // The matrix is written out HERE rather than read from the lexer's own table, so a shape cannot
 // pass by agreeing with the table it is supposed to test (DEC-DS-9). The test after the block is
 // the other direction: it refuses a table row that no shape plants.
-const R3_FILE = 'frontend/src/assets/docs/custom-verifiers.md';
+const R3_FILE = 'frontend/src/assets/docs/custom-modules.md';
 const R3_COMMENTED = 'gatherChildProofPackets(context, operation)';
 const R3_COMMENTED_NAME = 'gatherChildProofPackets';
 const R3_CONTROL = 'bulkVerifySignatures(context, operation);';
@@ -2675,11 +2719,11 @@ test('CU-211: the liveness oracle is case-aware in both directions', () => {
     'the C# source spelling of an exported member is live again; the fence scan cannot see such a name');
   assert.equal(isLiveName('canExecuteHook', 'docs/SECURITY_MODEL.md'), true,
     'the manifest spelling of an exported member is not live');
-  assert.ok(sourceDefinitions.has('CallVerifierChild'),
-    'the source-definition oracle lost CallVerifierChild, the C# definition CU-202 finding F1 records as absent from the pinned build');
-  assert.equal(deployedSpelling('CallVerifierChild'), undefined,
-    'CallVerifierChild is exported by a manifest now, so the live-as-source control is stale');
-  assert.equal(isLiveName('CallVerifierChild', 'docs/SECURITY_MODEL.md'), true,
+  assert.ok(sourceDefinitions.has('GetThresholdPolicy'),
+    'the source-definition oracle lost GetThresholdPolicy, the private core read the pinned build cannot export');
+  assert.equal(deployedSpelling('GetThresholdPolicy'), undefined,
+    'GetThresholdPolicy is exported by a manifest now, so the live-as-source control is stale');
+  assert.equal(isLiveName('GetThresholdPolicy', 'docs/SECURITY_MODEL.md'), true,
     'a C# definition that no manifest exports is treated as dead; the oracle is rejecting names by shape, not by artifact');
   // The ledger keeps the two classes apart and says what the artifact exports, so a reader does not
   // have to open a manifest to know what a `spelling:` entry should have been.
@@ -2707,19 +2751,20 @@ test('CU-211: the liveness oracle is case-aware in both directions', () => {
 // listed, and the recorded ledger is the measurement that widening produced. A reader can check every
 // number here against contracts/build/*.manifest.json and contracts/**/*.cs.
 test('CU-212: the entrypoint vocabulary is derived from the build and both oracles read the class', () => {
-  // 1. The derivation. 191 C# definitions at this base are exported under a different spelling than
+  // 1. The derivation. 134 C# definitions at this base are exported under a different spelling than
   //    the source writes, which is the class CU-211 could not read; the count is what makes this a
   //    derivation over the build rather than a list of names a document happened to use. The count
   //    moved 198 -> 194 when commit 26ad769 deleted contracts/mocks/PlatformRegistrarMock.cs and its
   //    build manifest: the members that artifact exported left the divergent class together with
   //    the artifact that carried them, which is exactly the move a derivation exists to record.
   //    It moved 194 -> 191 when the AA -> SA rename spelled SetAllowedAA / IsAllowedAA / GetAAContract
-  //    as SetAllowedSA / IsAllowedSA / GetSAContract in contracts/custom/market/SAAddressMarket.cs and
-  //    contracts/plugins/recovery/MorpheusSocialRecoveryVerifier.Queries.cs. The pinned contracts/build
-  //    manifests still export the AA spelling, so the three renamed members have no camelCase export
-  //    to diverge from until the artifacts are regenerated: the class measures the build it is given,
-  //    and this is the build on disk.
-  assert.equal(divergentSpellings.size, 191,
+  //    as SetAllowedSA / IsAllowedSA / GetSAContract. It moved 191 -> 134 in the v4 migration: the
+  //    verifier, hook, escape and backup-owner modules were deleted from contracts/custom (their
+  //    state moved into the module model), so the C# members those files defined left the source
+  //    with the files, and the members they exported left the pinned manifests with their artifacts.
+  //    The class measures the source it is given against the build it is given, and these are the
+  //    two on disk.
+  assert.equal(divergentSpellings.size, 134,
     'the divergent class changed size: a contract member was added, renamed or removed, and the ledger below must be re-measured');
   for (const name of divergentSpellings) {
     assert.equal(deployedSpellingOfSource(name), (() => {
@@ -2738,24 +2783,26 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   assert.ok(!divergentSpellings.has('_deploy'), '_deploy is not a divergent spelling');
   // The other direction of DEC-DS-5 rule 2: a C# definition no manifest exports stays live as source
   // and must not be dragged into the class.
-  assert.ok(sourceDefinitions.has('CallVerifierChild'),
-    'the source-definition oracle lost CallVerifierChild, the C# definition CU-202 finding F1 records as absent from the pinned build');
-  assert.equal(deployedSpelling('CallVerifierChild'), undefined,
-    'CallVerifierChild is exported by a manifest now, so the live-as-source control is stale');
-  assert.ok(!divergentSpellings.has('CallVerifierChild'),
+  assert.ok(sourceDefinitions.has('GetThresholdPolicy'),
+    'the source-definition oracle lost GetThresholdPolicy, the private core read the pinned build cannot export');
+  assert.equal(deployedSpelling('GetThresholdPolicy'), undefined,
+    'GetThresholdPolicy is exported by a manifest now, so the live-as-source control is stale');
+  assert.ok(!divergentSpellings.has('GetThresholdPolicy'),
     'a source-only definition was pulled into the divergent class');
-  assert.equal(isLiveName('CallVerifierChild', 'docs/SECURITY_MODEL.md'), true,
+  assert.equal(isLiveName('GetThresholdPolicy', 'docs/SECURITY_MODEL.md'), true,
     'a C# definition that no manifest exports is treated as dead; the oracle is rejecting names by shape, not by artifact');
 
   // 2. Both oracles read the class. The inline oracle is asked through `callableNames`, the fence
   //    oracle through `fenceClaims`, and the manifest spelling of the same member stays live.
   assert.equal(isCallableName('OnNEP17Payment'), true,
     'the inline oracle cannot read the source spelling of an exported member');
-  // The correction CU-211's F8 count carried: fourteen source-spelled exported members appear in the
-  // scanned documents, not thirteen, and every one of them is read now. The assertion is written
-  // against the shape rule so it keeps meaning if the class moves.
-  const blind = ['ClearAccount', 'VerifyExecution', 'VerifyAdmin', 'PreExecute', 'PostExecute', 'Transfer',
-    'SetupRecovery', 'Verify', 'VerifyMetaTx', 'ClearSessionKey', 'EnterMarketEscrow', 'OnNEP17Payment',
+  // The correction CU-211's F8 count carried: the source-spelled exported members the scanned
+  // documents carry are all read now, not all-but-one, and the assertion is written against the
+  // derivation so it keeps meaning when the class moves. The three verifier-model members the list
+  // carried before the v4 migration (VerifyExecution, VerifyAdmin, VerifyMetaTx) left it with the
+  // modules that defined them, and three v4 members replace them.
+  const blind = ['ClearAccount', 'SupportsModuleType', 'OnOracleResult', 'PreExecute', 'PostExecute', 'Transfer',
+    'SetupRecovery', 'Verify', 'BalanceOf', 'ClearSessionKey', 'EnterMarketEscrow', 'OnNEP17Payment',
     'RefundPendingPayment', 'Admin'];
   for (const name of blind) {
     assert.ok(!shapedLikeEntrypoint(name), `${name} is read by the shape rule now, so it is not a blind name`);
@@ -2799,19 +2846,22 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   assert.deepEqual(callableNames('call `enterMarketEscrow(accountId, marketContract, listingId)`').map(({ name }) => name),
     [], 'the vocabulary reads a name the shape rule never read and no source definition carries');
 
-  // 4. The ledger this vocabulary produces: 4 `spelling:` entries and 1 `entrypoint:` entry in 3
+  // 4. The ledger this vocabulary produces: 3 `spelling:` entries and no `entrypoint:` entry in 2
   //    files. It shrank from the 48/7/7 measurement this row was dispatched to report when the
   //    documents cleanup retired docs/SECURITY_AUDIT_RESULTS.md and
   //    docs/DEPENDENCY-CONVERGENCE-20261008.md (28 names), and it shrank again when the same cleanup
-  //    deleted both copies of the March 11, 2026 audit (22 names); the vocabulary rules themselves
-  //    are unchanged, so the r2 measurement of the same corpus in section 7 below must agree with
-  //    these numbers.
+  //    deleted both copies of the March 11, 2026 audit (22 names); the v4 migration then left one
+  //    entrypoint (`validateUserOp`, now defined by the native core source) and one spelling
+  //    (`VerifyExecution`/`VerifyAdmin`, whose modules were deleted) behind, and rewriting the
+  //    rendered custom module guide dropped the `Admin` spelling with the verifier binding it
+  //    described. The vocabulary rules themselves are unchanged, so the r2 measurement of the same
+  //    corpus in section 7 below must agree with these numbers.
   const found = ratchetDebt();
   const entries = Object.values(found).flat();
-  assert.equal(entries.length, 5, `the recorded ledger is not the widened one: ${entries.length} entries`);
-  assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 4, 'the spelling bucket changed size');
-  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 1, 'the entrypoint bucket changed size');
-  assert.equal(Object.keys(found).length, 3, 'the ledger no longer covers 3 files');
+  assert.equal(entries.length, 3, `the recorded ledger is not the widened one: ${entries.length} entries`);
+  assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 3, 'the spelling bucket changed size');
+  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 0, 'the entrypoint bucket changed size');
+  assert.equal(Object.keys(found).length, 2, 'the ledger no longer covers 2 files');
   // Every source-spelled occurrence in a scanned document is now read: the class has no blind spot.
   const missed = [];
   for (const file of Object.keys(found)) {
@@ -2873,7 +2923,7 @@ test('CU-212: each vocabulary rule is killed by its planted drift', () => {
     },
     {
       rule: 'CONTROL: a name live in both spellings stays live - the exact manifest spelling and a C# definition no manifest exports',
-      plant: (text) => text.replace('### 6. Market Escrow', '```csharp\nclearAccount(accountId);\nCallVerifierChild(accountId, childVerifier, method, args);\n```\n\n### 6. Market Escrow'),
+      plant: (text) => text.replace('### 6. Market Escrow', '```csharp\nclearAccount(accountId);\nGetThresholdPolicy(accountId, policyId);\n```\n\n### 6. Market Escrow'),
       check: () => {
         assert.deepEqual(fenceScan().claims[auditDoc] ?? [], [],
           'the oracle killed a name the artifact that owns it spells exactly');
@@ -2898,7 +2948,7 @@ test('CU-212: each vocabulary rule is killed by its planted drift', () => {
   }
   // the mutants leave the tree exactly as they found it
   const drifted = fs.readFileSync(target, 'utf8');
-  for (const name of ['OnNEP17Payment(', 'clearAccount, childVerifier']) {
+  for (const name of ['OnNEP17Payment(', 'clearAccount, policyId']) {
     assert.ok(!drifted.includes(name), `${auditDoc} kept a planted drift: ${name}`);
   }
   // THE KILL CONTROLS: with the divergent class emptied, the same mutation must stop being reported.
@@ -2924,9 +2974,9 @@ test('CU-211: each case rule is killed by its planted drift', () => {
     {
       rule: 'a document that writes the C# source spelling of an exported member is reported (the drift that was invisible before CU-211)',
       file: 'docs/ETHEREUM_AA_COMPARISON.md',
-      plant: (text) => text.replace('Configured --> EscapeInitiated: initiateEscape(accountId) called', 'Configured --> EscapeInitiated: InitiateEscape() called'),
-      claim: 'InitiateEscape',
-      notMention: 'InitiateEscape',
+      plant: (text) => text.replace('RecoveryInitiated --> Configured: cancelRecovery(accountId)', 'RecoveryInitiated --> Configured: FinalizeEscape(accountId)'),
+      claim: 'FinalizeEscape',
+      notMention: 'FinalizeEscape',
     },
     {
       rule: 'the same rule reaches a fenced C# block, not only a diagram',
@@ -2951,8 +3001,8 @@ test('CU-211: each case rule is killed by its planted drift', () => {
     {
       rule: 'both halves of the decision stay live: a C# definition no manifest exports, and the manifest spelling of one that is exported',
       file: 'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
-      plant: (text) => text.replace('### 6. Market Escrow', '```csharp\nCallVerifierChild(accountId, childVerifier, method, args);\ncanExecuteHook(accountId, callerContract, hookContract);\n```\n\n### 6. Market Escrow'),
-      live: ['CallVerifierChild', 'canExecuteHook'],
+      plant: (text) => text.replace('### 6. Market Escrow', '```csharp\nGetThresholdPolicy(accountId, policyId);\ncanExecuteHook(accountId, callerContract, hookContract);\n```\n\n### 6. Market Escrow'),
+      live: ['GetThresholdPolicy', 'canExecuteHook'],
     },
   ];
   for (const mutant of mutants) {
@@ -2992,7 +3042,7 @@ test('CU-211: each case rule is killed by its planted drift', () => {
   for (const mutant of mutants) {
     const target = path.join(repoRoot, mutant.file);
     const text = fs.readFileSync(target, 'utf8');
-    for (const name of ['CanExecuteHook(', 'InitiateEscape()', 'IsMarketEscrowActive(', 'InitiateLegacyThing', 'CallVerifierChild(']) {
+    for (const name of ['CanExecuteHook(', 'InitiateEscape()', 'IsMarketEscrowActive(', 'InitiateLegacyThing', 'GetThresholdPolicy(']) {
       assert.ok(!text.includes(name), `${mutant.file} kept a planted drift: ${name}`);
     }
   }
@@ -3089,15 +3139,15 @@ test('CU-212 R2: a call the sentence punctuates is read, and its drift is report
   assert.deepEqual(lost, [], `the punctuation rule dropped names the r1 parser read:\n${lost.join('\n')}`);
   assert.ok(linesScanned > 10000, `the direction check scanned only ${linesScanned} lines, so it proves little`);
 
-  // 7. On today's corpus the widening moves no entry: the ledger is 3 files / 5 names, the r1
-  //    records minus the deleted snapshot documents, so the fix adds enforcement rather than
-  //    changing what is recorded.
+  // 7. On today's corpus the widening moves no entry: the ledger is 2 files / 3 names, the r1
+  //    records minus the deleted snapshot documents and the v3-only members the v4 migration
+  //    removed, so the fix adds enforcement rather than changing what is recorded.
   const found = ratchetDebt();
   const entries = Object.values(found).flat();
-  assert.equal(entries.length, 5, `the punctuated-call rule changed the ledger size: ${entries.length} entries`);
-  assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 4, 'the spelling bucket changed size');
-  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 1, 'the entrypoint bucket changed size');
-  assert.equal(Object.keys(found).length, 3, 'the ledger no longer covers 3 files');
+  assert.equal(entries.length, 3, `the punctuated-call rule changed the ledger size: ${entries.length} entries`);
+  assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 3, 'the spelling bucket changed size');
+  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 0, 'the entrypoint bucket changed size');
+  assert.equal(Object.keys(found).length, 2, 'the ledger no longer covers 2 files');
   assert.ok(!entries.includes(`entrypoint:InitiateEscape`), 'the punctuated call was recorded in both buckets');
 });
 

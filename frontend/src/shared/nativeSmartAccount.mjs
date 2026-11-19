@@ -1,12 +1,36 @@
-/** Exact native SmartAccount ABI 2 codec. No public V3/RPC type coercion. */
+/**
+ * Exact SA module protocol v4 codec (docs/SA-MODULE-PROTOCOL.md).
+ *
+ * One implementation of the wire format shared by the native and custom
+ * kernels: the 13-field operation envelope (§4), the canonical unsigned
+ * serialization (§4.2), the §4.3 operation digest, the §6 nonce channel
+ * derivation, the §8 message digest, the §16.1 identity domain and the
+ * script builders. Every helper is pure: no RPC, no ambient state, hashing is
+ * injected as synchronous hex adapters so Node and the browser agree.
+ */
 export const NATIVE_SMART_ACCOUNT_CONTRACT =
   "398dc3f0227d7efac5533ed5ce9937390c158084";
-export const NATIVE_ABI_VERSION = 2;
+export const PROTOCOL_VERSION = 4;
+export const NATIVE_ABI_VERSION = 4;
+export const OPERATION_FIELDS = 13;
+export const NONCE_SUBKEY_BYTES = 32;
+export const MESSAGE_HASH_BYTES = 32;
+export const SIGNATURE_BYTES_MAX = 8192;
+export const ARGS_ENTRIES_MAX = 64;
+export const ARGS_BYTES_MAX = 4096;
+export const ARGS_DEPTH_MAX = 8;
+export const OPERATIONS_PER_ENVELOPE_MAX = 32;
+export const HOOK_PROOFS_ENTRIES_MAX = 8;
+export const HOOK_PROOFS_BYTES_MAX = 4096;
+const ACCOUNT_IDENTITY_DOMAIN = "aa524704";
+const USER_OPERATION_DOMAIN = "NeoSmartAccount/UserOperation";
+const MESSAGE_DOMAIN = "NeoSmartAccount/Message";
 const U64 = 1n << 64n;
 const I255 = 1n << 255n;
+const CHANNEL_MASK = (1n << 191n) - 1n;
 const utf8 = new TextEncoder();
 const fail = (message) => {
-  throw new Error(`Native SmartAccount: ${message}`);
+  throw new Error(`SmartAccount v4: ${message}`);
 };
 export function nativeHex(value, bytes) {
   if (typeof value !== "string") fail("hex bytes must be a string");
@@ -25,9 +49,7 @@ function bytes(hex) {
 function hex(data) {
   return Array.from(data, (n) => n.toString(16).padStart(2, "0")).join("");
 }
-function join(...data) {
-  return data.join("");
-}
+const join = (...parts) => parts.join("");
 function integer(value) {
   if (typeof value === "number" && !Number.isSafeInteger(value))
     fail("integer number must be safe and exact");
@@ -40,7 +62,7 @@ function integer(value) {
 }
 function unsigned(value, bits, label) {
   const n = integer(value);
-  if (n < 0n || n >= 1n << BigInt(bits)) fail(`${label} outside uint${bits}`);
+  if (n < 0n || n >> BigInt(bits) !== 0n) fail(`${label} outside uint${bits}`);
   return n;
 }
 function le(value, size) {
@@ -51,6 +73,17 @@ function le(value, size) {
     s += Number(n & 255n)
       .toString(16)
       .padStart(2, "0");
+    n >>= 8n;
+  }
+  return s;
+}
+function be(value, size) {
+  let n = unsigned(value, size * 8, "big-endian word");
+  let s = "";
+  for (let i = 0; i < size; i++) {
+    s = Number(n & 255n)
+      .toString(16)
+      .padStart(2, "0") + s;
     n >>= 8n;
   }
   return s;
@@ -99,7 +132,12 @@ function pushInt(value) {
       return le(i, 1) + le(n, size);
   fail("unencodable integer");
 }
-function canonicalValue(item, seen = new Set(), depth = 0, maxDepth = 8) {
+const integerValue = (value) => ({
+  type: "Integer",
+  value: integer(value).toString(),
+});
+const byteStringValue = (value) => ({ type: "ByteString", value: nativeHex(value) });
+function canonicalValue(item, seen = new Set(), depth = 0, maxDepth = ARGS_DEPTH_MAX) {
   if (!item || typeof item !== "object" || Array.isArray(item))
     fail("typed VM value required");
   const { type, value } = item;
@@ -113,10 +151,14 @@ function canonicalValue(item, seen = new Set(), depth = 0, maxDepth = 8) {
   }
   if (type === "Integer") {
     signedBytes(value);
-    return { type, value: integer(value).toString() };
+    return integerValue(value);
   }
-  if (type === "ByteString") return { type, value: nativeHex(value) };
-  if (type !== "Array" && type !== "Struct")
+  if (type === "ByteString") return byteStringValue(value);
+  if (type !== "Array")
+    // §4.1: an operation argument is Null, Boolean, Integer, ByteString or
+    // Array. A Struct (or a Map) anywhere in the operation is rejected, because
+    // the two kernels would have to agree on a container this protocol never
+    // defines.
     fail(`unsupported VM type ${type}`);
   if (
     !Array.isArray(value) ||
@@ -180,35 +222,82 @@ function encode(item) {
 }
 function methodBytes(method) {
   const s = strictText(method);
-  if (s.length < 2 || s.length > 256)
-    fail("method must contain 1..128 UTF8 bytes");
+  const length = s.length / 2;
+  if (length < 1 || length > 128) fail("method must contain 1..128 UTF8 bytes");
   return s;
 }
 function hashValue(value) {
   return { type: "ByteString", value: reverse(nativeHex(value, 20)) };
 }
+function hookProofsValue(proofs) {
+  if (proofs === undefined || proofs === null) return { type: "Array", value: [] };
+  if (!Array.isArray(proofs) || proofs.length > HOOK_PROOFS_ENTRIES_MAX)
+    fail(`hook proofs require 0..${HOOK_PROOFS_ENTRIES_MAX} entries`);
+  let total = 0;
+  let previous = -1n;
+  const entries = proofs.map((entry) => {
+    const pair = Array.isArray(entry)
+      ? { hookId: entry[0], proof: entry[1] }
+      : { hookId: entry?.hookId, proof: entry?.proof };
+    const hookId = unsigned(pair.hookId, 64, "hook id");
+    if (hookId <= previous) fail("hook ids must be unique and strictly ascending");
+    previous = hookId;
+    const proof = nativeHex(pair.proof ?? "");
+    total += proof.length / 2;
+    return {
+      type: "Array",
+      value: [integerValue(hookId), byteStringValue(proof)],
+    };
+  });
+  if (total > HOOK_PROOFS_BYTES_MAX) fail("aggregate hook proof bytes exceed 4096");
+  return { type: "Array", value: entries };
+}
 function operationValue(op, emptySignature = false) {
   if (!op || typeof op !== "object") fail("operation required");
   const target = nativeHex(op.targetContract, 20);
   if (/^0+$/.test(target)) fail("zero target");
-  if (!Array.isArray(op.args) || op.args.length > 64)
-    fail("operation args must be an Array with at most 64 values");
+  if (!Array.isArray(op.args) || op.args.length > ARGS_ENTRIES_MAX)
+    fail(`operation args must be an Array with at most ${ARGS_ENTRIES_MAX} values`);
   const args = canonicalValue({ type: "Array", value: op.args });
-  if (serialize(args).length > 8192)
-    fail("serialized arguments exceed 4096 bytes");
-  const sig = nativeHex(op.signature ?? "");
-  if (sig.length > 2048) fail("signature exceeds 1024 bytes");
-  const nonce = unsigned(op.nonce, 255, "nonce").toString(),
-    deadline = unsigned(op.deadline, 255, "deadline").toString();
+  if (serialize(args).length / 2 > ARGS_BYTES_MAX)
+    fail(`serialized arguments exceed ${ARGS_BYTES_MAX} bytes`);
+  const signature = op.signature === undefined || op.signature === null
+    ? ""
+    : nativeHex(op.signature);
+  if (signature.length / 2 > SIGNATURE_BYTES_MAX)
+    fail(`signature exceeds ${SIGNATURE_BYTES_MAX} bytes`);
+  if (!emptySignature && signature.length === 0)
+    fail("signature must contain 1..8192 bytes");
+  const nonce = unsigned(op.nonce, 255, "nonce");
+  const deadline = unsigned(op.deadline, 255, "deadline");
+  const validatorId = unsigned(op.validatorId, 64, "validator id");
+  const credentialGeneration = unsigned(
+    op.credentialGeneration,
+    64,
+    "credential generation",
+  );
+  const authorityEpoch = unsigned(op.authorityEpoch, 64, "authority epoch");
+  const configurationNonce = unsigned(
+    op.configurationNonce,
+    64,
+    "configuration nonce",
+  );
   return {
     type: "Array",
     value: [
+      integerValue(PROTOCOL_VERSION),
       hashValue(target),
-      { type: "ByteString", value: methodBytes(op.method) },
+      byteStringValue(methodBytes(op.method)),
       args,
-      { type: "Integer", value: nonce },
-      { type: "Integer", value: deadline },
-      { type: "ByteString", value: emptySignature ? "" : sig },
+      integerValue(nonce),
+      byteStringValue(nativeHex(op.nonceSubkey, NONCE_SUBKEY_BYTES)),
+      integerValue(deadline),
+      integerValue(validatorId),
+      integerValue(credentialGeneration),
+      integerValue(authorityEpoch),
+      integerValue(configurationNonce),
+      byteStringValue(emptySignature ? "" : signature),
+      hookProofsValue(op.hookProofs),
     ],
   };
 }
@@ -227,31 +316,219 @@ function dynamicCall(contract, method, args, flags = 15) {
     "41627d5b52"
   );
 }
-export function createNativeCodec({ sha256, hash160 }) {
+function operationSetting(op, name) {
+  const value = unsigned(op?.[name], 64, name);
+  return be(value, 8);
+}
+
+// ---------------------------------------------------------------------------
+// Standalone VM encoders for modules that only build scripts or parameters and
+// never hash (the proxy-witness builder, the transaction artifact, the relay
+// parameter adapter). The codec factory below exposes the same functions next
+// to the hash derivations; there is one implementation, not two.
+// ---------------------------------------------------------------------------
+export const canonicalizeValue = (value) => canonicalValue(value);
+export const serializeCanonicalValue = (value) => serialize(value);
+export const encodeCanonicalValue = (value) => encode(value);
+export { integerValue, byteStringValue, hashValue };
+export const userOperationValue = (op) => operationValue(op);
+export const serializeUserOperation = (op, emptySignature = false) =>
+  serialize(operationValue(op, emptySignature));
+export const encodeUserOperation = (op) => encode(operationValue(op));
+export const encodeDynamicCall = (contract, method, flagsOrArgs, maybeFlags) =>
+  // Callers pass (contract, method, args, flags); direct (contract, method, args)
+  // keeps the CallFlags.All default of the custom kernel.
+  dynamicCall(contract, method, flagsOrArgs, maybeFlags);
+export function createProtocolCodec({ sha256, hash160 }) {
   if (typeof sha256 !== "function" || typeof hash160 !== "function")
     fail("synchronous hex hash adapters required");
-  const sha = (value) => nativeHex(sha256(value), 32),
-    hash = (value) => nativeHex(hash160(value), 20);
-  const verificationScript = (accountId) =>
-    dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, "verify", [hashValue(accountId)], 5);
-  const authorizationDomain = (context) =>
-    join(
-      strictText("NeoSmartAccount/UserOperation"),
-      "02",
-      le(unsigned(context.networkMagic, 32, "network magic"), 4),
-      reverse(NATIVE_SMART_ACCOUNT_CONTRACT),
-      reverse(nativeHex(context.accountId, 20)),
-      le(unsigned(context.authorityEpoch, 64, "authority epoch"), 8),
-      le(unsigned(context.configurationNonce, 64, "configuration nonce"), 8),
+  const sha = (value) => nativeHex(sha256(value), 32);
+  const hash = (value) => nativeHex(hash160(value), 20);
+
+  /// The account-bound proxy verification script: PUSHDATA1 20 accountId,
+  /// PUSH1 PACK <flags>, PUSHDATA1 6 "verify", PUSHDATA1 20 core,
+  /// SYSCALL System.Contract.Call. The two kernels push different call flags
+  /// (the custom kernel builds PUSH15 = CallFlags.All, the native kernel
+  /// pushes PUSH5 = CallFlags.ReadOnly), so the numeric flag is an explicit
+  /// parameter and never inferred: the proxy address must be the one the
+  /// submitting kernel derives.
+  const verificationScript = (
+    accountId,
+    { coreContractHash = NATIVE_SMART_ACCOUNT_CONTRACT, callFlags = 15 } = {},
+  ) => dynamicCall(coreContractHash, "verify", [hashValue(accountId)], callFlags);
+
+  /// §16.1 identity: Hash160(0xAA524704 ‖ custody ‖ salt), raw UInt160 storage
+  /// order; the display form is the big-endian reversal of the same bytes.
+  const deriveIdentity = ({ custodyAddress, salt, coreContractHash, callFlags }) => {
+    const custody = nativeHex(custodyAddress, 20);
+    const core = nativeHex(
+      coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT,
+      20,
     );
+    // The proxy calls its own core, so naming the core as custody would make
+    // the account id a hash of the contract that is answering for it.
+    if (/^0+$/.test(custody) || custody === core) fail("invalid custody");
+    const saltHex = nativeHex(salt);
+    if (saltHex.length < 2 || saltHex.length > 256)
+      fail("registration salt must contain 1..128 bytes");
+    const accountId = hash(join(ACCOUNT_IDENTITY_DOMAIN, reverse(custody), saltHex));
+    if (/^0+$/.test(accountId)) fail("derived zero identity");
+    const script = verificationScript(accountId, { coreContractHash, callFlags });
+    return Object.freeze({
+      accountId,
+      verificationScript: script,
+      accountAddress: reverse(hash(script)),
+    });
+  };
+
+  /// §4.3 domain: UTF8("NeoSmartAccount/UserOperation") ‖ U1(4) ‖
+  /// U32LE(network) ‖ coreHash ‖ accountId ‖ U64BE(validatorId) ‖
+  /// U64BE(credentialGeneration) ‖ U64BE(authorityEpoch) ‖
+  /// U64BE(configurationNonce).
+  const operationDomain = (context, op) =>
+    join(
+      strictText(USER_OPERATION_DOMAIN),
+      le(PROTOCOL_VERSION, 1),
+      le(unsigned(context?.networkMagic, 32, "network magic"), 4),
+      reverse(nativeHex(context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT, 20)),
+      reverse(nativeHex(context?.accountId, 20)),
+      operationSetting(op, "validatorId"),
+      operationSetting(op, "credentialGeneration"),
+      operationSetting(op, "authorityEpoch"),
+      operationSetting(op, "configurationNonce"),
+    );
+
+  /// §8 message digest: UTF8("NeoSmartAccount/Message") ‖ U1(4) ‖
+  /// U32LE(network) ‖ coreHash ‖ accountId ‖ originalSender ‖
+  /// U64BE(validatorId) ‖ U64BE(credentialGeneration) ‖ U64BE(authorityEpoch)
+  /// ‖ hash.
+  const messageDigest = (context, message) =>
+    sha(
+      join(
+        strictText(MESSAGE_DOMAIN),
+        le(PROTOCOL_VERSION, 1),
+        le(unsigned(context?.networkMagic, 32, "network magic"), 4),
+        reverse(nativeHex(context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT, 20)),
+        reverse(nativeHex(context?.accountId, 20)),
+        reverse(nativeHex(message?.originalSender, 20)),
+        be(unsigned(message?.validatorId ?? 0, 64, "validator id"), 8),
+        be(unsigned(message?.credentialGeneration ?? 0, 64, "credential generation"), 8),
+        be(unsigned(context?.authorityEpoch, 64, "authority epoch"), 8),
+        nativeHex(message?.hash, MESSAGE_HASH_BYTES),
+      ),
+    );
+
+  /// §6 nonce namespace digest (the full 256-bit derivation), and the derived
+  /// 191-bit channel taken from its low bits.
+  const nonceNamespaceDigest = (context, { validatorId, credentialGeneration, nonceSubkey }) =>
+    sha(
+      join(
+        le(PROTOCOL_VERSION, 1),
+        reverse(nativeHex(context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT, 20)),
+        reverse(nativeHex(context?.accountId, 20)),
+        be(unsigned(context?.authorityEpoch, 64, "authority epoch"), 8),
+        be(unsigned(validatorId ?? 0, 64, "validator id"), 8),
+        be(unsigned(credentialGeneration ?? 1, 64, "credential generation"), 8),
+        nativeHex(nonceSubkey, NONCE_SUBKEY_BYTES),
+      ),
+    );
+  const deriveNonceChannel = (context, routing) =>
+    (BigInt("0x" + nonceNamespaceDigest(context, routing)) & CHANNEL_MASK).toString();
+
+  /// Built-in (validatorId = 0) message and operation signature envelope:
+  /// serialized [4, 0, generation, [[canonicalP256Script, r‖s], ...]].
+  const builtInSignature = ({ credentialGeneration, pairs }) => {
+    if (!Array.isArray(pairs) || pairs.length < 1) fail("at least one signature pair required");
+    const seen = new Set();
+    const value = pairs.map((pair) => {
+      const script = nativeHex(pair.script);
+      if (seen.has(script)) fail("signature scripts must be pairwise distinct");
+      seen.add(script);
+      return {
+        type: "Array",
+        value: [byteStringValue(script), byteStringValue(nativeHex(pair.signature, 64))],
+      };
+    });
+    return serialize(
+      canonicalValue({
+        type: "Array",
+        value: [
+          integerValue(PROTOCOL_VERSION),
+          integerValue(0),
+          integerValue(credentialGeneration),
+          { type: "Array", value },
+        ],
+      }),
+    );
+  };
+
+  /// Threshold route signature field: serialized [[memberModuleId, signature]].
+  const thresholdSignature = (members) => {
+    if (!Array.isArray(members) || members.length < 1) fail("at least one member signature required");
+    let previous = -1n;
+    const value = members.map((member) => {
+      const moduleId = unsigned(member.moduleId, 64, "member module id");
+      if (moduleId <= previous) fail("threshold members must be strictly ascending");
+      previous = moduleId;
+      return {
+        type: "Array",
+        value: [
+          integerValue(moduleId),
+          byteStringValue(nativeHex(member.signature)),
+        ],
+      };
+    });
+    return serialize(canonicalValue({ type: "Array", value }));
+  };
+
+  /// §5 threshold member digest: SHA256("NeoSmartAccount/ThresholdMember" ‖
+  /// U1(4) ‖ operationDigest ‖ U64BE(memberModuleId) ‖ U64BE(memberGeneration)).
+  const thresholdMemberDigest = (operationDigest, moduleId, credentialGeneration) =>
+    sha(
+      join(
+        strictText("NeoSmartAccount/ThresholdMember"),
+        le(PROTOCOL_VERSION, 1),
+        nativeHex(operationDigest, 32),
+        be(unsigned(moduleId, 64, "member module id"), 8),
+        be(unsigned(credentialGeneration, 64, "member credential generation"), 8),
+      ),
+    );
+
   const serializeOperation = (op, emptySignature = false) =>
     serialize(operationValue(op, emptySignature));
+
+  const buildExecutionScript = (accountId, operations, context) => {
+    if (
+      !Array.isArray(operations) ||
+      !operations.length ||
+      operations.length > OPERATIONS_PER_ENVELOPE_MAX
+    )
+      fail(`execution requires 1..${OPERATIONS_PER_ENVELOPE_MAX} operations`);
+    const batch = operations.length !== 1;
+    const sameAccount =
+      context?.accountId === undefined ||
+      nativeHex(context.accountId, 20) === nativeHex(accountId, 20);
+    if (!sameAccount) fail("execution context account mismatch");
+    const ops = operations.map((op) => operationValue(op));
+    return dynamicCall(
+      context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT,
+      batch ? "executeUserOps" : "executeUserOp",
+      [
+        hashValue(accountId),
+        batch ? { type: "Array", value: ops } : ops[0],
+      ],
+    );
+  };
+
   return Object.freeze({
+    protocolVersion: PROTOCOL_VERSION,
     hex: nativeHex,
     bytes,
     bytesToHex: hex,
     integer,
     unsigned,
+    integerValue,
+    byteStringValue,
     hashValue,
     stringValue: (value) => ({ type: "ByteString", value: strictText(value) }),
     canonicalValue,
@@ -268,74 +545,18 @@ export function createNativeCodec({ sha256, hash160 }) {
       return { channel: n >> 64n, sequence: n & (U64 - 1n) };
     },
     verificationScript,
-    accountAddress: (accountId) => reverse(hash(verificationScript(accountId))),
-    deriveIdentity: ({ networkMagic, custodyAddress, salt }) => {
-      const custody = nativeHex(custodyAddress, 20);
-      if (/^0+$/.test(custody) || custody === NATIVE_SMART_ACCOUNT_CONTRACT)
-        fail("invalid custody");
-      const accountId = reverse(
-        hash(
-          join(
-            strictText("NeoSmartAccount"),
-            "01",
-            le(unsigned(networkMagic, 32, "network magic"), 4),
-            reverse(NATIVE_SMART_ACCOUNT_CONTRACT),
-            reverse(custody),
-            nativeHex(salt, 32),
-          ),
-        ),
-      );
-      if (/^0+$/.test(accountId)) fail("derived zero identity");
-      return Object.freeze({
-        accountId,
-        accountAddress: reverse(hash(verificationScript(accountId))),
-        verificationScript: verificationScript(accountId),
-      });
-    },
-    authorizationDomain,
-    operationPreimage: (context, op) =>
-      authorizationDomain(context) + serializeOperation(op, true),
-    operationDigest: (context, op) =>
-      sha(authorizationDomain(context) + serializeOperation(op, true)),
-    buildExecutionScript: (
-      accountId,
-      operations,
-      context,
-      batch = operations.length !== 1,
-    ) => {
-      if (
-        !Array.isArray(operations) ||
-        !operations.length ||
-        operations.length > 32 ||
-        (!batch && operations.length !== 1)
-      )
-        fail("execution requires 1..32 operations");
-      const authorityEpoch = unsigned(
-        context?.authorityEpoch,
-        64,
-        "expected authority epoch",
-      ).toString();
-      const configurationNonce = unsigned(
-        context?.configurationNonce,
-        64,
-        "expected configuration nonce",
-      ).toString();
-      if (
-        context?.accountId !== undefined &&
-        nativeHex(context.accountId, 20) !== nativeHex(accountId, 20)
-      )
-        fail("execution context account mismatch");
-      const ops = operations.map((op) => operationValue(op));
-      return dynamicCall(
-        NATIVE_SMART_ACCOUNT_CONTRACT,
-        batch ? "executeUserOps" : "executeUserOp",
-        [
-          hashValue(accountId),
-          batch ? { type: "Array", value: ops } : ops[0],
-          { type: "Integer", value: authorityEpoch },
-          { type: "Integer", value: configurationNonce },
-        ],
-      );
-    },
+    accountAddress: (accountId, options) =>
+      reverse(hash(verificationScript(accountId, options))),
+    deriveIdentity,
+    nonceNamespaceDigest,
+    deriveNonceChannel,
+    operationDomain,
+    operationPreimage: (context, op) => operationDomain(context, op) + serializeOperation(op, true),
+    operationDigest: (context, op) => sha(operationDomain(context, op) + serializeOperation(op, true)),
+    messageDigest,
+    builtInSignature,
+    thresholdSignature,
+    thresholdMemberDigest,
+    buildExecutionScript,
   });
 }

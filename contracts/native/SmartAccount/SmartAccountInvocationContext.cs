@@ -14,26 +14,54 @@
 // regenerate it via scripts/sync_native_smartaccount.py.
 
 using Neo.Extensions;
-using Neo.VM;
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 
 namespace Neo.SmartContract.Native
 {
-    internal enum SmartAccountCallbackPhase { Validation, PreExecute, PostExecute, Configuration, Cleanup }
+    /// <summary>
+    /// Writer phases of the v4 execution state machine (spec §7.1/§9). A
+    /// module callback is authorized only while the recorded phase is the one
+    /// that callback belongs to, for the exact active module instance.
+    /// </summary>
+    internal enum SmartAccountCallbackPhase : byte
+    {
+        None = 0,
+        Validation = 1,
+        HookPre = 2,
+        TargetDispatch = 3,
+        HookPost = 4,
+        Completion = 5,
+        Configuration = 6,
+        Cleanup = 7,
+    }
 
-    /// <summary>Engine-local account locks and frame-bound callback/target grants.</summary>
+    internal enum SmartAccountGasPool { Validation, Hook, Completion }
+
+    /// <summary>Engine-local account locks, phase grants and aggregate gas pools.</summary>
     internal sealed class SmartAccountInvocationContext
     {
         private readonly Dictionary<UInt160, AccountLease> _accounts = new();
+        private readonly Dictionary<UInt160, AccountExecution> _executions = new();
         private readonly Stack<Lease> _scopes = new();
         private object _generation = new();
+
+        internal sealed class AccountExecution
+        {
+            internal byte Phase;
+            internal BigInteger ActiveModuleId = BigInteger.Zero;
+            internal UInt160 ActiveModuleContract = UInt160.Zero;
+            internal long ValidationRemaining;
+            internal long HookRemaining;
+            internal long CompletionRemaining;
+        }
 
         private abstract class Lease(SmartAccountInvocationContext owner) : IDisposable
         {
             internal readonly object Generation = owner._generation;
             private bool _disposed;
-            internal abstract AccountLease Account { get; }
+            internal abstract UInt160 Account { get; }
             public void Dispose()
             {
                 if (_disposed) return;
@@ -46,19 +74,26 @@ namespace Neo.SmartContract.Native
         {
             internal readonly UInt160 Identity = Copy(identity);
             internal readonly UInt160 Address = SmartAccountProtocol.GetAccountAddress(identity);
-            internal override AccountLease Account => this;
+            internal override UInt160 Account => Identity;
         }
 
-        private sealed class GrantLease(SmartAccountInvocationContext owner, AccountLease account,
-            UInt160 contract, ExecutionContextState anchor, SmartAccountModuleKind? kind,
-            SmartAccountCallbackPhase? phase, HashSet<UInt160> children) : Lease(owner)
+        private sealed class GrantLease(SmartAccountInvocationContext owner, UInt160 account,
+            BigInteger moduleId, UInt160 contract, SmartAccountCallbackPhase phase, ExecutionContextState anchor)
+            : Lease(owner)
         {
-            internal override AccountLease Account => account;
+            internal override UInt160 Account => account;
+            internal readonly BigInteger ModuleId = moduleId;
             internal readonly UInt160 Contract = Copy(contract);
+            internal readonly SmartAccountCallbackPhase Phase = phase;
             internal readonly ExecutionContextState Anchor = anchor;
-            internal readonly SmartAccountModuleKind? Kind = kind;
-            internal readonly SmartAccountCallbackPhase? Phase = phase;
-            internal readonly HashSet<UInt160> Children = children;
+        }
+
+        private sealed class TargetLease(SmartAccountInvocationContext owner, UInt160 account,
+            UInt160 target, ExecutionContextState anchor) : Lease(owner)
+        {
+            internal override UInt160 Account => account;
+            internal readonly UInt160 Target = Copy(target);
+            internal readonly ExecutionContextState Anchor = anchor;
         }
 
         private static UInt160 Copy(UInt160 value) => new(value.ToArray());
@@ -88,9 +123,53 @@ namespace Neo.SmartContract.Native
         {
             RequireIdentity(accountId);
             if (!_accounts.TryGetValue(accountId, out var account) ||
-                !_scopes.TryPeek(out var active) || !ReferenceEquals(active.Account, account))
+                !_scopes.TryPeek(out var active) || active.Account != accountId)
                 throw new InvalidOperationException("A grant requires the currently locked SmartAccount.");
             return account;
+        }
+
+        /// <summary>Engine-local execution state of an account (phase + gas pools).</summary>
+        internal AccountExecution Execution(UInt160 accountId)
+        {
+            if (!_executions.TryGetValue(accountId, out var execution))
+                throw new InvalidOperationException("The SmartAccount has no open execution context.");
+            return execution;
+        }
+
+        internal bool TryGetExecution(UInt160 accountId, out AccountExecution execution) =>
+            _executions.TryGetValue(accountId, out execution!);
+
+        internal void OpenExecution(UInt160 accountId, long validation, long hook, long completion)
+        {
+            if (_executions.ContainsKey(accountId))
+                throw new InvalidOperationException("The SmartAccount already has an open execution context.");
+            _executions.Add(accountId, new AccountExecution
+            {
+                ValidationRemaining = validation,
+                HookRemaining = hook,
+                CompletionRemaining = completion,
+            });
+        }
+
+        internal void CloseExecution(UInt160 accountId) => _executions.Remove(accountId);
+
+        internal long Remaining(AccountExecution execution, SmartAccountGasPool pool) => pool switch
+        {
+            SmartAccountGasPool.Validation => execution.ValidationRemaining,
+            SmartAccountGasPool.Hook => execution.HookRemaining,
+            SmartAccountGasPool.Completion => execution.CompletionRemaining,
+            _ => throw new ArgumentOutOfRangeException(nameof(pool)),
+        };
+
+        internal void Spend(AccountExecution execution, SmartAccountGasPool pool, long amount)
+        {
+            switch (pool)
+            {
+                case SmartAccountGasPool.Validation: execution.ValidationRemaining -= amount; break;
+                case SmartAccountGasPool.Hook: execution.HookRemaining -= amount; break;
+                case SmartAccountGasPool.Completion: execution.CompletionRemaining -= amount; break;
+                default: throw new ArgumentOutOfRangeException(nameof(pool));
+            }
         }
 
         private static void RequireAnchor(UInt160 contract, ExecutionContextState anchor)
@@ -101,90 +180,133 @@ namespace Neo.SmartContract.Native
                 throw new ArgumentException("The grant must identify its loaded contract invocation.", nameof(anchor));
         }
 
-        private static bool ValidPhase(SmartAccountModuleKind kind, SmartAccountCallbackPhase phase) => kind switch
-        {
-            SmartAccountModuleKind.Verifier => phase is SmartAccountCallbackPhase.Validation or SmartAccountCallbackPhase.PostExecute
-                or SmartAccountCallbackPhase.Configuration or SmartAccountCallbackPhase.Cleanup,
-            SmartAccountModuleKind.Hook => phase is SmartAccountCallbackPhase.PreExecute or SmartAccountCallbackPhase.PostExecute
-                or SmartAccountCallbackPhase.Configuration or SmartAccountCallbackPhase.Cleanup,
-            _ => false
-        };
-
-        internal IDisposable EnterModule(UInt160 accountId, SmartAccountModuleKind kind, UInt160 module,
-            SmartAccountCallbackPhase phase, ExecutionContextState anchor, IReadOnlyList<UInt160>? children = null)
+        internal IDisposable EnterModule(UInt160 accountId, BigInteger moduleId, UInt160 contract,
+            SmartAccountCallbackPhase phase, ExecutionContextState anchor)
         {
             AccountLease account = RequireAccount(accountId);
-            RequireAnchor(module, anchor);
-            if (!ValidPhase(kind, phase) || NativeContract.IsNative(module) || module == SmartAccountProtocol.ServiceHash)
-                throw new ArgumentException("The module kind, phase or native identity is invalid.");
-            int maximum = kind == SmartAccountModuleKind.Verifier ? 3 : 8;
-            if (children is not null && (children.Count > maximum ||
-                (children.Count > 0 && phase is SmartAccountCallbackPhase.Configuration or SmartAccountCallbackPhase.Cleanup)))
-                throw new ArgumentException("The callback phase or roster size does not permit delegation.", nameof(children));
-            HashSet<UInt160> roster = new();
-            if (children is not null)
-                foreach (UInt160 child in children)
-                {
-                    if (child is null || child == UInt160.Zero || child == module || child == SmartAccountProtocol.ServiceHash ||
-                        NativeContract.IsNative(child) || !roster.Add(Copy(child)))
-                        throw new ArgumentException("The child roster contains an invalid or duplicate identity.", nameof(children));
-                }
-            var lease = new GrantLease(this, account, module, anchor, kind, phase, roster);
+            RequireAnchor(contract, anchor);
+            if (phase == SmartAccountCallbackPhase.None || phase > SmartAccountCallbackPhase.Cleanup
+                || NativeContract.IsNative(contract) || contract == SmartAccountProtocol.ServiceHash)
+                throw new ArgumentException("The callback phase or module identity is invalid.");
+            AccountExecution execution = Execution(accountId);
+            execution.Phase = (byte)phase;
+            execution.ActiveModuleId = moduleId;
+            execution.ActiveModuleContract = Copy(contract);
+            var lease = new GrantLease(this, account.Identity, moduleId, contract, phase, anchor);
             _scopes.Push(lease);
             return lease;
         }
 
+        /// <summary>
+        /// Opens the target-dispatch scope: from here until the scope is closed
+        /// the ONLY open authorization of the account is its dispatched target.
+        /// </summary>
         internal IDisposable EnterTarget(UInt160 accountId, UInt160 target, ExecutionContextState anchor)
         {
             AccountLease account = RequireAccount(accountId);
             RequireAnchor(target, anchor);
-            var lease = new GrantLease(this, account, target, anchor, null, null, new());
+            // Only the core itself is excluded: a dispatched target may be any
+            // contract, native ones included (transfers, registration, ...).
+            if (target == SmartAccountProtocol.ServiceHash)
+                throw new ArgumentException("The dispatch target identity is invalid.");
+            AccountExecution execution = Execution(accountId);
+            execution.Phase = (byte)SmartAccountCallbackPhase.TargetDispatch;
+            execution.ActiveModuleId = BigInteger.Zero;
+            execution.ActiveModuleContract = Copy(target);
+            var lease = new TargetLease(this, account.Identity, target, anchor);
             _scopes.Push(lease);
             return lease;
         }
 
-        private GrantLease? CurrentGrant(UInt160 accountId) =>
-            accountId is not null && _scopes.TryPeek(out var active) && active is GrantLease grant &&
-            grant.Account.Identity == accountId ? grant : null;
+        /// <summary>
+        /// Trigger gate of a writer phase: an application invocation may address
+        /// every phase it runs (validation preview, hooks, completion, lifecycle),
+        /// a verification invocation may only address the validation phase, and
+        /// the native persist triggers never address account state at all.
+        /// </summary>
+        private static bool AllowsPhase(ApplicationEngine engine, SmartAccountCallbackPhase phase) =>
+            engine.Trigger == TriggerType.Application
+            || (engine.Trigger == TriggerType.Verification && phase == SmartAccountCallbackPhase.Validation);
+
+        /// <summary>
+        /// True while the account's proxy script is invoking the core from
+        /// inside that account's own target dispatch — the only window in which
+        /// an account witness may be granted without a transaction witness.
+        /// </summary>
+        internal bool IsTargetAuthorized(ApplicationEngine engine, UInt160 accountId)
+        {
+            if (engine.State == Neo.VM.VMState.FAULT || engine.Trigger != TriggerType.Application) return false;
+            if (!_scopes.TryPeek(out var active) || active is not TargetLease target || target.Account != accountId)
+                return false;
+            var proxy = engine.CurrentContext?.GetState<ExecutionContextState>();
+            var caller = proxy?.CallingContext?.GetState<ExecutionContextState>();
+            return ReferenceEquals(caller, target.Anchor);
+        }
+
+        /// <summary>Closes the writer phase of an account without dropping its gas pools.</summary>
+        internal void ClosePhase(UInt160 accountId)
+        {
+            AccountExecution execution = Execution(accountId);
+            execution.Phase = (byte)SmartAccountCallbackPhase.None;
+            execution.ActiveModuleId = BigInteger.Zero;
+            execution.ActiveModuleContract = UInt160.Zero;
+        }
 
         private static ExecutionContextState? QueryCaller(ApplicationEngine engine) =>
-            engine.State != VMState.FAULT && engine.CurrentScriptHash == SmartAccountProtocol.ServiceHash
+            engine.State != Neo.VM.VMState.FAULT && engine.CurrentScriptHash == SmartAccountProtocol.ServiceHash
                 ? engine.CurrentContext!.GetState<ExecutionContextState>().CallingContext?.GetState<ExecutionContextState>()
                 : null;
 
-        internal bool IsModuleAuthorized(ApplicationEngine engine, UInt160 accountId, SmartAccountModuleKind kind,
-            UInt160 module, SmartAccountCallbackPhase phase)
+        /// <summary>
+        /// True when the caller of this core invocation is the module instance
+        /// that the current phase addresses. Used by the module-facing
+        /// <c>getAuthorizedModuleId</c> query and by the core's own callback
+        /// phase checks.
+        /// </summary>
+        internal bool IsModuleAuthorized(ApplicationEngine engine, UInt160 accountId, SmartAccountCallbackPhase phase)
         {
-            if (!ValidPhase(kind, phase) ||
-                !(engine.Trigger == TriggerType.Application ||
-                  (engine.Trigger == TriggerType.Verification && phase == SmartAccountCallbackPhase.Validation)))
+            if (!_scopes.TryPeek(out var active) || active is not GrantLease grant
+                || grant.Account != accountId || grant.Phase != phase)
                 return false;
-            GrantLease? grant = CurrentGrant(accountId);
+            if (!AllowsPhase(engine, phase)) return false;
             ExecutionContextState? caller = QueryCaller(engine);
-            if (grant is null || grant.Kind != kind || grant.Phase != phase || !MatchesContract(caller, module))
-                return false;
-            if (ReferenceEquals(caller, grant.Anchor))
-                return module == grant.Contract;
-            return grant.Children.Contains(module) && MatchesContract(grant.Anchor, grant.Contract) &&
-                ReferenceEquals(caller!.CallingContext?.GetState<ExecutionContextState>(), grant.Anchor);
+            return ReferenceEquals(caller, grant.Anchor) && MatchesContract(caller, grant.Contract);
         }
 
-        internal bool IsTargetAuthorized(ApplicationEngine engine, UInt160 accountId)
-        {
-            GrantLease? grant = CurrentGrant(accountId);
-            ExecutionContextState? caller = QueryCaller(engine);
-            return engine.Trigger == TriggerType.Application && grant is { Kind: null } &&
-                ReferenceEquals(caller, grant.Anchor) && MatchesContract(caller, grant.Contract);
-        }
-
+        /// <summary>
+        /// Whether the account address may witness from the current frame. Only
+        /// the account's own dispatched target acts as the account: either the
+        /// target frame itself, or the core invoked directly by that frame. A
+        /// module callback never carries the account witness, and anything the
+        /// target calls in turn (nested contracts, dynamic scripts) is excluded.
+        /// </summary>
         internal bool IsWitnessAuthorized(ApplicationEngine engine, UInt160 accountAddress)
         {
-            if (engine.State == VMState.FAULT || engine.Trigger != TriggerType.Application ||
-                !_scopes.TryPeek(out var active) || active is not GrantLease { Kind: null } grant)
+            if (engine.State == Neo.VM.VMState.FAULT || engine.Trigger != TriggerType.Application || accountAddress is null)
                 return false;
-            var current = engine.CurrentContext?.GetState<ExecutionContextState>();
-            return grant.Account.Address == accountAddress && ReferenceEquals(current, grant.Anchor) &&
-                MatchesContract(current, grant.Contract);
+            if (!_scopes.TryPeek(out var active) || active is not TargetLease target)
+                return false;
+            if (accountAddress != SmartAccountProtocol.GetAccountAddress(target.Account)) return false;
+            ExecutionContextState? current = engine.CurrentContext?.GetState<ExecutionContextState>();
+            if (ReferenceEquals(current, target.Anchor)) return true;
+            return engine.CurrentScriptHash == SmartAccountProtocol.ServiceHash
+                && ReferenceEquals(current?.CallingContext?.GetState<ExecutionContextState>(), target.Anchor);
+        }
+
+        /// <summary>
+        /// Whether the address is the proxy of an account this invocation is
+        /// currently executing. Such a proxy must never become a witness
+        /// principal through the legacy signer fast path: the only way it
+        /// authorizes anything is its own verified execution (spec §3.6).
+        /// </summary>
+        internal bool IsAccountProxyActive(UInt160 address)
+        {
+            if (address is null) return false;
+            foreach (AccountLease account in _accounts.Values)
+            {
+                if (account.Address == address) return true;
+            }
+            return false;
         }
 
         private void Release(Lease lease)
@@ -200,6 +322,7 @@ namespace Neo.SmartContract.Native
         {
             _scopes.Clear();
             _accounts.Clear();
+            _executions.Clear();
             _generation = new();
         }
     }

@@ -1,12 +1,14 @@
 # Recovery and identity read contract
 
-`finalizeEscape` is a timelocked backup-owner operation. Before calling an old
-plugin or changing state, every nonzero replacement verifier must pass the same
-V3 manifest and capability validation as `confirmVerifierUpdate`. The zero
-verifier remains an explicit return to backup-owner authorization.
+`proposeConfiguration` / `confirmConfiguration` is the timelocked owner path that
+changes an account's module set. Before dispatching a lifecycle callback the core
+resolves the target instance from its own recorded module set and re-checks the
+installed module's profile and lifecycle ABI; a caller-supplied replacement
+address is never trusted. An empty validator set remains the explicit return to
+custody-only authorization.
 
-Recovery is atomic, but its completion depends on the installed verifier and hook
-successfully executing `clearAccount`. A destroyed, incompatible, or faulting
+Recovery is atomic, but its completion depends on the installed validator and hook
+instances successfully executing `onUninstall`. A destroyed, incompatible, or faulting
 plugin can therefore block finalization even after the timelock. This is not an
 unconditional recovery guarantee. Ignoring cleanup faults would leave persistent
 plugin authority behind; removing that dependency requires a separately designed
@@ -20,8 +22,9 @@ both. It reads only the existing core ABI:
   explicit account ID; the UI must not substitute the proxy address as the ID.
 - `getProxyScriptHash(accountId)` verifies a supplied or resolved ID against the
   requested proxy, when both are available.
-- `getVerifier(accountId)` confirms the account exists and obtains its bound
-  verifier. Neo RPC returns UInt160 values as little-endian 20-byte stack values;
+- `getModules(accountId)` confirms the account exists and lists its installed
+  validator and hook instances by module id and role; `getAccount(accountId)`
+  returns the account record. Neo RPC returns UInt160 values as little-endian 20-byte stack values;
   the UI converts them to display-order hex before using Hash160 arguments.
 
 The RPC URL and core hash must be configured, and malformed inputs, mismatched
@@ -58,11 +61,12 @@ remains available.
 The current implementation already provides a useful boundary for assets at the
 core-derived proxy: `executeUserOp` selects the verifier and hook from core state,
 and `verify` accepts Application-phase witness requests only in an active target
-context. `canConfigureVerifier` / `canConfigureHook` require a temporary context;
-`canExecuteVerifier` / `canExecuteHook` require the active root and immediate
-caller. The checks are implemented in `SmartAccount.Execution.cs` and
+context. Configuration callbacks require a temporary context; execution callbacks
+require the active root and immediate caller, resolved through
+`getAuthorizedModuleId(accountId, phase)`. The checks are implemented in
+`SmartAccount.Execution.cs`, `SmartAccount.ModuleProtocol.cs` and
 `SmartAccount.VerifyContext.cs`; the corresponding module-side checks are
-in `VerifierAuthority.cs` and `HookAuthority.cs`.
+in `ValidatorAuthority.cs` and `HookAuthority.cs`.
 
 Those checks do not prove that detaching a module erases all of its authority:
 

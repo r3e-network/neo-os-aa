@@ -106,9 +106,9 @@ does not authorize arbitrary transaction fees.
 
 | Native module | Intended use |
 | --- | --- |
-| NeoNativeVerifier | Explicit Neo witness authorization with exact verifier scopes |
-| SessionKeyVerifier | Expiring delegated keys and constrained operations |
-| MultiSigVerifier | Threshold authorization across admitted child verifier modules |
+| NeoWitnessValidator | Explicit Neo witness authorization with exact validator scopes |
+| SessionKeyValidator | Expiring delegated keys and constrained operations |
+| MultiSigValidator | One configured child signer; the core holds the threshold policy |
 | WhitelistHook | Allowed targets and methods |
 | DailyLimitHook | Bounded spending with measured token-balance changes |
 | TokenRestrictedHook | Restricted token movement and policy checks |

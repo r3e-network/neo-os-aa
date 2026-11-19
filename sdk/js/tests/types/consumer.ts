@@ -5,257 +5,556 @@
  * (tsc --noEmit) to guarantee the public `.d.ts` keeps describing the real
  * runtime surface. It imports the package by name so the `types` field in
  * package.json is exercised the same way a downstream consumer would.
+ *
+ * Every name the package exports at runtime appears here at least once: a
+ * declaration that drifts from `src/index.js` fails this file, not a user.
  */
 import {
+  // Protocol identity
+  CUSTOM_IMPLEMENTATION_ID,
+  CUSTOM_PROXY_CALL_FLAGS,
+  CUSTOM_REQUIRED_ABI,
+  DEFAULT_CALL_FLAGS,
+  NATIVE_ABI_VERSION,
+  NATIVE_PROXY_CALL_FLAGS,
+  NATIVE_REQUIRED_ABI,
+  NATIVE_REQUIRED_EVENTS,
+  NATIVE_SMART_ACCOUNT_CONTRACT,
+  PROTOCOL_VERSION,
+  USER_OPERATION_DOMAIN_NAME,
+  USER_OPERATION_DOMAIN_VERSION,
+  codec,
+  nativeCodec,
+  // Clients
+  NativeSmartAccountClient,
   SmartAccountClient,
+  createSmartAccountClient,
+  normalizeAddress,
+  // Operations
   UserOperationBuilder,
   createUserOpBuilder,
-  simulateUserOperation,
-  preFlightCheck,
-  buildV3UserOperationTypedData,
-  buildMetaTransactionTypedData,
-  buildContractCompatibleStructHash,
-  buildWeb3AuthSigningPayload,
+  // Signing surfaces
+  buildUserOperationTypedData,
+  buildUserOperationSigningPayload,
+  buildUserOperationSigningDigest,
+  methodHash,
   toBytes20Word,
+  toAddressWord,
   toUint256Word,
-  withRetry,
-  isRetryableError,
-  formatError,
-  createError,
-  mapRpcError,
-  EC,
+  sanitizeHex,
+  decodeByteStringStackHex,
+  decodeIntegerStack,
+  decodeStackBoolean,
+  decodeHash160Stack,
+  decodeValidationPreviewStack,
+  decodeAccountDescriptorStack,
+  decodeModuleDescriptorStack,
+  decodeRecoveryStatusStack,
+  // Threshold
+  THRESHOLD_MAX_MEMBERS,
+  createThresholdClient,
+  thresholdTools,
+  serializeMemberSignatures,
+  toMultiSigRpcParameter,
+  // Proxy witness
+  buildExecuteUserOpScript,
+  buildProxyWalletSignRequest,
+  buildProxyWitnessTransaction,
+  createProxyVerificationScript,
+  createProxyWitness,
+  resolveProxyWitnessTransaction,
+  // Transfer result rules
   TRANSFER_RETURNED_FALSE,
   TRANSFER_RETURNED_FALSE_MESSAGE,
-  findFailedTransferInInvocation,
   findFailedTransferInExecution,
+  findFailedTransferInInvocation,
   isProxySourcedTransfer,
+  // Session keys
+  SESSION_KEY_CLEAR_COMMAND,
+  SESSION_KEY_INSTALL_COMMAND,
+  MAX_SESSION_DURATION_MS,
+  MAX_SESSION_KEY_DESCRIPTION_BYTES,
+  buildSessionKeyClearCommand,
+  buildSessionKeyInstallCommand,
+  buildSessionKeyPermission,
+  // Errors and utilities
+  EC,
+  SA_ERRORS,
+  SA_ERROR_CODES,
+  createError,
+  mapRpcError,
+  formatError,
+  withRetry,
+  // Native transaction tools
+  transactionTools,
+  codeIdentityTools,
 } from '@r3e-network/neo-smart-account';
 import type {
+  AccountDescriptor,
+  BatchRegistrationPlan,
+  ConfigurationPlan,
+  CreateAccountInput,
+  NativePlan,
+  NativePreparedTransaction,
+  NativeSignedTransaction,
+  NativeSignedTransactionArtifact,
+  NativeTransactionPreflight,
+  NativeTransactionReceipt,
+  ProtocolCodec,
+  RegistrationPlan,
+  SignerDescriptor,
+  SimulationResult,
+  SmartAccountKernel,
   UserOperation,
   UserOperationTypedData,
-  MetaTransactionTypedData,
-  AccountState,
-  OwnerOnlyRecoveryStatus,
-  SimulationResult,
-  ContractInvocationPayload,
-  SdkError,
+  VMValue,
+  WalletSigner,
 } from '@r3e-network/neo-smart-account';
 
-const ACCOUNT_ID = 'f951cd3eb5196dacde99b339c5dcca37ac38cc22';
-const VERIFIER = 'b4107cb2cb4bace0ebe15bc4842890734abe133a';
-const CORE = 'dbf38e7b2117186bf7a5e17ead702322c0c5b6f2';
-const MASTER = '5be915aea3ce85e4752d522632f0a9520e377aaf';
+const ACCOUNT_ID = 'f2125dfcd4f8992f79231d8c175fc499baa10130';
+const CUSTODY = '202122232425262728292a2b2c2d2e2f30313233';
+const CORE = '398dc3f0227d7efac5533ed5ce9937390c158084';
+const CUSTOM_CORE = '944588b3e6d2aaf6f313969244f6715b68272598';
 const TARGET = '49c095ce04d38642e39155f5481615c58227a498';
-const PAYMASTER = '27a81e6d04d38642e39155f5481615c58227a498';
-const SPONSOR = 'NXV6kqVqp4Qh3Dx8a9z2sCq8sQ4QZbZ4q';
-const ARGS_HASH = 'ab'.repeat(32);
+const NETWORK = 305419896;
+const SALT = '404142434445464748494a4b4c4d4e4f';
+const NONCE_SUBKEY = '11'.repeat(32);
 
-// --- Client construction ---------------------------------------------------
-const client = new SmartAccountClient('https://rpc.example.com', MASTER);
+/** Type-only unwrap: a declaration mismatch fails here, not at runtime. */
+declare function awaited<T>(value: Promise<T>): T;
 
-// --- UserOperationBuilder fluent API ---------------------------------------
-const builder: UserOperationBuilder = createUserOpBuilder()
+// --- Protocol identity ------------------------------------------------------
+const version: 4 = PROTOCOL_VERSION;
+const abiVersion: 4 = NATIVE_ABI_VERSION;
+const customFlags: 15 = CUSTOM_PROXY_CALL_FLAGS;
+const nativeFlags: 5 = NATIVE_PROXY_CALL_FLAGS;
+const defaultFlags: 15 = DEFAULT_CALL_FLAGS;
+const implementationId: 'org.r3e.neo.smart-account.v4' = CUSTOM_IMPLEMENTATION_ID;
+const domainName: 'Neo Smart Account' = USER_OPERATION_DOMAIN_NAME;
+const domainVersion: '4' = USER_OPERATION_DOMAIN_VERSION;
+const nativeContract: string = NATIVE_SMART_ACCOUNT_CONTRACT;
+const requiredEvents: readonly string[] = NATIVE_REQUIRED_EVENTS;
+const coreAbi: readonly string[] = NATIVE_REQUIRED_ABI.getAccount[0];
+const customAbi: readonly string[] = CUSTOM_REQUIRED_ABI.setMetadataUri[0];
+const sharedCodec: ProtocolCodec = codec;
+const nativeSurface: ProtocolCodec = nativeCodec;
+
+// --- Codec derivations ------------------------------------------------------
+const identity = codec.deriveIdentity({
+  custodyAddress: CUSTODY,
+  salt: SALT,
+  coreContractHash: CORE,
+  callFlags: nativeFlags,
+});
+const accountId: string = identity.accountId;
+const accountAddress: string = codec.accountAddress(ACCOUNT_ID, {
+  coreContractHash: CUSTOM_CORE,
+  callFlags: customFlags,
+});
+const channel: string = codec.deriveNonceChannel(
+  { networkMagic: NETWORK, coreContractHash: CORE, accountId: ACCOUNT_ID },
+  {
+    authorityEpoch: '1',
+    validatorId: 0,
+    credentialGeneration: 1,
+    nonceSubkey: NONCE_SUBKEY,
+  },
+);
+const packedNonce: bigint = codec.composeNonce(channel, '0');
+const split: { channel: bigint; sequence: bigint } = codec.splitNonce(packedNonce);
+const script: string = codec.buildExecutionScript(ACCOUNT_ID, [], {
+  networkMagic: NETWORK,
+  coreContractHash: CORE,
+  accountId: ACCOUNT_ID,
+});
+
+// --- UserOperationBuilder ---------------------------------------------------
+const operation: UserOperation = createUserOpBuilder({ networkMagic: NETWORK })
+  .setCoreContractHash(CORE)
   .setAccountId(ACCOUNT_ID)
   .setTarget(TARGET)
   .setMethod('transfer')
-  .setArgs([{ type: 'Hash160', value: '0xabc' }])
-  .addArg({ type: 'Integer', value: 1 })
-  .setVerifier(VERIFIER)
-  .setCoreContract(CORE)
-  .setChainId(860833102)
-  .setNonce(7)
-  .setDeadline(Date.now() + 3_600_000)
-  .setArgsHash(ARGS_HASH);
+  .setArgs([
+    codec.hashValue(ACCOUNT_ID),
+    codec.integerValue(1),
+  ])
+  .setRouting({ authorityEpoch: '1', configurationNonce: '1' })
+  .setNonceSubkey(NONCE_SUBKEY)
+  .setNonceSequence({ channel, sequence: '0' })
+  .autoDeadline()
+  .setSignature('aa'.repeat(64))
+  .build();
+const builderAgain: UserOperationBuilder = new UserOperationBuilder({
+  networkMagic: NETWORK,
+});
+const digest: string = codec.operationDigest(
+  { networkMagic: NETWORK, coreContractHash: CORE, accountId: ACCOUNT_ID },
+  operation,
+);
+const serialized: string = codec.serializeOperation(operation, true);
+const value: VMValue = codec.operationValue(operation);
 
-const userOp: UserOperation = builder.build();
-const v3Typed: UserOperationTypedData = builder.buildEIP712(ARGS_HASH);
-const legacyTyped: MetaTransactionTypedData = builder.buildLegacyEIP712(ARGS_HASH, MASTER);
+const decodedDescriptor = decodeAccountDescriptorStack(null);
+const decodedModule = decodeModuleDescriptorStack(null);
+const decodedRecovery = decodeRecoveryStatusStack(null);
+const preview: { accepted: boolean; operationDigest: string } =
+  decodeValidationPreviewStack(null);
+const integer: bigint = decodeIntegerStack(null);
+const flag: boolean = decodeStackBoolean(null);
+const hash: string = decodeHash160Stack(null);
+const bytesHex: string = decodeByteStringStackHex(null);
 
-// Typed-data message shape is type-sensitive (V3 signs `method`, legacy `methodHash`).
-const v3Method: string = v3Typed.message.method;
-const legacyMethodHash: string = legacyTyped.message.methodHash;
-const v3Nonce: string = v3Typed.message.nonce;
-
-// autoNonce overloads: sync fetcher returns the builder, async returns a promise.
-const syncChain: UserOperationBuilder = builder.autoNonce(() => 3);
-async function exerciseAutoNonce(): Promise<void> {
-  const asyncChain: UserOperationBuilder = await builder.autoNonce(async () => 9);
-  asyncChain.build();
-}
-void exerciseAutoNonce;
-
-const direct = new UserOperationBuilder({ accountIdHash: ACCOUNT_ID, chainId: 1 });
-const snapshot = direct.toJSON();
-const cachedArgsHash: string | null = snapshot.argsHash;
-void cachedArgsHash;
-
-// --- createEIP712Payload (Promise of either layout) ------------------------
-async function exercisePayloads(): Promise<void> {
-  const typedData: UserOperationTypedData | MetaTransactionTypedData =
-    await client.createEIP712Payload({
-      chainId: 860833102,
-      accountIdHash: ACCOUNT_ID,
-      verifierHash: VERIFIER,
-      targetContract: TARGET,
-      method: 'transfer',
-      args: [{ type: 'Hash160', value: '0xabc' }],
-      nonce: 0,
-      deadline: Date.now() + 3_600_000,
-    });
-  const domainName: string = typedData.domain.name;
-  void domainName;
-
-  const argsHash: string = await client.computeArgsHash([]);
-  void argsHash;
-
-  const recoveryPayload: ContractInvocationPayload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: ACCOUNT_ID });
-  const recoveryStatus: OwnerOnlyRecoveryStatus = await client.getOwnerOnlyRecoveryStatus(ACCOUNT_ID);
-  if (recoveryStatus.supported) {
-    const permanent: boolean = recoveryStatus.ownerOnlyRecovery;
-    void permanent;
-  } else {
-    const unsupportedMode: null = recoveryStatus.ownerOnlyRecovery;
-    void unsupportedMode;
-  }
-  void recoveryPayload;
-
-  // getAccountState return shape.
-  const state: AccountState = await client.getAccountState(ACCOUNT_ID);
-  const verifier: string = state.verifier;
-  const escapeActive: boolean = state.escapeActive;
-  const escapeTimelock: string = state.escapeTimelock;
-  void verifier;
-  void escapeActive;
-  void escapeTimelock;
-
-  // SimulationResult.signatureVerified is the literal `false`.
-  const sim: SimulationResult = await simulateUserOperation(client, {
-    accountIdHash: ACCOUNT_ID,
-    targetContract: TARGET,
-    method: 'transfer',
-    args: [],
-    nonce: 0,
-    deadline: Date.now() + 3_600_000,
-  });
-  const verified: false = sim.signatureVerified;
-  const passed: boolean = sim.passed;
-  void verified;
-  void passed;
-
-  const preflight = await preFlightCheck(client, {
-    accountHashOrAddress: ACCOUNT_ID,
-    verifierHash: VERIFIER,
-    userOp: { targetContract: TARGET, method: 'transfer', nonce: 0, deadline: 1 },
-  });
-  void preflight.passed;
-
-  // Sponsored payload shape.
-  const sponsored: ContractInvocationPayload = client.createSponsoredUserOpPayload({
-    accountAddress: ACCOUNT_ID,
-    userOp,
-    paymasterHash: PAYMASTER,
-    sponsorAddress: SPONSOR,
-    reimbursementAmount: '100000000',
-  });
-  const op: string = sponsored.operation;
-  void op;
-
-  const balance: string = await client.querySponsorBalance(PAYMASTER, SPONSOR);
-  void balance;
-}
-void exercisePayloads;
-
-// --- Standalone meta-tx + signing helpers ----------------------------------
-const standaloneTyped = buildV3UserOperationTypedData({
-  chainId: 1,
-  verifyingContract: VERIFIER,
-  accountIdHash: ACCOUNT_ID,
+// --- Meta-transaction signing surface --------------------------------------
+const typed: UserOperationTypedData = buildUserOperationTypedData({
+  chainId: NETWORK,
+  verifyingContract: TARGET,
+  accountId: ACCOUNT_ID,
+  coreContractHash: CORE,
+  validatorId: 0,
+  targetContract: TARGET,
+  method: 'transfer',
+  argsHashHex: 'ab'.repeat(32),
+  nonce: packedNonce.toString(),
+  deadline: '1700000000000',
+  operationDigest: digest,
+});
+const payload: Uint8Array = buildUserOperationSigningPayload({
+  chainId: NETWORK,
+  verifyingContract: TARGET,
+  accountId: ACCOUNT_ID,
   coreContractHash: CORE,
   targetContract: TARGET,
   method: 'transfer',
-  argsHashHex: ARGS_HASH,
-  nonce: 0,
-  deadline: 1,
+  argsHashHex: 'ab'.repeat(32),
+  nonce: packedNonce.toString(),
+  deadline: '1700000000000',
+  operationDigest: digest,
 });
-void standaloneTyped.message.accountId;
-
-const legacyStandalone = buildMetaTransactionTypedData({
-  chainId: 1,
-  verifyingContract: MASTER,
-  accountAddressScriptHash: ACCOUNT_ID,
-  targetContract: TARGET,
-  method: 'transfer',
-  argsHashHex: ARGS_HASH,
-  nonce: 0,
-  deadline: 1,
-});
-void legacyStandalone.message.accountAddress;
-
-const structHash: string = buildContractCompatibleStructHash({
-  accountIdHash: ACCOUNT_ID,
+const signingDigest: string = buildUserOperationSigningDigest({
+  chainId: NETWORK,
+  verifyingContract: TARGET,
+  accountId: ACCOUNT_ID,
   coreContractHash: CORE,
   targetContract: TARGET,
   method: 'transfer',
-  argsHash: ARGS_HASH,
-  nonce: 0,
-  deadline: 1,
+  argsHashHex: 'ab'.repeat(32),
+  nonce: packedNonce.toString(),
+  deadline: '1700000000000',
+  operationDigest: digest,
 });
-void structHash;
+const selector: string = methodHash('transfer');
+const word: Uint8Array = toBytes20Word(ACCOUNT_ID);
+const addressWord: Uint8Array = toAddressWord(ACCOUNT_ID);
+const integerWord: Uint8Array = toUint256Word(1);
+const cleanHex: string = sanitizeHex('0xAB');
 
-const signingPayload: Uint8Array = buildWeb3AuthSigningPayload({
-  chainId: 1,
-  verifierHash: VERIFIER,
-  accountIdHash: ACCOUNT_ID,
-  coreContractHash: CORE,
+// --- Threshold route --------------------------------------------------------
+const maxMembers: 10 = THRESHOLD_MAX_MEMBERS;
+const memberDigest: string = thresholdTools.memberDigest(digest, 1, 1);
+const preparedMembers = thresholdTools.prepareMembers({
+  operationDigest: digest,
+  members: [{ moduleId: 1, credentialGeneration: 1 }],
+});
+const memberSignature: string = serializeMemberSignatures([
+  [1, 'aa'.repeat(64)],
+]);
+const rpcParameter: unknown = toMultiSigRpcParameter({ type: 'ByteArray', value: '00' });
+
+// --- Proxy witness ----------------------------------------------------------
+const proxyScript: string = createProxyVerificationScript({
+  coreHash: CORE,
+  accountId: ACCOUNT_ID,
+});
+const proxyArtifacts = createProxyWitness({
+  coreHash: CORE,
+  accountId: ACCOUNT_ID,
+  proxyHash: accountAddress,
+  feePayer: TARGET,
+});
+const executeScript: string = buildExecuteUserOpScript({
+  coreHash: CORE,
+  accountId: ACCOUNT_ID,
+  invocation: { operation: 'executeUserOp', scriptHash: CORE, args: [] },
+});
+const proxyTransaction = buildProxyWitnessTransaction({
+  coreHash: CORE,
+  accountId: ACCOUNT_ID,
+  invocation: { operation: 'executeUserOp', scriptHash: CORE, args: [] },
+  proxyHash: accountAddress,
+  feePayer: TARGET,
+});
+const walletRequest = buildProxyWalletSignRequest({ transaction: proxyTransaction });
+const resolved = awaited(
+  resolveProxyWitnessTransaction({
+    coreHash: CORE,
+    accountId: ACCOUNT_ID,
+    invocation: { operation: 'executeUserOp', scriptHash: CORE, args: [] },
+    proxyHash: accountAddress,
+    feePayer: TARGET,
+    readState: async () => ({ proxyHash: accountAddress }),
+  }),
+);
+const proxySignerScope: string = proxyArtifacts.signer.scopes;
+
+// --- Transfer result rules --------------------------------------------------
+const transferFailure: 'transfer_returned_false' = TRANSFER_RETURNED_FALSE;
+const transferText: string = TRANSFER_RETURNED_FALSE_MESSAGE;
+const failedInvocation: number[] = findFailedTransferInInvocation({ stack: [] });
+const failedExecution: number[] = findFailedTransferInExecution({});
+const proxySourced: boolean = isProxySourcedTransfer({ method: 'transfer' });
+
+// --- Session keys -----------------------------------------------------------
+const installCommand: VMValue[] = buildSessionKeyInstallCommand({
+  publicKeyHex: '02' + '11'.repeat(32),
   targetContract: TARGET,
   method: 'transfer',
-  argsHash: ARGS_HASH,
-  nonce: 0,
-  deadline: 1,
+  validUntilMs: 1_700_000_000_000,
+  spendingLimitDatoshi: 1_000_000,
+  description: 'daily',
 });
-void signingPayload;
-
-const word20: Uint8Array = toBytes20Word(ACCOUNT_ID);
-const word256: Uint8Array = toUint256Word(42n);
-void word20;
-void word256;
-
-// --- Retry utilities (generic) ---------------------------------------------
-async function exerciseRetry(): Promise<void> {
-  const result: number = await withRetry('read', async () => 5);
-  void result;
-}
-void exerciseRetry;
-const retryable: boolean = isRetryableError(new Error('ECONNRESET'));
-void retryable;
+const clearCommand: VMValue[] = buildSessionKeyClearCommand();
+const permission = buildSessionKeyPermission({
+  publicKeyHex: '02' + '11'.repeat(32),
+  targetContract: TARGET,
+  method: 'transfer',
+  validUntilMs: 1_700_000_000_000,
+});
+const installName: 'setSessionKey' = SESSION_KEY_INSTALL_COMMAND;
+const clearName: 'clearSessionKey' = SESSION_KEY_CLEAR_COMMAND;
+const descriptionLimit: 128 = MAX_SESSION_KEY_DESCRIPTION_BYTES;
+const durationLimit: number = MAX_SESSION_DURATION_MS;
 
 // --- Errors -----------------------------------------------------------------
-const err: SdkError = createError(EC.VALIDATION_HASH160_INVALID, { provided: 'x' });
-const code: string = err.code;
-const formatted: string = formatError(err);
-const mapped = mapRpcError('method not found');
-void code;
-void formatted;
-void mapped;
+const code: string = EC.VALIDATION_OPTIONS_REQUIRED.code;
+const saText: string = SA_ERRORS.SA_NONCE_INVALID;
+const saCodes: readonly string[] = SA_ERROR_CODES;
+const failure: Error = createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'x' });
+const mapped = mapRpcError(new Error('SA_DEADLINE_EXPIRED'));
+const formatted: string = formatError(failure);
+const retried: number = awaited(
+  withRetry('rpc.getblockcount', async () => 1, { maxAttempts: 2 }),
+);
 
-// --- Token transfer results ---------------------------------------------------
-const failedPositions: number[] = findFailedTransferInInvocation({
-  invocation: { scriptHash: MASTER, operation: 'executeUserOp', args: [{ type: 'Hash160', value: ACCOUNT_ID }] },
-  stack: [{ type: 'Boolean', value: false }],
+// --- Custom kernel client ---------------------------------------------------
+const client = createSmartAccountClient({
+  rpcUrl: 'https://rpc.example.com',
+  networkMagic: NETWORK,
+  contractHash: CUSTOM_CORE,
 });
-const failedInLog: number[] = findFailedTransferInExecution({
-  stack: [{ type: 'Boolean', value: false }],
-  notifications: [{ eventname: 'UserOpExecuted', state: { type: 'Array', value: [] } }],
-});
-const fromProxy: boolean = isProxySourcedTransfer({ method: 'transfer', from: ACCOUNT_ID, proxy: ACCOUNT_ID });
-const transferVerdictCode: 'transfer_returned_false' = TRANSFER_RETURNED_FALSE;
-const transferVerdictMessage: string = TRANSFER_RETURNED_FALSE_MESSAGE;
-void [failedPositions, failedInLog, fromProxy, transferVerdictCode, transferVerdictMessage];
+const sameClient: SmartAccountClient = client;
+const kernel: SmartAccountKernel = client;
+const normalized: string = normalizeAddress('NXV6kqVqp4Qh3Dx8a9z2sCq8sQ4QZbZ4q');
 
-// Native ABI 2 exports resolve in both a source checkout and real npm package.
-import { NativeSmartAccountClient, nativeCodec, createNativeCodec, NATIVE_ABI_VERSION, NATIVE_PROFILE_PARAMETER_DIGEST, type NativeValue } from '@r3e-network/neo-smart-account';
-const nativeClient = new NativeSmartAccountClient({ rpcUrl: 'http://127.0.0.1:10332', networkMagic: 12345 });
-const nativeIdentity = nativeClient.deriveIdentity({ custodyAddress: '22'.repeat(20), salt: '33'.repeat(32) });
-const nativeArgs: NativeValue[] = [nativeCodec.hashValue(nativeIdentity.accountAddress), {type:'Struct',value:[{type:'Boolean',value:true}]}];
-const nativePrepare = nativeClient.prepareOperation({ accountId: nativeIdentity.accountId, targetContract: '44'.repeat(20), method: 'ping', args: nativeArgs, channel: 3n, deadline: '9999999999999' });
-void nativePrepare; void createNativeCodec; void NATIVE_ABI_VERSION; void NATIVE_PROFILE_PARAMETER_DIGEST;
+const registration: RegistrationPlan = client.buildCreateAccountScript({
+  custodyAddress: CUSTODY,
+  salt: SALT,
+});
+const batch: BatchRegistrationPlan = client.buildCreateAccountsScript({
+  custodyAddress: CUSTODY,
+  salts: [SALT],
+});
+const configuration: ConfigurationPlan = client.buildConfigurationScript({
+  kind: 'propose',
+  accountId: ACCOUNT_ID,
+  actions: [],
+  readSet: [],
+});
+const execution = client.buildExecutionScript({
+  accountId: ACCOUNT_ID,
+  operations: [operation],
+});
+const executionSigners: SignerDescriptor[] = execution.signers.map((account) => ({
+  account,
+  scopes: 'WitnessRules',
+}));
+const metadata = client.setMetadataUri(ACCOUNT_ID, 'ipfs://metadata');
+const frozen = client.freezeAccount(ACCOUNT_ID);
+const routed: string = client.deriveNonceRouting(ACCOUNT_ID, {
+  authorityEpoch: '1',
+  nonceSubkey: NONCE_SUBKEY,
+});
+const state: AccountDescriptor | null = awaited(client.getAccount(ACCOUNT_ID));
+const simulation: SimulationResult = awaited(client.simulate(execution, []));
+const registrationRecipe: CreateAccountInput = {
+  custodyAddress: CUSTODY,
+  salt: SALT,
+};
+
+// --- Native kernel client ---------------------------------------------------
+const nativeClient = new NativeSmartAccountClient({
+  rpcUrl: 'https://rpc.example.com',
+  networkMagic: NETWORK,
+});
+const nativePlan: NativePlan = nativeClient.buildCreateAccountScript({
+  custodyAddress: CUSTODY,
+  salt: SALT,
+});
+const nativeSimulation: SimulationResult = awaited(
+  nativeClient.simulate(nativePlan),
+);
+
+// --- Transaction lifecycle --------------------------------------------------
+const feePayer: WalletSigner = {
+  account: TARGET,
+  verificationScript: '0c21' + '02' + '11'.repeat(32) + '4156e7b327',
+  sign: async () => 'aa'.repeat(64),
+};
+const prepared: NativePreparedTransaction = awaited(
+  client.prepareTransaction(metadata, {
+    feePayer,
+    recipe: { method: 'buildCustomActionScript', input: { method: 'setMetadataUri', accountId: ACCOUNT_ID } },
+    maxSystemFee: '100000000',
+    maxNetworkFee: '100000000',
+    maxTotalFee: '200000000',
+  }),
+);
+const signed: NativeSignedTransaction = awaited(client.signTransaction(prepared));
+const artifact: NativeSignedTransactionArtifact =
+  client.exportSignedTransaction(signed);
+const preflight: NativeTransactionPreflight = awaited(
+  client.preflightTransaction(signed),
+);
+const receipt: NativeTransactionReceipt = awaited(
+  client.getTransactionReceipt(signed),
+);
+
+// --- Shared tools -----------------------------------------------------------
+const nativePrepared: NativePreparedTransaction = awaited(
+  transactionTools.prepareNativeTransaction(nativeClient, nativePlan, {
+    feePayer,
+    recipe: { method: 'buildCreateAccountScript', input: registrationRecipe },
+    maxSystemFee: '100000000',
+    maxNetworkFee: '100000000',
+    maxTotalFee: '200000000',
+  }),
+);
+const identityTools = codeIdentityTools(codec);
+const thresholdClient = createThresholdClient({ client });
+const thresholdMembers = awaited(
+  thresholdClient.prepareMembers({
+    accountId: ACCOUNT_ID,
+    operationDigest: digest,
+    memberIds: [1],
+  }),
+);
+const codeHash: string = identityTools.moduleCodeHash({
+  nef: {
+    magic: 0x3346454e,
+    compiler: 'test',
+    source: 'test',
+    tokens: [],
+    script: '',
+    checksum: 0,
+  },
+  manifest: {},
+});
+
+// --- Removed v3 surface -----------------------------------------------------
+// The v3 client took (url, coreHash); v4 takes one options object.
+// @ts-expect-error - v3 client signature is gone
+const legacyClient = new SmartAccountClient('https://rpc.example.com', CORE);
+// @ts-expect-error - setVerifier was removed with the v3 verifier model
+builderAgain.setVerifier(TARGET);
+// @ts-expect-error - the operation is 13 fields; a 6-field shape is rejected
+const legacyOperation: UserOperation = {
+  targetContract: TARGET,
+  method: 'transfer',
+  args: [],
+  nonce: '0',
+  deadline: '0',
+  signature: 'aa',
+};
+
+void [
+  version,
+  abiVersion,
+  customFlags,
+  nativeFlags,
+  defaultFlags,
+  implementationId,
+  domainName,
+  domainVersion,
+  nativeContract,
+  requiredEvents,
+  coreAbi,
+  customAbi,
+  sharedCodec,
+  nativeSurface,
+  accountId,
+  channel,
+  split,
+  script,
+  builderAgain,
+  serialized,
+  value,
+  decodedDescriptor,
+  decodedModule,
+  decodedRecovery,
+  preview,
+  integer,
+  flag,
+  hash,
+  bytesHex,
+  typed,
+  payload,
+  signingDigest,
+  selector,
+  word,
+  addressWord,
+  integerWord,
+  cleanHex,
+  maxMembers,
+  memberDigest,
+  preparedMembers,
+  memberSignature,
+  rpcParameter,
+  proxyScript,
+  proxyArtifacts,
+  executeScript,
+  proxyTransaction,
+  walletRequest,
+  resolved,
+  proxySignerScope,
+  transferFailure,
+  transferText,
+  failedInvocation,
+  failedExecution,
+  proxySourced,
+  installCommand,
+  clearCommand,
+  permission,
+  installName,
+  clearName,
+  descriptionLimit,
+  durationLimit,
+  code,
+  saText,
+  saCodes,
+  failure,
+  mapped,
+  formatted,
+  retried,
+  sameClient,
+  kernel,
+  normalized,
+  registration,
+  batch,
+  executionSigners,
+  thresholdMembers,
+  configuration,
+  frozen,
+  routed,
+  state,
+  simulation,
+  nativePlan,
+  nativeSimulation,
+  prepared,
+  signed,
+  artifact,
+  preflight,
+  receipt,
+  nativePrepared,
+  codeHash,
+  legacyClient,
+  legacyOperation,
+];

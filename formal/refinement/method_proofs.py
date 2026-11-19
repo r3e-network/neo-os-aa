@@ -22,7 +22,8 @@ from method_source import project_method, render_program
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
-START, END = 18900, 19181
+# v4 artifact: the helper body is byte-identical and moved by 17148 bytes.
+START, END = 36048, 36329
 METHOD = "SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
 LIMIT = 1 << 255
 ERROR = b"Reimbursement exceeds actual gas cost"
@@ -36,6 +37,28 @@ NATIVE = "0xacce6fd80d44e1796aa0c2c625e9e4e0ce39efc0"
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+_CODEC_TOKENS = None
+
+
+def codec_token_indices():
+    """Codec token indices resolved from the pinned NEF, never copied literals.
+
+    Token numbers are a compiler decision: the v3 build numbered
+    serialize(3)/deserialize(4), the v4 build deserialize(2)/serialize(3). An
+    index-pinned interpreter would read that renumbering as a codec change.
+    """
+    global _CODEC_TOKENS
+    if _CODEC_TOKENS is None:
+        spec = importlib.util.spec_from_file_location("cap_method_artifact", ROOT / "verify.py")
+        binding = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(binding)
+        decoded = binding.decode_nef((REPO / "contracts/bin/public/SmartAccount.nef").read_bytes())
+        _CODEC_TOKENS = {token["method"]: index for index, token in enumerate(decoded["tokens"])
+                         if token["method"] in ("serialize", "deserialize")}
+        require(sorted(_CODEC_TOKENS) == ["deserialize", "serialize"], "Missing native codec token")
+    return _CODEC_TOKENS
 
 
 def digest(data):
@@ -68,7 +91,7 @@ def bind_method(inventory):
     for filename, expected in inventory["inputs"].items():
         require(input_hashes[filename] == expected, "Inventory input drift: " + filename)
     paths = [name for name, expected in inventory["inputs"].items()
-             if name.endswith("SmartAccountV3.nef") and expected == inventory["nef"]["sha256"]]
+             if name.endswith("SmartAccount.nef") and expected == inventory["nef"]["sha256"]]
     require(len(paths) == 1, "Ambiguous actual NEF")
     spec = importlib.util.spec_from_file_location("cap_method_binding", ROOT / "verify.py")
     binding = importlib.util.module_from_spec(spec)
@@ -93,15 +116,23 @@ def bind_method(inventory):
             all(all(exported.get(key) == value for key, value in actual.items())
                 for actual, exported in zip(region, focused[0]["instructions"])),
             "Focused method instructions differ")
-    for index, name in [(3, "serialize"), (4, "deserialize")]:
+    # Token indices are a compiler decision: the v3 build numbered
+    # serialize(3)/deserialize(4), the v4 build deserialize(2)/serialize(3).
+    # Identify the codec tokens by name and check their effect contract, so a
+    # renumbering cannot masquerade as a changed effect table.
+    codec_tokens = {token["method"]: token for token in inventory["nef"]["tokens"]
+                    if token["method"] in ("serialize", "deserialize")}
+    require(sorted(codec_tokens) == ["deserialize", "serialize"],
+            "Native token effect contract mismatch")
+    for name, token in codec_tokens.items():
         expected = dict(hash=NATIVE, method=name, parametersCount=1, hasReturnValue=True, callFlags=15)
-        require(inventory["nef"]["tokens"][index] == expected, "Native token effect contract mismatch")
+        require(token == expected, "Native token effect contract mismatch")
     normalized_tokens = [dict(hash="0x" + bytes.fromhex(token["hashLittleEndian"])[::-1].hex(),
                               **{key: token[key] for key in ("method", "parametersCount", "hasReturnValue", "callFlags")})
                          for token in decoded["tokens"]]
     require(normalized_tokens == inventory["nef"]["tokens"], "Actual NEF token table differs")
     manifests = [name for name, expected in inventory["inputs"].items()
-                 if name.endswith("SmartAccountV3.manifest.json")
+                 if name.endswith("SmartAccount.manifest.json")
                  and expected == inventory["manifest"]["sha256"]]
     require(len(manifests) == 1, "Ambiguous actual manifest")
     manifest_raw = snapshots[manifests[0]]
@@ -145,7 +176,7 @@ def execute(program, *, requested, system_fee, network_fee, tx_hash, stored, max
     effects, pcs = [], []
     storage, pc, status, result, error = stored, 0, "RUNNING", None, None
     context = object()
-    static_values = {38: bytearray(b"\x21")} if static_values is None else static_values
+    static_values = {58: bytearray(b"\x21")} if static_values is None else static_values
 
     def pop():
         if not stack:
@@ -288,13 +319,14 @@ def execute(program, *, requested, system_fee, network_fee, tx_hash, stored, max
                 else:
                     raise ReferenceFault("unknown syscall")
             elif op == 0x37:
-                token, value = int.from_bytes(operand, "little"), pop()
-                if token == 4:
+                index, value = int.from_bytes(operand, "little"), pop()
+                codecs = codec_token_indices()
+                if index == codecs["deserialize"]:
                     if not isinstance(value, Ledger) or value.kind not in ("Array", "Struct"):
                         raise ReferenceFault("typed ledger codec contract")
                     effects.append("Deserialize")
                     stack.append(allocate(value.kind, [value.tx_hash, value.reserved]))
-                elif token == 3:
+                elif index == codecs["serialize"]:
                     kind, values = object_at(value)
                     if len(values) != 2 or not isinstance(values[0], bytes) or type(values[1]) is not int:
                         raise ReferenceFault("typed ledger serialization contract")
@@ -729,7 +761,7 @@ def run_proofs(inventory, output_dir, controls=False):
                 coqchkSha256=digest(kernel_log.read_bytes()),
                 assumptionDeclarations=declarations, closedAssumptionCount=closed_count,
                 assumptionsSha256=digest(assumptions_log.read_bytes()),
-                theoremNames=THEOREM_NAMES, nativeTokenContracts={str(i):inventory["nef"]["tokens"][i] for i in (3,4)},
+                theoremNames=THEOREM_NAMES, nativeTokenContracts={str(i):inventory["nef"]["tokens"][i] for i in codec_token_indices().values()},
                 traceProjection=["Storage.Get", "StdLib.Deserialize", "StdLib.Serialize(snapshot)", "Storage.Put(snapshot)"],
                 pureStableNonfaultingGetters=["GetScriptContainer", "GetContext"],
                 sourceDialect=projection["dialect"], environmentContracts=projection["frameworkContracts"],

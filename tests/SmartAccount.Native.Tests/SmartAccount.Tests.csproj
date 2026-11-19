@@ -18,24 +18,23 @@
   </PropertyGroup>
 
   <!-- Like the core project, the test project compiles the pinned core's full
-       test tree and swaps in the SA-owned copies of the four SmartAccount UT
-       files (plus their three *-v2.json vector fixtures) that live in this
-       directory, so the SmartAccount test surface lives here too. NeoTestsRoot /
-       NeoSourceRoot are regular MSBuild properties and can be overridden by
-       environment variables of the same name. -->
+       test tree and swaps in the SA-owned copies of the SmartAccount UT files
+       that live in this directory, so the whole SmartAccount test surface lives
+       here. NeoTestsRoot / NeoSourceRoot are regular MSBuild properties and can
+       be overridden by environment variables of the same name. -->
   <ItemGroup>
     <Compile Include="$(NeoTestsRoot)/**/*.cs"
-             Exclude="$(NeoTestsRoot)/obj/**;$(NeoTestsRoot)/bin/**;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccount.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountEnvelope.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountProtocol.cs;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccountState.cs" />
+             Exclude="$(NeoTestsRoot)/obj/**;$(NeoTestsRoot)/bin/**;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccount*.cs" />
     <Compile Include="*.cs" />
     <Compile Include="$(NeoTestsRoot)/../AssemblyInfo.cs" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="$(NeoTestsRoot)/SmartContract/Manifest/TestFile/**/*" Link="SmartContract/Manifest/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-    <!-- The core's copies of the three SmartAccount v2 vector files are
-         replaced by the SA-owned ones below. -->
+    <!-- The core's own SmartAccount fixtures are copied in as-is; the v4
+         vectors this project pins live in TestFile/smartaccount-v4-vectors.json
+         and are derived by TestFile/generate-smartaccount-v4-vectors.py. -->
     <None Include="$(NeoTestsRoot)/SmartContract/Native/TestFile/**/*"
-          Exclude="$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-envelope-v2.json;$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-authorization-v2.json;$(NeoTestsRoot)/SmartContract/Native/TestFile/smartaccount-state-v2.json"
           Link="SmartContract/Native/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="TestFile/**/*" Link="SmartContract/Native/TestFile/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="$(NeoTestsRoot)/GasTests/Fixtures/**/*" Link="GasTests/Fixtures/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

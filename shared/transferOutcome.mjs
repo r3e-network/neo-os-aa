@@ -27,9 +27,8 @@ export const TRANSFER_RETURNED_FALSE_MESSAGE = 'A token transfer returned false,
 
 const USER_OP_ENTRY_POINTS = ['executeUserOp', 'executeSponsoredUserOp'];
 const USER_OP_BATCH_ENTRY_POINTS = ['executeUserOps', 'executeSponsoredUserOps'];
-const LEGACY_ENTRY_POINTS = ['executeUnified', 'executeUnifiedByAddress'];
-const USER_OP_METHOD_FIELD = 1; // UserOperation(target, method, args, nonce, deadline, signature)
-const LEGACY_METHOD_ARG = 2; // executeUnified*(account, target, method, args, ...)
+// 13-field operation: [0 version, 1 target, 2 method, 3 args, 4 nonce, ...].
+const USER_OP_METHOD_FIELD = 2;
 const EVENT_METHOD_FIELD = 2; // UserOpExecuted(accountId, targetContract, method, nonce)
 const HASH160_PATTERN = /^[0-9a-f]{40}$/;
 
@@ -90,8 +89,9 @@ function textFromBase64(value) {
   }
 }
 
-// A method name inside a request, the way the relay builds the script from it: String is text, every other
-// string-valued type (ByteArray, Any, unknown) is the hex of the bytes that get pushed.
+// A method name inside a request, the way the relay builds the script from it:
+// a String is text, every other string-valued type (ByteArray, Any, unknown) is
+// the hex of the bytes that get pushed.
 function methodFromRequestParam(param) {
   if (!param || typeof param !== 'object' || typeof param.value !== 'string') return '';
   return param.type === 'String' ? param.value : textFromHex(param.value);
@@ -121,9 +121,6 @@ export function extractInvocationShape(invocation) {
   if (USER_OP_BATCH_ENTRY_POINTS.includes(operation)) {
     const ops = isContainer(args[1]) ? args[1].value : [];
     return { methods: ops.map(methodOfUserOp), batch: true };
-  }
-  if (LEGACY_ENTRY_POINTS.includes(operation)) {
-    return { methods: [methodFromRequestParam(args[LEGACY_METHOD_ARG])], batch: false };
   }
   return { methods: [], batch: false };
 }

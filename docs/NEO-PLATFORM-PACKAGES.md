@@ -65,12 +65,15 @@ path is written to the evidence.
 Native modules are built separately by `scripts/build_native_modules.py`. Its
 six projects obey the same root `Directory.Build.props`, `nuget.config` and
 reviewed per-project locks; a missing or changed lock is a build failure. The
-packager requires `native-v2`, exact Array callbacks, ABI 2 metadata and explicit
-`getAuthorityEpoch` permission. SessionKeyVerifier additionally requires explicit
-`canonicalP256PublicKey` permission on the fixed native contract. Every module
-declares the exact parameter
-fingerprint and a Boolean verifier-composition marker; composite verifiers must
-expose the additional receipt validation and post-execution callbacks. It records original/prepared sources and both
+packager requires the `native-v4` marker, the v4 lifecycle ABI
+(`getModuleProfile` plus `onInstall`/`configure`/`onUninstall`), the exact native
+service permission allowlist and the NEF checksum. A module's capabilities come
+from its own `getModuleProfile()` answer, which the core re-hashes at install
+time, so packaging never grafts an `extra.smartAccount` declaration onto the
+compiler manifest. Protocol v4 replaced composite verifiers with the core
+threshold policy, so the descriptor keeps `compositeVerifier`/`compositeProfile`
+only to reject a non-empty value instead of silently reinterpreting an old one.
+It records original/prepared sources and both
 raw/packaged artifact bytes, then compares two independent scratch builds.
 Run `node scripts/check_neo_platform_packages.mjs --include-native` for all
 36 projects, including two test-only epoch probe projects and two source-runtime

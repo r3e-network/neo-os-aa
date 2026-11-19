@@ -1,0 +1,92 @@
+{
+  "vectorId": "sa4-message-envelope",
+  "kind": "message-envelope",
+  "constantsRevision": {
+    "custom": "ae220783aa0a303f47332adf135aa44416c58c0e",
+    "native": "0d9ad4f08797f4b2e8ad63c83182fa554ef33fb9"
+  },
+  "input": {
+    "custody": "0x291bff0f48bf68ca4e023953fb065fb984431f9b",
+    "salt": "0000000000000000000000000000000000000000000000000000000000000000",
+    "accountId": "0xd722a126dade99f38bd77f4bd3d9fc126b998cf6",
+    "verificationScript": "0c21020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed4156e7b327",
+    "messageHash": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+    "envelopeVersion": 4,
+    "validatorId": 0,
+    "credentialGeneration": 1,
+    "authorityEpoch": 1,
+    "threshold": 1,
+    "thresholdVariant": 3,
+    "network": 860833102
+  },
+  "expected": {
+    "messageDomainPrefixHex": "4e656f536d6172744163636f756e742f4d657373616765",
+    "versionByte": 4,
+    "successMagicHex": "1626ba7e",
+    "failureMagicHex": "ffffffff",
+    "custom": {
+      "coreHash": "0xbcc99b511b9126f16bc0e0f33ef5a935486dafc0",
+      "network": 860833102,
+      "originalSender": "0xb71bfb20b8c2365e6d7e1e3bd0910dd89546edb2",
+      "messageDomainHex": "4e656f536d6172744163636f756e742f4d657373616765044e454f33c0af6d4835a9f53ef3e0c06bf126911b519bc9bcf68c996b12fcd9d34b7fd78bf399deda26a122d7b2ed4695d80d91d03b1e7e6d5e36c2b820fb1bb7000000000000000000000000000000010000000000000001",
+      "messageDigestHex": "d8c803d3baac4da322766f50cad8e7a3e3b21f97dc80a9e67e9ba3f4e3e8d860",
+      "signatureHex": "f370af8eddf0a688144a9628e786622fca162eb2594912f2a8ca21bffbb070f51e8a4c4893d6b737c0d4c293993d8721f3733e27001c6618ee7d0d5cb46b082b",
+      "signaturePairs": [
+        [
+          "0c21020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed4156e7b327",
+          "f370af8eddf0a688144a9628e786622fca162eb2594912f2a8ca21bffbb070f51e8a4c4893d6b737c0d4c293993d8721f3733e27001c6618ee7d0d5cb46b082b"
+        ]
+      ]
+    },
+    "native": {
+      "coreHash": "0x398dc3f0227d7efac5533ed5ce9937390c158084",
+      "network": 860833102,
+      "originalSender": "0x53773c391326e97bab5daae2764e0739e083eaf1",
+      "messageDomainHex": "4e656f536d6172744163636f756e742f4d657373616765044e454f338480150c393799ced53e53c5fa7e7d22f0c38d39f68c996b12fcd9d34b7fd78bf399deda26a122d7f1ea83e039074e76e2aa5dab7be92613393c7753000000000000000000000000000000010000000000000001",
+      "messageDigestHex": "142a8f1158f8d0c4473dc877afb608cf0c7fc565b011e472b998c4de97a15e62",
+      "signatureHex": "2de9e00ad85b3aca7b8f3aeb0fdacb025720273f1339d2c9dbed370b90c151ef07dec11b6acf54d77caa1bd5e112039180a62610e10ea5f5df4fdc87d3a9abfa",
+      "signaturePairs": [
+        [
+          "0c21020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed4156e7b327",
+          "2de9e00ad85b3aca7b8f3aeb0fdacb025720273f1339d2c9dbed370b90c151ef07dec11b6acf54d77caa1bd5e112039180a62610e10ea5f5df4fdc87d3a9abfa"
+        ]
+      ],
+      "forwarderScriptHex": "5700037a797813c0110c10697356616c69645369676e61747572650c148480150c393799ced53e53c5fa7e7d22f0c38d3941627d5b5240"
+    }
+  },
+  "rejections": [
+    {
+      "mutation": "messageHash differs from the signed digest",
+      "error": "SA_MESSAGE_INVALID"
+    },
+    {
+      "mutation": "duplicate verification script in one envelope",
+      "error": "SA_MESSAGE_INVALID"
+    },
+    {
+      "mutation": "non-canonical or off-curve verification script",
+      "error": "SA_MESSAGE_INVALID"
+    },
+    {
+      "mutation": "signature count below the 0x57 threshold",
+      "error": "SA_MESSAGE_INVALID"
+    },
+    {
+      "mutation": "validatorId of a module without messageCapability",
+      "error": "SA_MODULE_MESSAGE_CAPABILITY_ABSENT"
+    },
+    {
+      "mutation": "stale credentialGeneration against the 0x57 subjectRevision",
+      "error": "SA_CREDENTIAL_STALE"
+    },
+    {
+      "mutation": "contract custody passes CheckWitness but holds no subject script",
+      "error": "SA_MESSAGE_INVALID"
+    },
+    {
+      "mutation": "frozen account",
+      "error": "SA_MESSAGE_INVALID"
+    }
+  ],
+  "notes": "ERC-1271 is a magic-value surface, never a throw surface: every row above returns 0xffffffff. The vector therefore pins the two magics plus, per kernel, the digest and the deterministic RFC 6979 signature over it. The digest binds the calling script hash, so each kernel is exercised through its own forwarder and the two signatures differ by construction."
+}

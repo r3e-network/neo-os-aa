@@ -2,6 +2,7 @@
 import importlib.util
 import copy
 import json
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -72,10 +73,6 @@ def fixture(module):
     receipts['helper-gas'].update(applicationEngineVerified=False,sourceFrontendVerified=False,sourceCommit=module.CORE_COMMIT,
         sourcePricingPinned=True,modelPriceBoundProved=True,actualRuntimeCrossChecked=True,
         artifacts={'nefSha256':'a'*64,'scriptSha256':'b'*64,'manifestSha256':'c'*64,'helperSha256':method_hash})
-    if 'hook' in receipts:
-        receipts['hook'].update(referenceRefinementVerified=True,vmCorrespondenceProven=False,
-            fullUnprovedEntrypointCount=len(inventory['manifest']['methods']),methodRange=[0,1],byteCount=1,instructionCount=1,
-            methodSha256=method_hash,certificateSha256='e'*64,sourceProjection={'sourceProjectionSha256':'f'*64})
     receipts['storage-getters'].update(
         schema='neoos-sa-storage-getter-source-refinement/v1', coqchkChecked=True, assumptionsClosed=True,
         vmCorrespondenceProven=True, projectionSha256='7'*64,
@@ -1677,9 +1674,9 @@ class ClosureTests(unittest.TestCase):
     def test_process_failure_and_timeout_preserved(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            result = self.module.run_command(['python3', '-c', 'raise SystemExit(7)'], root/'fail.log', 2)
+            result = self.module.run_command([sys.executable, '-c', 'raise SystemExit(7)'], root/'fail.log', 2)
             self.assertEqual(result['exitCode'], 7)
-            result = self.module.run_command(['python3', '-c', 'import time;time.sleep(10)'], root/'timeout.log', .1)
+            result = self.module.run_command([sys.executable, '-c', 'import time;time.sleep(10)'], root/'timeout.log', .1)
             self.assertTrue(result['timedOut'])
             self.assertNotEqual(result['exitCode'], 0)
 
@@ -1805,25 +1802,14 @@ class ClosureTests(unittest.TestCase):
         inventory, receipts = fixture(self.module); receipts['method']['methodSha256'] = '0'*64
         with self.assertRaisesRegex(ValueError, 'coverage'): self.module.join_scopes(inventory, receipts)
 
-    def test_private_hook_selected_without_public_closure(self):
+    def test_retired_hook_lane_is_not_joined(self):
+        self.assertNotIn('hook', self.module.SCOPES)
+        self.assertNotIn('hook', self.module.ARTIFACT_LANES)
+        self.assertNotIn('hook', self.module.CERTIFICATES)
         inventory, receipts = fixture(self.module)
-        self.assertIn('hook', receipts)
         result = self.module.join_scopes(inventory, receipts)
         self.assertEqual(result['verifiedEntrypoints'], [])
         self.assertEqual(result['fullUnprovedCount'], 4)
-
-    def test_private_hook_cannot_claim_public_or_runtime_closure(self):
-        for key,value in [('vmCorrespondenceProven',True),('fullUnprovedEntrypointCount',0),('referenceRefinementVerified',False)]:
-            inventory, receipts = fixture(self.module)
-            self.assertIn('hook', receipts)
-            receipts['hook'][key] = value
-            with self.assertRaisesRegex(ValueError, 'hook'): self.module.join_scopes(inventory, receipts)
-
-    def test_private_hook_range_and_bytes_must_match(self):
-        inventory, receipts = fixture(self.module)
-        self.assertIn('hook', receipts)
-        receipts['hook']['methodSha256'] = '0'*64
-        with self.assertRaisesRegex(ValueError, 'hook'): self.module.join_scopes(inventory, receipts)
 
     def test_runtime_collection_partial_projection_is_preserved(self):
         report = self.module.join_scopes(*fixture(self.module))

@@ -260,10 +260,11 @@ namespace Neo.SmartContract
             // must never become a witness principal through the legacy fast path.
             if (IsHardforkEnabled(Hardfork.HF_SmartAccountV1) && hash == NativeContract.SmartAccount.Hash)
                 return false;
+            // Only a static transaction signer may authorize the address later on.
             if (Trigger == TriggerType.Application && IsHardforkEnabled(Hardfork.HF_SmartAccountV1) &&
-                NativeContract.SmartAccount.IsRegisteredProxy(SnapshotCache, hash) &&
-                !(GetState<SmartAccountInvocationContext>()?.IsWitnessAuthorized(this, hash) ?? false))
-                return false;
+                GetState<SmartAccountInvocationContext>() is { } accountContext &&
+                accountContext.IsAccountProxyActive(hash))
+                return accountContext.IsWitnessAuthorized(this, hash);
             if (hash.Equals(CallingScriptHash)) return true;
 
             if (ScriptContainer is Transaction tx)

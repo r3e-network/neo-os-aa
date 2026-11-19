@@ -65,9 +65,9 @@ are zero in a pricing container, so a sponsored invocation faults there
 signing, leaving the nonce and the sponsor deposit untouched. A sponsored
 operation on the deployed core is therefore only expressible by direct
 submission, which `SA-08` covers. The frontend has no sponsored-invocation
-builder either, so the probe composes that wire shape itself and the SDK's
-`createSponsoredUserOpPayload` wraps the inner argument array in an `Any`
-parameter a relay-ready JSON payload cannot carry; both are inputs for CU-162.
+builder either, so the probe composes that wire shape itself, and the SDK's
+`buildSponsoredExecutionScript` returns a VM script rather than the relay-ready
+JSON invocation the probe sends; both are inputs for CU-162.
 
 `SA-11` drives the SDK sponsored-operation end to end. The invocation is composed by the SDK's own
 payload builder (`scripts/localchain/sdk_paymaster_fixture.mjs`), not by the harness: the fixture

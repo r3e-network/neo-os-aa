@@ -1,23 +1,39 @@
-const crypto = require("node:crypto");
+/**
+ * The native kernel SDK entry point: the v4 protocol codec, the shared client
+ * bound to the native core, and the transaction lifecycle.
+ *
+ * The v3 surface (`createNativeCodec`, `NATIVE_ABI_VERSION 2`, the verifier
+ * witness registry, `NATIVE_PROFILE_PARAMETER_DIGEST`) is gone. A profile is
+ * now read from the chain (`discover()` returns `{contract, networkMagic,
+ * protocolVersion, implementationId}`), not pinned as a parameter digest.
+ */
+
 const { rpc } = require("./neonCompat");
+const { codec: nativeCodec } = require("./codec");
 const {
-  createNativeCodec,
   NATIVE_SMART_ACCOUNT_CONTRACT,
   NATIVE_ABI_VERSION,
+  PROTOCOL_VERSION,
 } = require("../../../shared/nativeSmartAccount.mjs");
-const digest = (algorithm, hex) =>
-  crypto.createHash(algorithm).update(Buffer.from(hex, "hex")).digest("hex");
-const nativeCodec = createNativeCodec({
-  sha256: (hex) => digest("sha256", hex),
-  hash160: (hex) => digest("ripemd160", digest("sha256", hex)),
-});
 const {
   createNativeClientClass,
-  NATIVE_PROFILE_PARAMETER_DIGEST,
+  NATIVE_REQUIRED_ABI,
+  NATIVE_REQUIRED_EVENTS,
 } = require("./native/client");
 const { createNativeTransactionTools } = require("./native/transaction");
+const { codeIdentityTools } = require("./native/moduleIdentity");
+
+/** The native kernel pushes CallFlags.ReadOnly (5) in the proxy script. */
+const NATIVE_PROXY_CALL_FLAGS = 5;
 const transactionTools = createNativeTransactionTools(nativeCodec);
-class NativeSmartAccountClient extends createNativeClientClass(nativeCodec) {
+
+const NativeClient = createNativeClientClass(nativeCodec, {
+  contractHash: NATIVE_SMART_ACCOUNT_CONTRACT,
+  callFlags: NATIVE_PROXY_CALL_FLAGS,
+  nativeCore: true,
+});
+
+class NativeSmartAccountClient extends NativeClient {
   constructor(options = {}) {
     super({
       ...options,
@@ -36,18 +52,23 @@ class NativeSmartAccountClient extends createNativeClientClass(nativeCodec) {
   preflightTransaction(signed) {
     return transactionTools.preflightNativeTransaction(this, signed);
   }
-  getTransactionReceipt(signed) {
-    return transactionTools.getNativeTransactionReceipt(this, signed);
-  }
   broadcastTransaction(signed) {
     return transactionTools.broadcastNativeTransaction(this, signed);
   }
+  getTransactionReceipt(signed) {
+    return transactionTools.getNativeTransactionReceipt(this, signed);
+  }
 }
+
 module.exports = {
   NativeSmartAccountClient,
-  NATIVE_PROFILE_PARAMETER_DIGEST,
   nativeCodec,
-  createNativeCodec,
+  transactionTools,
+  codeIdentityTools,
+  NATIVE_REQUIRED_ABI,
+  NATIVE_REQUIRED_EVENTS,
   NATIVE_SMART_ACCOUNT_CONTRACT,
   NATIVE_ABI_VERSION,
+  PROTOCOL_VERSION,
+  NATIVE_PROXY_CALL_FLAGS,
 };

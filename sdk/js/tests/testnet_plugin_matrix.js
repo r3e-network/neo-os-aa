@@ -1,2510 +1,1655 @@
 #!/usr/bin/env node
+/**
+ * v4 plugin matrix runbook: one scenario per deployed module.
+ *
+ * The v3 script of this name exercised every plugin through registration
+ * fields, `callVerifier` and `callHook`. Protocol v4 deleted all three: a
+ * module is an instance with an allocated id, its configuration is an
+ * `onInstall`/`configure` callback, hook composition is the core-owned
+ * `hookOrder` and a threshold is a core-owned policy naming member ids. The
+ * matrix therefore keeps the same coverage — every validator, every hook, plus
+ * the modules that exist only to be refused — and proves it on the v4 surface:
+ *
+ * validators
+ *   p256                 standalone secp256r1 key, foreign key refused
+ *   web3auth             EIP-712 typed data over the §4.3 digest
+ *   tee                  `keyId ‖ r‖s` DTO bound to the enclave key
+ *   session-key          grant-scoped transfer, spending cap, grant dies with
+ *                        the credential generation
+ *   multisig             a member key that only ever signs under a policy, and
+ *                        the member digest the client and the module share
+ *   subscription         merchant-witnessed pull, one charge per period
+ *   neowitness           Neo N3 witness quorum over the transaction
+ *   delegated-identity   identity commitment + per-action nullifier
+ *   zkemail              disabled: the install action itself is refused
+ * hooks
+ *   daily-limit          per-token meter refuses an over-limit transfer
+ *   whitelist-hook       target allowlist refuses everything else
+ *   token-restricted     the restricted token is refused by effect
+ *   neodid-hook          a required credential without a registry is refused
+ *   multihook            retired: the install action itself is refused
+ * composition
+ *   threshold            a 2-of-2 policy over two instances, and the refusals
+ *                        that make membership meaningful
+ *   abi-negatives        modules without a bindable profile never install, and
+ *                        a validator profile cannot be installed as a hook
+ *
+ * Each scenario installs its own accounts on one core, so a failure names the
+ * module rather than the last screen of output. `SA_MATRIX_SCENARIOS` narrows
+ * the run to a comma-separated subset (the report file is named after it).
+ *
+ * Runbooks are not gates: `npm test` does not run this, and the v4 core is not
+ * deployed to a public testnet yet. It is exercised against a chain that
+ * already carries the artifacts built by `bash contracts/compile.sh`, and the
+ * mock token (`PolicyExecutionProbe`) is used wherever a scenario needs NEP-17
+ * value movement without real GAS.
+ *
+ * Usage:
+ *   TEST_WIF=Kx... node tests/testnet_plugin_matrix.js
+ *   TEST_WIF=Kx... SA_MATRIX_SCENARIOS=session-key,subscription node tests/testnet_plugin_matrix.js
+ */
 
-const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
-const {
-  rpc,
-  sc,
-  wallet,
-  experimental,
-  tx,
-  u,
-  CONST,
-} = require("@cityofzion/neon-js");
+const { CONST, wallet } = require("@cityofzion/neon-js");
 const { ethers } = require("ethers");
 
-const { extractDeployedContractHash } = require("../src/deployLog");
-const { SmartAccountClient } = require("../src/index");
-const { buildV3UserOperationTypedData, sanitizeHex } = require("../src/metaTx");
-const { resolveTestnetRpcUrl } = require("./testnet-rpc");
+const h = require("./testnet-v4-harness");
 
-let RPC_URL =
-  process.env.TESTNET_RPC_URL || "";
-const TEST_WIF = process.env.TEST_WIF || "";
-const REPORT_DIR = path.resolve(__dirname, "..", "..", "..", "docs", "reports");
+const GAS_HASH = CONST.NATIVE_CONTRACT_HASH.GasToken;
+const SALT_BYTES = 20;
+const ONE_HOUR_MS = 60 * 60 * 1000;
 const SELECTED_SCENARIOS = new Set(
   String(process.env.SA_MATRIX_SCENARIOS || "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean),
 );
-let latestReportContext = null;
 
-if (!TEST_WIF) {
-  console.error("TEST_WIF is required.");
-  process.exit(1);
-}
+let checks = 0;
 
-const GAS_HASH = CONST.NATIVE_CONTRACT_HASH.GasToken;
-const REGISTRATION_ESCAPE_TIMELOCK = 604800;
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+  checks += 1;
+  console.log(`  ok: ${message}`);
 }
 
 function shouldRunScenario(name) {
-  if (!SELECTED_SCENARIOS.size) return true;
-  return SELECTED_SCENARIOS.has(
-    String(name || "")
-      .trim()
-      .toLowerCase(),
-  );
+  return SELECTED_SCENARIOS.size === 0 || SELECTED_SCENARIOS.has(name);
 }
 
-function writePluginMatrixReport(context, status, error = null) {
-  if (!context) return null;
-  fs.mkdirSync(REPORT_DIR, { recursive: true });
-  const payload = {
-    ...context.results,
-    status,
-    error: error ? String(error?.stack || error?.message || error) : null,
-  };
-  fs.writeFileSync(context.reportPath, JSON.stringify(payload, null, 2));
-  return payload;
+function saltHex() {
+  return crypto.randomBytes(SALT_BYTES).toString("hex");
 }
 
-function isRetryableRpcError(error) {
-  const message = error instanceof Error ? error.message : String(error || "");
-  return /socket hang up|ECONNRESET|ETIMEDOUT|fetch failed|network error|EAI_AGAIN|ECONNREFUSED|EADDRNOTAVAIL|socket disconnected before secure TLS connection was established|TLS connection was established|premature close|invalid response body/i.test(
-    message,
-  );
+function randomHex(bytes) {
+  return crypto.randomBytes(bytes).toString("hex");
 }
 
-async function withRpcRetry(label, fn, attempts = 5) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableRpcError(error) || attempt >= attempts) throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[rpc-retry] ${label} attempt ${attempt}/${attempts} failed: ${message}`,
-      );
-      await sleep(1500 * attempt);
-    }
+/** A 32-byte digest over arbitrary text, so a scenario reads as what it means. */
+function digestOf(text) {
+  return crypto.createHash("sha256").update(text).digest("hex");
+}
+
+/** A VM ByteString as hex: stack items arrive base64-encoded. */
+function stackHex(item) {
+  return Buffer.from(item?.value || "", "base64").toString("hex");
+}
+
+/** The 20-byte storage order of a UInt160, which is what an operation arg carries. */
+function storageOrder(displayHex) {
+  return h.sanitizeHex(displayHex).match(/../g).reverse().join("");
+}
+
+// ---------------------------------------------------------------------------
+// Deployments: one instance per module, shared by the scenarios that need it
+// ---------------------------------------------------------------------------
+
+const deployed = {};
+
+async function moduleNamed(chain, core, name) {
+  if (!deployed[name]) {
+    // Canonical manifest name: the core compares the profile's own
+    // `contractName` with the deployed manifest name (§7.3).
+    deployed[name] = await h.deployModule(chain, core.hash, name);
   }
-  throw lastError;
+  return deployed[name];
 }
 
-function repoRoot() {
-  return path.resolve(__dirname, "..", "..", "..");
+/** The adversarial NEP-17 token: arbitrary balances, arbitrary results. */
+async function probeToken(chain) {
+  if (!deployed.probe) {
+    deployed.probe = await h.deployContract(chain, "PolicyExecutionProbe", `${chain.deploymentTag}-probe-token`);
+  }
+  return deployed.probe;
 }
 
-function oracleRepoRoot() {
-  return path.resolve(repoRoot(), "..", "neo-morpheus-oracle");
-}
-
-function artifactPaths(baseName) {
-  const verifierNames = new Set([
-    "Web3AuthVerifier",
-    "TEEVerifier",
-    "SessionKeyVerifier",
-    "WebAuthnVerifier",
-    "ZKEmailVerifier",
-    "ZkLoginVerifier",
-    "MultiSigVerifier",
-    "SubscriptionVerifier",
+async function fundProbeToken(chain, token, address, amount) {
+  await h.invokePersisted(chain, token.hash, "setBalance", [
+    h.hash160Param(address),
+    h.integerParam(String(amount)),
   ]);
-  const hookNames = new Set([
-    "WhitelistHook",
-    "DailyLimitHook",
-    "TokenRestrictedHook",
-    "MultiHook",
-    "NeoDIDCredentialHook",
-  ]);
-  const artifactDir = verifierNames.has(baseName)
-    ? path.join(repoRoot(), "contracts", "bin", "public", "verifiers")
-    : hookNames.has(baseName)
-      ? path.join(repoRoot(), "contracts", "bin", "public", "hooks")
-      : path.join(repoRoot(), "contracts", "bin", "public");
+}
+
+// ---------------------------------------------------------------------------
+// Operations: one 13-field envelope per call, nonce read from the channel
+// ---------------------------------------------------------------------------
+
+function nonceRouting(descriptor, validatorId = "0", credentialGeneration = "1") {
   return {
-    nef: path.join(artifactDir, `${baseName}.nef`),
-    manifest: path.join(artifactDir, `${baseName}.manifest.json`),
+    validatorId,
+    credentialGeneration,
+    authorityEpoch: descriptor.authorityEpoch,
+    nonceSubkey: "00".repeat(32),
   };
 }
 
-function loadArtifact(baseName, uniqueSuffix) {
-  const paths = artifactPaths(baseName);
-  const nef = sc.NEF.fromBuffer(fs.readFileSync(paths.nef));
-  const manifestJson = JSON.parse(fs.readFileSync(paths.manifest, "utf8"));
-  manifestJson.name = `${manifestJson.name}-${uniqueSuffix}`;
-  const manifest = sc.ContractManifest.fromJson(manifestJson);
-  return { nef, manifest };
-}
-
-function loadOracleArtifact(baseName, uniqueSuffix) {
-  const nefPath = path.join(
-    oracleRepoRoot(),
-    "contracts",
-    "build",
-    `${baseName}.nef`,
-  );
-  const manifestPath = path.join(
-    oracleRepoRoot(),
-    "contracts",
-    "build",
-    `${baseName}.manifest.json`,
-  );
-  const nef = sc.NEF.fromBuffer(fs.readFileSync(nefPath));
-  const manifestJson = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  manifestJson.name = `${manifestJson.name}-${uniqueSuffix}`;
-  const manifest = sc.ContractManifest.fromJson(manifestJson);
-  return { nef, manifest };
-}
-
-function normalizeHash(value) {
-  const hex = sanitizeHex(value || "");
-  return hex ? `0x${hex}` : "";
-}
-
-function buildConfig(account, networkMagic) {
-  return {
-    account,
-    networkMagic,
-    rpcAddress: RPC_URL,
-    blocksTillExpiry: 200,
-  };
-}
-
-function stackItemToText(item) {
-  if (!item) return "";
-  if (item.type === "Integer") return String(item.value || "0");
-  if (item.type === "Boolean") return String(item.value);
-  if (item.type === "Hash160") return normalizeHash(item.value);
-  if (item.type === "ByteString") {
-    const hex = Buffer.from(item.value || "", "base64").toString("hex");
-    if (!hex) return "";
-    const utf8 = Buffer.from(hex, "hex").toString("utf8");
-    return /^[\x20-\x7E]+$/.test(utf8) ? utf8 : `0x${hex}`;
-  }
-  return JSON.stringify(item);
-}
-
-async function waitForAppLog(client, txid, label, timeoutMs = 300000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const appLog = await client.getApplicationLog(txid);
-      if (appLog?.executions?.length) return appLog;
-    } catch (_) {}
-    await sleep(3000);
-  }
-  throw new Error(
-    `${label}: timed out waiting for application log for ${txid}`,
-  );
-}
-
-function assertVmState(appLog, label, expected = "HALT") {
-  const execution = appLog?.executions?.[0];
-  if (!execution) throw new Error(`${label}: missing execution log`);
-  const vmState = String(execution.vmstate || execution.state || "");
-  if (!vmState.includes(expected)) {
-    throw new Error(
-      `${label}: expected ${expected}, got ${vmState} ${execution.exception || ""}`.trim(),
-    );
-  }
-  return execution;
-}
-
-function makeSigner(scriptHash) {
-  return { account: scriptHash, scopes: tx.WitnessScope.CalledByEntry };
-}
-
-function hash160Param(value) {
-  return sc.ContractParam.hash160(sanitizeHex(value));
-}
-
-function byteArrayParam(hexValue) {
-  return sc.ContractParam.byteArray(
-    u.HexString.fromHex(sanitizeHex(hexValue), true),
-  );
-}
-
-function integerParam(value) {
-  if (typeof value === "bigint")
-    return sc.ContractParam.integer(value.toString());
-  return sc.ContractParam.integer(value);
-}
-
-function boolParam(value) {
-  return sc.ContractParam.boolean(Boolean(value));
-}
-
-function stringParam(value) {
-  return sc.ContractParam.string(String(value));
-}
-
-function anyParam(value) {
-  return sc.ContractParam.any(value);
-}
-
-function arrayParam(values = []) {
-  return sc.ContractParam.array(...values);
-}
-
-function emptyByteArrayParam() {
-  return sc.ContractParam.byteArray(u.HexString.fromHex("", true));
-}
-
-function userOpParam({
-  targetContract,
-  method,
+/**
+ * A routed operation whose nonce and configuration nonce come from the account
+ * the core reports, so a scenario never guesses either counter.
+ */
+async function routedOperation(sdk, accountId, {
+  validatorId = "0",
+  credentialGeneration = "1",
+  descriptor,
+  targetContract = GAS_HASH,
+  method = "symbol",
   args = [],
-  nonce = 0n,
-  deadline = 0n,
-  signatureHex = "",
-}) {
-  return arrayParam([
-    hash160Param(targetContract),
-    stringParam(method),
-    arrayParam(args),
-    integerParam(nonce),
-    integerParam(deadline),
-    byteArrayParam(signatureHex),
-  ]);
+  signature = "",
+} = {}) {
+  const state = descriptor || (await sdk.getAccount(accountId));
+  const routing = nonceRouting(state, validatorId, credentialGeneration);
+  const nonce = await h.nextNonce(sdk, accountId, routing);
+  return h.operation({
+    targetContract,
+    method,
+    args,
+    nonce,
+    validatorId,
+    credentialGeneration: routing.credentialGeneration,
+    authorityEpoch: routing.authorityEpoch,
+    configurationNonce: state.configurationNonce,
+    nonceSubkey: routing.nonceSubkey,
+    signature,
+  });
 }
 
-async function deployContract(
-  client,
-  account,
-  networkMagic,
-  baseName,
-  uniqueSuffix,
-) {
-  const { nef, manifest } = loadArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(
-    experimental.getContractHash(
-      u.HexString.fromHex(account.scriptHash),
-      nef.checksum,
-      manifest.name,
-    ),
-  );
-  console.log(`Deploying ${baseName} (${manifest.name})...`);
-  const txid = await withRpcRetry(`deploy ${baseName}`, () =>
-    experimental.deployContract(
-      nef,
-      manifest,
-      buildConfig(account, networkMagic),
-    ),
-  );
-  const appLog = await waitForAppLog(client, txid, `deploy ${baseName}`);
-  assertVmState(appLog, `deploy ${baseName}`, "HALT");
-  const deployedHash = extractDeployedContractHash(appLog) || predictedHash;
-  console.log(`Deployed ${baseName}: ${deployedHash} via ${txid}`);
+/** Broadcast one execution whose transaction carries extra witnesses. */
+async function executeWithWitnesses(chain, sdk, { accountId, operation: op, authorizers = [], label }) {
+  return h.sendPlan(chain, sdk, {
+    ...h.executionPlan(sdk, { accountId, operations: [op] }),
+    authorizers,
+    label: label || `executeUserOp(${op.method})`,
+  });
+}
+
+function refusalSpec(sdk, { accountId, operation: op, authorizers = [] }) {
+  return { ...h.executionPlan(sdk, { accountId, operations: [op] }), authorizers };
+}
+
+// ---------------------------------------------------------------------------
+// Signatures: one helper per validator family, each documented by its spec §5 DTO
+// ---------------------------------------------------------------------------
+
+/** A 64-byte `r‖s` over the core operation digest (standalone route). */
+function sign64(chain, coreHash, { accountId, operation: op, key, moduleId }) {
+  const digest = h.operationDigest(chain, coreHash, accountId, op);
   return {
-    txid,
-    hash: normalizeHash(deployedHash),
-    manifestName: manifest.name,
+    ...op,
+    validatorId: String(moduleId),
+    signature: wallet.sign(digest, key.privateKey),
   };
 }
 
-async function deployOracleContract(
-  client,
-  account,
-  networkMagic,
-  baseName,
-  uniqueSuffix,
-) {
-  const { nef, manifest } = loadOracleArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(
-    experimental.getContractHash(
-      u.HexString.fromHex(account.scriptHash),
-      nef.checksum,
-      manifest.name,
-    ),
-  );
-  console.log(`Deploying ${baseName} (${manifest.name})...`);
-  const txid = await withRpcRetry(`deploy ${baseName}`, () =>
-    experimental.deployContract(
-      nef,
-      manifest,
-      buildConfig(account, networkMagic),
-    ),
-  );
-  const appLog = await waitForAppLog(client, txid, `deploy ${baseName}`);
-  assertVmState(appLog, `deploy ${baseName}`, "HALT");
-  const deployedHash = extractDeployedContractHash(appLog) || predictedHash;
-  console.log(`Deployed ${baseName}: ${deployedHash} via ${txid}`);
+/** `keyId(32) ‖ r‖s(64)`, where `keyId = SHA256(compressedKey)`. */
+function signTee(chain, coreHash, { accountId, operation: op, key, moduleId }) {
+  const digest = h.operationDigest(chain, coreHash, accountId, op);
+  const keyId = crypto.createHash("sha256").update(Buffer.from(key.publicKey, "hex")).digest("hex");
   return {
-    txid,
-    hash: normalizeHash(deployedHash),
-    manifestName: manifest.name,
+    ...op,
+    validatorId: String(moduleId),
+    signature: `${keyId}${wallet.sign(digest, key.privateKey)}`,
   };
 }
 
-async function authorizeHook(
-  client,
-  coreHash,
-  hookHash,
-  account,
-  networkMagic,
-) {
-  return invokePersisted(
-    client,
-    hookHash,
-    account,
-    networkMagic,
-    "setAuthorizedCore",
-    [hash160Param(coreHash)],
-  );
-}
-
-async function authorizeVerifier(
-  client,
-  coreHash,
-  verifierHash,
-  account,
-  networkMagic,
-) {
-  return invokePersisted(
-    client,
-    verifierHash,
-    account,
-    networkMagic,
-    "setAuthorizedCore",
-    [hash160Param(coreHash)],
-  );
-}
-
-async function invokeRead(
-  client,
-  contractHash,
-  operation,
-  params = [],
-  signers = undefined,
-) {
-  return withRpcRetry(`${sanitizeHex(contractHash)}.${operation}`, () =>
-    client.invokeFunction(
-      sanitizeHex(contractHash),
-      operation,
-      params,
-      signers,
-    ),
-  );
-}
-
-async function readAndDecode(
-  client,
-  contractHash,
-  operation,
-  params = [],
-  signers = undefined,
-) {
-  const result = await invokeRead(
-    client,
-    contractHash,
-    operation,
-    params,
-    signers,
-  );
-  const state = String(result?.state || "");
-  if (state.includes("FAULT")) {
-    throw new Error(`${operation} fault: ${result.exception || "VM fault"}`);
-  }
-  return result?.stack?.[0];
-}
-
-async function invokePersisted(
-  client,
-  contractHash,
-  account,
-  networkMagic,
-  operation,
-  params = [],
-  signers = undefined,
-) {
-  const contract = new experimental.SmartContract(
-    sanitizeHex(contractHash),
-    buildConfig(account, networkMagic),
-  );
-  const txid = await withRpcRetry(
-    `${sanitizeHex(contractHash)}.${operation}.invoke`,
-    () => contract.invoke(operation, params, signers),
-  );
-  const appLog = await waitForAppLog(client, txid, `${operation}`);
-  const execution = assertVmState(appLog, `${operation}`, "HALT");
-  return { txid, appLog, execution };
-}
-
-async function testInvoke(
-  client,
-  contractHash,
-  account,
-  networkMagic,
-  operation,
-  params = [],
-  signers = undefined,
-) {
-  const contract = new experimental.SmartContract(
-    sanitizeHex(contractHash),
-    buildConfig(account, networkMagic),
-  );
-  return withRpcRetry(
-    `${sanitizeHex(contractHash)}.${operation}.testInvoke`,
-    () => contract.testInvoke(operation, params, signers),
-  );
-}
-
-function compactSignature(signature) {
-  const parsed = ethers.Signature.from(signature);
-  return `${sanitizeHex(parsed.r)}${sanitizeHex(parsed.s)}`;
-}
-
-function sha256Buffer(value) {
-  return crypto.createHash("sha256").update(value).digest();
-}
-
-function encodeNeoDidSegment(value) {
-  const text = Buffer.from(String(value || ""), "utf8");
-  if (text.length > 255) {
-    throw new Error("NeoDID segment too long");
-  }
-  return Buffer.concat([Buffer.from([text.length]), text]);
-}
-
-function buildNeoDidBindingCommitmentDigest({
-  vaultAccount,
-  provider,
-  claimType,
-  claimCommitmentHex,
-  masterNullifierHex,
-  metadataHashHex,
-  networkMagic,
-}) {
-  const network = Buffer.alloc(4);
-  network.writeUInt32LE(Number(networkMagic) >>> 0, 0);
-  return sha256Buffer(
-    Buffer.concat([
-      Buffer.from("neodid-claim-commitment-v1", "utf8"),
-      Buffer.from(sanitizeHex(vaultAccount), "hex"),
-      encodeNeoDidSegment(provider),
-      encodeNeoDidSegment(claimType),
-      Buffer.from(sanitizeHex(claimCommitmentHex), "hex"),
-      Buffer.from(sanitizeHex(masterNullifierHex), "hex"),
-      Buffer.from(sanitizeHex(metadataHashHex), "hex"),
-      network,
-    ]),
-  );
-}
-
-function randomAccountId() {
-  return Buffer.from(ethers.randomBytes(20)).toString("hex");
-}
-
-function validationRunId() {
-  return (
-    process.env.SA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString("hex")}`
-  ).toLowerCase();
-}
-
-function logSection(title) {
-  console.log(`\n== ${title} ==`);
-}
-
-function expectedSubscriptionNonce(subIdHex, periodSeconds, runtimeMs = Date.now()) {
-  const digest = crypto
-    .createHash("sha256")
-    .update(Buffer.from(sanitizeHex(subIdHex), "hex"))
-    .digest();
-  let subTag = 0n;
-  for (let i = 0; i < 8; i += 1) {
-    subTag = (subTag << 8n) + BigInt(digest[i]);
-  }
-  const currentPeriod = BigInt(Math.floor(runtimeMs / Number(periodSeconds)));
-  return 1_000_000_000_000_000_000n + (subTag << 32n) + currentPeriod;
-}
-
-async function getLatestBlockTimeMs(rpcClient) {
-  try {
-    const latestHeight =
-      Number(
-        await withRpcRetry("rpc.getBlockCount", () =>
-          rpcClient.getBlockCount(),
-        ),
-      ) - 1;
-    const block = await withRpcRetry("rpc.getBlock", () =>
-      rpcClient.getBlock(latestHeight, 1),
-    );
-    const raw = Number(block?.time ?? block?.timestamp ?? 0);
-    if (Number.isFinite(raw) && raw > 0) return raw;
-  } catch {
-    // fall back to local wall clock if the RPC helper is unavailable
-  }
-  return Date.now();
-}
-
-function assertFaultResult(result, label, pattern) {
-  const state = String(result?.state || "");
-  if (!state.includes("FAULT")) {
-    throw new Error(`${label}: expected FAULT, got ${state}`);
-  }
-  if (pattern && !pattern.test(String(result?.exception || ""))) {
-    throw new Error(
-      `${label}: unexpected exception ${result?.exception || ""}`,
-    );
-  }
-  return { state, exception: result?.exception || "" };
-}
-
-async function initiatePendingVerifierCall(
-  rpcClient,
-  core,
-  account,
-  networkMagic,
-  accountId,
-  method,
-  args,
-) {
-  const request = await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    "callVerifier",
-    [hash160Param(accountId), stringParam(method), arrayParam(args)],
-  );
-  const confirmationPreview = await testInvoke(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    "callVerifier",
-    [hash160Param(accountId), stringParam(method), arrayParam(args)],
-    [makeSigner(account.scriptHash)],
-  );
+/** `grantDigest(32) ‖ r‖s(64)`: the grant the instance holds, then the key's signature. */
+function signSessionKey(chain, coreHash, { accountId, operation: op, key, moduleId, grantDigestHex }) {
+  const digest = h.operationDigest(chain, coreHash, accountId, op);
   return {
-    requestTxid: request.txid,
-    requestResult: stackItemToText(request.execution.stack?.[0]),
-    pending: assertFaultResult(
-      confirmationPreview,
-      `callVerifier.${method}.pending`,
-      /Timelock not elapsed/,
-    ),
+    ...op,
+    validatorId: String(moduleId),
+    signature: `${grantDigestHex}${wallet.sign(digest, key.privateKey)}`,
   };
 }
 
-async function initiatePendingHookCall(
-  rpcClient,
-  core,
-  account,
-  networkMagic,
-  accountId,
-  method,
-  args,
-) {
-  const request = await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    "callHook",
-    [hash160Param(accountId), stringParam(method), arrayParam(args)],
-  );
-  const confirmationPreview = await testInvoke(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    "callHook",
-    [hash160Param(accountId), stringParam(method), arrayParam(args)],
-    [makeSigner(account.scriptHash)],
-  );
-  return {
-    requestTxid: request.txid,
-    requestResult: stackItemToText(request.execution.stack?.[0]),
-    pending: assertFaultResult(
-      confirmationPreview,
-      `callHook.${method}.pending`,
-      /Timelock not elapsed/,
-    ),
-  };
+/** `0x01 ‖ U8(providerLength) ‖ provider ‖ master(32) ‖ action(32) ‖ r‖s(64)`. */
+function signDelegated({ signingDigestHex, key, provider, masterNullifierHex, actionNullifierHex }) {
+  const providerHex = Buffer.from(provider, "utf8").toString("hex");
+  const providerBytes = providerHex.length / 2;
+  if (providerBytes < 1 || providerBytes > 255) throw new Error(`provider ${provider} does not fit a U8 length prefix`);
+  const prefix = providerBytes.toString(16).padStart(2, "0");
+  const signature = wallet.sign(signingDigestHex, key.privateKey);
+  return `01${prefix}${providerHex}${masterNullifierHex}${actionNullifierHex}${signature}`;
 }
+
+// ---------------------------------------------------------------------------
+// Scenario context shared by every case
+// ---------------------------------------------------------------------------
 
 async function main() {
-  RPC_URL = await resolveTestnetRpcUrl({ env: process.env });
-  const account = new wallet.Account(TEST_WIF);
-  const rpcClient = new rpc.RPCClient(RPC_URL);
-  const version = await withRpcRetry("rpc.getVersion", () =>
-    rpcClient.getVersion(),
-  );
-  const networkMagic = Number(version.protocol.network);
-  const deploymentTag =
-    process.env.SA_VALIDATION_DEPLOY_TAG ||
-    `validation-plugin-matrix-${validationRunId()}`;
+  if (!process.env.TEST_WIF && !process.env.NEO_TESTNET_WIF) {
+    console.error("TEST_WIF or NEO_TESTNET_WIF is required.");
+    process.exit(1);
+  }
+
+  const chain = await h.connect();
   const results = {
     env: {
-      rpc: RPC_URL,
-      networkMagic,
-      address: account.address,
-      scriptHash: normalizeHash(account.scriptHash),
+      rpc: chain.rpcUrl,
+      networkMagic: chain.networkMagic,
+      runId: chain.runId,
+      address: chain.account.address,
+      scriptHash: h.normalizeHash(chain.account.scriptHash),
       selectedScenarios: Array.from(SELECTED_SCENARIOS),
     },
     deployments: {},
     matrix: {},
   };
-  const reportFileName = SELECTED_SCENARIOS.size
-    ? `sa-testnet-plugin-matrix.${Array.from(SELECTED_SCENARIOS).join("_")}.json`
-    : "sa-testnet-plugin-matrix.latest.json";
-  const reportPath = path.join(REPORT_DIR, reportFileName);
-  latestReportContext = { results, reportPath };
 
   console.log(JSON.stringify(results.env, null, 2));
 
-  const runDirectConfig = shouldRunScenario("direct-config");
-  const runWeb3Auth = shouldRunScenario("web3auth");
-  const runTee = shouldRunScenario("tee");
-  const runWebAuthn = shouldRunScenario("webauthn");
-  const runSessionKey = shouldRunScenario("session-key");
-  const runMultiSig = shouldRunScenario("multisig");
-  const runSubscription = shouldRunScenario("subscription");
-  const runZkEmail = shouldRunScenario("zkemail");
-  const runWhitelistHook = shouldRunScenario("whitelist-hook");
-  const runDailyLimit = shouldRunScenario("daily-limit");
-  const runTokenRestricted = shouldRunScenario("token-restricted");
-  const runMultiHook = shouldRunScenario("multihook");
-  const runNeoDidHook = shouldRunScenario("neodid-hook");
+  h.logSection("Deploy core");
+  const core = await h.deployCore(chain);
+  const sdk = h.clientFor(chain, core.hash);
+  const protocol = await sdk.getProtocolInfo();
+  assert(protocol.protocolVersion === "4", `core reports protocol ${protocol.protocolVersion}`);
+  results.deployments.core = { hash: h.normalizeHash(core.hash), txid: core.txid };
+  console.log(JSON.stringify(results.deployments.core, null, 2));
 
-  const needWeb3AuthA = runDirectConfig || runWeb3Auth;
-  const needWeb3AuthB = runWeb3Auth;
-  const needTeeVerifier = runTee;
-  const needWebAuthnVerifier = runWebAuthn;
-  const needSessionKeyVerifier = runSessionKey;
-  const needMultiSigVerifier = runMultiSig;
-  const needSubscriptionVerifier = runSubscription;
-  const needZkEmailVerifier = runZkEmail;
-  const needWhitelistHook = runDirectConfig || runWhitelistHook || runMultiHook;
-  const needDailyLimitHook = runDailyLimit;
-  const needTokenRestrictedHook = runTokenRestricted || runMultiHook;
-  const needMultiHook = runMultiHook;
-  const needNeoDidHook = runNeoDidHook;
-  const needNeoDidRegistry = runNeoDidHook;
-  const needMockTarget =
-    runDirectConfig ||
-    runWeb3Auth ||
-    runTee ||
-    runWebAuthn ||
-    runSessionKey ||
-    runMultiSig ||
-    runSubscription ||
-    runZkEmail ||
-    runWhitelistHook ||
-    runDailyLimit ||
-    runTokenRestricted ||
-    runMultiHook ||
-    runNeoDidHook;
+  const context = { chain, core, sdk, results, custody: chain.account };
+  const scenarios = [
+    ["p256", scenarioP256],
+    ["web3auth", scenarioWeb3Auth],
+    ["tee", scenarioTee],
+    ["session-key", scenarioSessionKey],
+    ["multisig", scenarioMultiSig],
+    ["subscription", scenarioSubscription],
+    ["neowitness", scenarioNeoWitness],
+    ["delegated-identity", scenarioDelegatedIdentity],
+    ["zkemail", scenarioZKEmail],
+    ["daily-limit", scenarioDailyLimit],
+    ["whitelist-hook", scenarioWhitelistHook],
+    ["token-restricted", scenarioTokenRestricted],
+    ["neodid-hook", scenarioNeoDidHook],
+    ["multihook", scenarioMultiHook],
+    ["threshold", scenarioThreshold],
+    ["abi-negatives", scenarioAbiNegatives],
+  ];
 
-  logSection("Deploy Contracts");
-  const core = await deployContract(
-    rpcClient,
-    account,
-    networkMagic,
-    "SmartAccount",
-    `${deploymentTag}-core`,
+  const failures = [];
+  for (const [name, run] of scenarios) {
+    if (!shouldRunScenario(name)) continue;
+    h.logSection(name);
+    try {
+      results.matrix[name] = { status: "passed", ...(await run(context)) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      results.matrix[name] = { status: "failed", error: message };
+      failures.push(`${name}: ${message}`);
+      console.error(`  FAILED ${name}: ${message}`);
+      if (error instanceof Error && error.stack) console.error(error.stack);
+    }
+  }
+
+  results.deployments.modules = Object.fromEntries(
+    Object.entries(deployed).map(([name, contract]) => [name, h.normalizeHash(contract.hash)]),
   );
-  const web3AuthA = needWeb3AuthA
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "Web3AuthVerifier",
-        `${deploymentTag}-web3auth-a`,
-      )
-    : null;
-  const web3AuthB = needWeb3AuthB
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "Web3AuthVerifier",
-        `${deploymentTag}-web3auth-b`,
-      )
-    : null;
-  const teeVerifier = needTeeVerifier
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "TEEVerifier",
-        `${deploymentTag}-tee`,
-      )
-    : null;
-  const webAuthnVerifier = needWebAuthnVerifier
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "WebAuthnVerifier",
-        `${deploymentTag}-webauthn`,
-      )
-    : null;
-  const sessionKeyVerifier = needSessionKeyVerifier
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "SessionKeyVerifier",
-        `${deploymentTag}-session-key`,
-      )
-    : null;
-  const multiSigVerifier = needMultiSigVerifier
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "MultiSigVerifier",
-        `${deploymentTag}-multisig`,
-      )
-    : null;
-  const subscriptionVerifier = needSubscriptionVerifier
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "SubscriptionVerifier",
-        `${deploymentTag}-subscription`,
-      )
-    : null;
-  const zkEmailVerifier = needZkEmailVerifier
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "ZKEmailVerifier",
-        `${deploymentTag}-zkemail`,
-      )
-    : null;
-  const whitelistHook = needWhitelistHook
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "WhitelistHook",
-        `${deploymentTag}-whitelist`,
-      )
-    : null;
-  const dailyLimitHook = needDailyLimitHook
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "DailyLimitHook",
-        `${deploymentTag}-daily-limit`,
-      )
-    : null;
-  const tokenRestrictedHook = needTokenRestrictedHook
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "TokenRestrictedHook",
-        `${deploymentTag}-token-restricted`,
-      )
-    : null;
-  const multiHook = needMultiHook
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "MultiHook",
-        `${deploymentTag}-multi-hook`,
-      )
-    : null;
-  const neoDidHook = needNeoDidHook
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "NeoDIDCredentialHook",
-        `${deploymentTag}-neodid-hook`,
-      )
-    : null;
-  const neoDidRegistry = needNeoDidRegistry
-    ? await deployOracleContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "NeoDIDRegistry",
-        `${deploymentTag}-neodid-registry`,
-      )
-    : null;
-  const mockTarget = needMockTarget
-    ? await deployContract(
-        rpcClient,
-        account,
-        networkMagic,
-        "MockTransferTarget",
-        `${deploymentTag}-mock-target`,
-      )
-    : null;
+  results.checks = checks;
+  results.failures = failures;
 
-  if (web3AuthA)
-    await authorizeVerifier(
-      rpcClient,
-      core.hash,
-      web3AuthA.hash,
-      account,
-      networkMagic,
-    );
-  if (web3AuthB)
-    await authorizeVerifier(
-      rpcClient,
-      core.hash,
-      web3AuthB.hash,
-      account,
-      networkMagic,
-    );
-  if (teeVerifier)
-    await authorizeVerifier(
-      rpcClient,
-      core.hash,
-      teeVerifier.hash,
-      account,
-      networkMagic,
-    );
-  if (webAuthnVerifier)
-    await authorizeVerifier(
-      rpcClient,
-      core.hash,
-      webAuthnVerifier.hash,
-      account,
-      networkMagic,
-    );
-  if (sessionKeyVerifier)
-    await authorizeVerifier(
-      rpcClient,
-      core.hash,
-      sessionKeyVerifier.hash,
-      account,
-      networkMagic,
-    );
-  if (multiSigVerifier)
-    await authorizeVerifier(
-      rpcClient,
-      core.hash,
-      multiSigVerifier.hash,
-      account,
-      networkMagic,
-    );
-  if (subscriptionVerifier)
-    await authorizeVerifier(
-      rpcClient,
-      core.hash,
-      subscriptionVerifier.hash,
-      account,
-      networkMagic,
-    );
-  if (zkEmailVerifier)
-    await authorizeVerifier(
-      rpcClient,
-      core.hash,
-      zkEmailVerifier.hash,
-      account,
-      networkMagic,
-    );
+  const reportName = SELECTED_SCENARIOS.size
+    ? `sa-testnet-plugin-matrix.${Array.from(SELECTED_SCENARIOS).join("_")}.json`
+    : "sa-testnet-plugin-matrix.latest.json";
+  const reportPath = await h.writeReport(reportName, results);
 
-  if (whitelistHook)
-    await authorizeHook(
-      rpcClient,
-      core.hash,
-      whitelistHook.hash,
-      account,
-      networkMagic,
-    );
-  if (dailyLimitHook)
-    await authorizeHook(
-      rpcClient,
-      core.hash,
-      dailyLimitHook.hash,
-      account,
-      networkMagic,
-    );
-  if (tokenRestrictedHook)
-    await authorizeHook(
-      rpcClient,
-      core.hash,
-      tokenRestrictedHook.hash,
-      account,
-      networkMagic,
-    );
-  if (multiHook)
-    await authorizeHook(
-      rpcClient,
-      core.hash,
-      multiHook.hash,
-      account,
-      networkMagic,
-    );
-  if (neoDidHook)
-    await authorizeHook(
-      rpcClient,
-      core.hash,
-      neoDidHook.hash,
-      account,
-      networkMagic,
-    );
-
-  Object.assign(results.deployments, {
-    core,
-    web3AuthA,
-    web3AuthB,
-    teeVerifier,
-    webAuthnVerifier,
-    sessionKeyVerifier,
-    multiSigVerifier,
-    subscriptionVerifier,
-    zkEmailVerifier,
-    whitelistHook,
-    dailyLimitHook,
-    tokenRestrictedHook,
-    multiHook,
-    neoDidHook,
-    neoDidRegistry,
-    mockTarget,
-  });
-  console.log(JSON.stringify(results.deployments, null, 2));
-
-  if (neoDidRegistry) {
-    await invokePersisted(
-      rpcClient,
-      neoDidRegistry.hash,
-      account,
-      networkMagic,
-      "setVerifier",
-      [sc.ContractParam.publicKey(account.publicKey)],
-    );
-  }
-
-  const saClient = new SmartAccountClient(RPC_URL, core.hash);
-
-  async function registerAccount(label, options = {}) {
-    const initialVerifier = normalizeHash(options.verifier || "0".repeat(40));
-    const initialVerifierParams = sanitizeHex(options.verifierParams || "");
-    const registrationSalt = !initialVerifierParams && initialVerifier === "0x0000000000000000000000000000000000000000"
-      ? crypto.createHash("sha256").update(`plugin-matrix:${label}`).digest("hex").slice(0, 64)
-      : "";
-    const effectiveVerifierParams = initialVerifierParams || registrationSalt;
-    const initialHook = normalizeHash(options.hook || "0".repeat(40));
-    const accountId = saClient.deriveRegistrationAccountIdHash({
-      verifierContractHash: initialVerifier,
-      verifierParamsHex: effectiveVerifierParams,
-      hookContractHash: initialHook,
-      backupOwnerAddress: account.scriptHash,
-      escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
-    });
-    const virtual = saClient.deriveVirtualAccount(accountId);
-    const register = await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "registerAccount",
-      [
-        hash160Param(accountId),
-        hash160Param(sanitizeHex(initialVerifier || "0".repeat(40))),
-        effectiveVerifierParams
-          ? byteArrayParam(effectiveVerifierParams)
-          : emptyByteArrayParam(),
-        hash160Param(sanitizeHex(initialHook || "0".repeat(40))),
-        hash160Param(account.scriptHash),
-        integerParam(REGISTRATION_ESCAPE_TIMELOCK),
-      ],
-    );
-    return {
-      label,
-      accountId,
-      virtualAddress: virtual.address,
-      virtualScriptHash: virtual.scriptHash,
-      registerTxid: register.txid,
-    };
-  }
-
-  async function getNonce(accountId) {
-    const stack = await readAndDecode(rpcClient, core.hash, "getNonce", [
-      hash160Param(accountId),
-      integerParam(0),
-    ]);
-    return BigInt(stack.value || "0");
-  }
-
-  async function computeArgsHash(args) {
-    const stack = await readAndDecode(rpcClient, core.hash, "computeArgsHash", [
-      arrayParam(args),
-    ]);
-    return Buffer.from(stack.value || "", "base64").toString("hex");
-  }
-
-  async function directFault(contractHash, operation, params, pattern) {
-    const result = await testInvoke(
-      rpcClient,
-      contractHash,
-      account,
-      networkMagic,
-      operation,
-      params,
-      [makeSigner(account.scriptHash)],
-    );
-    return assertFaultResult(
-      result,
-      `${sanitizeHex(contractHash)}.${operation}`,
-      pattern,
-    );
-  }
-
-  if (SELECTED_SCENARIOS.size) {
-    if (shouldRunScenario("daily-limit")) {
-      logSection("Daily Limit Hook");
-      {
-        console.log("[daily-limit] registerAccount:start");
-        const scenario = await registerAccount("daily-limit");
-        console.log(
-          "[daily-limit] registerAccount:done",
-          normalizeHash(scenario.accountId),
-        );
-        console.log("[daily-limit] updateHook:start");
-        await invokePersisted(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "updateHook",
-          [hash160Param(scenario.accountId), hash160Param(dailyLimitHook.hash)],
-        );
-        console.log("[daily-limit] updateHook:done");
-        console.log("[daily-limit] setDailyLimit:start");
-        const pendingConfig = await initiatePendingHookCall(
-          rpcClient,
-          core,
-          account,
-          networkMagic,
-          scenario.accountId,
-          "setDailyLimit",
-          [
-            hash160Param(scenario.accountId),
-            hash160Param(mockTarget.hash),
-            integerParam(100),
-            boolParam(false),
-          ],
-        );
-        console.log("[daily-limit] setDailyLimit:done");
-        console.log("[daily-limit] exec1:start");
-        const exec1 = await invokePersisted(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "executeUserOp",
-          [
-            hash160Param(scenario.accountId),
-            userOpParam({
-              targetContract: mockTarget.hash,
-              method: "transfer",
-              args: [
-                hash160Param(scenario.accountId),
-                hash160Param(account.scriptHash),
-                integerParam(40),
-                stringParam("one"),
-              ],
-              nonce: 0n,
-              deadline: BigInt(Date.now() + 60 * 60 * 1000),
-              signatureHex: "",
-            }),
-          ],
-        );
-        console.log("[daily-limit] exec1:done", exec1.txid);
-        console.log("[daily-limit] overflow:start");
-        const overflow = await testInvoke(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "executeUserOp",
-          [
-            hash160Param(scenario.accountId),
-            userOpParam({
-              targetContract: mockTarget.hash,
-              method: "transfer",
-              args: [
-                hash160Param(scenario.accountId),
-                hash160Param(account.scriptHash),
-                integerParam(61),
-                stringParam("two"),
-              ],
-              nonce: 1n,
-              deadline: BigInt(Date.now() + 60 * 60 * 1000),
-              signatureHex: "",
-            }),
-          ],
-          [makeSigner(account.scriptHash)],
-        );
-        console.log(
-          "[daily-limit] overflow:done",
-          overflow?.state || "unknown",
-        );
-        console.log("[daily-limit] wrongSource:start");
-        const wrongSource = await testInvoke(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "executeUserOp",
-          [
-            hash160Param(scenario.accountId),
-            userOpParam({
-              targetContract: mockTarget.hash,
-              method: "transfer",
-              args: [
-                hash160Param(account.scriptHash),
-                hash160Param(account.scriptHash),
-                integerParam(1),
-                stringParam("bad-source"),
-              ],
-              nonce: 1n,
-              deadline: BigInt(Date.now() + 60 * 60 * 1000),
-              signatureHex: "",
-            }),
-          ],
-          [makeSigner(account.scriptHash)],
-        );
-        console.log(
-          "[daily-limit] wrongSource:done",
-          wrongSource?.state || "unknown",
-        );
-        results.matrix.dailyLimitHook = {
-          accountId: normalizeHash(scenario.accountId),
-          maintenance: pendingConfig,
-          txid: exec1.txid,
-          result: String(exec1.execution.stack?.[0]?.value ?? ""),
-          note:
-            "The hook installs immediately, but the configured ceiling is deferred behind the maintenance timelock; same-session transfers still use the unconfigured default path.",
-        };
-        console.log(JSON.stringify(results.matrix.dailyLimitHook, null, 2));
-      }
-    }
-
-    if (shouldRunScenario("multihook")) {
-      logSection("MultiHook");
-      {
-        console.log("[multihook] registerAccount:start");
-        const scenario = await registerAccount("multihook", {
-          hook: multiHook.hash,
-        });
-        console.log(
-          "[multihook] registerAccount:done",
-          normalizeHash(scenario.accountId),
-        );
-        console.log("[multihook] setHooks:start");
-        const pendingConfig = await initiatePendingHookCall(
-          rpcClient,
-          core,
-          account,
-          networkMagic,
-          scenario.accountId,
-          "setHooks",
-          [
-            hash160Param(scenario.accountId),
-            arrayParam([
-              hash160Param(whitelistHook.hash),
-              hash160Param(tokenRestrictedHook.hash),
-            ]),
-          ],
-        );
-        console.log("[multihook] setHooks:done", pendingConfig.requestTxid);
-        const storedHooks = await readAndDecode(
-          rpcClient,
-          multiHook.hash,
-          "getHooks",
-          [hash160Param(scenario.accountId)],
-        );
-        console.log("[multihook] getHooks:done");
-        console.log("[multihook] blocked:start");
-        const blocked = await testInvoke(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "executeUserOp",
-          [
-            hash160Param(scenario.accountId),
-            userOpParam({
-              targetContract: mockTarget.hash,
-              method: "symbol",
-              args: [],
-              nonce: 0n,
-              deadline: BigInt(Date.now() + 60 * 60 * 1000),
-              signatureHex: "",
-            }),
-          ],
-          [makeSigner(account.scriptHash)],
-        );
-        console.log("[multihook] blocked:done", blocked?.state || "unknown");
-        console.log("[multihook] duplicateHooks:start");
-        const duplicateHooks = await testInvoke(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "callHook",
-          [
-            hash160Param(scenario.accountId),
-            stringParam("setHooks"),
-            arrayParam([
-              hash160Param(scenario.accountId),
-              arrayParam([
-                hash160Param(whitelistHook.hash),
-                hash160Param(whitelistHook.hash),
-              ]),
-            ]),
-          ],
-          [makeSigner(account.scriptHash)],
-        );
-        console.log(
-          "[multihook] duplicateHooks:done",
-          duplicateHooks?.state || "unknown",
-        );
-        console.log("[multihook] selfHook:start");
-        const selfHook = await testInvoke(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "callHook",
-          [
-            hash160Param(scenario.accountId),
-            stringParam("setHooks"),
-            arrayParam([
-              hash160Param(scenario.accountId),
-              arrayParam([hash160Param(multiHook.hash)]),
-            ]),
-          ],
-          [makeSigner(account.scriptHash)],
-        );
-        console.log("[multihook] selfHook:done", selfHook?.state || "unknown");
-        console.log("[multihook] tooManyHooks:start");
-        const tooManyHooks = await testInvoke(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "callHook",
-          [
-            hash160Param(scenario.accountId),
-            stringParam("setHooks"),
-            arrayParam([
-              hash160Param(scenario.accountId),
-              arrayParam([
-                hash160Param(whitelistHook.hash),
-                hash160Param(tokenRestrictedHook.hash),
-                hash160Param(whitelistHook.hash),
-                hash160Param(tokenRestrictedHook.hash),
-                hash160Param(whitelistHook.hash),
-                hash160Param(tokenRestrictedHook.hash),
-                hash160Param(whitelistHook.hash),
-                hash160Param(tokenRestrictedHook.hash),
-                hash160Param(mockTarget.hash),
-              ]),
-            ]),
-          ],
-          [makeSigner(account.scriptHash)],
-        );
-        console.log(
-          "[multihook] tooManyHooks:done",
-          tooManyHooks?.state || "unknown",
-        );
-        results.matrix.multiHook = {
-          accountId: normalizeHash(scenario.accountId),
-          maintenance: pendingConfig,
-          hookCount: Array.isArray(storedHooks?.value)
-            ? storedHooks.value.length
-            : 0,
-          unconfiguredExecutionState: String(blocked?.state || ""),
-          duplicateHooks: { state: String(duplicateHooks?.state || ""), exception: duplicateHooks?.exception || "" },
-          selfHook: { state: String(selfHook?.state || ""), exception: selfHook?.exception || "" },
-          tooManyHooks: { state: String(tooManyHooks?.state || ""), exception: tooManyHooks?.exception || "" },
-          note:
-            "MultiHook composition is deferred behind the maintenance timelock; stored hook sets remain unchanged in the same live session.",
-        };
-        console.log(JSON.stringify(results.matrix.multiHook, null, 2));
-      }
-    }
-
-    if (shouldRunScenario("neodid-hook")) {
-      logSection("NeoDID Credential Hook");
-      {
-        console.log("[neodid-hook] registerAccount:start");
-        const scenario = await registerAccount("neodid-hook");
-        console.log(
-          "[neodid-hook] registerAccount:done",
-          normalizeHash(scenario.accountId),
-        );
-        console.log("[neodid-hook] updateHook:start");
-        await invokePersisted(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "updateHook",
-          [hash160Param(scenario.accountId), hash160Param(neoDidHook.hash)],
-        );
-        console.log("[neodid-hook] updateHook:done");
-        console.log("[neodid-hook] setRegistry:start");
-        await invokePersisted(
-          rpcClient,
-          neoDidHook.hash,
-          account,
-          networkMagic,
-          "setRegistry",
-          [hash160Param(neoDidRegistry.hash)],
-        );
-        console.log("[neodid-hook] setRegistry:done");
-        console.log("[neodid-hook] requireCredential:start");
-        const pendingConfig = await initiatePendingHookCall(
-          rpcClient,
-          core,
-          account,
-          networkMagic,
-          scenario.accountId,
-          "requireCredentialCommitmentForContract",
-          [
-            hash160Param(scenario.accountId),
-            hash160Param(mockTarget.hash),
-            stringParam("github"),
-            stringParam("Github_VerifiedUser"),
-            byteArrayParam("0x" + "11".repeat(32)),
-          ],
-        );
-        console.log("[neodid-hook] requireCredential:done");
-        console.log("[neodid-hook] missing:start");
-        const missing = await testInvoke(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "executeUserOp",
-          [
-            hash160Param(scenario.accountId),
-            userOpParam({
-              targetContract: mockTarget.hash,
-              method: "symbol",
-              args: [],
-              nonce: 0n,
-              deadline: BigInt(Date.now() + 60 * 60 * 1000),
-              signatureHex: "",
-            }),
-          ],
-          [makeSigner(account.scriptHash)],
-        );
-        const masterNullifier = sanitizeHex(
-          crypto.randomBytes(32).toString("hex"),
-        );
-        const metadataHash = sanitizeHex(
-          crypto.randomBytes(32).toString("hex"),
-        );
-        const claimCommitment = Buffer.alloc(32, 0x11);
-        const bindingDigest = buildNeoDidBindingCommitmentDigest({
-          vaultAccount: scenario.accountId,
-          provider: "github",
-          claimType: "Github_VerifiedUser",
-          claimCommitmentHex: claimCommitment.toString("hex"),
-          masterNullifierHex: masterNullifier,
-          metadataHashHex: metadataHash,
-          networkMagic,
-        });
-        const bindingSignature = wallet.sign(
-          bindingDigest.toString("hex"),
-          account.privateKey,
-        );
-        await invokePersisted(
-          rpcClient,
-          neoDidRegistry.hash,
-          account,
-          networkMagic,
-          "registerBindingCommitment",
-          [
-            hash160Param(scenario.accountId),
-            stringParam("github"),
-            stringParam("Github_VerifiedUser"),
-            byteArrayParam(claimCommitment.toString("hex")),
-            byteArrayParam(masterNullifier),
-            byteArrayParam(metadataHash),
-            byteArrayParam(bindingSignature),
-          ],
-        );
-        const success = await invokePersisted(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "executeUserOp",
-          [
-            hash160Param(scenario.accountId),
-            userOpParam({
-              targetContract: mockTarget.hash,
-              method: "symbol",
-              args: [],
-              nonce: 0n,
-              deadline: BigInt(Date.now() + 60 * 60 * 1000),
-              signatureHex: "",
-            }),
-          ],
-        );
-        await invokePersisted(
-          rpcClient,
-          neoDidRegistry.hash,
-          account,
-          networkMagic,
-          "revokeBinding",
-          [
-            hash160Param(scenario.accountId),
-            stringParam("github"),
-            stringParam("Github_VerifiedUser"),
-          ],
-        );
-        const revoked = await testInvoke(
-          rpcClient,
-          core.hash,
-          account,
-          networkMagic,
-          "executeUserOp",
-          [
-            hash160Param(scenario.accountId),
-            userOpParam({
-              targetContract: mockTarget.hash,
-              method: "symbol",
-              args: [],
-              nonce: 1n,
-              deadline: BigInt(Date.now() + 60 * 60 * 1000),
-              signatureHex: "",
-            }),
-          ],
-          [makeSigner(account.scriptHash)],
-        );
-        results.matrix.neoDidCredentialHook = {
-          accountId: normalizeHash(scenario.accountId),
-          registry: normalizeHash(neoDidRegistry.hash),
-          maintenance: pendingConfig,
-          txid: success.txid,
-          result: stackItemToText(success.execution.stack?.[0]),
-          missing: { state: String(missing?.state || ""), exception: missing?.exception || "" },
-          revoked: { state: String(revoked?.state || ""), exception: revoked?.exception || "" },
-          note:
-            "Credential requirement activation is deferred behind the hook maintenance timelock; registry binding and revocation still execute live.",
-        };
-        console.log(
-          JSON.stringify(results.matrix.neoDidCredentialHook, null, 2),
-        );
-      }
-    }
-
-    writePluginMatrixReport(latestReportContext, "passed");
-    logSection("Report");
-    console.log(reportPath);
-    console.log(
-      JSON.stringify(
-        {
-          reportPath,
-          core: core.hash,
-          mockTarget: mockTarget.hash,
-          scenarios: Object.keys(results.matrix),
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-
-  logSection("Direct Config Attack Surface");
-  results.matrix.directConfigGuards = {
-    whitelistDirectSet: await directFault(
-      whitelistHook.hash,
-      "setWhitelist",
-      [
-        hash160Param(randomAccountId()),
-        hash160Param(mockTarget.hash),
-        boolParam(true),
-      ],
-      /(Unauthorized|not found|Called Contract Does Not Exist)/,
+  h.logSection("Summary");
+  console.log(JSON.stringify({
+    reportPath,
+    checks,
+    scenarios: Object.fromEntries(
+      Object.entries(results.matrix).map(([name, item]) => [name, item.status]),
     ),
-    web3AuthDirectSet: await directFault(
-      web3AuthA.hash,
-      "setPublicKey",
-      [
-        hash160Param(randomAccountId()),
-        byteArrayParam(
-          sanitizeHex(ethers.Wallet.createRandom().signingKey.publicKey),
-        ),
-      ],
-      /(Unauthorized|not found|Called Contract Does Not Exist)/,
-    ),
-  };
-  console.log(JSON.stringify(results.matrix.directConfigGuards, null, 2));
+    failures,
+  }, null, 2));
 
-  logSection("Web3Auth Verifier");
-  {
-    const scenario = await registerAccount("web3auth");
-    const signer = ethers.Wallet.createRandom();
-    const pubKey = sanitizeHex(signer.signingKey.publicKey);
-    await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "updateVerifier",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(web3AuthA.hash),
-        byteArrayParam(pubKey),
-      ],
-    );
-
-    const nonce = await getNonce(scenario.accountId);
-    const argsHash = await computeArgsHash([]);
-    const deadline = Date.now() + 60 * 60 * 1000;
-    const typedData = buildV3UserOperationTypedData({
-      chainId: networkMagic,
-      verifyingContract: sanitizeHex(web3AuthA.hash),
-      accountIdHash: scenario.accountId,
-      coreContractHash: sanitizeHex(core.hash),
-      targetContract: mockTarget.hash,
-      method: "symbol",
-      argsHashHex: argsHash,
-      nonce,
-      deadline,
-    });
-    const signature = compactSignature(
-      await signer.signTypedData(
-        typedData.domain,
-        typedData.types,
-        typedData.message,
-      ),
-    );
-    const success = await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce,
-          deadline: BigInt(deadline),
-          signatureHex: signature,
-        }),
-      ],
-    );
-
-    const tampered = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "balanceOf",
-          args: [hash160Param(account.scriptHash)],
-          nonce: nonce + 1n,
-          deadline: BigInt(deadline),
-          signatureHex: signature,
-        }),
-      ],
-    );
-    const replay = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce,
-          deadline: BigInt(deadline),
-          signatureHex: signature,
-        }),
-      ],
-    );
-
-    results.matrix.web3Auth = {
-      accountId: normalizeHash(scenario.accountId),
-      txid: success.txid,
-      result: stackItemToText(success.execution.stack?.[0]),
-      tampered: assertFaultResult(
-        tampered,
-        "web3auth.tampered",
-        /Verifier rejected signature/,
-      ),
-      replay: assertFaultResult(
-        replay,
-        "web3auth.replay",
-        /Invalid sequence for channel|Salt already used/,
-      ),
-    };
-    console.log(JSON.stringify(results.matrix.web3Auth, null, 2));
+  if (failures.length > 0) {
+    throw new Error(`${failures.length} scenario(s) failed: ${failures.join("; ")}`);
   }
-
-  async function runP256VerifierScenario(
-    name,
-    verifierHash,
-    verifierKeyHex = "",
-  ) {
-    const scenario = await registerAccount(name);
-    await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "updateVerifier",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(verifierHash),
-        byteArrayParam(verifierKeyHex || account.publicKey),
-      ],
-    );
-    const nonce = await getNonce(scenario.accountId);
-    const deadline = Date.now() + 60 * 60 * 1000;
-    const args = [];
-    const payloadStack = await readAndDecode(
-      rpcClient,
-      verifierHash,
-      "getPayload",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(mockTarget.hash),
-        stringParam("symbol"),
-        arrayParam(args),
-        integerParam(nonce),
-        integerParam(deadline),
-      ],
-    );
-    const payload = Buffer.from(payloadStack.value || "", "base64");
-    const signature = wallet.sign(payload.toString("hex"), account.privateKey);
-    const success = await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args,
-          nonce,
-          deadline: BigInt(deadline),
-          signatureHex: signature,
-        }),
-      ],
-    );
-    const tampered = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "transfer",
-          args: [],
-          nonce: nonce + 1n,
-          deadline: BigInt(deadline),
-          signatureHex: signature,
-        }),
-      ],
-    );
-    return {
-      accountId: normalizeHash(scenario.accountId),
-      txid: success.txid,
-      result: stackItemToText(success.execution.stack?.[0]),
-      tampered: assertFaultResult(
-        tampered,
-        `${name}.tampered`,
-        /Verifier rejected signature|Method not permitted|Target contract not permitted|Invalid signature/,
-      ),
-      raw: scenario,
-    };
-  }
-
-  logSection("TEE Verifier");
-  {
-    const tee = await runP256VerifierScenario("tee", teeVerifier.hash);
-    results.matrix.teeVerifier = {
-      accountId: tee.accountId,
-      txid: tee.txid,
-      result: tee.result,
-      tampered: tee.tampered,
-    };
-    console.log(JSON.stringify(results.matrix.teeVerifier, null, 2));
-  }
-
-  logSection("WebAuthn Verifier");
-  {
-    const webauthn = await runP256VerifierScenario(
-      "webauthn",
-      webAuthnVerifier.hash,
-    );
-    results.matrix.webAuthnVerifier = {
-      accountId: webauthn.accountId,
-      txid: webauthn.txid,
-      result: webauthn.result,
-      tampered: webauthn.tampered,
-    };
-    console.log(JSON.stringify(results.matrix.webAuthnVerifier, null, 2));
-  }
-
-  logSection("Session Key Verifier");
-  {
-    const scenario = await registerAccount("session-key", {
-      verifier: sessionKeyVerifier.hash,
-    });
-    const validUntil = 2_000_000_000_000n;
-    const pendingConfig = await initiatePendingVerifierCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "setSessionKey",
-      [
-        hash160Param(scenario.accountId),
-        byteArrayParam(account.publicKey),
-        hash160Param(mockTarget.hash),
-        stringParam("symbol"),
-        integerParam(validUntil),
-        integerParam(0),
-        stringParam("session-key"),
-      ],
-    );
-    const nonce = await getNonce(scenario.accountId);
-    const deadline = Date.now() + 60 * 60 * 1000;
-    const payloadStack = await readAndDecode(
-      rpcClient,
-      sessionKeyVerifier.hash,
-      "getPayload",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(mockTarget.hash),
-        stringParam("symbol"),
-        arrayParam([]),
-        integerParam(nonce),
-        integerParam(deadline),
-      ],
-    );
-    const payload = Buffer.from(payloadStack.value || "", "base64");
-    const signature = wallet.sign(payload.toString("hex"), account.privateKey);
-    const activationBlocked = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce,
-          deadline: BigInt(deadline),
-          signatureHex: signature,
-        }),
-      ],
-    );
-
-    results.matrix.sessionKeyVerifier = {
-      accountId: normalizeHash(scenario.accountId),
-      maintenance: pendingConfig,
-      activationBlocked: assertFaultResult(
-        activationBlocked,
-        "session.activationBlocked",
-        /No session key active/,
-      ),
-      note:
-        "Session key activation is timelocked and cannot become active in the same live session.",
-    };
-    console.log(JSON.stringify(results.matrix.sessionKeyVerifier, null, 2));
-  }
-
-  logSection("MultiSig Verifier");
-  {
-    const scenario = await registerAccount("multisig", {
-      verifier: multiSigVerifier.hash,
-    });
-    const pendingConfig = await initiatePendingVerifierCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "setConfig",
-      [
-        hash160Param(scenario.accountId),
-        arrayParam([
-          hash160Param(web3AuthA.hash),
-          hash160Param(web3AuthB.hash),
-        ]),
-        integerParam(2),
-      ],
-    );
-    const inactive = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: Buffer.from(JSON.stringify(["", ""]), "utf8").toString("hex"),
-        }),
-      ],
-    );
-
-    results.matrix.multiSigVerifier = {
-      accountId: normalizeHash(scenario.accountId),
-      maintenance: pendingConfig,
-      inactive: assertFaultResult(
-        inactive,
-        "multisig.inactive",
-        /No MultiSig config|Verifier rejected signature/,
-      ),
-      note: "MultiSig child verifier configuration is timelocked and cannot become active in the same live session.",
-    };
-    console.log(JSON.stringify(results.matrix.multiSigVerifier, null, 2));
-  }
-
-  logSection("Subscription Verifier");
-  {
-    const scenario = await registerAccount("subscription", {
-      verifier: subscriptionVerifier.hash,
-    });
-    const subId = Buffer.from(ethers.randomBytes(8)).toString("hex");
-    const periodSeconds = 3600n;
-    const pendingConfig = await initiatePendingVerifierCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "createSubscription",
-      [
-        hash160Param(scenario.accountId),
-        byteArrayParam(subId),
-        hash160Param(account.scriptHash),
-        hash160Param(mockTarget.hash),
-        integerParam(100),
-        integerParam(periodSeconds),
-      ],
-    );
-
-    const chainNowMs = await getLatestBlockTimeMs(rpcClient);
-    const inactive = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "transfer",
-          args: [
-            hash160Param(scenario.virtualScriptHash),
-            hash160Param(account.scriptHash),
-            integerParam(50),
-            stringParam("sub"),
-          ],
-          nonce: expectedSubscriptionNonce(subId, periodSeconds, chainNowMs),
-          deadline: BigInt(chainNowMs + 60 * 60 * 1000),
-          signatureHex: subId,
-        }),
-      ],
-    );
-
-    results.matrix.subscriptionVerifier = {
-      accountId: normalizeHash(scenario.accountId),
-      maintenance: pendingConfig,
-      inactive: assertFaultResult(
-        inactive,
-        "subscription.inactive",
-        /Subscription not found/,
-      ),
-      note: "Subscription creation is timelocked and cannot become active in the same live session.",
-    };
-    console.log(JSON.stringify(results.matrix.subscriptionVerifier, null, 2));
-  }
-
-  logSection("ZKEmail Verifier");
-  {
-    // The disabled verifier advertises no V3 capability, so the core's
-    // AssertV3Verifier must reject binding at registration time (simulated,
-    // not persisted: a deliberately faulting registration spends no fees).
-    const zkAccountId = saClient.deriveRegistrationAccountIdHash({
-      verifierContractHash: normalizeHash(zkEmailVerifier.hash),
-      verifierParamsHex: "",
-      hookContractHash: "0x0000000000000000000000000000000000000000",
-      backupOwnerAddress: account.scriptHash,
-      escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
-    });
-    const bindAttempt = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "registerAccount",
-      [
-        hash160Param(zkAccountId),
-        hash160Param(zkEmailVerifier.hash),
-        emptyByteArrayParam(),
-        hash160Param("0x0000000000000000000000000000000000000000"),
-        hash160Param(account.scriptHash),
-        integerParam(REGISTRATION_ESCAPE_TIMELOCK),
-      ],
-    );
-
-    results.matrix.zkEmailVerifier = {
-      bindRejected: assertFaultResult(
-        bindAttempt,
-        "zkemail.bindRejected",
-        /Verifier does not implement V3 interface/,
-      ),
-      note: "Disabled verifier is rejected at the bind gate (SupportsV3 = false); accounts can no longer be attached to it, so the execution-time fail-closed branch is unreachable for new accounts.",
-    };
-    console.log(JSON.stringify(results.matrix.zkEmailVerifier, null, 2));
-  }
-
-  logSection("Whitelist Hook");
-  {
-    const scenario = await registerAccount("whitelist-hook");
-    await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "updateHook",
-      [hash160Param(scenario.accountId), hash160Param(whitelistHook.hash)],
-    );
-    const denied = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-      [makeSigner(account.scriptHash)],
-    );
-    const pendingConfig = await initiatePendingHookCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "setWhitelist",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(mockTarget.hash),
-        boolParam(true),
-      ],
-    );
-    const stillBlocked = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-    );
-    results.matrix.whitelistHook = {
-      accountId: normalizeHash(scenario.accountId),
-      maintenance: pendingConfig,
-      denied: assertFaultResult(
-        denied,
-        "whitelist.denied",
-        /Target contract not in whitelist/,
-      ),
-      stillBlocked: assertFaultResult(
-        stillBlocked,
-        "whitelist.stillBlocked",
-        /Target contract not in whitelist|Native witness failed/,
-      ),
-      note: "Whitelist activation is timelocked; same-session execution remains blocked.",
-    };
-    console.log(JSON.stringify(results.matrix.whitelistHook, null, 2));
-  }
-
-  logSection("Daily Limit Hook");
-  {
-    const scenario = await registerAccount("daily-limit");
-    await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "updateHook",
-      [hash160Param(scenario.accountId), hash160Param(dailyLimitHook.hash)],
-    );
-    const pendingConfig = await initiatePendingHookCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "setDailyLimit",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(mockTarget.hash),
-        integerParam(100),
-        boolParam(false),
-      ],
-    );
-    const exec1 = await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "transfer",
-          args: [
-            hash160Param(scenario.accountId),
-            hash160Param(account.scriptHash),
-            integerParam(40),
-            stringParam("one"),
-          ],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-    );
-    results.matrix.dailyLimitHook = {
-      accountId: normalizeHash(scenario.accountId),
-      maintenance: pendingConfig,
-      txid: exec1.txid,
-      result: String(exec1.execution.stack?.[0]?.value ?? ""),
-      note: "The hook installs immediately, but the configured ceiling is deferred behind the maintenance timelock; same-session transfers still use the unconfigured default path.",
-    };
-    console.log(JSON.stringify(results.matrix.dailyLimitHook, null, 2));
-  }
-
-  logSection("Token Restricted Hook");
-  {
-    const scenario = await registerAccount("token-restricted");
-    await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "updateHook",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(tokenRestrictedHook.hash),
-      ],
-    );
-    const pendingConfig = await initiatePendingHookCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "setRestrictedToken",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(GAS_HASH),
-        boolParam(true),
-      ],
-    );
-    const success = await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-    );
-    const restricted = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: GAS_HASH,
-          method: "symbol",
-          args: [],
-          nonce: 1n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-      [makeSigner(account.scriptHash)],
-    );
-    results.matrix.tokenRestrictedHook = {
-      accountId: normalizeHash(scenario.accountId),
-      maintenance: pendingConfig,
-      txid: success.txid,
-      result: stackItemToText(success.execution.stack?.[0]),
-      restricted: { state: String(restricted?.state || ""), exception: restricted?.exception || "" },
-      note: "Restricted-token activation is deferred behind the maintenance timelock; same-session unrestricted calls still succeed.",
-    };
-    console.log(JSON.stringify(results.matrix.tokenRestrictedHook, null, 2));
-  }
-
-  logSection("MultiHook");
-  {
-    const scenario = await registerAccount("multihook", {
-      hook: multiHook.hash,
-    });
-    const pendingConfig = await initiatePendingHookCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "setHooks",
-      [
-        hash160Param(scenario.accountId),
-        arrayParam([
-          hash160Param(whitelistHook.hash),
-          hash160Param(tokenRestrictedHook.hash),
-        ]),
-      ],
-    );
-    const storedHooks = await readAndDecode(
-      rpcClient,
-      multiHook.hash,
-      "getHooks",
-      [hash160Param(scenario.accountId)],
-    );
-    const blocked = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-      [makeSigner(account.scriptHash)],
-    );
-    const duplicateHooks = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "callHook",
-      [
-        hash160Param(scenario.accountId),
-        stringParam("setHooks"),
-        arrayParam([
-          hash160Param(scenario.accountId),
-          arrayParam([
-            hash160Param(whitelistHook.hash),
-            hash160Param(whitelistHook.hash),
-          ]),
-        ]),
-      ],
-      [makeSigner(account.scriptHash)],
-    );
-    const selfHook = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "callHook",
-      [
-        hash160Param(scenario.accountId),
-        stringParam("setHooks"),
-        arrayParam([
-          hash160Param(scenario.accountId),
-          arrayParam([hash160Param(multiHook.hash)]),
-        ]),
-      ],
-      [makeSigner(account.scriptHash)],
-    );
-    const tooManyHooks = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "callHook",
-      [
-        hash160Param(scenario.accountId),
-        stringParam("setHooks"),
-        arrayParam([
-          hash160Param(scenario.accountId),
-          arrayParam([
-            hash160Param(whitelistHook.hash),
-            hash160Param(tokenRestrictedHook.hash),
-            hash160Param(whitelistHook.hash),
-            hash160Param(tokenRestrictedHook.hash),
-            hash160Param(whitelistHook.hash),
-            hash160Param(tokenRestrictedHook.hash),
-            hash160Param(whitelistHook.hash),
-            hash160Param(tokenRestrictedHook.hash),
-            hash160Param(mockTarget.hash),
-          ]),
-        ]),
-      ],
-      [makeSigner(account.scriptHash)],
-    );
-    results.matrix.multiHook = {
-      accountId: normalizeHash(scenario.accountId),
-      maintenance: pendingConfig,
-      hookCount: Array.isArray(storedHooks?.value)
-        ? storedHooks.value.length
-        : 0,
-      unconfiguredExecutionState: String(blocked?.state || ""),
-      duplicateHooks: { state: String(duplicateHooks?.state || ""), exception: duplicateHooks?.exception || "" },
-      selfHook: { state: String(selfHook?.state || ""), exception: selfHook?.exception || "" },
-      tooManyHooks: { state: String(tooManyHooks?.state || ""), exception: tooManyHooks?.exception || "" },
-      note: "MultiHook composition is deferred behind the maintenance timelock; stored hook sets remain unchanged in the same live session.",
-    };
-    console.log(JSON.stringify(results.matrix.multiHook, null, 2));
-  }
-
-  logSection("NeoDID Credential Hook");
-  {
-    const scenario = await registerAccount("neodid-hook");
-    await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "updateHook",
-      [hash160Param(scenario.accountId), hash160Param(neoDidHook.hash)],
-    );
-    await invokePersisted(
-      rpcClient,
-      neoDidHook.hash,
-      account,
-      networkMagic,
-      "setRegistry",
-      [hash160Param(neoDidRegistry.hash)],
-    );
-    const pendingConfig = await initiatePendingHookCall(
-      rpcClient,
-      core,
-      account,
-      networkMagic,
-      scenario.accountId,
-      "requireCredentialCommitmentForContract",
-      [
-        hash160Param(scenario.accountId),
-        hash160Param(mockTarget.hash),
-        stringParam("github"),
-        stringParam("Github_VerifiedUser"),
-        byteArrayParam("0x" + "11".repeat(32)),
-      ],
-    );
-    const missing = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-      [makeSigner(account.scriptHash)],
-    );
-    console.log("[neodid-hook] missing:done", missing?.state || "unknown");
-    const masterNullifier = sanitizeHex(crypto.randomBytes(32).toString("hex"));
-    const metadataHash = sanitizeHex(crypto.randomBytes(32).toString("hex"));
-    const claimCommitment = Buffer.alloc(32, 0x11);
-    const bindingDigest = buildNeoDidBindingCommitmentDigest({
-      vaultAccount: scenario.accountId,
-      provider: "github",
-      claimType: "Github_VerifiedUser",
-      claimCommitmentHex: claimCommitment.toString("hex"),
-      masterNullifierHex: masterNullifier,
-      metadataHashHex: metadataHash,
-      networkMagic,
-    });
-    const bindingSignature = wallet.sign(
-      bindingDigest.toString("hex"),
-      account.privateKey,
-    );
-    console.log("[neodid-hook] registerBinding:start");
-    await invokePersisted(
-      rpcClient,
-      neoDidRegistry.hash,
-      account,
-      networkMagic,
-      "registerBindingCommitment",
-      [
-        hash160Param(scenario.accountId),
-        stringParam("github"),
-        stringParam("Github_VerifiedUser"),
-        byteArrayParam(claimCommitment.toString("hex")),
-        byteArrayParam(masterNullifier),
-        byteArrayParam(metadataHash),
-        byteArrayParam(bindingSignature),
-      ],
-    );
-    console.log("[neodid-hook] registerBinding:done");
-    console.log("[neodid-hook] success:start");
-    const success = await invokePersisted(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 0n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-    );
-    console.log("[neodid-hook] success:done", success.txid);
-    console.log("[neodid-hook] revokeBinding:start");
-    await invokePersisted(
-      rpcClient,
-      neoDidRegistry.hash,
-      account,
-      networkMagic,
-      "revokeBinding",
-      [
-        hash160Param(scenario.accountId),
-        stringParam("github"),
-        stringParam("Github_VerifiedUser"),
-      ],
-    );
-    console.log("[neodid-hook] revokeBinding:done");
-    console.log("[neodid-hook] revoked:start");
-    const revoked = await testInvoke(
-      rpcClient,
-      core.hash,
-      account,
-      networkMagic,
-      "executeUserOp",
-      [
-        hash160Param(scenario.accountId),
-        userOpParam({
-          targetContract: mockTarget.hash,
-          method: "symbol",
-          args: [],
-          nonce: 1n,
-          deadline: BigInt(Date.now() + 60 * 60 * 1000),
-          signatureHex: "",
-        }),
-      ],
-      [makeSigner(account.scriptHash)],
-    );
-    console.log("[neodid-hook] revoked:done", revoked?.state || "unknown");
-    results.matrix.neoDidCredentialHook = {
-      accountId: normalizeHash(scenario.accountId),
-      registry: normalizeHash(neoDidRegistry.hash),
-      maintenance: pendingConfig,
-      txid: success.txid,
-      result: stackItemToText(success.execution.stack?.[0]),
-      missing: { state: String(missing?.state || ""), exception: missing?.exception || "" },
-      revoked: { state: String(revoked?.state || ""), exception: revoked?.exception || "" },
-      note: "Credential requirement activation is deferred behind the hook maintenance timelock; registry binding and revocation still execute live.",
-    };
-    console.log(JSON.stringify(results.matrix.neoDidCredentialHook, null, 2));
-  }
-
-  writePluginMatrixReport(latestReportContext, "passed");
-
-  logSection("Report");
-  console.log(reportPath);
-  console.log(
-    JSON.stringify(
-      {
-        reportPath,
-        core: core.hash,
-        mockTarget: mockTarget.hash,
-        scenarios: Object.keys(results.matrix),
-      },
-      null,
-      2,
-    ),
-  );
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    writePluginMatrixReport(latestReportContext, "failed", error);
-    console.error(error?.stack || error?.message || String(error));
-    process.exit(1);
+/** A key and its hex public key, the shape every P-256 validator installs. */
+function p256Key() {
+  const account = new wallet.Account();
+  return { account, publicKeyHex: h.sanitizeHex(account.publicKey) };
+}
+
+/** A fresh validator-routed account, plus the ids a scenario needs. */
+async function validatorAccount(chain, sdk, actions, label) {
+  const created = await h.createAccount(chain, sdk, {
+    custody: chain.account,
+    salt: saltHex(),
+    actions,
   });
+  const state = await sdk.getAccount(created.accountId);
+  const validatorIds = (await h.moduleIds(sdk, created.accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds;
+  assert(validatorIds.length >= 1, `${label}: expected a validator instance, got ${validatorIds.length}`);
+  return { accountId: created.accountId, state, validatorId: validatorIds[0], txid: created.txid };
+}
+
+async function installValidator(chain, moduleHash, publicKeyHex, command = "setPublicKey") {
+  return h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash,
+    initData: [h.codec.stringValue(command), h.codec.byteStringValue(publicKeyHex)],
+  });
+}
+
+/**
+ * The capability flags the core recorded come from the module's own canonical
+ * profile, never from the installer, so reading them back proves the deployed
+ * profile and the core's record agree.
+ */
+async function assertCapabilities(sdk, accountId, moduleId, expected, label) {
+  const record = await h.moduleState(sdk, accountId, moduleId);
+  assert(
+    record.instanceIsolation === expected.instanceIsolation,
+    `${label}: instanceIsolation is ${record.instanceIsolation}`,
+  );
+  assert(
+    record.thresholdMemberEligible === expected.thresholdMemberEligible,
+    `${label}: thresholdMemberEligible is ${record.thresholdMemberEligible}`,
+  );
+  assert(
+    record.messageCapability === Boolean(expected.messageCapability),
+    `${label}: messageCapability is ${record.messageCapability}`,
+  );
+  return record;
+}
+
+// ---------------------------------------------------------------------------
+// p256: the baseline standalone validator
+// ---------------------------------------------------------------------------
+
+async function scenarioP256({ chain, core, sdk }) {
+  const p256 = await moduleNamed(chain, core, "validators/P256Validator");
+  const { account, publicKeyHex } = p256Key();
+  const rogue = p256Key();
+  const routed = await validatorAccount(chain, sdk, [await installValidator(chain, p256.hash, publicKeyHex)], "p256");
+  assert(routed.state.defaultOperationAuthorization === false, "the first validator install turns the built-in route off");
+  const record = await assertCapabilities(sdk, routed.accountId, routed.validatorId, {
+    instanceIsolation: false,
+    thresholdMemberEligible: true,
+    messageCapability: false,
+  }, "p256");
+  assert(record.credentialGeneration === "1", `a fresh instance starts at generation ${record.credentialGeneration}`);
+  const stored = stackHex(await h.readAndDecode(chain, p256.hash, "getPublicKey", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+  ]));
+  assert(stored.toUpperCase() === publicKeyHex.toUpperCase(), "the instance stores the installed P-256 key");
+
+  const op = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const signed = sign64(chain, core.hash, {
+    accountId: routed.accountId,
+    operation: op,
+    key: account,
+    moduleId: routed.validatorId,
+  });
+  const preview = await h.validateOperation(chain, sdk, routed.accountId, signed);
+  assert(preview.accepted === true, "the instance accepts its own key");
+  const executed = await h.executeOperation(chain, sdk, { accountId: routed.accountId, operation: signed });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "GAS", "P256-routed operation executed");
+
+  const rogueOp = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const rogueSigned = sign64(chain, core.hash, {
+    accountId: routed.accountId,
+    operation: rogueOp,
+    key: rogue.account,
+    moduleId: routed.validatorId,
+  });
+  const rogueRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId: routed.accountId, operation: rogueSigned }),
+    /SA_VALIDATION_REJECTED/,
+    "a key the instance does not hold",
+  );
+  return { accountId: h.normalizeHash(routed.accountId), moduleId: routed.validatorId, txid: executed.txid, rogueRefusal };
+}
+
+// ---------------------------------------------------------------------------
+// web3auth: EIP-712 typed data over the §4.3 digest
+// ---------------------------------------------------------------------------
+
+async function scenarioWeb3Auth({ chain, core, sdk }) {
+  const web3Auth = await moduleNamed(chain, core, "validators/Web3AuthValidator");
+  const signer = ethers.Wallet.createRandom();
+  const rogueSigner = ethers.Wallet.createRandom();
+  const publicKeyHex = h.sanitizeHex(signer.signingKey.compressedPublicKey);
+  const routed = await validatorAccount(chain, sdk, [await installValidator(chain, web3Auth.hash, publicKeyHex)], "web3auth");
+  // This is the one module that publishes `isValidSignature`, so the core must
+  // record the message capability it read from that module's profile.
+  await assertCapabilities(sdk, routed.accountId, routed.validatorId, {
+    instanceIsolation: false,
+    thresholdMemberEligible: true,
+    messageCapability: true,
+  }, "web3auth");
+  const stored = stackHex(await h.readAndDecode(chain, web3Auth.hash, "getPublicKey", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+  ]));
+  assert(stored.toUpperCase() === publicKeyHex.toUpperCase(), "the instance stores the installed secp256k1 key");
+
+  const op = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const argsHashHex = await h.operationArgsHash(chain, core.hash, op.args);
+  const typed = h.web3AuthTypedData(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId: routed.accountId,
+    operation: op,
+    argsHashHex,
+  });
+  const localDigest = ethers.TypedDataEncoder.hash(typed.domain, typed.types, typed.message);
+  const signed = await h.signOperationForWeb3Auth(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId: routed.accountId,
+    operation: op,
+    argsHashHex,
+    signer,
+  });
+  // The validator's own payload is the only authority on the encoding: the
+  // chain hashes those 66 bytes with Keccak-256, so keccak(payload) must be
+  // the EIP-712 digest the wallet signed.
+  const payload = stackHex(await h.readAndDecode(chain, web3Auth.hash, "getSigningPayload", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+    h.byteArrayParam(h.operationDigest(chain, core.hash, routed.accountId, op)),
+    h.operationParam(op),
+  ]));
+  assert(payload.length === 66 * 2, `the signing payload is ${payload.length / 2} bytes, expected 66`);
+  assert(ethers.keccak256(`0x${payload}`) === localDigest, "the EIP-712 digest is keccak256 of the validator payload");
+  const executed = await h.executeOperation(chain, sdk, { accountId: routed.accountId, operation: signed });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "GAS", "Web3Auth-routed operation executed");
+
+  const rogueOp = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const rogueArgsHash = await h.operationArgsHash(chain, core.hash, rogueOp.args);
+  const rogueSigned = await h.signOperationForWeb3Auth(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId: routed.accountId,
+    operation: rogueOp,
+    argsHashHex: rogueArgsHash,
+    signer: rogueSigner,
+  });
+  const rogueRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId: routed.accountId, operation: rogueSigned }),
+    /SA_VALIDATION_REJECTED/,
+    "a secp256k1 key the validator does not hold",
+  );
+  return {
+    accountId: h.normalizeHash(routed.accountId),
+    validatorId: routed.validatorId,
+    typedDataDigest: localDigest,
+    txid: executed.txid,
+    rogueRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// tee: the enclave-key DTO, bound to SHA256(compressedKey)
+// ---------------------------------------------------------------------------
+
+async function scenarioTee({ chain, core, sdk }) {
+  const tee = await moduleNamed(chain, core, "validators/TeeKeyValidator");
+  const { account, publicKeyHex } = p256Key();
+  const foreign = p256Key();
+  const routed = await validatorAccount(chain, sdk, [await installValidator(chain, tee.hash, publicKeyHex)], "tee");
+  const record = await assertCapabilities(sdk, routed.accountId, routed.validatorId, {
+    instanceIsolation: false,
+    thresholdMemberEligible: true,
+  }, "tee");
+  const keyId = stackHex(await h.readAndDecode(chain, tee.hash, "getKeyId", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+  ]));
+  assert(
+    keyId === crypto.createHash("sha256").update(Buffer.from(publicKeyHex, "hex")).digest("hex"),
+    "the instance publishes SHA256 of its configured key as the key id",
+  );
+
+  const op = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const signed = signTee(chain, core.hash, {
+    accountId: routed.accountId,
+    operation: op,
+    key: account,
+    moduleId: routed.validatorId,
+  });
+  const preview = await h.validateOperation(chain, sdk, routed.accountId, signed);
+  assert(preview.accepted === true, "the instance accepts keyId ‖ r‖s from its key");
+  const executed = await h.executeOperation(chain, sdk, { accountId: routed.accountId, operation: signed });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "GAS", "TeeKey-routed operation executed");
+
+  // A valid signature under a foreign key, prefixed with THIS instance's key id:
+  // the keyId check must reject it before the signature is even examined.
+  const spoofOp = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const spoofDigest = h.operationDigest(chain, core.hash, routed.accountId, spoofOp);
+  const spoofed = {
+    ...spoofOp,
+    validatorId: String(routed.validatorId),
+    signature: `${keyId}${wallet.sign(spoofDigest, foreign.account.privateKey)}`,
+  };
+  const spoofRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId: routed.accountId, operation: spoofed }),
+    /SA_VALIDATION_REJECTED/,
+    "a signature that does not belong to the configured key",
+  );
+  return {
+    accountId: h.normalizeHash(routed.accountId),
+    validatorId: routed.validatorId,
+    keyId,
+    credentialGeneration: record.credentialGeneration,
+    txid: executed.txid,
+    spoofRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// session-key: grant scope, spending cap, and death by credential generation
+// ---------------------------------------------------------------------------
+
+async function scenarioSessionKey({ chain, core, sdk }) {
+  const session = await moduleNamed(chain, core, "validators/SessionKeyValidator");
+  const token = await probeToken(chain);
+  const { account, publicKeyHex } = p256Key();
+  const salt = saltHex();
+  const validUntil = String(Date.now() + ONE_HOUR_MS);
+  const spendingLimit = 1000;
+  const grant = h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: session.hash,
+    initData: [
+      h.codec.stringValue("setSessionKey"),
+      h.codec.byteStringValue(publicKeyHex),
+      h.codec.hashValue(token.hash),
+      h.codec.stringValue("transfer"),
+      h.codec.integerValue(validUntil),
+      h.codec.integerValue(String(spendingLimit)),
+      h.codec.stringValue("matrix session key"),
+    ],
+  });
+  const created = await h.createAccount(chain, sdk, { custody: chain.account, salt, actions: [await grant] });
+  const accountId = created.accountId;
+  const state = await sdk.getAccount(accountId);
+  const validatorId = (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds[0];
+  const record = await assertCapabilities(sdk, accountId, validatorId, {
+    instanceIsolation: true,
+    thresholdMemberEligible: false,
+  }, "session-key");
+
+  const storedGrant = await h.readAndDecode(chain, session.hash, "getSessionKey", [
+    h.hash160Param(accountId),
+    h.integerParam(validatorId),
+  ]);
+  assert(storedGrant?.value?.length === 7, `the grant is ${storedGrant?.value?.length} fields, expected 7`);
+  const grantDigestHex = stackHex(await h.readAndDecode(chain, session.hash, "getGrantDigest", [
+    h.hash160Param(accountId),
+    h.integerParam(validatorId),
+  ]));
+  assert(grantDigestHex.length === 64, `the grant digest is ${grantDigestHex.length / 2} bytes, expected 32`);
+  assert(
+    h.decodeInteger(storedGrant.value[4]) === String(spendingLimit),
+    `the grant caps spending at ${h.decodeInteger(storedGrant.value[4])}`,
+  );
+
+  const proxyHash = await sdk.getProxyScriptHash(accountId);
+  await fundProbeToken(chain, token, proxyHash, 10_000);
+  const recipient = storageOrder(new wallet.Account().scriptHash);
+
+  const transferOp = async () => {
+    const fresh = await sdk.getAccount(accountId);
+    return routedOperation(sdk, accountId, {
+      validatorId,
+      credentialGeneration: record.credentialGeneration,
+      descriptor: fresh,
+      targetContract: token.hash,
+      method: "transfer",
+      args: [
+        h.codec.hashValue(proxyHash),
+        { type: "ByteString", value: recipient },
+        h.codec.integerValue("400"),
+        {
+          type: "Array",
+          value: [h.codec.integerValue("400"), { type: "Boolean", value: true }],
+        },
+      ],
+    });
+  };
+
+  const first = signSessionKey(chain, core.hash, {
+    accountId,
+    operation: await transferOp(),
+    key: account,
+    moduleId: validatorId,
+    grantDigestHex,
+  });
+  const firstExec = await h.executeOperation(chain, sdk, { accountId, operation: first });
+  assert(h.stackText(firstExec.appLog.executions[0].stack[0]) === "true", "the grant executed its scoped transfer");
+  const spentAfterFirst = h.decodeInteger(await h.readAndDecode(chain, session.hash, "getSpentAmount", [
+    h.hash160Param(accountId),
+    h.integerParam(validatorId),
+  ]));
+  assert(spentAfterFirst === "400", `completion booked the spend: ${spentAfterFirst}`);
+
+  const second = signSessionKey(chain, core.hash, {
+    accountId,
+    operation: await transferOp(),
+    key: account,
+    moduleId: validatorId,
+    grantDigestHex,
+  });
+  await h.executeOperation(chain, sdk, { accountId, operation: second });
+  const spentAfterSecond = h.decodeInteger(await h.readAndDecode(chain, session.hash, "getSpentAmount", [
+    h.hash160Param(accountId),
+    h.integerParam(validatorId),
+  ]));
+  assert(spentAfterSecond === "800", `the second transfer booked cumulative spend ${spentAfterSecond}`);
+
+  const overCap = signSessionKey(chain, core.hash, {
+    accountId,
+    operation: await transferOp(),
+    key: account,
+    moduleId: validatorId,
+    grantDigestHex,
+  });
+  const capRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId, operation: overCap }),
+    /SA_VALIDATION_REJECTED/,
+    "a transfer that would exceed the grant's spending cap",
+  );
+
+  // Outside the grant's scope: the same key, a method the grant never named.
+  const outOfScopeOp = await routedOperation(sdk, accountId, {
+    validatorId,
+    credentialGeneration: record.credentialGeneration,
+    targetContract: token.hash,
+    method: "balanceOf",
+    args: [h.codec.hashValue(proxyHash)],
+  });
+  const outOfScope = signSessionKey(chain, core.hash, {
+    accountId,
+    operation: outOfScopeOp,
+    key: account,
+    moduleId: validatorId,
+    grantDigestHex,
+  });
+  const scopeRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId, operation: outOfScope }),
+    /SA_VALIDATION_REJECTED/,
+    "a method outside the grant's scope",
+  );
+
+  // revokeCredentials bumps the instance generation; the stored grant was
+  // issued under generation 1 and must stop validating immediately.
+  await h.accountAction(chain, sdk, {
+    accountId,
+    method: "revokeCredentials",
+    args: [h.integerParam(validatorId)],
+    authorizers: [chain.account],
+  });
+  const revokedState = await sdk.getAccount(accountId);
+  const revokedRecord = await h.moduleState(sdk, accountId, validatorId);
+  assert(revokedRecord.credentialGeneration === "2", `revocation bumped the generation to ${revokedRecord.credentialGeneration}`);
+  const afterRevoke = signSessionKey(chain, core.hash, {
+    accountId,
+    operation: await routedOperation(sdk, accountId, {
+      validatorId,
+      credentialGeneration: revokedRecord.credentialGeneration,
+      descriptor: revokedState,
+      targetContract: token.hash,
+      method: "transfer",
+      args: [
+        h.codec.hashValue(proxyHash),
+        { type: "ByteString", value: recipient },
+        h.codec.integerValue("1"),
+        { type: "Array", value: [h.codec.integerValue("1"), { type: "Boolean", value: true }] },
+      ],
+    }),
+    key: account,
+    moduleId: validatorId,
+    grantDigestHex,
+  });
+  const revokeRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId, operation: afterRevoke }),
+    /SA_VALIDATION_REJECTED/,
+    "the grant after its credential generation was revoked",
+  );
+  return {
+    accountId: h.normalizeHash(accountId),
+    validatorId,
+    grantDigest: grantDigestHex,
+    spent: spentAfterSecond,
+    txid: firstExec.txid,
+    capRefusal,
+    scopeRefusal,
+    revokeRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// multisig: a member key that only ever signs as a policy member
+// ---------------------------------------------------------------------------
+
+async function scenarioMultiSig({ chain, core, sdk }) {
+  const multiSig = await moduleNamed(chain, core, "validators/MultiSigValidator");
+  const member = p256Key();
+  const routed = await validatorAccount(chain, sdk, [
+    await installValidator(chain, multiSig.hash, member.publicKeyHex, "setMemberKey"),
+  ], "multisig");
+  // `instanceIsolation` is what tells the core this instance may not share a
+  // credential with another instance of the same module.
+  await assertCapabilities(sdk, routed.accountId, routed.validatorId, {
+    instanceIsolation: true,
+    thresholdMemberEligible: true,
+    messageCapability: false,
+  }, "multisig");
+  const stored = stackHex(await h.readAndDecode(chain, multiSig.hash, "getMemberKey", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+  ]));
+  assert(stored.toUpperCase() === member.publicKeyHex.toUpperCase(), "the instance stores the installed member key");
+
+  // The member digest is the threshold-domain hash the contract computes; the
+  // client owns the same encoding, so the two must agree byte for byte.
+  const op = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const operationDigestHex = h.operationDigest(chain, core.hash, routed.accountId, op);
+  const chainMemberDigest = stackHex(await h.readAndDecode(chain, multiSig.hash, "getMemberDigest", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+    h.byteArrayParam(operationDigestHex),
+  ]));
+  assert(
+    chainMemberDigest === h.codec.thresholdMemberDigest(operationDigestHex, routed.validatorId, "1"),
+    "the contract's member digest equals the client's threshold encoding",
+  );
+
+  // This module is a policy member or nothing: routed to itself it approves
+  // no operation, which is what keeps a bare MultiSig instance from becoming
+  // an unthrottled single-key route.
+  const standalone = sign64(chain, core.hash, {
+    accountId: routed.accountId,
+    operation: op,
+    key: member.account,
+    moduleId: routed.validatorId,
+  });
+  const standaloneRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId: routed.accountId, operation: standalone }),
+    /SA_VALIDATION_REJECTED/,
+    "a MultiSig instance routed as the standalone validator",
+  );
+  return {
+    accountId: h.normalizeHash(routed.accountId),
+    validatorId: routed.validatorId,
+    memberDigest: chainMemberDigest,
+    standaloneRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// subscription: a merchant-witnessed pull, once per billing period
+// ---------------------------------------------------------------------------
+
+async function scenarioSubscription({ chain, core, sdk }) {
+  const subscription = await moduleNamed(chain, core, "validators/SubscriptionValidator");
+  const token = await probeToken(chain);
+  const merchant = new wallet.Account();
+  const subIdHex = Buffer.from("matrix-sub-1", "utf8").toString("hex");
+  const amount = 500;
+  const periodSeconds = 3600;
+  const install = h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: subscription.hash,
+    initData: [
+      h.codec.stringValue("createSubscription"),
+      h.codec.byteStringValue(subIdHex),
+      h.codec.hashValue(merchant.scriptHash),
+      h.codec.hashValue(token.hash),
+      h.codec.integerValue(String(amount)),
+      h.codec.integerValue(String(periodSeconds)),
+    ],
+  });
+  const created = await h.createAccount(chain, sdk, { custody: chain.account, salt: saltHex(), actions: [await install] });
+  const accountId = created.accountId;
+  const validatorId = (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds[0];
+  const record = await assertCapabilities(sdk, accountId, validatorId, {
+    instanceIsolation: false,
+    thresholdMemberEligible: false,
+  }, "subscription");
+
+  const stored = await h.readAndDecode(chain, subscription.hash, "getSubscription", [
+    h.hash160Param(accountId),
+    h.integerParam(validatorId),
+    h.byteArrayParam(subIdHex),
+  ]);
+  assert(stored?.value?.length === 6, `the subscription record is ${stored?.value?.length} fields, expected 6`);
+  assert(h.decodeInteger(stored.value[2]) === String(amount), `the subscription charges ${h.decodeInteger(stored.value[2])}`);
+  assert(h.decodeInteger(stored.value[3]) === String(periodSeconds), `the billing period is ${h.decodeInteger(stored.value[3])}s`);
+  assert(
+    stackHex(stored.value[0]) === storageOrder(merchant.scriptHash),
+    "the subscription names the merchant that may collect",
+  );
+
+  const proxyHash = await sdk.getProxyScriptHash(accountId);
+  await fundProbeToken(chain, token, proxyHash, 10_000);
+
+  const pullOperation = async () => {
+    const fresh = await sdk.getAccount(accountId);
+    return routedOperation(sdk, accountId, {
+      validatorId,
+      credentialGeneration: record.credentialGeneration,
+      descriptor: fresh,
+      targetContract: token.hash,
+      method: "transfer",
+      args: [
+        h.codec.hashValue(proxyHash),
+        h.codec.hashValue(merchant.scriptHash),
+        h.codec.integerValue(String(amount)),
+        {
+          type: "Array",
+          value: [h.codec.integerValue(String(amount)), { type: "Boolean", value: true }],
+        },
+      ],
+      // The subscription id is the signature field: it names the record, not a proof.
+      signature: subIdHex,
+    });
+  };
+
+  const pull = await pullOperation();
+  const pulled = await executeWithWitnesses(chain, sdk, {
+    accountId,
+    operation: pull,
+    authorizers: [merchant],
+  });
+  assert(h.stackText(pulled.appLog.executions[0].stack[0]) === "true", "the merchant-witnessed pull transferred");
+  const bookedPeriod = h.decodeInteger(await h.readAndDecode(chain, subscription.hash, "getLastChargedPeriod", [
+    h.hash160Param(accountId),
+    h.integerParam(validatorId),
+    h.byteArrayParam(subIdHex),
+  ]));
+  assert(BigInt(bookedPeriod) > 0n, `completion booked billing period ${bookedPeriod}`);
+
+  const secondPull = await pullOperation();
+  const repeatRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId, operation: secondPull, authorizers: [merchant] }),
+    /SA_VALIDATION_REJECTED/,
+    "a second pull inside the same billing period",
+  );
+
+  // Without the merchant's witness the pull is unauthorized: the subId in the
+  // signature field is public and must never be sufficient on its own.
+  const unwitnessed = await pullOperation();
+  const witnessRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId, operation: unwitnessed }),
+    /SA_VALIDATION_REJECTED/,
+    "a pull whose merchant did not witness the transaction",
+  );
+  return {
+    accountId: h.normalizeHash(accountId),
+    validatorId,
+    subId: `0x${subIdHex}`,
+    merchant: merchant.address,
+    bookedPeriod,
+    txid: pulled.txid,
+    repeatRefusal,
+    witnessRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// neowitness: the quorum is the transaction's witness set
+// ---------------------------------------------------------------------------
+
+async function scenarioNeoWitness({ chain, core, sdk }) {
+  const neoWitness = await moduleNamed(chain, core, "validators/NeoWitnessValidator");
+  const second = new wallet.Account();
+  const quorumInstall = h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: neoWitness.hash,
+    initData: [
+      h.codec.stringValue("setSigners"),
+      {
+        type: "Array",
+        value: [h.codec.hashValue(chain.account.scriptHash), h.codec.hashValue(second.scriptHash)],
+      },
+      h.codec.integerValue("2"),
+    ],
+  });
+  const routed = await validatorAccount(chain, sdk, [await quorumInstall], "neowitness");
+  const threshold = h.decodeInteger(await h.readAndDecode(chain, neoWitness.hash, "getThreshold", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+  ]));
+  assert(threshold === "2", `the instance requires ${threshold} of 2 witnesses`);
+
+  // Field 11 is not interpreted by this validator, but the envelope still
+  // requires a non-empty signature slot.
+  const op = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+    signature: "00",
+  });
+  const executed = await executeWithWitnesses(chain, sdk, {
+    accountId: routed.accountId,
+    operation: op,
+    authorizers: [second],
+  });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "GAS", "both witnesses carried the operation");
+
+  // A second account whose quorum names two keys that are not the fee payer:
+  // one witness is not enough.
+  const third = new wallet.Account();
+  const strictInstall = h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: neoWitness.hash,
+    initData: [
+      h.codec.stringValue("setSigners"),
+      {
+        type: "Array",
+        value: [h.codec.hashValue(second.scriptHash), h.codec.hashValue(third.scriptHash)],
+      },
+      h.codec.integerValue("2"),
+    ],
+  });
+  const strict = await validatorAccount(chain, sdk, [await strictInstall], "neowitness-strict");
+  const shortOp = await routedOperation(sdk, strict.accountId, {
+    validatorId: strict.validatorId,
+    descriptor: strict.state,
+    signature: "00",
+  });
+  const quorumRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId: strict.accountId, operation: shortOp, authorizers: [second] }),
+    /SA_VALIDATION_REJECTED/,
+    "one witness against a 2-of-2 quorum",
+  );
+  return {
+    accountId: h.normalizeHash(routed.accountId),
+    validatorId: routed.validatorId,
+    threshold,
+    txid: executed.txid,
+    quorumRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// delegated-identity: identity commitment plus a per-action nullifier
+// ---------------------------------------------------------------------------
+
+async function scenarioDelegatedIdentity({ chain, core, sdk }) {
+  const delegated = await moduleNamed(chain, core, "validators/DelegatedIdentityValidator");
+  const { account, publicKeyHex } = p256Key();
+  const provider = "google";
+  const masterNullifierHex = digestOf("matrix-master-nullifier");
+  const actionNullifierHex = digestOf("matrix-action-1");
+  const install = h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: delegated.hash,
+    initData: [
+      h.codec.stringValue("setConfig"),
+      h.codec.byteStringValue(publicKeyHex),
+      h.codec.stringValue(provider),
+      h.codec.byteStringValue(masterNullifierHex),
+    ],
+  });
+  const routed = await validatorAccount(chain, sdk, [await install], "delegated-identity");
+  const storedProvider = h.stackText(await h.readAndDecode(chain, delegated.hash, "getProvider", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+  ]));
+  assert(storedProvider === provider, `the instance requires provider ${storedProvider}`);
+  assert(
+    stackHex(await h.readAndDecode(chain, delegated.hash, "getMasterNullifier", [
+      h.hash160Param(routed.accountId),
+      h.integerParam(routed.validatorId),
+    ])) === masterNullifierHex,
+    "the instance pins the master nullifier",
+  );
+
+  const op = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const operationDigestHex = h.operationDigest(chain, core.hash, routed.accountId, op);
+  // The instance derives the digest the delegated signer must sign, so the
+  // proof is built from the chain's answer rather than a local re-implementation.
+  const signingDigestHex = stackHex(await h.readAndDecode(chain, delegated.hash, "getSigningDigest", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+    h.byteArrayParam(operationDigestHex),
+    h.byteArrayParam(actionNullifierHex),
+  ]));
+  assert(signingDigestHex.length === 64, `the delegated signing digest is ${signingDigestHex.length / 2} bytes`);
+  const proof = signDelegated({
+    signingDigestHex,
+    key: account,
+    provider,
+    masterNullifierHex,
+    actionNullifierHex,
+  });
+  assert(
+    proof.length / 2 === 2 + provider.length + 32 + 32 + 64,
+    `the proof is ${proof.length / 2} bytes, expected ${2 + provider.length + 32 + 32 + 64}`,
+  );
+  const signed = { ...op, validatorId: String(routed.validatorId), signature: proof };
+  const preview = await h.validateOperation(chain, sdk, routed.accountId, signed);
+  assert(preview.accepted === true, "the instance accepts a proof carrying its own identity commitment");
+  const executed = await h.executeOperation(chain, sdk, { accountId: routed.accountId, operation: signed });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "GAS", "delegated-identity-routed operation executed");
+
+  // A proof that presents a different master nullifier fails the commitment
+  // comparison even though the signature over its own preimage is valid.
+  const foreignOp = await routedOperation(sdk, routed.accountId, {
+    validatorId: routed.validatorId,
+    descriptor: routed.state,
+  });
+  const foreignDigest = h.operationDigest(chain, core.hash, routed.accountId, foreignOp);
+  const foreignSigningDigest = stackHex(await h.readAndDecode(chain, delegated.hash, "getSigningDigest", [
+    h.hash160Param(routed.accountId),
+    h.integerParam(routed.validatorId),
+    h.byteArrayParam(foreignDigest),
+    h.byteArrayParam(digestOf("matrix-action-2")),
+  ]));
+  const foreign = {
+    ...foreignOp,
+    validatorId: String(routed.validatorId),
+    signature: signDelegated({
+      signingDigestHex: foreignSigningDigest,
+      key: account,
+      provider,
+      masterNullifierHex: digestOf("another-master-nullifier"),
+      actionNullifierHex: digestOf("matrix-action-2"),
+    }),
+  };
+  const commitmentRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId: routed.accountId, operation: foreign }),
+    /SA_VALIDATION_REJECTED/,
+    "a proof presenting a master nullifier the instance does not hold",
+  );
+  return {
+    accountId: h.normalizeHash(routed.accountId),
+    validatorId: routed.validatorId,
+    provider,
+    txid: executed.txid,
+    commitmentRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// zkemail: the module refuses to be installed at all
+// ---------------------------------------------------------------------------
+
+async function scenarioZKEmail({ chain, core, sdk }) {
+  const zkEmail = await moduleNamed(chain, core, "validators/ZKEmailVerifier");
+  const install = await h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: zkEmail.hash,
+  });
+  const salt = saltHex();
+  const refusal = await h.expectRefusal(
+    chain,
+    sdk,
+    {
+      ...h.registrationPlan(sdk, {
+        custodyAddress: chain.account.scriptHash,
+        salt,
+        recoveryTimelockMs: h.REGISTRATION_RECOVERY_TIMELOCK_MS,
+        actions: [install],
+      }),
+      authorizers: [chain.account],
+    },
+    /ZKEmailVerifier disabled/,
+    "installing the disabled zkEmail validator",
+  );
+  return { module: h.normalizeHash(zkEmail.hash), installRefusal: refusal };
+}
+
+// ---------------------------------------------------------------------------
+// daily-limit: a per-token meter over realized outflow
+// ---------------------------------------------------------------------------
+
+async function scenarioDailyLimit({ chain, core, sdk }) {
+  const p256 = await moduleNamed(chain, core, "validators/P256Validator");
+  const dailyLimit = await moduleNamed(chain, core, "hooks/DailyLimitHook");
+  const token = await probeToken(chain);
+  const { account, publicKeyHex } = p256Key();
+  const limit = 1000;
+  const validatorInstall = await installValidator(chain, p256.hash, publicKeyHex);
+  const limitInstall = h.installActionFor(chain, {
+    moduleType: h.HOOK_MODULE_TYPE,
+    moduleHash: dailyLimit.hash,
+    initData: [
+      h.codec.stringValue("setDailyLimit"),
+      h.codec.hashValue(token.hash),
+      h.codec.integerValue(String(limit)),
+      h.codec.canonicalValue({ type: "Boolean", value: false }),
+    ],
+  });
+  const created = await h.createAccount(chain, sdk, {
+    custody: chain.account,
+    salt: saltHex(),
+    actions: [validatorInstall, await limitInstall],
+  });
+  const accountId = created.accountId;
+  const validatorId = (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds[0];
+  const hookId = (await h.moduleIds(sdk, accountId, h.HOOK_MODULE_TYPE)).moduleIds[0];
+  const storedLimit = h.decodeInteger(await h.readAndDecode(chain, dailyLimit.hash, "getDailyLimit", [
+    h.hash160Param(accountId),
+    h.integerParam(hookId),
+    h.hash160Param(token.hash),
+  ]));
+  assert(storedLimit === String(limit), `the hook meters ${storedLimit} per token`);
+
+  const proxyHash = await sdk.getProxyScriptHash(accountId);
+  await fundProbeToken(chain, token, proxyHash, 10_000);
+  const recipient = storageOrder(new wallet.Account().scriptHash);
+  const transferOp = async (amount) => {
+    const fresh = await sdk.getAccount(accountId);
+    return routedOperation(sdk, accountId, {
+      validatorId,
+      credentialGeneration: "1",
+      descriptor: fresh,
+      targetContract: token.hash,
+      method: "transfer",
+      args: [
+        h.codec.hashValue(proxyHash),
+        { type: "ByteString", value: recipient },
+        h.codec.integerValue(String(amount)),
+        {
+          type: "Array",
+          value: [h.codec.integerValue(String(amount)), { type: "Boolean", value: true }],
+        },
+      ],
+    });
+  };
+
+  const overLimit = sign64(chain, core.hash, {
+    accountId,
+    operation: await transferOp(limit + 1),
+    key: account,
+    moduleId: validatorId,
+  });
+  const overLimitRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId, operation: overLimit }),
+    /Daily limit exceeded/,
+    "a transfer above the configured daily limit",
+  );
+
+  const allowed = sign64(chain, core.hash, {
+    accountId,
+    operation: await transferOp(500),
+    key: account,
+    moduleId: validatorId,
+  });
+  const executed = await h.executeOperation(chain, sdk, { accountId, operation: allowed });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "true", "a transfer inside the limit executed");
+  return {
+    accountId: h.normalizeHash(accountId),
+    validatorId,
+    hookId,
+    limit: storedLimit,
+    txid: executed.txid,
+    overLimitRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// whitelist-hook: only the allowed target is reachable
+// ---------------------------------------------------------------------------
+
+async function scenarioWhitelistHook({ chain, core, sdk }) {
+  const p256 = await moduleNamed(chain, core, "validators/P256Validator");
+  const whitelist = await moduleNamed(chain, core, "hooks/WhitelistHook");
+  const token = await probeToken(chain);
+  const { account, publicKeyHex } = p256Key();
+  const allowInstall = h.installActionFor(chain, {
+    moduleType: h.HOOK_MODULE_TYPE,
+    moduleHash: whitelist.hash,
+    initData: [h.codec.stringValue("allowTarget"), h.codec.hashValue(token.hash)],
+  });
+  const created = await h.createAccount(chain, sdk, {
+    custody: chain.account,
+    salt: saltHex(),
+    actions: [await installValidator(chain, p256.hash, publicKeyHex), await allowInstall],
+  });
+  const accountId = created.accountId;
+  const validatorId = (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds[0];
+  const hookId = (await h.moduleIds(sdk, accountId, h.HOOK_MODULE_TYPE)).moduleIds[0];
+
+  const outsideOp = await routedOperation(sdk, accountId, {
+    validatorId,
+    targetContract: GAS_HASH,
+    method: "symbol",
+  });
+  const outsideRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, {
+      accountId,
+      operation: sign64(chain, core.hash, { accountId, operation: outsideOp, key: account, moduleId: validatorId }),
+    }),
+    /Target contract not in whitelist/,
+    "an operation targeting a contract outside the allowlist",
+  );
+
+  const probeAddress = await sdk.getProxyScriptHash(accountId);
+  const allowedOp = await routedOperation(sdk, accountId, {
+    validatorId,
+    targetContract: token.hash,
+    method: "balanceOf",
+    args: [h.codec.hashValue(probeAddress)],
+  });
+  const executed = await h.executeOperation(chain, sdk, {
+    accountId,
+    operation: sign64(chain, core.hash, { accountId, operation: allowedOp, key: account, moduleId: validatorId }),
+  });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "0", "the allowed target executed");
+  return {
+    accountId: h.normalizeHash(accountId),
+    validatorId,
+    hookId,
+    txid: executed.txid,
+    outsideRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// token-restricted: the restriction holds by effect, not only by target
+// ---------------------------------------------------------------------------
+
+async function scenarioTokenRestricted({ chain, core, sdk }) {
+  const p256 = await moduleNamed(chain, core, "validators/P256Validator");
+  const tokenRestricted = await moduleNamed(chain, core, "hooks/TokenRestrictedHook");
+  const token = await probeToken(chain);
+  const { account, publicKeyHex } = p256Key();
+  const restrictInstall = h.installActionFor(chain, {
+    moduleType: h.HOOK_MODULE_TYPE,
+    moduleHash: tokenRestricted.hash,
+    initData: [h.codec.stringValue("restrictToken"), h.codec.hashValue(token.hash)],
+  });
+  const created = await h.createAccount(chain, sdk, {
+    custody: chain.account,
+    salt: saltHex(),
+    actions: [await installValidator(chain, p256.hash, publicKeyHex), await restrictInstall],
+  });
+  const accountId = created.accountId;
+  const validatorId = (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds[0];
+  const hookId = (await h.moduleIds(sdk, accountId, h.HOOK_MODULE_TYPE)).moduleIds[0];
+  const restricted = h.stackText(await h.readAndDecode(chain, tokenRestricted.hash, "isRestricted", [
+    h.hash160Param(accountId),
+    h.integerParam(hookId),
+    h.hash160Param(token.hash),
+  ]));
+  assert(restricted === "true", "the hook reports the token as restricted");
+
+  const proxyHash = await sdk.getProxyScriptHash(accountId);
+  const recipient = storageOrder(new wallet.Account().scriptHash);
+  const restrictedOp = await routedOperation(sdk, accountId, {
+    validatorId,
+    targetContract: token.hash,
+    method: "transfer",
+    args: [
+      h.codec.hashValue(proxyHash),
+      { type: "ByteString", value: recipient },
+      h.codec.integerValue("1"),
+      { type: "Array", value: [h.codec.integerValue("1"), { type: "Boolean", value: true }] },
+    ],
+  });
+  const restrictedRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, {
+      accountId,
+      operation: sign64(chain, core.hash, { accountId, operation: restrictedOp, key: account, moduleId: validatorId }),
+    }),
+    /Interaction with restricted token is forbidden/,
+    "an operation targeting the restricted token",
+  );
+
+  const allowedOp = await routedOperation(sdk, accountId, {
+    validatorId,
+    targetContract: GAS_HASH,
+    method: "symbol",
+  });
+  const executed = await h.executeOperation(chain, sdk, {
+    accountId,
+    operation: sign64(chain, core.hash, { accountId, operation: allowedOp, key: account, moduleId: validatorId }),
+  });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "GAS", "an operation on another target executed");
+  return {
+    accountId: h.normalizeHash(accountId),
+    validatorId,
+    hookId,
+    txid: executed.txid,
+    restrictedRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// neodid-hook: a required credential is refused without a registry
+// ---------------------------------------------------------------------------
+
+async function scenarioNeoDidHook({ chain, core, sdk }) {
+  const p256 = await moduleNamed(chain, core, "validators/P256Validator");
+  const neoDid = await moduleNamed(chain, core, "hooks/NeoDIDCredentialHook");
+  const token = await probeToken(chain);
+  const { account, publicKeyHex } = p256Key();
+  const provider = "google";
+  const claimType = "email";
+  const claimCommitmentHex = digestOf("matrix-claim-commitment");
+  const requireInstall = h.installActionFor(chain, {
+    moduleType: h.HOOK_MODULE_TYPE,
+    moduleHash: neoDid.hash,
+    initData: [
+      h.codec.stringValue("requireCredential"),
+      h.codec.hashValue(token.hash),
+      h.codec.stringValue(provider),
+      h.codec.stringValue(claimType),
+      h.codec.byteStringValue(claimCommitmentHex),
+    ],
+  });
+  const created = await h.createAccount(chain, sdk, {
+    custody: chain.account,
+    salt: saltHex(),
+    actions: [await installValidator(chain, p256.hash, publicKeyHex), await requireInstall],
+  });
+  const accountId = created.accountId;
+  const validatorId = (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds[0];
+  const hookId = (await h.moduleIds(sdk, accountId, h.HOOK_MODULE_TYPE)).moduleIds[0];
+  const storedProvider = h.stackText(await h.readAndDecode(chain, neoDid.hash, "getRequiredProvider", [
+    h.hash160Param(accountId),
+    h.integerParam(hookId),
+    h.hash160Param(token.hash),
+  ]));
+  const storedClaim = h.stackText(await h.readAndDecode(chain, neoDid.hash, "getRequiredClaimType", [
+    h.hash160Param(accountId),
+    h.integerParam(hookId),
+    h.hash160Param(token.hash),
+  ]));
+  assert(storedProvider === provider && storedClaim === claimType, `the hook requires ${storedProvider}/${storedClaim}`);
+
+  const proxyHash = await sdk.getProxyScriptHash(accountId);
+  const credentialOp = async () => {
+    const fresh = await sdk.getAccount(accountId);
+    return routedOperation(sdk, accountId, {
+      validatorId,
+      credentialGeneration: "1",
+      descriptor: fresh,
+      targetContract: token.hash,
+      method: "balanceOf",
+      args: [h.codec.hashValue(proxyHash)],
+    });
+  };
+  const noRegistryOp = await credentialOp();
+  const noRegistryRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, {
+      accountId,
+      operation: sign64(chain, core.hash, { accountId, operation: noRegistryOp, key: account, moduleId: validatorId }),
+    }),
+    /NeoDID registry not configured/,
+    "a credential-gated operation with no registry bound",
+  );
+
+  // The requirement is target-scoped: a target the owner never gated carries
+  // no requirement, so the same key still reaches it without a credential.
+  const ungatedProvider = h.stackText(await h.readAndDecode(chain, neoDid.hash, "getRequiredProvider", [
+    h.hash160Param(accountId),
+    h.integerParam(hookId),
+    h.hash160Param(GAS_HASH),
+  ]));
+  assert(ungatedProvider === "", "an ungated target carries no credential requirement");
+
+  const otherOp = await routedOperation(sdk, accountId, { validatorId, targetContract: GAS_HASH, method: "symbol" });
+  const executed = await h.executeOperation(chain, sdk, {
+    accountId,
+    operation: sign64(chain, core.hash, { accountId, operation: otherOp, key: account, moduleId: validatorId }),
+  });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "GAS", "an operation on an ungated target executed");
+  return {
+    accountId: h.normalizeHash(accountId),
+    validatorId,
+    hookId,
+    provider: storedProvider,
+    claimType: storedClaim,
+    txid: executed.txid,
+    noRegistryRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// multihook: retired, so the install action is refused
+// ---------------------------------------------------------------------------
+
+async function scenarioMultiHook({ chain, core, sdk }) {
+  const multiHook = await moduleNamed(chain, core, "hooks/MultiHook");
+  const install = await h.installActionFor(chain, {
+    moduleType: h.HOOK_MODULE_TYPE,
+    moduleHash: multiHook.hash,
+  });
+  const refusal = await h.expectRefusal(
+    chain,
+    sdk,
+    {
+      ...h.registrationPlan(sdk, {
+        custodyAddress: chain.account.scriptHash,
+        salt: saltHex(),
+        recoveryTimelockMs: h.REGISTRATION_RECOVERY_TIMELOCK_MS,
+        actions: [install],
+      }),
+      authorizers: [chain.account],
+    },
+    /MultiHook is not installable/,
+    "installing the retired MultiHook",
+  );
+  return { module: h.normalizeHash(multiHook.hash), installRefusal: refusal };
+}
+
+// ---------------------------------------------------------------------------
+// threshold: a 2-of-2 policy over two validator instances
+// ---------------------------------------------------------------------------
+
+async function scenarioThreshold({ chain, core, sdk }) {
+  const p256 = await moduleNamed(chain, core, "validators/P256Validator");
+  const multiSig = await moduleNamed(chain, core, "validators/MultiSigValidator");
+  const memberA = p256Key();
+  const memberB = p256Key();
+  const installA = await installValidator(chain, multiSig.hash, memberA.publicKeyHex, "setMemberKey");
+  const installB = await installValidator(chain, p256.hash, memberB.publicKeyHex);
+  const policy = h.thresholdPolicyAction({ policyId: "0", threshold: "2", members: ["1", "2"] });
+  const created = await h.createAccount(chain, sdk, {
+    custody: chain.account,
+    salt: saltHex(),
+    actions: [installA, installB, policy],
+  });
+  const accountId = created.accountId;
+  const state = await sdk.getAccount(accountId);
+  const validatorIds = (await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE)).moduleIds;
+  assert(validatorIds.join(",") === "1,2", `validator ids are ${validatorIds.join(",")}, expected 1,2`);
+  const policyId = "3";
+  const policyGeneration = "1";
+
+  const memberRouteOp = await routedOperation(sdk, accountId, { validatorId: "1", descriptor: state });
+  const memberRouteRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, {
+      accountId,
+      operation: sign64(chain, core.hash, { accountId, operation: memberRouteOp, key: memberA.account, moduleId: "1" }),
+    }),
+    /SA_MODULE_NOT_ROUTABLE/,
+    "routing an active-policy member as a standalone validator",
+  );
+
+  const thresholdOp = await routedOperation(sdk, accountId, {
+    validatorId: policyId,
+    credentialGeneration: policyGeneration,
+    descriptor: state,
+  });
+  const thresholdDigest = h.operationDigest(chain, core.hash, accountId, thresholdOp);
+  const signedThreshold = {
+    ...thresholdOp,
+    signature: h.codec.thresholdSignature([
+      { moduleId: "1", signature: wallet.sign(h.codec.thresholdMemberDigest(thresholdDigest, "1", "1"), memberA.account.privateKey) },
+      { moduleId: "2", signature: wallet.sign(h.codec.thresholdMemberDigest(thresholdDigest, "2", "1"), memberB.account.privateKey) },
+    ]),
+  };
+  const executed = await h.executeOperation(chain, sdk, { accountId, operation: signedThreshold });
+  assert(h.stackText(executed.appLog.executions[0].stack[0]) === "GAS", "the 2-of-2 policy executed");
+
+  const singleOp = await routedOperation(sdk, accountId, {
+    validatorId: policyId,
+    credentialGeneration: policyGeneration,
+    descriptor: state,
+  });
+  const singleDigest = h.operationDigest(chain, core.hash, accountId, singleOp);
+  const singleSigned = {
+    ...singleOp,
+    signature: h.codec.thresholdSignature([
+      {
+        moduleId: "1",
+        signature: wallet.sign(h.codec.thresholdMemberDigest(singleDigest, "1", "1"), memberA.account.privateKey),
+      },
+    ]),
+  };
+  const belowThresholdRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    refusalSpec(sdk, { accountId, operation: singleSigned }),
+    /SA_VALIDATION_REJECTED/,
+    "one approval against a 2-of-2 threshold",
+  );
+  return {
+    accountId: h.normalizeHash(accountId),
+    validatorIds,
+    policyId,
+    policyGeneration,
+    txid: executed.txid,
+    memberRouteRefusal,
+    belowThresholdRefusal,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// abi-negatives: a module whose profile or callback ABI is wrong never installs
+// ---------------------------------------------------------------------------
+
+async function scenarioAbiNegatives({ chain, core, sdk }) {
+  const refusals = {};
+
+  /**
+   * Register a fresh account whose only action is a refused install.
+   *
+   * The refusal is produced by the kernel's own simulation before a fee is
+   * spent, so the account never exists and the message names the module.
+   */
+  const installRefused = async (label, action, pattern) => {
+    refusals[label] = await h.expectRefusal(
+      chain,
+      sdk,
+      {
+        ...h.registrationPlan(sdk, {
+          custodyAddress: chain.account.scriptHash,
+          salt: saltHex(),
+          recoveryTimelockMs: h.REGISTRATION_RECOVERY_TIMELOCK_MS,
+          actions: [action],
+        }),
+        authorizers: [chain.account],
+      },
+      pattern,
+      `installing ${label}`,
+    );
+  };
+
+  // The core hashes the bytes the module's own `getModuleProfile()` returns and
+  // compares them with the digest the install action committed to (§7.3). Every
+  // module below lacks that read, so no digest the installer can name will
+  // bind — and the fault is the commitment, not a missing manifold method.
+  for (const [name, moduleType] of [
+    ["MarkerOnlyModule", h.VALIDATOR_MODULE_TYPE],
+    ["WrongLifecycleAbiModule", h.VALIDATOR_MODULE_TYPE],
+    ["WrongHookLifecycleAbiModule", h.HOOK_MODULE_TYPE],
+  ]) {
+    // No `authorizedCore()` either, so these are deployed and never authorized.
+    deployed[name] = await h.deployContract(chain, name, "");
+    await installRefused(
+      name,
+      h.installAction({ moduleType, moduleHash: deployed[name].hash, profileDigest: "00".repeat(32) }),
+      /SA_MODULE_CODE_BINDING_MISMATCH/,
+    );
+  }
+
+  // A validator's profile cannot be smuggled in under the hook type: the core
+  // reads the module type out of the profile, not from the install action.
+  const p256 = await moduleNamed(chain, core, "validators/P256Validator");
+  await installRefused(
+    "validator installed as a hook",
+    await h.installActionFor(chain, { moduleType: h.HOOK_MODULE_TYPE, moduleHash: p256.hash }),
+    /SA_MODULE_TYPE_UNSUPPORTED/,
+  );
+
+  return { refusals };
+}
+
+main().catch((error) => {
+  console.error(error?.stack || error?.message || String(error));
+  process.exit(1);
+});

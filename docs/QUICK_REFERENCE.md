@@ -29,92 +29,124 @@ cd sdk/js && npm test
 
 ## SDK API Reference
 
+Every snippet below is the v4 client (`sdk/js/src/index.js` for the custom kernel, the shared
+`nativeSmartAccountClient.mjs` for the native one). Both drive the same 13-field operation and the
+same `SA_*` vocabulary. A v3 call (`registerAccount`, `createAccountPayload`, `getVerifier`,
+`updateHook`) does not resolve: there is no alias.
+
 ### Account Lifecycle
 
+A v4 identity is committed to at creation and nowhere else:
+`accountId = hash160('aa524704' || custody || salt)`. The salt is 1..128 bytes of public uniqueness
+input, and the recovery timelock is 7..90 days, passed in milliseconds.
+
 ```javascript
-const accountIdHash = client.deriveRegistrationAccountIdHash({
-  verifierContractHash,
-  verifierParamsHex,
-  hookContractHash,
-  backupOwnerAddress,
-  escapeTimelock: 7 * 24 * 60 * 60,
+const { createSmartAccountClient } = require('./sdk/js/src');
+
+const client = await createSmartAccountClient({ rpcUrl, contractHash, networkMagic });
+await client.discover(); // pins protocolVersion and implementationId
+
+const identity = client.deriveIdentity({ custodyAddress: custody, salt });
+
+// createAccount(Hash160 accountId, Hash160 custody, ByteArray salt,
+//               Integer recoveryTimelockMs, Array actions)
+const plan = client.buildCreateAccountScript({
+  custodyAddress: custody,
+  salt,
+  recoveryTimelockMs: 30 * 86_400_000,
 });
 
-const payload = client.createAccountPayload({
-  verifierContractHash,
-  verifierParamsHex,
-  hookContractHash,
-  backupOwnerAddress,
-  escapeTimelock: 7 * 24 * 60 * 60,
-});
-
-const state = await client.getAccountState(accountIdHash);
+const state = await client.getAccount(identity.accountId);
 ```
 
-`registerAccounts(Array, Hash160, Array, Hash160, Hash160, Integer)` on the deployed core
-registers several accounts in one transaction; the SDK has no batch payload builder, so build one
-`createAccountPayload` per account and submit them through that entrypoint.
+The create call carries the derived id, the custody address, the salt and the timelock; no verifier
+or hook is chosen at creation. `state` returns the control record (custody, recovery authority and
+timelock, authority epoch, configuration nonce, hook-order revision), the installed modules and the
+pending configuration intent.
 
-### Removed V2 surfaces
+### Modules and configuration intents
 
-The V1/V2 role model is gone. There is no admin, manager or threshold state on a V3 account, and
-the SDK keeps only removed stubs that throw `LEGACY_V3_REMOVED`:
+Modules are installed afterwards. A configuration change is proposed, matures for 24 hours, and is
+then confirmed or cancelled; nothing changes on the account before confirmation.
 
-- `client.getAccountsByAdmin()`, `client.getAccountsByManager()` — removed in V3: no arguments,
-  always throws `LEGACY_V3_REMOVED`; use `getAccountState(accountIdHash)` per account.
-- `client.getAccountAddressesByAdmin()`, `client.getAccountAddressesByManager()` — removed in V3 for
-  the same reason.
-- `client.createAccountBatchPayload(...)`, `client.getAdmins(...)`,
-  `client.getAdminThreshold(...)`, `client.getManagers(...)` — removed names that never existed in
-  this SDK.
-- `client.getManagerThreshold(...)`, `client.executePayload(...)`,
-  `client.executeUnifiedByAddressPayload(...)` — removed names that never existed in this SDK;
-  the current builders are `createAccountPayload` and `UserOperationBuilder`.
+```javascript
+const propose = client.buildConfigurationScript({
+  kind: 'propose',
+  accountId: identity.accountId,
+  // [1, moduleTypeCode, moduleHash, profileDigest, initData]
+  actions: [installAction],
+  readSet: [],
+});
+
+const confirm = client.buildConfigurationScript({
+  kind: 'confirm',
+  accountId: identity.accountId,
+  intentId: intent.intentId,
+});
+```
+
+`getModules(accountId, 'validator' | 'hook', { cursor, limit })` pages the installed instances and
+`getModule(accountId, moduleId)` reads one. `getPendingConfiguration(accountId)` returns the intent,
+its maturity and its action digest. Every module exposes its own safe reads (`getModuleProfile`,
+`getConfig`, `getSessionKey`, `getThreshold`, `getPublicKey`, `getDailyLimit`, and so on); those are
+the only module methods a caller invokes directly, because the core owns the lifecycle callbacks.
 
 ### Execution
 
-V3 executes through `executeUserOp(accountId, op)` (or `executeUserOps(accountId, ops)` for a
-batch); the `executeUnified`/`executeUnifiedByAddress` wrappers were removed and exist in no
-deployed manifest and no contract source. Build the operation with the SDK's `UserOperationBuilder`
-and sign the typed data the V3 layout defines:
+Execution is `executeUserOp(accountId, op)` for one operation and `executeUserOps(accountId, ops)`
+for a batch. The operation is the v4 13-field array: version, target, method, args, nonce,
+nonce subkey, deadline, validator id, credential generation, authority epoch, configuration nonce,
+signature, hook proofs. Sign the typed data the core checks:
 
 ```javascript
-const { createUserOpBuilder, buildV3UserOperationTypedData } = require('./sdk/js/src');
+const operation = {
+  targetContract,
+  method: 'transfer',
+  args: [{ type: 'Hash160', value: recipient }, { type: 'Integer', value: '100000000' }],
+  nonce,
+  nonceSubkey,
+  deadline,
+  validatorId: 1,
+  credentialGeneration: 1,
+  authorityEpoch,
+  configurationNonce,
+  signature,
+  hookProofs: [],
+};
 
-const userOp = createUserOpBuilder()
-  .setAccountId(accountIdHash)
-  .setTarget(targetContract)
-  .setMethod('transfer')
-  .setArgs([{ type: 'Hash160', value: recipient }, { type: 'Integer', value: '100000000' }])
-  .build();
-
-const typedData = buildV3UserOperationTypedData(userOp);
+const typedData = buildUserOperationTypedData({
+  chainId,
+  verifyingContract: proxyAddress,
+  accountId,
+  coreContractHash,
+  validatorId: operation.validatorId,
+  targetContract: operation.targetContract,
+  method: operation.method,
+  argsHashHex,
+  nonce: operation.nonce,
+  deadline: operation.deadline,
+  operationDigest,
+});
 ```
 
 ### Sponsored Execution (Paymaster)
 
+Sponsorship keeps the v4 operation: the sponsor pays, and the account still authorises the operation
+with its own validator signature. The client refuses a batch whose operations do not share one
+target contract and method, because the core settles one reimbursement for the whole envelope.
+
 ```javascript
-// Check sponsor balance
-const balance = await client.querySponsorBalance(paymasterHash, sponsorAddress);
-
-// Validate before submit (relay preflight)
-const ok = await client.validatePaymasterOp({
-  paymasterHash, sponsorAddress, accountAddress,
-  targetContract, method, reimbursementAmount
-});
-
-// Build sponsored execution payload
-const payload = client.createSponsoredUserOpPayload({
-  accountScriptHash, userOp, paymasterHash,
-  sponsorAddress, reimbursementAmount
-});
-
-// Build sponsored batch payload
-const batchPayload = client.createSponsoredBatchPayload({
-  accountScriptHash, userOps, paymasterHash,
-  sponsorAddress, reimbursementAmount
+const plan = client.buildSponsoredExecutionScript({
+  accountId,
+  operations: [operation], // 1..32, one target contract and method
+  paymaster: paymasterHash,
+  sponsor: sponsorAddress,
+  reimbursementAmount: '1000000', // positive
 });
 ```
+
+`plan.method` is `executeSponsoredUserOp` for one operation and `executeSponsoredUserOps` for a
+batch. Deposits, policies and counters live on the paymaster contract:
 
 ### Paymaster Contract Methods (On-Chain)
 

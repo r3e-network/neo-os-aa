@@ -237,7 +237,10 @@ public class SAArtifactStructureRuntimeTests
         if (type == typeof(void)) return ContractParameterType.Void;
         if (type == typeof(bool)) return ContractParameterType.Boolean;
         if (type == typeof(string)) return ContractParameterType.String;
-        if (type == typeof(BigInteger) || type == typeof(uint)) return ContractParameterType.Integer;
+        if (type == typeof(BigInteger) || type == typeof(uint) || type == typeof(byte)
+            || type == typeof(sbyte) || type == typeof(int) || type == typeof(long)
+            || type == typeof(ulong))
+            return ContractParameterType.Integer;
         if (type == typeof(UInt160) || type.FullName == "Neo.SmartContract.Framework.UInt160")
             return ContractParameterType.Hash160;
         if (type == typeof(UInt256) || type.FullName == "Neo.SmartContract.Framework.UInt256")

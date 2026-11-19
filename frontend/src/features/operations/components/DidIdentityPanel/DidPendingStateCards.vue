@@ -1,14 +1,14 @@
 <template>
   <div
     v-if="
-      verifierState &&
-      (verifierState.pendingRecovery?.active ||
-        verifierState.activeSession?.active)
+      recoveryState &&
+      (recoveryState.pendingRecovery?.active ||
+        recoveryState.activeSession?.active)
     "
     class="grid gap-4 xl:grid-cols-2"
   >
     <div
-      v-if="verifierState.pendingRecovery?.active"
+      v-if="recoveryState.pendingRecovery?.active"
       class="rounded-xl border border-sa-warning/30 bg-sa-warning/5 p-4"
     >
       <p class="text-xs uppercase text-sa-warning font-bold mb-2">
@@ -17,18 +17,18 @@
       <p class="text-sm text-sa-text break-all">
         {{ t("didPanel.newOwner", "new owner") }}:
         {{
-          verifierState.pendingRecovery.newOwner ||
+          recoveryState.pendingRecovery.newOwner ||
           t("didPanel.unset", "unset")
         }}
       </p>
       <p class="text-sm text-sa-text">
         {{ t("didPanel.approved", "approved") }}:
-        {{ verifierState.pendingRecovery.approvedCount }} /
-        {{ verifierState.threshold }}
+        {{ recoveryState.pendingRecovery.approvedCount }} /
+        {{ recoveryState.threshold }}
       </p>
       <p class="text-sm text-sa-text">
         {{ t("didPanel.executableAt", "executable at") }}:
-        {{ verifierState.pendingRecovery.executableAt }}
+        {{ recoveryState.pendingRecovery.executableAt }}
       </p>
       <div class="mt-4 flex gap-3">
         <button
@@ -64,7 +64,7 @@
       </div>
     </div>
     <div
-      v-if="verifierState.activeSession?.active"
+      v-if="recoveryState.activeSession?.active"
       class="rounded-xl border border-sa-info/30 bg-sa-info/5 p-4"
     >
       <p class="text-xs uppercase text-sa-info font-bold mb-2">
@@ -73,20 +73,20 @@
       <p class="text-sm text-sa-text break-all">
         {{ t("didPanel.executor", "executor") }}:
         {{
-          verifierState.activeSession.executor ||
+          recoveryState.activeSession.executor ||
           t("didPanel.unset", "unset")
         }}
       </p>
       <p class="text-sm text-sa-text break-all">
         {{ t("didPanel.action", "action") }}:
         {{
-          verifierState.activeSession.actionId ||
+          recoveryState.activeSession.actionId ||
           t("didPanel.unset", "unset")
         }}
       </p>
       <p class="text-sm text-sa-text">
         {{ t("didPanel.expiresAt", "expires at") }}:
-        {{ verifierState.activeSession.expiresAt }}
+        {{ recoveryState.activeSession.expiresAt }}
       </p>
       <button
         class="btn-secondary mt-4 w-full"
@@ -109,7 +109,7 @@
 import { useI18n } from "@/i18n";
 
 defineProps({
-  verifierState: {
+  recoveryState: {
     type: Object,
     default: null,
   },

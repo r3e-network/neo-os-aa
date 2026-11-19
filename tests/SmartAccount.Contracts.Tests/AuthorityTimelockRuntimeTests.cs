@@ -41,18 +41,18 @@ public class AuthorityTimelockRuntimeTests
 
     private static readonly TimeSpan Window = TimeSpan.FromDays(7);
 
-    /// <summary>Every deployable contract compiled with <c>VerifierAuthority</c>, plus the paymaster.</summary>
+    /// <summary>Every deployable contract compiled with <c>ValidatorAuthority</c>, plus the paymaster.</summary>
     private static readonly string[] VerifierAndPaymasterArtifacts =
     {
-        "verifiers/NeoNativeVerifier",
-        "verifiers/TEEVerifier",
-        "verifiers/Web3AuthVerifier",
-        "verifiers/WebAuthnVerifier",
-        "verifiers/ZKEmailVerifier",
-        "verifiers/ZkLoginVerifier",
-        "verifiers/MultiSigVerifier",
-        "verifiers/SubscriptionVerifier",
-        "verifiers/SessionKeyVerifier",
+        "validators/NeoWitnessValidator",
+        "validators/TeeKeyValidator",
+        "validators/Web3AuthValidator",
+        "validators/P256Validator",
+        "validators/ZKEmailVerifier",
+        "validators/DelegatedIdentityValidator",
+        "validators/MultiSigValidator",
+        "validators/SubscriptionValidator",
+        "validators/SessionKeyValidator",
         "SAPaymaster",
     };
 
@@ -102,7 +102,7 @@ public class AuthorityTimelockRuntimeTests
     public void AuthorityCore_InitialSet_AllowedOnceThenLocked()
     {
         RuntimeFixture fx = new();
-        UInt160 verifier = fx.Deploy("verifiers/NeoNativeVerifier");
+        UInt160 verifier = fx.Deploy("validators/NeoWitnessValidator");
         Assert.AreEqual(UInt160.Zero, fx.CallUInt160(verifier, "authorizedCore"), "Core starts unset");
 
         fx.CallVoid(verifier, "setAuthorizedCore", ProposedCore);
@@ -117,7 +117,7 @@ public class AuthorityTimelockRuntimeTests
     [TestMethod]
     public void AuthorityCore_ProposeConfirm_HonorsSevenDayWindow()
     {
-        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "SAPaymaster" })
+        foreach (string artifact in new[] { "validators/NeoWitnessValidator", "SAPaymaster" })
         {
             RuntimeFixture fx = new();
             UInt160 core = fx.Deploy("MockVerifierCore");
@@ -147,7 +147,7 @@ public class AuthorityTimelockRuntimeTests
     {
         RuntimeFixture fx = new();
         UInt160 core = fx.Deploy("MockVerifierCore");
-        UInt160 verifier = fx.Deploy("verifiers/NeoNativeVerifier", core.ToArray());
+        UInt160 verifier = fx.Deploy("validators/NeoWitnessValidator", core.ToArray());
 
         // Mismatched confirmation target is rejected even after the window.
         fx.CallVoid(verifier, "proposeAuthorizedCore", ProposedCore);
@@ -201,7 +201,7 @@ public class AuthorityTimelockRuntimeTests
     [TestMethod]
     public void AuthorityUpdate_WithoutProposal_IsRejected()
     {
-        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "hooks/WhitelistHook", "SAPaymaster" })
+        foreach (string artifact in new[] { "validators/NeoWitnessValidator", "hooks/WhitelistHook", "SAPaymaster" })
         {
             RuntimeFixture fx = new();
             UInt160 contract = fx.Deploy(artifact);
@@ -218,7 +218,7 @@ public class AuthorityTimelockRuntimeTests
     [TestMethod]
     public void AuthorityUpdate_ProposeConfirm_HonorsWindowAndHashes()
     {
-        foreach (string artifact in new[] { "verifiers/NeoNativeVerifier", "hooks/WhitelistHook", "SAPaymaster" })
+        foreach (string artifact in new[] { "validators/NeoWitnessValidator", "hooks/WhitelistHook", "SAPaymaster" })
         {
             RuntimeFixture fx = new();
             UInt160 contract = fx.Deploy(artifact);
@@ -298,8 +298,8 @@ public class AuthorityTimelockRuntimeTests
     public void AuthorityUpdate_ProposeRequiresAdminWitness()
     {
         RuntimeFixture fx = new();
-        UInt160 verifier = fx.Deploy("verifiers/NeoNativeVerifier");
-        (byte[] nef, string manifest) = ReadArtifact("verifiers/NeoNativeVerifier");
+        UInt160 verifier = fx.Deploy("validators/NeoWitnessValidator");
+        (byte[] nef, string manifest) = ReadArtifact("validators/NeoWitnessValidator");
 
         fx.SetSigners(Stranger);
         Assert.ThrowsExactly<TestException>(

@@ -9,304 +9,346 @@ import {
   nativeGasLimit,
   buildRecoveryDescriptor,
   readRecoveryDescriptor,
-  buildSessionArguments,
-  buildMultiSigArguments,
-  NATIVE_MULTISIG_LIMITS,
   nativeWalletNetwork,
   createNativeRpc,
-  NATIVE_PROFILE_PARAMETER_DIGEST,
+  rebuildNativeReview,
+  validateNativeReceipt,
+  describeConfigurationAction,
+  installModuleAction,
+  uninstallModuleAction,
+  configureModuleAction,
+  rebindModuleCodeAction,
+  setHookOrderAction,
+  setDefaultPolicyAction,
+  setThresholdPolicyAction,
+  setRecoveryPolicyAction,
+  NATIVE_ACTIONS,
+  NATIVE_ACTION_CODES,
+  NATIVE_MODULE_LIMITS,
+  NATIVE_MODULE_TYPES,
+  NATIVE_PROXY_CALL_FLAGS,
   NATIVE_SMART_ACCOUNT_CONTRACT,
+  NATIVE_STATUS_NAMES,
+  NATIVE_THRESHOLD_LIMITS,
+  CONFIGURATION_INTENT_EXPIRY_MS,
+  MAX_ACTIONS_PER_INTENT,
+  MAX_ACTIVE_INTENTS,
+  MAX_OPERATIONS_PER_ENVELOPE,
+  MODULE_CHANGE_DELAY_MS,
+  RECOVERY_TIMELOCK_MAX_MS,
+  RECOVERY_TIMELOCK_MIN_MS,
 } from "../src/features/native/nativeWorkspace.js";
+import { createNativeClientClass } from "../src/shared/nativeSmartAccountClient.mjs";
+import {
+  createNativeRpcFixture,
+  nativeTestCustody,
+  nativeTestIdentity,
+  nativeTestRecovery,
+  nativeTestSalt,
+} from "./fixtures/nativeRpcFixture.js";
 
-const custody = "11".repeat(20),
-  recovery = "22".repeat(20),
-  salt = "33".repeat(32);
+const custody = nativeTestCustody,
+  recovery = nativeTestRecovery,
+  salt = nativeTestSalt,
+  stranger = "66".repeat(20);
 const profile = {
-  networkMagic: 123,
-  abiVersion: 2,
-  profileParameterDigest: NATIVE_PROFILE_PARAMETER_DIGEST,
   contract: NATIVE_SMART_ACCOUNT_CONTRACT,
+  networkMagic: 123,
+  protocolVersion: 4,
+  implementationId: "NativeSmartAccount/v4",
 };
-const identity = () =>
-  nativeCodec.deriveIdentity({
-    networkMagic: 123,
-    custodyAddress: custody,
-    salt,
-  });
+const Client = createNativeClientClass(nativeCodec, {
+  callFlags: NATIVE_PROXY_CALL_FLAGS,
+});
+const I = (value) => ({ type: "Integer", value: String(value) });
+const B = (hex) => ({ type: "ByteString", value: hex });
+const A = (value) => ({ type: "Array", value });
+const BOOL = (value) => ({ type: "Boolean", value });
 
-test("native UI distinguishes node profile matching from protocol activation", () => {
-  const source = readFileSync(
-    new URL("../src/features/native/NativeAccountWorkspace.vue", import.meta.url),
-    "utf8",
+/** A real browser client over the v4 fixture: nothing here is stubbed but the node. */
+async function connected({ registered = false, mutate } = {}) {
+  const rpc = createNativeRpcFixture();
+  rpc.state.registered = registered;
+  if (mutate) mutate(rpc.state);
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  const workspace = createNativeWorkspace({ makeClient: () => client });
+  await workspace.connect({});
+  return { rpc, client, workspace };
+}
+
+test("the workspace exports the v4 surface and no v3 alias", async () => {
+  const module = await import("../src/features/native/nativeWorkspace.js");
+  for (const removed of [
+    "NATIVE_PROFILE_PARAMETER_DIGEST",
+    "createNativeCodec",
+    "buildRegistration",
+    "buildAction",
+    "prepareOperation",
+    "inspectPolicy",
+    "activatePolicy",
+    "buildSessionArguments",
+    "buildMultiSigArguments",
+    "NATIVE_MULTISIG_LIMITS",
+    "NATIVE_VERIFIER_ACTIONS",
+  ])
+    assert.equal(removed in module, false, `${removed} must not survive the v4 port`);
+  assert.deepEqual(NATIVE_ACTION_CODES, {
+    installModule: 1,
+    uninstallModule: 2,
+    configureModule: 3,
+    setHookOrder: 4,
+    setDefaultPolicy: 5,
+    rebindModuleCode: 6,
+    setThresholdPolicy: 7,
+    setRecoveryPolicy: 8,
+    setMessageSubjects: 9,
+    migrateAccount: 10,
+  });
+  assert.deepEqual(NATIVE_STATUS_NAMES, ["Active", "Frozen", "MigrationRequired"]);
+  assert.equal(NATIVE_PROXY_CALL_FLAGS, 5, "the native proxy calls verify read-only");
+  assert.deepEqual(NATIVE_ACTIONS.map((entry) => entry.value), [
+    "freezeAccount",
+    "unfreezeAccount",
+    "beginRecovery",
+    "executeRecovery",
+    "cancelRecovery",
+  ]);
+  assert.deepEqual(
+    NATIVE_ACTIONS.filter((entry) => entry.address).map((entry) => entry.value),
+    ["beginRecovery"],
   );
-  assert.match(
-    source,
-    /Node ABI\/profile matched · standard implementation pending protocol activation/,
-  );
-  assert.match(source, /节点 ABI\/参数匹配 · 标准实现待协议激活/);
-  assert.match(
-    source,
-    /Node ABI 2\/profile matched\. Standard implementation remains pending protocol activation\./,
-  );
-  assert.match(source, /节点 ABI 2\/参数匹配。标准实现仍待协议激活。/);
-  assert.doesNotMatch(source, /Profile verified|Native ABI 2 and network verified/);
 });
 
-function fixture(options = {}) {
-  let changed = false,
-    called = 0;
-  const state = {
-    ...identity(),
-    custodyAddress: custody,
-    recoveryAddress: recovery,
-    status: "Active",
-    authorityEpoch: "0",
-    configurationNonce: "0",
-    verifier: null,
-    hook: null,
+test("configuration limits and delays track the contract source", () => {
+  const source = readFileSync(
+    new URL(
+      "../../contracts/native/SmartAccount/SmartAccountModuleProtocol.cs",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const constant = (name, type = "int") => {
+    const match = new RegExp(`${type} ${name} = ([0-9_]+);`).exec(source);
+    assert.ok(match, `${name} must stay an explicit constant`);
+    return Number(match[1].replaceAll("_", ""));
   };
-  const client = {
-    profile,
-    rpc: { send: async () => ({}) },
-    discover: async () => profile,
-    getAccount: async () => state,
-    getNonce: async () => 0n,
-    buildRegistration: (input) => ({
-      kind: "registration",
-      ...identity(),
-      method: "registerAccount",
-      requiredAuthorities: [input.custodyAddress, ...(input.recoveryAddress && input.recoveryAddress !== "00".repeat(20) ? [input.recoveryAddress] : [])],
-      script: nativeCodec.dynamicCall(
-        NATIVE_SMART_ACCOUNT_CONTRACT,
-        "registerAccount",
-        [
-          nativeCodec.hashValue(input.custodyAddress),
-          { type: "ByteString", value: input.salt },
-          nativeCodec.hashValue("00".repeat(20)),
-          nativeCodec.hashValue("00".repeat(20)),
-          nativeCodec.hashValue(input.recoveryAddress),
-        ],
-      ),
+  assert.equal(MODULE_CHANGE_DELAY_MS, constant("ModuleChangeDelayMs", "ulong"));
+  assert.equal(
+    CONFIGURATION_INTENT_EXPIRY_MS,
+    constant("ConfigurationIntentExpiryMs", "ulong"),
+  );
+  assert.equal(
+    RECOVERY_TIMELOCK_MIN_MS,
+    constant("RecoveryTimelockMinMs", "ulong"),
+  );
+  assert.equal(
+    RECOVERY_TIMELOCK_MAX_MS,
+    constant("RecoveryTimelockMaxMs", "ulong"),
+  );
+  assert.equal(
+    MODULE_CHANGE_DELAY_MS,
+    86_400_000,
+    "a configuration intent matures after 24 hours",
+  );
+  assert.equal(CONFIGURATION_INTENT_EXPIRY_MS, 604_800_000, "matureAt + 7 days");
+  assert.equal(RECOVERY_TIMELOCK_MIN_MS, 7 * 86_400_000);
+  assert.equal(RECOVERY_TIMELOCK_MAX_MS, 90 * 86_400_000);
+  assert.equal(MAX_ACTIONS_PER_INTENT, constant("MaxActionsPerConfigurationIntent"));
+  assert.equal(MAX_ACTIVE_INTENTS, constant("MaxActiveConfigurationIntents"));
+  assert.equal(MAX_OPERATIONS_PER_ENVELOPE, constant("MaxOperationsPerEnvelope"));
+  assert.deepEqual(NATIVE_MODULE_LIMITS, {
+    validator: constant("MaxValidatorModuleInstances"),
+    hook: constant("MaxHookModuleInstances"),
+  });
+  assert.deepEqual(NATIVE_MODULE_TYPES, {
+    validator: constant("ModuleTypeCodeValidator"),
+    hook: constant("ModuleTypeCodeHook"),
+  });
+  assert.deepEqual(NATIVE_THRESHOLD_LIMITS, {
+    maxMembers: constant("MaxThresholdPolicyMembers"),
+    minValue: constant("MinThresholdPolicyValue"),
+    maxValue: constant("MaxThresholdPolicyValue"),
+  });
+});
+
+test("configuration actions serialize to the positional Arrays the core dispatches", () => {
+  const moduleHash = "77".repeat(20),
+    digest = "ab".repeat(32);
+  assert.deepEqual(
+    installModuleAction({
+      moduleType: "validator",
+      contractHash: moduleHash,
+      profileDigest: digest,
+      initData: [I(1)],
     }),
-    revalidatePlan: async () => {
-      if (changed) throw Error("changed");
-    },
-    simulate: async () => ({
-      state: "HALT",
-      gasConsumed: "10",
-      failedTransfers: [],
+    A([
+      I(1),
+      I(1),
+      nativeCodec.hashValue(moduleHash),
+      B(digest),
+      A([I(1)]),
+    ]),
+  );
+  assert.deepEqual(uninstallModuleAction({ moduleId: 3 }), A([I(2), I(3), A([])]));
+  assert.deepEqual(configureModuleAction({ moduleId: 4 }), A([I(3), I(4), A([])]));
+  assert.deepEqual(rebindModuleCodeAction({ moduleId: 5, profileDigest: digest }), A([
+    I(6),
+    I(5),
+    B(digest),
+  ]));
+  assert.deepEqual(setHookOrderAction({ hookIds: [2, 3] }), A([
+    I(4),
+    A([I(2), I(3)]),
+  ]));
+  assert.deepEqual(
+    setDefaultPolicyAction({ operationAuthorization: false, messageAuthorization: true }),
+    A([I(5), BOOL(false), BOOL(true)]),
+  );
+  assert.deepEqual(
+    setThresholdPolicyAction({ policyId: 2, threshold: 2, memberIds: [1, 2] }),
+    A([I(7), I(2), I(2), A([I(1), I(2)]), BOOL(true)]),
+  );
+  assert.deepEqual(
+    setThresholdPolicyAction({ threshold: 1, memberIds: [], active: false }),
+    A([I(7), I(0), I(1), A([]), BOOL(false)]),
+  );
+  assert.deepEqual(
+    setRecoveryPolicyAction({
+      recoveryAuthority: recovery,
+      recoveryTimelockMs: String(RECOVERY_TIMELOCK_MIN_MS),
+      ownerOnlyRecovery: true,
     }),
-  };
-  const wallet = {
-    account: async () => custody,
-    network: async () => 123,
-    invoke: async (request) => {
-      called++;
-      return { txid: "aa".repeat(32), request };
-    },
-  };
-  const workspace = createNativeWorkspace({ makeClient: () => client, wallet, ...options });
-  return {
-    workspace,
-    client,
-    wallet,
-    state,
-    called: () => called,
-    change: () => (changed = true),
-  };
-}
+    A([I(8), nativeCodec.hashValue(recovery), I(RECOVERY_TIMELOCK_MIN_MS), BOOL(true)]),
+  );
+});
+
+test("configuration actions reject unreachable, duplicate and out-of-range inputs", () => {
+  const digest = "ab".repeat(32);
+  const invalid = [
+    () => installModuleAction({ moduleType: 2, contractHash: custody, profileDigest: digest }),
+    () => installModuleAction({ moduleType: "validator", contractHash: "00".repeat(20), profileDigest: digest }),
+    () => installModuleAction({ moduleType: "validator", contractHash: custody, profileDigest: "ab" }),
+    () => installModuleAction({ moduleType: "validator", contractHash: custody, profileDigest: digest, initData: Array(65).fill(I(1)) }),
+    () => uninstallModuleAction({ moduleId: -1 }),
+    () => setHookOrderAction({ hookIds: [1, 1] }),
+    () => setHookOrderAction({ hookIds: Array(NATIVE_MODULE_LIMITS.hook + 1).fill(0).map((_, index) => index + 1) }),
+    () => setThresholdPolicyAction({ threshold: 0, memberIds: [1] }),
+    () => setThresholdPolicyAction({ threshold: 11, memberIds: [1] }),
+    () => setThresholdPolicyAction({ threshold: 3, memberIds: [1, 2] }),
+    () => setThresholdPolicyAction({ threshold: 1, memberIds: [] }),
+    () => setThresholdPolicyAction({ threshold: 1, memberIds: [1, 1] }),
+    () => setThresholdPolicyAction({ threshold: 1, memberIds: Array(11).fill(0).map((_, index) => index + 1) }),
+    () => setThresholdPolicyAction({ threshold: 1, memberIds: [1], active: false }),
+    () => setRecoveryPolicyAction({ recoveryTimelockMs: "0" }),
+    () => setRecoveryPolicyAction({ recoveryTimelockMs: String(RECOVERY_TIMELOCK_MAX_MS + 1) }),
+  ];
+  for (const build of invalid) assert.throws(build);
+});
+
+test("pending intents describe themselves without inventing a module", () => {
+  assert.equal(
+    describeConfigurationAction(
+      installModuleAction({ moduleType: "hook", contractHash: "ab".repeat(20), profileDigest: "cc".repeat(32) }),
+    ),
+    "Install hook module abababab…",
+  );
+  assert.equal(describeConfigurationAction(uninstallModuleAction({ moduleId: 7 })), "Uninstall module 7");
+  assert.equal(describeConfigurationAction(configureModuleAction({ moduleId: 8 })), "Reconfigure module 8");
+  assert.equal(describeConfigurationAction(setHookOrderAction({ hookIds: [3, 4] })), "Set hook order [3 → 4]");
+  assert.equal(
+    describeConfigurationAction(setDefaultPolicyAction({ operationAuthorization: false, messageAuthorization: true })),
+    "Built-in route: operations off, messages on",
+  );
+  assert.match(
+    describeConfigurationAction(setThresholdPolicyAction({ threshold: 2, memberIds: [1, 2, 3] })),
+    /^Threshold policy 0: 2-of-3$/,
+  );
+  assert.match(
+    describeConfigurationAction(setRecoveryPolicyAction({ recoveryAuthority: recovery, recoveryTimelockMs: String(RECOVERY_TIMELOCK_MIN_MS) })),
+    /7-day timelock$/,
+  );
+  assert.equal(describeConfigurationAction(A([I(99)])), "Action 99");
+  assert.equal(describeConfigurationAction({ type: "Integer", value: "1" }), "Unrecognized action");
+});
+
 test("recovery descriptor is public, roundtrips and rejects identity or network substitution", () => {
   const descriptor = buildRecoveryDescriptor({
-    ...profile,
-    ...identity(),
     custodyAddress: custody,
     salt,
+    networkMagic: 123,
+    contract: NATIVE_SMART_ACCOUNT_CONTRACT,
+    recoveryTimelockMs: String(RECOVERY_TIMELOCK_MIN_MS),
   });
+  assert.equal(descriptor.format, "neo-native-account-descriptor");
+  assert.equal(descriptor.version, 2);
+  assert.equal(descriptor.protocolVersion, 4);
+  assert.equal(descriptor.callFlags, NATIVE_PROXY_CALL_FLAGS);
+  assert.equal(descriptor.accountId, nativeTestIdentity.accountId);
+  assert.equal(descriptor.accountAddress, nativeTestIdentity.accountAddress);
   assert.equal(
     readRecoveryDescriptor(JSON.stringify(descriptor), profile).accountId,
-    identity().accountId,
+    nativeTestIdentity.accountId,
   );
   for (const patch of [
     { accountId: "44".repeat(20) },
+    { accountAddress: "44".repeat(20) },
     { networkMagic: 456 },
-    { profileParameterDigest: "00".repeat(32) },
+    { protocolVersion: 3 },
+    { version: 1 },
+    { callFlags: 15 },
     { salt: "ff" },
+    { custodyAddress: "00".repeat(20) },
   ])
     assert.throws(() =>
-      readRecoveryDescriptor(
-        JSON.stringify({ ...descriptor, ...patch }),
-        profile,
-      ),
+      readRecoveryDescriptor(JSON.stringify({ ...descriptor, ...patch }), profile),
     );
+  assert.throws(() =>
+    readRecoveryDescriptor(
+      JSON.stringify(descriptor),
+      { ...profile, networkMagic: 456 },
+    ),
+  );
+  assert.throws(() =>
+    readRecoveryDescriptor(JSON.stringify(descriptor), { ...profile, contract: "aa".repeat(20) }),
+  );
   assert.equal(JSON.stringify(descriptor).includes("private"), false);
   assert.throws(() => readRecoveryDescriptor("x".repeat(20000), profile));
+  assert.throws(() =>
+    buildRecoveryDescriptor({
+      custodyAddress: custody,
+      salt,
+      networkMagic: 123,
+      contract: NATIVE_SMART_ACCOUNT_CONTRACT,
+      recoveryTimelockMs: "1",
+    }),
+  );
 });
-test("addresses require Neo hashes or checked Neo address, no malformed/zero custody", () => {
+
+test("addresses, GAS limits and wallet network stay exact", () => {
   assert.equal(nativeAddress("0x" + custody), custody);
+  assert.equal(nativeAddress(custody.toUpperCase()), custody.toUpperCase().toLowerCase());
   assert.throws(() => nativeAddress("0x123"));
   assert.throws(() => nativeAddress("00".repeat(20)));
-});
-test("session builder requires finite future expiry, explicit cap, specific transfer target, excludes account id", () => {
-  const args = buildSessionArguments(
-    {
-      publicKey: "02" + "11".repeat(32),
-      target: recovery,
-      expiresAt: "172801000",
-      spendingLimit: "1",
-      description: "session",
-    },
-    1000,
-  );
-  assert.equal(args.length, 6);
-  assert.equal(args[2].value, nativeCodec.stringValue("transfer").value);
-  for (const patch of [
-    { expiresAt: "999" },
-    { spendingLimit: "0" },
-    { spendingLimit: "-1" },
-    { publicKey: "abcd" },
-    { target: "00".repeat(20) },
-  ])
-    assert.throws(() =>
-      buildSessionArguments(
-        {
-          publicKey: "02" + "11".repeat(32),
-          target: recovery,
-          expiresAt: "172801000",
-          spendingLimit: "1",
-          ...patch,
-        },
-        1000,
-      ),
-    );
-});
-test("native multisig limits track native source markers and the pinned profile", () => {
-  const source = readFileSync(new URL("../../contracts/plugins/verifiers/MultiSigVerifier.cs", import.meta.url), "utf8");
-  const nativeCaps = /#if SMARTACCOUNT_NATIVE\s+private const int MaxChildVerifiers = (\d+);\s+private const int MaxApprovedChildren = (\d+);/.exec(source);
-  assert.ok(nativeCaps, "native compile-time cap markers must remain explicit");
-  const profile = JSON.parse(readFileSync(new URL("../../docs/proposals/smartaccount-native-profile-v2-parameters.json", import.meta.url), "utf8"));
-  assert.equal(NATIVE_MULTISIG_LIMITS.maxChildren, Number(nativeCaps[1]));
-  assert.equal(NATIVE_MULTISIG_LIMITS.maxThreshold, Number(nativeCaps[2]));
-  assert.equal(NATIVE_MULTISIG_LIMITS.maxChildren, profile.compositeVerifierMaxChildren);
-  assert.equal(NATIVE_MULTISIG_LIMITS.maxThreshold, profile.compositeVerifierMaxThreshold);
-});
-test("native multisig preserves child order and accepts 1-of-1 through 2-of-3", () => {
-  const children = ["44".repeat(20), "55".repeat(20), "66".repeat(20)];
-  for (const [count, threshold] of [[1, 1], [2, 1], [2, 2], [3, 1], [3, 2]]) {
-    assert.deepEqual(buildMultiSigArguments({ children: children.slice(0, count).join("\n"), threshold: String(threshold) }), [
-      { type: "Array", value: children.slice(0, count).map(nativeCodec.hashValue) },
-      { type: "Integer", value: String(threshold) },
-    ]);
-  }
-});
-test("native multisig rejects oversized, duplicate and unreachable policies before RPC", () => {
-  const hashes = ["44".repeat(20), "55".repeat(20), "66".repeat(20), "77".repeat(20)];
-  for (const [children, threshold] of [["", "1"], [hashes.join(" "), "2"], [hashes.slice(0, 3).join(" "), "3"],
-    [hashes[0], "2"], [hashes[0], "0"], [hashes[0], "1.5"], [hashes[0], "NaN"],
-    [[hashes[0], "0x" + hashes[0]].join(" "), "1"], ["00".repeat(20), "1"], [null, "1"]]) {
-    assert.throws(() => buildMultiSigArguments({ children, threshold }));
-  }
-});
-test("wallet active network cannot be inferred from supported list", () => {
+  assert.throws(() => nativeAddress(NATIVE_SMART_ACCOUNT_CONTRACT));
+  assert.equal(nativeAddress("00".repeat(20), { zero: true }), "00".repeat(20));
+
+  assert.equal(nativeGasLimit("0.00000001"), "1");
+  assert.equal(nativeGasLimit("1.23456789"), "123456789");
+  assert.equal(nativeGasLimit("0"), "0");
+  for (const invalid of ["", "1e2", "-1", "0.000000001", "01", "Infinity", "92233720369"])
+    assert.throws(() => nativeGasLimit(invalid), /fee|GAS/);
+
   assert.equal(nativeWalletNetwork({ magic: 123 }), 123);
+  assert.equal(nativeWalletNetwork({ networkMagic: "123" }), 123);
   assert.equal(nativeWalletNetwork({ defaultNetwork: "TestNet" }), 894710606);
   assert.throws(() => nativeWalletNetwork({ networks: [123] }));
+  assert.throws(() => nativeWalletNetwork(1.5));
 });
-test("discovery must complete before review and switching endpoint discards every previous review", async () => {
-  const f = fixture();
-  await assert.rejects(
-    () =>
-      f.workspace.registration({
-        custodyAddress: custody,
-        salt,
-        recoveryAddress: recovery,
-      }),
-    /discover/i,
-  );
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
-  });
-  const review = await f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    recoveryAddress: recovery,
-  });
-  f.workspace.invalidate();
-  await assert.rejects(() => f.workspace.submit(review), /stale|discover/i);
-  assert.equal(f.called(), 0);
-});
-test("manual wallet handoff checks current network/actor/state and uses bounded scope", async () => {
-  const f = fixture();
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
-  });
-  const review = await f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    allowNoRecovery: true,
-  });
-  f.wallet.network = async () => 456;
-  await assert.rejects(() => f.workspace.submit(review), /network/i);
-  assert.equal(f.called(), 0);
-  f.wallet.network = async () => 123;
-  f.wallet.account = async () => recovery;
-  await assert.rejects(() => f.workspace.submit(review), /authority|actor/i);
-  f.wallet.account = async () => custody;
-  const result = await f.workspace.submit(review);
-  assert.equal(result.request.operation, "registerAccount");
-  assert.equal(result.request.signers[0].scopes, "CalledByEntry");
-  assert.equal(result.request.signers[0].account, "0x" + custody);
-  assert.equal(result.request.args.length, 5);
-  const fresh = await f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    allowNoRecovery: true,
-  });
-  f.change();
-  await assert.rejects(() => f.workspace.submit(fresh), /changed/);
-  assert.equal(f.called(), 1);
-});
-test("unsuccessful simulation never reaches wallet", async () => {
-  const f = fixture();
-  f.client.simulate = async () => ({
-    state: "FAULT",
-    exception: "denied",
-    failedTransfers: [],
-  });
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
-  });
-  const review = await f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    allowNoRecovery: true,
-  });
-  await assert.rejects(() => f.workspace.submit(review), /simulation/i);
-  assert.equal(f.called(), 0);
-});
-test("in-flight old endpoint discovery cannot replace newer connection", async () => {
-  let release;
-  const slow = new Promise((resolve) => (release = resolve));
-  let id = 0;
-  const w = createNativeWorkspace({
-    makeClient: () => ({
-      discover: () =>
-        ++id === 1 ? slow : Promise.resolve({ ...profile, networkMagic: 456 }),
-    }),
-  });
-  const old = w.connect({ rpcUrl: "http://localhost:1234", networkMagic: 123 });
-  await w.connect({ rpcUrl: "http://localhost:4567", networkMagic: 456 });
-  release(profile);
-  await assert.rejects(() => old, /stale/i);
-  assert.equal(w.profile.networkMagic, 456);
-});
-test("RPC rejects embedded credentials and never logs remote error payloads", async () => {
-  assert.throws(
-    () => createNativeRpc("https://user:secret@example.com"),
-    /credentials/i,
-  );
+
+test("RPC rejects embedded credentials and never echoes a remote payload", async () => {
+  assert.throws(() => createNativeRpc("https://user:secret@example.com"), /credentials/i);
+  assert.throws(() => createNativeRpc("http://localhost:1/?key=1"), /query/i);
+  assert.throws(() => createNativeRpc("ftp://localhost:1"), /HTTP/i);
   const rpc = createNativeRpc("http://localhost:1234", {
     fetchImpl: async () => ({
       ok: true,
@@ -319,251 +361,809 @@ test("RPC rejects embedded credentials and never logs remote error payloads", as
   );
 });
 
-test("editing inputs during simulation prevents a stale review from reappearing", async () => {
-  const f = fixture();
-  let release;
-  f.client.simulate = () => new Promise((resolve) => (release = resolve));
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
-  });
-  const pending = f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    recoveryAddress: recovery,
-  });
-  f.workspace.clearReview();
-  release({ state: "HALT", failedTransfers: [] });
-  await assert.rejects(() => pending, /inputs changed/);
-  assert.equal(f.workspace.review, null);
+test("discovery gates network magic, kernel identity, protocol version and implementation id", async () => {
+  for (const [change, expected] of [
+    [(state) => (state.magic = 456), /network magic/i],
+    [(state) => (state.nativeId = 1), /not available/i],
+    [(state) => (state.protocolVersion = 3), /v4 protocol/i],
+    [(state) => (state.implementationId = "NativeSmartAccount/v3"), /implementation id/i],
+  ]) {
+    const rpc = createNativeRpcFixture();
+    change(rpc.state);
+    const workspace = createNativeWorkspace({
+      makeClient: () => new Client({ rpcClient: rpc, networkMagic: 123 }),
+    });
+    await assert.rejects(() => workspace.connect({}), expected);
+    assert.equal(workspace.profile, null);
+  }
 });
 
-const { createNativeRpcFixture, nativeTestIdentity } =
-  await import("./fixtures/nativeRpcFixture.js");
-const { createNativeClientClass } =
-  await import("../src/shared/nativeSmartAccountClient.mjs");
-test("actual browser client rejects absent native contract, ABI1, wrong digest, native id and malformed account", async () => {
-  const Client = createNativeClientClass(nativeCodec);
+test("discovery requires every v4 method and lifecycle event before any script runs", async () => {
   for (const change of [
-    (f) => (f.state.abiVersion = 1),
-    (f) => (f.state.digest = "00".repeat(32)),
-    (f) => (f.state.magic = 456),
-    (f) => (f.state.nativeId = 1),
-  ]) {
-    const f = createNativeRpcFixture();
-    change(f);
-    const w = createNativeWorkspace({
-      makeClient: () => new Client({ rpcClient: f, networkMagic: 123 }),
-    });
-    await assert.rejects(() => w.connect({}));
-    assert.equal(w.profile, null);
-  }
-  const f = createNativeRpcFixture();
-  f.state.registered = true;
-  f.state.malformed = true;
-  const w = createNativeWorkspace({
-    makeClient: () => new Client({ rpcClient: f, networkMagic: 123 }),
-  });
-  await w.connect({});
-  await assert.rejects(() => w.load(nativeTestIdentity.accountId), /identity/);
-});
-test("browser workspace discovery rejects incomplete methods and malformed event descriptors", async () => {
-  const Client = createNativeClientClass(nativeCodec);
-  for (const change of [
-    (abi) =>
-      (abi.methods = abi.methods.filter(
-        (method) => method.name !== "setVerifierDependencies",
-      )),
+    (abi) => (abi.methods = abi.methods.filter((method) => method.name !== "proposeConfiguration")),
+    (abi) => (abi.methods = abi.methods.filter((method) => method.name !== "getHookOrder")),
     (abi) => delete abi.events,
-    (abi) => {
-      const event = abi.events.find(
-        (event) => event.name === "RecoveryExecuted",
-      );
-      [event.parameters[3], event.parameters[4]] = [
-        event.parameters[4],
-        event.parameters[3],
-      ];
-    },
+    (abi) => (abi.events = abi.events.filter((event) => event.name !== "ConfigurationIntentExpired")),
   ]) {
-    const f = createNativeRpcFixture();
-    const send = f.send;
-    f.send = async (method, params) => {
+    const rpc = createNativeRpcFixture();
+    const send = rpc.send;
+    rpc.send = async (method, params) => {
       const response = await send(method, params);
       if (method === "getcontractstate") change(response.manifest.abi);
       return response;
     };
     const workspace = createNativeWorkspace({
-      makeClient: () => new Client({ rpcClient: f, networkMagic: 123 }),
+      makeClient: () => new Client({ rpcClient: rpc, networkMagic: 123 }),
     });
     await assert.rejects(() => workspace.connect({}), /native ABI/);
     assert.equal(workspace.profile, null);
     assert.equal(
-      f.state.calls.some((call) => call.method === "invokescript"),
+      rpc.state.calls.some((call) => call.method === "invokescript"),
       false,
     );
   }
 });
-test("canonical native codecs are shipped byte-identically in the standalone frontend", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const { createHash } = await import("node:crypto");
-  const hash = (value) => createHash("sha256").update(value).digest("hex");
-  for (const name of ["nativeSmartAccount.mjs", "nativeSmartAccountClient.mjs", "nativeTransactionArtifact.mjs", "nativeWalletWitness.mjs"])
-    assert.equal(
-      hash(await readFile(new URL("../src/shared/" + name, import.meta.url))),
-      hash(await readFile(new URL("../../shared/" + name, import.meta.url))),
-      name + " must match canonical shared source",
-    );
-});
-test("export contains a rebuildable SDK recipe and immutable exact script comparison target", async () => {
-  const f = fixture();
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
+
+test("a malformed account record is refused before the workspace shows it", async () => {
+  const f = await connected({
+    registered: true,
+    // Custody equal to the core is how a forged record would try to make the
+    // kernel answer for its own account; the descriptor must refuse it.
+    mutate: (state) => (state.custody = NATIVE_SMART_ACCOUNT_CONTRACT),
   });
-  const review = await f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    recoveryAddress: recovery,
-  });
-  const exported = await f.workspace.exportReview(review);
-  assert.equal(exported.recipe.method, "buildRegistration");
-  assert.equal(
-    f.client.buildRegistration(exported.recipe.input).script,
-    exported.plan.script,
+  await assert.rejects(
+    () => f.workspace.load(nativeTestIdentity.accountId),
+    /identity/i,
   );
-  f.workspace.clearReview();
-  await assert.rejects(() => f.workspace.exportReview(review), /stale/);
 });
-test("editing a review while submission awaits the node never opens the wallet", async () => {
-  const f = fixture();
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
+
+test("load reads the account, modules, hook order and pending intents from the core", async () => {
+  const moduleHash = "77".repeat(20);
+  const f = await connected({
+    registered: true,
+    mutate: (state) => {
+      state.modules = [
+        { moduleId: 1, moduleType: 1, contractHash: moduleHash, messageCapability: true },
+        { moduleId: 2, moduleType: 4, contractHash: "88".repeat(20) },
+      ];
+      state.hookOrder = [2];
+      state.hookRevision = 3;
+      state.recovery = recovery;
+    },
   });
-  const review = await f.workspace.registration({
+  const snapshot = await f.workspace.load(nativeTestIdentity.accountId);
+  assert.equal(snapshot.account.accountId, nativeTestIdentity.accountId);
+  assert.equal(snapshot.account.accountAddress, nativeTestIdentity.accountAddress);
+  assert.equal(snapshot.account.statusName, "Active");
+  assert.equal(snapshot.account.custodyAddress, custody);
+  assert.equal(snapshot.account.recoveryAuthority, recovery);
+  assert.equal(snapshot.account.recoveryTimelockMs, String(RECOVERY_TIMELOCK_MIN_MS));
+  assert.equal(snapshot.protocol.protocolVersion, "4");
+  assert.equal(snapshot.protocol.migrationModeOpen, false);
+  assert.deepEqual(snapshot.modules.validators.map((m) => m.moduleId), ["1"]);
+  assert.equal(snapshot.modules.validators[0].moduleTypeName, "validator");
+  assert.deepEqual(snapshot.modules.hooks.map((m) => m.moduleId), ["2"]);
+  assert.deepEqual(snapshot.hookOrder, { hookIds: ["2"], revision: "3" });
+  assert.deepEqual(snapshot.pending, []);
+  assert.equal(snapshot.chainTime, f.rpc.state.time);
+  assert.equal(snapshot.account.pendingRecovery, null);
+});
+
+test("discovery must complete before a review and invalidation discards every review", async () => {
+  const rpc = createNativeRpcFixture();
+  const workspace = createNativeWorkspace({
+    makeClient: () => new Client({ rpcClient: rpc, networkMagic: 123 }),
+  });
+  await assert.rejects(
+    () => workspace.registration({ custodyAddress: custody, salt, recoveryTimelockDays: 7 }),
+    /discovery/i,
+  );
+  await workspace.connect({});
+  const review = await workspace.registration({
     custodyAddress: custody,
     salt,
-    allowNoRecovery: true,
+    recoveryTimelockDays: 7,
   });
-  let release;
-  f.client.revalidatePlan = () => new Promise((resolve) => (release = resolve));
-  const result = f.workspace.submit(review);
-  f.workspace.clearReview();
-  release(true);
-  await assert.rejects(() => result, /inputs changed/);
-  assert.equal(f.called(), 0);
+  workspace.invalidate();
+  await assert.rejects(() => workspace.submit(review), /stale/i);
 });
-test("late wallet response is not shown as current after a network switch", async () => {
-  const f = fixture();
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
-  });
-  const review = await f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    allowNoRecovery: true,
-  });
-  let signal, release;
-  const opened = new Promise((resolve) => (signal = resolve));
-  f.wallet.invoke = () => {
-    signal();
-    return new Promise((resolve) => (release = resolve));
+
+test("wallet handoff checks live network and actor and keeps a bounded scope", async () => {
+  let called = 0;
+  const rpc = createNativeRpcFixture();
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  const wallet = {
+    account: async () => custody,
+    network: async () => 123,
+    invoke: async (request) => {
+      called++;
+      return { txid: "aa".repeat(32), request };
+    },
   };
-  const result = f.workspace.submit(review);
-  await opened;
-  f.workspace.invalidate();
-  release({ txid: "aa".repeat(32) });
-  await assert.rejects(() => result, /Wallet response arrived after/);
+  const workspace = createNativeWorkspace({ makeClient: () => client, wallet });
+  await workspace.connect({});
+  const review = await workspace.registration({
+    custodyAddress: custody,
+    salt,
+    recoveryTimelockDays: 7,
+  });
+  assert.equal(review.submission, "wallet-invoke");
+  assert.equal(review.walletSupported, true);
+
+  wallet.network = async () => 456;
+  await assert.rejects(() => workspace.submit(review), /network/i);
+  assert.equal(called, 0);
+  wallet.network = async () => 123;
+  wallet.account = async () => stranger;
+  await assert.rejects(() => workspace.submit(review), /authority|actor/i);
+  assert.equal(called, 0);
+
+  wallet.account = async () => custody;
+  const sent = await workspace.submit(review);
+  assert.equal(sent.request.operation, "createAccount");
+  assert.deepEqual(sent.request.signers, [
+    { account: "0x" + custody, scopes: "CalledByEntry" },
+  ]);
+  assert.equal(sent.request.args.length, 5);
+  assert.equal(called, 1);
 });
-test("lost profile attestation during a later recheck revokes the verified state", async () => {
-  const f = createNativeRpcFixture();
-  const Client = createNativeClientClass(nativeCodec);
-  const w = createNativeWorkspace({
-    makeClient: () => new Client({ rpcClient: f, networkMagic: 123 }),
+
+test("registration with an initial install carries the exact action Array", async () => {
+  const actions = [
+    installModuleAction({
+      moduleType: "validator",
+      contractHash: "77".repeat(20),
+      profileDigest: "ab".repeat(32),
+    }),
+  ];
+  const rpc = createNativeRpcFixture();
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  const workspace = createNativeWorkspace({
+    makeClient: () => client,
     wallet: {
       account: async () => custody,
       network: async () => 123,
-      invoke: () => {
-        throw Error("must not call");
-      },
+      invoke: async (request) => ({ request }),
     },
   });
-  await w.connect({});
-  const review = await w.registration({
+  await workspace.connect({});
+  const review = await workspace.registration({
     custodyAddress: custody,
     salt,
-    allowNoRecovery: true,
+    recoveryTimelockDays: 7,
+    actions,
   });
-  f.state.magic = 456;
-  await assert.rejects(() => w.submit(review), /network magic mismatch/);
-  assert.equal(w.profile, null);
+  assert.equal(review.plan.kind, "registration");
+  assert.deepEqual(review.requiredAuthorities, [custody]);
+  assert.deepEqual(review.signers, [
+    { account: "0x" + custody, scopes: "CalledByEntry" },
+  ]);
+  assert.deepEqual(review.request.args[4], A(actions));
+  const exact = await workspace.registration({
+    custodyAddress: custody,
+    salt,
+    recoveryTimelockDays: 7,
+    actions,
+    submission: "native-sdk",
+  });
+  assert.deepEqual(exact.signers, [
+    { account: "0x" + custody, scopes: "CustomContracts", allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT] },
+  ]);
+  assert.equal(exact.walletSupported, false);
 });
 
-test("rebuilding exported recovery and module calls binds full reviewed authority and pending intent, not just script", async () => {
-  const { rebuildNativeReview } =
-    await import("../src/features/native/nativeWorkspace.js");
-  assert.equal(typeof rebuildNativeReview, "function");
-  const base = {
-    kind: "lifecycle",
-    accountId: identity().accountId,
-    method: "executeRecovery",
-    script: "abcd",
-    requiredAuthorities: [],
-    accountState: {
-      authorityEpoch: "0",
-      configurationNonce: "1",
-      pendingRecovery: { address: "aa".repeat(20), matureAt: "1" },
-    },
-  };
-  const exported = {
-    format: "neo-native-reviewed-request",
-    version: 1,
-    submission: "native-sdk",
-    profile,
-    feePayer: custody,
-    requiredAuthorities: [],
-    signers: [{ account: "0x" + custody, scopes: "None" }],
-    recipe: {
-      method: "buildAction",
-      input: { accountId: identity().accountId, action: "executeRecovery" },
-    },
-    plan: base,
-  };
-  const client = {
-    discover: async () => profile,
-    buildAction: async () => base,
-    revalidatePlan: async () => true,
-  };
-  assert.equal(await rebuildNativeReview(client, exported), base);
-  for (const plan of [
-    {
-      ...base,
-      accountState: {
-        ...base.accountState,
-        pendingRecovery: { address: "bb".repeat(20), matureAt: "2" },
-      },
-    },
-    { ...base, pending: { method: "setConfig" } },
-    { ...base, accountState: { ...base.accountState, authorityEpoch: "1" } },
-  ]) {
-    client.buildAction = async () => plan;
-    await assert.rejects(
-      () => rebuildNativeReview(client, exported),
-      /changed|mismatch/i,
-    );
-  }
+test("an already registered account id is refused before simulation", async () => {
+  const f = await connected({ registered: true });
+  await assert.rejects(
+    () =>
+      f.workspace.registration({
+        custodyAddress: custody,
+        salt,
+        recoveryTimelockDays: 7,
+      }),
+    /already registered/i,
+  );
 });
-test("confirmation requires mined identity and matching Application log; editing during receipt fetch cancels it", async () => {
-  const f = fixture();
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
+
+test("unsuccessful simulation never reaches the wallet", async () => {
+  const rpc = createNativeRpcFixture();
+  const send = rpc.send;
+  rpc.send = async (method, params) => {
+    const response = await send(method, params);
+    if (method === "invokescript" && params[0] && response.stack?.[0]?.type === "Any")
+      return { ...response, state: "FAULT", exception: "denied" };
+    return response;
+  };
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  let called = 0;
+  const workspace = createNativeWorkspace({
+    makeClient: () => client,
+    wallet: { account: async () => custody, network: async () => 123, invoke: async () => called++ },
   });
-  const review = await f.workspace.registration({
+  await workspace.connect({});
+  const review = await workspace.registration({
     custodyAddress: custody,
     salt,
-    recoveryAddress: recovery,
+    recoveryTimelockDays: 7,
+  });
+  assert.match(review.simulationError, /simulation/i);
+  await assert.rejects(() => workspace.submit(review), /simulation/i);
+  assert.equal(called, 0);
+});
+
+test("editing inputs during simulation prevents a stale review from reappearing", async () => {
+  const rpc = createNativeRpcFixture();
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  const workspace = createNativeWorkspace({ makeClient: () => client });
+  await workspace.connect({});
+  let release;
+  client.simulate = () => new Promise((resolve) => (release = resolve));
+  const pending = workspace.registration({
+    custodyAddress: custody,
+    salt,
+    recoveryTimelockDays: 7,
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  workspace.clearReview();
+  release({ state: "HALT", incompleteTransfers: [] });
+  await assert.rejects(() => pending, /inputs changed/);
+  assert.equal(workspace.review, null);
+});
+
+test("in-flight discovery of an old endpoint cannot replace a newer connection", async () => {
+  let release;
+  const slow = new Promise((resolve) => (release = resolve));
+  let id = 0;
+  const workspace = createNativeWorkspace({
+    makeClient: () => ({
+      discover: () =>
+        ++id === 1 ? slow : Promise.resolve({ ...profile, networkMagic: 456 }),
+    }),
+  });
+  const old = workspace.connect({ rpcUrl: "http://localhost:1234", networkMagic: 123 });
+  await workspace.connect({ rpcUrl: "http://localhost:4567", networkMagic: 456 });
+  release(profile);
+  await assert.rejects(() => old, /stale/i);
+  assert.equal(workspace.profile.networkMagic, 456);
+});
+
+test("a lost profile attestation during a later recheck revokes the verified state", async () => {
+  const rpc = createNativeRpcFixture();
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  const workspace = createNativeWorkspace({
+    makeClient: () => client,
+    wallet: {
+      account: async () => custody,
+      network: async () => 123,
+      invoke: () => assert.fail("the wallet must not be called"),
+    },
+  });
+  await workspace.connect({});
+  const review = await workspace.registration({
+    custodyAddress: custody,
+    salt,
+    recoveryTimelockDays: 7,
+  });
+  rpc.state.magic = 456;
+  await assert.rejects(() => workspace.submit(review), /network magic mismatch/);
+  assert.equal(workspace.profile, null);
+});
+
+test("account actions are custody or recovery gated and recovery is permissionless once mature", async () => {
+  const f = await connected({
+    registered: true,
+    mutate: (state) => {
+      state.recovery = recovery;
+    },
+  });
+  const account = nativeTestIdentity.accountId;
+
+  const freeze = await f.workspace.lifecycle({ accountId: account, action: "freezeAccount" });
+  assert.deepEqual(freeze.requiredAuthorities, [custody]);
+  assert.equal(freeze.submission, "wallet-invoke");
+  assert.equal(freeze.plan.method, "freezeAccount");
+  await assert.rejects(
+    () => f.workspace.lifecycle({ accountId: account, action: "freezeAccount", feePayer: stranger }),
+    /custody wallet can sign/i,
+  );
+  await assert.rejects(
+    () => f.workspace.lifecycle({ accountId: account, action: "unfreezeAccount" }),
+    /not frozen/i,
+  );
+
+  const begin = await f.workspace.lifecycle({
+    accountId: account,
+    action: "beginRecovery",
+    newCustody: "99".repeat(20),
+  });
+  assert.deepEqual(begin.requiredAuthorities, [custody, "99".repeat(20)]);
+  assert.equal(begin.submission, "native-sdk");
+  assert.equal(begin.walletSupported, false);
+  assert.deepEqual(begin.signers.map((signer) => signer.account), [
+    "0x" + custody,
+    "0x" + "99".repeat(20),
+  ]);
+
+  f.rpc.state.status = 1;
+  assert.match(
+    actionBlockReason({ statusName: "Frozen", pendingRecovery: null }, "freezeAccount", 1),
+    /already frozen/,
+  );
+  const unfreeze = await f.workspace.lifecycle({ accountId: account, action: "unfreezeAccount" });
+  assert.deepEqual(unfreeze.requiredAuthorities, [custody]);
+});
+
+test("recovery may be started or cancelled by custody or the recovery authority only", async () => {
+  const now = Date.now();
+  const f = await connected({
+    registered: true,
+    mutate: (state) => {
+      state.recovery = recovery;
+      state.pendingRecovery = {
+        newCustody: stranger,
+        initiatedAt: now - 1000,
+        matureAt: now + 60_000,
+      };
+    },
+  });
+  const account = nativeTestIdentity.accountId;
+  await assert.rejects(
+    () => f.workspace.lifecycle({ accountId: account, action: "beginRecovery", newCustody: "99".repeat(20) }),
+    /already pending/i,
+  );
+  const cancel = await f.workspace.lifecycle({ accountId: account, action: "cancelRecovery" });
+  assert.deepEqual(cancel.requiredAuthorities, [custody]);
+  const byRecovery = await f.workspace.lifecycle({
+    accountId: account,
+    action: "cancelRecovery",
+    feePayer: recovery,
+  });
+  assert.deepEqual(byRecovery.requiredAuthorities, [recovery]);
+  await assert.rejects(
+    () => f.workspace.lifecycle({ accountId: account, action: "cancelRecovery", feePayer: stranger }),
+    /recovery authority/i,
+  );
+  await assert.rejects(
+    () => f.workspace.lifecycle({ accountId: account, action: "executeRecovery" }),
+    /not matured/i,
+  );
+
+  f.rpc.state.pendingRecovery = null;
+  await assert.rejects(
+    () => f.workspace.lifecycle({ accountId: account, action: "executeRecovery" }),
+    /no custody recovery is pending/i,
+  );
+  await assert.rejects(
+    () => f.workspace.lifecycle({ accountId: account, action: "cancelRecovery" }),
+    /no custody recovery is pending/i,
+  );
+});
+
+test("a mature recovery is executable by any fee payer with no authority scope", async () => {
+  const now = Date.now();
+  const f = await connected({
+    registered: true,
+    mutate: (state) => {
+      state.recovery = recovery;
+      state.pendingRecovery = {
+        newCustody: stranger,
+        initiatedAt: now - 8 * 86_400_000,
+        matureAt: now - 1000,
+      };
+    },
+  });
+  const review = await f.workspace.lifecycle({
+    accountId: nativeTestIdentity.accountId,
+    action: "executeRecovery",
+    feePayer: "77".repeat(20),
+  });
+  assert.deepEqual(review.requiredAuthorities, []);
+  assert.deepEqual(review.signers, [{ account: "0x" + "77".repeat(20), scopes: "CalledByEntry" }]);
+  assert.equal(review.walletSupported, true);
+  await assert.rejects(
+    () =>
+      f.workspace.lifecycle({
+        accountId: nativeTestIdentity.accountId,
+        action: "executeRecovery",
+        feePayer: nativeTestIdentity.accountAddress,
+      }),
+    /separate Neo wallet/i,
+  );
+});
+
+test("begin recovery refuses the current custody, the proxy and the core as the new custody", async () => {
+  const f = await connected({ registered: true });
+  for (const [newCustody, expected] of [
+    [custody, /different Neo account/i],
+    [nativeTestIdentity.accountAddress, /different Neo account/i],
+    [NATIVE_SMART_ACCOUNT_CONTRACT, /nonzero Neo authority/i],
+  ])
+    await assert.rejects(
+      () =>
+        f.workspace.lifecycle({
+          accountId: nativeTestIdentity.accountId,
+          action: "beginRecovery",
+          newCustody,
+        }),
+      expected,
+    );
+});
+
+test("actionBlockReason reads the live state instead of a device clock", () => {
+  const active = { statusName: "Active", pendingRecovery: null };
+  const frozen = { ...active, statusName: "Frozen" };
+  const migration = { ...active, statusName: "MigrationRequired" };
+  const pending = { ...active, pendingRecovery: { matureAt: "2000" } };
+  assert.equal(actionBlockReason(active, "freezeAccount", 1000), "");
+  assert.match(actionBlockReason(frozen, "freezeAccount", 1000), /already frozen/);
+  assert.match(actionBlockReason(active, "unfreezeAccount", 1000), /not frozen/);
+  assert.match(actionBlockReason(pending, "beginRecovery", 1000), /already pending/);
+  assert.equal(actionBlockReason(pending, "cancelRecovery", 1000), "");
+  assert.match(actionBlockReason(pending, "executeRecovery", 1000), /not matured/);
+  assert.match(actionBlockReason(active, "executeRecovery", 1000), /No custody recovery/);
+  assert.equal(actionBlockReason(pending, "executeRecovery", 2000), "");
+  assert.match(actionBlockReason(migration, "freezeAccount", 1000), /migration/i);
+  assert.match(actionBlockReason(null, "freezeAccount", 1000), /Load an account/);
+});
+
+test("a configuration proposal is one atomic intent and never a wallet invoke", async () => {
+  const f = await connected({ registered: true });
+  const account = nativeTestIdentity.accountId;
+  const actions = [setDefaultPolicyAction({ operationAuthorization: false, messageAuthorization: true })];
+  const propose = await f.workspace.configuration({ kind: "propose", accountId: account, actions });
+  assert.equal(propose.plan.method, "proposeConfiguration");
+  assert.deepEqual(propose.requiredAuthorities, [custody]);
+  assert.equal(propose.submission, "native-sdk");
+  assert.equal(propose.walletSupported, false);
+  assert.equal(propose.request, null);
+  assert.match(propose.description, /24 hours/);
+  await assert.rejects(() => f.workspace.submit(propose), /exact-script/);
+
+  for (const invalid of [
+    { kind: "propose", accountId: account, actions: [] },
+    { kind: "propose", accountId: account, actions: Array(MAX_ACTIONS_PER_INTENT + 1).fill(actions[0]) },
+  ])
+    await assert.rejects(() => f.workspace.configuration(invalid), /1 to 16 actions/);
+
+  f.rpc.state.status = 1;
+  await assert.rejects(
+    () => f.workspace.configuration({ kind: "propose", accountId: account, actions }),
+    /frozen/i,
+  );
+  f.rpc.state.status = 2;
+  await assert.rejects(
+    () => f.workspace.configuration({ kind: "propose", accountId: account, actions }),
+    /migration/i,
+  );
+});
+
+function pendingIntent(fixture, overrides = {}) {
+  const now = fixture.rpc.state.time;
+  return {
+    intentId: 3,
+    proposedAt: now - 86_400_000,
+    matureAt: now - 1000,
+    expiresAt: now + 86_400_000,
+    authorityEpoch: 0,
+    actionDigest: { type: "ByteString", value: Buffer.from("ab".repeat(32), "hex").toString("base64") },
+    actions: [setDefaultPolicyAction({ operationAuthorization: true, messageAuthorization: true })],
+    ...overrides,
+  };
+}
+
+test("confirmation enforces maturity, expiry and the authority epoch of the intent", async () => {
+  const f = await connected({ registered: true });
+  const account = nativeTestIdentity.accountId;
+  const now = f.rpc.state.time;
+  f.rpc.state.intents = { 3: pendingIntent(f) };
+
+  f.rpc.state.intents = { 3: pendingIntent(f, { matureAt: now + 1000 }) };
+  await assert.rejects(
+    () => f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "3" }),
+    /not matured/i,
+  );
+  f.rpc.state.intents = { 3: pendingIntent(f, { matureAt: now - 1000, expiresAt: now - 1 }) };
+  await assert.rejects(
+    () => f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "3" }),
+    /expired/i,
+  );
+  f.rpc.state.intents = { 3: pendingIntent(f, { authorityEpoch: 5 }) };
+  await assert.rejects(
+    () => f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "3" }),
+    /earlier authority epoch/i,
+  );
+
+  f.rpc.state.intents = { 3: pendingIntent(f) };
+  const confirm = await f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "3" });
+  assert.equal(confirm.plan.method, "confirmConfiguration");
+  assert.deepEqual(confirm.requiredAuthorities, [custody]);
+  assert.equal(confirm.submission, "native-sdk");
+  assert.equal(confirm.intentId, "3");
+  assert.deepEqual(confirm.intentActions, pendingIntent(f).actions);
+  const exported = await f.workspace.exportReview(confirm);
+  assert.deepEqual(exported.recipe.input.actions, pendingIntent(f).actions);
+
+  await assert.rejects(
+    () => f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "9" }),
+    /not pending/i,
+  );
+});
+
+test("a live intent needs custody to cancel, an expired one needs nobody", async () => {
+  const f = await connected({ registered: true });
+  const account = nativeTestIdentity.accountId;
+  const now = f.rpc.state.time;
+
+  f.rpc.state.intents = { 3: pendingIntent(f) };
+  const live = await f.workspace.configuration({ kind: "cancel", accountId: account, intentId: "3" });
+  assert.deepEqual(live.requiredAuthorities, [custody]);
+  assert.equal(live.plan.method, "cancelConfiguration");
+
+  f.rpc.state.intents = { 3: pendingIntent(f, { matureAt: now - 1, expiresAt: now - 1 }) };
+  const expired = await f.workspace.configuration({
+    kind: "cancel",
+    accountId: account,
+    intentId: "3",
+  });
+  assert.deepEqual(expired.requiredAuthorities, []);
+  assert.deepEqual(expired.signers, [{ account: "0x" + custody, scopes: "None" }]);
+  assert.equal(expired.submission, "native-sdk", "exact script survives a permissionless cancel");
+  assert.match(expired.description, /expired intent can be cleaned by anyone/i);
+});
+
+test("a changed pending intent is refused before it can be confirmed or exported", async () => {
+  const f = await connected({ registered: true });
+  const account = nativeTestIdentity.accountId;
+  f.rpc.state.intents = { 3: pendingIntent(f) };
+  const inspected = await f.workspace.inspectConfiguration({ accountId: account });
+  assert.equal(inspected.intents.length, 1);
+  assert.equal(inspected.intents[0].mature, true);
+  assert.equal(inspected.intents[0].expired, false);
+  assert.deepEqual(inspected.intents[0].descriptions, ["Built-in route: operations on, messages on"]);
+
+  const review = await f.workspace.configuration({
+    kind: "confirm",
+    accountId: account,
+    intentId: "3",
+    expectedIntent: inspected.intents[0],
+  });
+  const exported = await f.workspace.exportReview(review);
+  assert.equal(exported.recipe.method, "buildConfigurationScript");
+  assert.equal(exported.recipe.input.intentId, "3");
+  assert.deepEqual(await rebuildNativeReview(f.client, exported), review.plan);
+
+  f.rpc.state.intents = {
+    3: pendingIntent(f, {
+      actions: [setDefaultPolicyAction({ operationAuthorization: false, messageAuthorization: false })],
+    }),
+  };
+  await assert.rejects(() => f.workspace.exportReview(review), /changed/i);
+  await assert.rejects(() => rebuildNativeReview(f.client, exported), /changed/i);
+  await assert.rejects(
+    () =>
+      f.workspace.configuration({
+        kind: "confirm",
+        accountId: account,
+        intentId: "3",
+        expectedIntent: inspected.intents[0],
+      }),
+    /pending intent changed/i,
+  );
+});
+
+test("inspection refuses to publish a stale pending card", async () => {
+  const f = await connected({ registered: true, mutate: (state) => (state.intents = {}) });
+  let finish;
+  const gate = new Promise((resolve) => (finish = resolve));
+  f.client.getPendingConfigurationIntentIds = async () => {
+    await gate;
+    return [];
+  };
+  const inspection = f.workspace.inspectConfiguration({ accountId: nativeTestIdentity.accountId });
+  f.workspace.clearReview();
+  finish();
+  await assert.rejects(() => inspection, /inputs changed/i);
+});
+
+test("an execution review carries the canonical proxy signer and refuses wallet handoff", async () => {
+  const f = await connected({ registered: true });
+  const account = nativeTestIdentity.accountId;
+  const operation = {
+    targetContract: "99".repeat(20),
+    method: "ping",
+    args: [],
+    nonce: "1",
+    nonceSubkey: "ab".repeat(32),
+    deadline: String(f.rpc.state.time + 60_000),
+    validatorId: "0",
+    credentialGeneration: "1",
+    authorityEpoch: "0",
+    configurationNonce: "0",
+    signature: "cd".repeat(64),
+    hookProofs: [],
+  };
+  const payer = "77".repeat(20);
+  const review = await f.workspace.operation({
+    accountId: account,
+    operations: [operation],
+    feePayer: payer,
+  });
+  assert.equal(review.plan.kind, "execution");
+  assert.equal(review.plan.method, "executeUserOp");
+  assert.equal(review.plan.batch, false);
+  assert.equal(review.plan.proxyCallFlags, NATIVE_PROXY_CALL_FLAGS);
+  assert.equal(review.plan.accountAddress, nativeTestIdentity.accountAddress);
+  assert.deepEqual(review.requiredAuthorities, []);
+  assert.equal(review.signers.length, 2);
+  assert.deepEqual(review.signers[0], { account: "0x" + payer, scopes: "None" });
+  assert.deepEqual(review.signers[1], {
+    account: "0x" + nativeTestIdentity.accountAddress,
+    scopes: "WitnessRules",
+    rules: [
+      { action: "Allow", condition: { type: "CalledByContract", hash: NATIVE_SMART_ACCOUNT_CONTRACT } },
+    ],
+  });
+  assert.equal(review.walletSupported, false);
+  await assert.rejects(() => f.workspace.submit(review), /exact-script/);
+
+  assert.equal(typeof review.simulation.state, "string");
+  assert.equal(f.rpc.state.calls.some(({ method }) => method === "sendrawtransaction"), false);
+
+  const exported = await f.workspace.exportReview(review);
+  assert.equal(exported.recipe.method, "buildExecutionScript");
+  assert.deepEqual(await rebuildNativeReview(f.client, exported), review.plan);
+
+  for (const [change, expected] of [
+    [(copy) => (copy.feePayer = nativeTestIdentity.accountAddress), /separate Neo wallet/i],
+    [(copy) => (copy.plan.operations = []), /changed|malformed/i],
+    [(copy) => (copy.signers[1].rules[0].condition.hash = "aa".repeat(20)), /signer|proxy|scope/i],
+    [(copy) => copy.signers.reverse(), /signer|proxy|payer/i],
+  ]) {
+    const copy = structuredClone(exported);
+    change(copy);
+    await assert.rejects(() => rebuildNativeReview(f.client, copy), expected);
+  }
+});
+
+test("execution is refused unless the account is active and the envelope is bounded", async () => {
+  const operation = {
+    targetContract: "99".repeat(20),
+    method: "ping",
+    args: [],
+    nonce: "1",
+    nonceSubkey: "ab".repeat(32),
+    deadline: String(Date.now() + 60_000),
+    validatorId: "0",
+    credentialGeneration: "1",
+    authorityEpoch: "0",
+    configurationNonce: "0",
+    signature: "cd".repeat(64),
+  };
+  const frozen = await connected({ registered: true, mutate: (state) => (state.status = 1) });
+  await assert.rejects(
+    () =>
+      frozen.workspace.operation({
+        accountId: nativeTestIdentity.accountId,
+        operations: [operation],
+      }),
+    /not active/i,
+  );
+  const f = await connected({ registered: true });
+  await assert.rejects(
+    () => f.workspace.operation({ accountId: nativeTestIdentity.accountId, operations: [] }),
+    /1 to 32 operations/i,
+  );
+  await assert.rejects(
+    () =>
+      f.workspace.operation({
+        accountId: nativeTestIdentity.accountId,
+        operations: Array(MAX_OPERATIONS_PER_ENVELOPE + 1).fill(operation),
+      }),
+    /1 to 32 operations/i,
+  );
+});
+
+test("an exported review rebuilds from its recipe and binds plan, authority and scopes", async () => {
+  const f = await connected({ registered: true });
+  const account = nativeTestIdentity.accountId;
+  const review = await f.workspace.lifecycle({
+    accountId: account,
+    action: "freezeAccount",
+    submission: "native-sdk",
+  });
+  const exported = await f.workspace.exportReview(review);
+  assert.equal(exported.format, "neo-native-reviewed-request");
+  assert.equal(exported.recipe.method, "buildAccountActionScript");
+  assert.equal(exported.recipe.input.method, "freezeAccount");
+  assert.deepEqual(await rebuildNativeReview(f.client, exported), review.plan);
+
+  for (const [change, expected] of [
+    [(copy) => copy.plan.script = "abcd", /changed|mismatch/i],
+    [(copy) => (copy.profile.implementationId = "NativeSmartAccount/v3"), /profile/i],
+    [(copy) => (copy.requiredAuthorities = []), /authority/i],
+    [(copy) => (copy.signers[0].scopes = "None"), /signer|scope/i],
+    [(copy) => (copy.feePayer = recovery), /authority|signer|payer/i],
+    [(copy) => (copy.recipe.input.accountId = "44".repeat(20)), /changed|mismatch/i],
+    [(copy) => (copy.submission = "wallet-invoke"), /wallet invocation/i],
+  ]) {
+    const copy = structuredClone(exported);
+    change(copy);
+    await assert.rejects(() => rebuildNativeReview(f.client, copy), expected);
+  }
+});
+
+test("receipt validation requires a mined transaction, the reviewed script and a HALT Application log", async () => {
+  const hash = "0x" + "aa".repeat(32);
+  const review = {
+    feePayer: custody,
+    signers: [
+      { account: "0x" + custody, scopes: "CustomContracts", allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT] },
+    ],
+    plan: {
+      kind: "execution",
+      script: nativeCodec.dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, "executeUserOp", [
+        nativeCodec.hashValue(nativeTestIdentity.accountId),
+        nativeCodec.operationValue({
+          targetContract: "99".repeat(20),
+          method: "transfer",
+          args: [],
+          nonce: "1",
+          nonceSubkey: "ab".repeat(32),
+          deadline: "2000",
+          validatorId: "0",
+          credentialGeneration: "1",
+          authorityEpoch: "0",
+          configurationNonce: "0",
+          signature: "cd".repeat(64),
+        }),
+      ]),
+      batch: false,
+      operations: [{ method: "transfer" }],
+    },
+  };
+  const transaction = {
+    hash,
+    blockhash: "0x" + "bb".repeat(32),
+    script: review.plan.script,
+    signers: review.signers,
+  };
+  assert.deepEqual(
+    validateNativeReceipt(
+      review,
+      { ...transaction, script: Buffer.from(review.plan.script, "hex").toString("base64") },
+      { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Boolean", value: true }] }] },
+      hash,
+    ),
+    { txid: hash, state: "HALT" },
+  );
+  const base64 = Buffer.from(review.plan.script, "hex").toString("base64");
+  for (const [patch, expected] of [
+    [{ transaction: { ...transaction, blockhash: undefined, script: base64 } }, /mined/i],
+    [{ transaction: { ...transaction, script: base64, signers: [{ ...review.signers[0], scopes: "Global" }] } }, /scope/i],
+    [{ transaction: { ...transaction, script: "abcd" } }, /script/i],
+    [{ log: { txid: "0x" + "cc".repeat(32), executions: [] } }, /identity/i],
+    [{ log: { txid: hash, executions: [{ trigger: "Verification", vmstate: "HALT" }] } }, /Application/i],
+    [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "FAULT", stack: [] }] } }, /successful/i],
+    [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Boolean", value: false }] }] } }, /transfer/i],
+    [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [] }] } }, /transfer/i],
+  ])
+    assert.throws(
+      () =>
+        validateNativeReceipt(
+          review,
+          patch.transaction ?? { ...transaction, script: base64 },
+          patch.log ?? { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Boolean", value: true }] }] },
+          hash,
+        ),
+      expected,
+    );
+});
+
+test("confirmation reads the mined transaction and refuses to publish it after an edit", async () => {
+  const f = await connected({ registered: true });
+  const review = await f.workspace.lifecycle({
+    accountId: nativeTestIdentity.accountId,
+    action: "freezeAccount",
   });
   const hash = "0x" + "aa".repeat(32);
   const transaction = {
@@ -572,719 +1172,207 @@ test("confirmation requires mined identity and matching Application log; editing
     script: Buffer.from(review.plan.script, "hex").toString("base64"),
     signers: review.signers,
   };
-  let log = {
-      txid: hash,
-      executions: [{ trigger: "Application", vmstate: "HALT", stack: [] }],
-    },
-    tx = transaction;
-  f.client.rpc.send = async (method) =>
-    method === "getrawtransaction" ? tx : log;
-  assert.equal((await f.workspace.confirm(review, hash)).state, "HALT");
-  tx = { ...transaction, blockhash: undefined };
-  await assert.rejects(
-    () => f.workspace.confirm(review, hash),
-    /mined|confirm/i,
-  );
-  tx = {
-    ...transaction,
-    signers: [{ ...review.signers[0], scopes: "Global" }],
+  const log = { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [] }] };
+  const send = f.client.rpc.send;
+  f.client.rpc.send = async (method, params) => {
+    if (method === "getrawtransaction") return transaction;
+    if (method === "getapplicationlog") return log;
+    return send(method, params);
   };
-  await assert.rejects(() => f.workspace.confirm(review, hash), /scope/i);
-  tx = transaction;
-  log = {
-    txid: "0x" + "cc".repeat(32),
-    executions: [{ trigger: "Application", vmstate: "HALT" }],
+  assert.deepEqual(await f.workspace.confirm(review, hash), { txid: hash, state: "HALT" });
+
+  let release,
+    first = true;
+  f.client.rpc.send = (method, params) => {
+    if (first && method === "getrawtransaction") {
+      first = false;
+      return new Promise((resolve) => (release = resolve));
+    }
+    return send(method, params);
   };
-  await assert.rejects(
-    () => f.workspace.confirm(review, hash),
-    /identity|transaction/i,
-  );
-  log = {
-    txid: hash,
-    executions: [{ trigger: "Verification", vmstate: "HALT" }],
-  };
-  await assert.rejects(() => f.workspace.confirm(review, hash), /Application/i);
-  let release;
-  f.client.rpc.send = () => new Promise((resolve) => (release = resolve));
   const pending = f.workspace.confirm(review, hash);
   await new Promise((resolve) => setImmediate(resolve));
   f.workspace.clearReview();
   release(transaction);
-  await assert.rejects(() => pending, /changed|stale/i);
-});
-test("false or missing NEP17 transfer outcomes cannot be called a confirmed success", async () => {
-  const { validateNativeReceipt } =
-    await import("../src/features/native/nativeWorkspace.js");
-  assert.equal(typeof validateNativeReceipt, "function");
-  const hash = "0x" + "aa".repeat(32),
-    review = {
-      feePayer: custody,
-      signers: [{ account: "0x" + custody, scopes: "CalledByEntry" }],
-      plan: {
-        kind: "execution",
-        script: "abcd",
-        batch: false,
-        preparedOperations: [{ operation: { method: "transfer" } }],
-      },
-    };
-  const tx = {
-    hash,
-    blockhash: "0x" + "bb".repeat(32),
-    script: Buffer.from("abcd", "hex").toString("base64"),
-    signers: review.signers,
-  };
-  for (const stack of [[{ type: "Boolean", value: false }], []])
-    assert.throws(
-      () =>
-        validateNativeReceipt(
-          review,
-          tx,
-          {
-            txid: hash,
-            executions: [{ trigger: "Application", vmstate: "HALT", stack }],
-          },
-          hash,
-        ),
-      /transfer/i,
-    );
-});
-test("SDK review uses SDK payer scope while wallet invocation remains a separate bounded path", async () => {
-  const f = fixture();
-  await f.workspace.connect({
-    rpcUrl: "http://localhost:1234",
-    networkMagic: 123,
-  });
-  const review = await f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    recoveryAddress: recovery,
-    submission: "native-sdk",
-  });
-  assert.equal(review.submission, "native-sdk");
-  assert.equal(review.walletSupported, false);
-  assert.equal(review.request, null);
-  assert.deepEqual(review.signers, [
-    {
-      account: "0x" + custody,
-      scopes: "CustomContracts",
-      allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT],
-    },
-    { account: "0x" + recovery, scopes: "CustomContracts", allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT] },
-  ]);
-  await assert.rejects(() => f.workspace.submit(review), /exact-script/);
-  const walletReview = await f.workspace.registration({
-    custodyAddress: custody,
-    salt,
-    allowNoRecovery: true,
-  });
-  const { rebuildNativeReview } =
-    await import("../src/features/native/nativeWorkspace.js");
-  const exported = await f.workspace.exportReview(walletReview);
-  await assert.rejects(
-    () => rebuildNativeReview(f.client, exported),
-    /wallet invocation/,
-  );
-});
-test("SDK recovery cancellation grants the actor core scope; permissionless recovery payer has None", async () => {
-  const f = fixture();
-  let state = { ...f.state, pendingRecovery: { matureAt: "2000" } };
-  f.client.rpc.send = async (method) =>
-    method === "getblockcount" ? 1 : { time: 1000 };
-  f.client.buildAction = async (input) => ({
-    kind: "lifecycle",
-    accountId: state.accountId,
-    accountState: state,
-    method: input.action,
-    requiredAuthorities: [],
-    authorityPolicy:
-      input.action === "cancelRecovery"
-        ? "recovery-or-custody-before-maturity"
-        : undefined,
-    script: "abcd",
-  });
-  await f.workspace.connect({});
-  const cancel = await f.workspace.lifecycle({
-    accountId: state.accountId,
-    action: "cancelRecovery",
-    feePayer: recovery,
-    submission: "native-sdk",
-  });
-  assert.equal(cancel.signers[0].scopes, "CustomContracts");
-  assert.deepEqual(cancel.requiredAuthorities, [recovery]);
-  assert.deepEqual(cancel.signers[0].allowedcontracts, [
-    "0x" + NATIVE_SMART_ACCOUNT_CONTRACT,
-  ]);
-  state = { ...state, pendingRecovery: { matureAt: "1" } };
-  const execute = await f.workspace.lifecycle({
-    accountId: state.accountId,
-    action: "executeRecovery",
-    feePayer: recovery,
-    submission: "native-sdk",
-  });
-  assert.equal(execute.signers[0].scopes, "None");
-  assert.deepEqual(execute.requiredAuthorities, []);
+  await assert.rejects(() => pending, /changed/i);
 });
 
-function policyFixture(role = "verifier") {
-  const rpc = createNativeRpcFixture();
-  rpc.state.registered = true;
-  const binding = { contract: "44".repeat(20), codeHash: "55".repeat(32) };
-  const makePending = (method = "setPolicy") => ({
-    accountId: nativeTestIdentity.accountId,
-    role,
-    root: binding,
-    selected: binding,
-    method,
-    invokedArguments: { type: "Array", value: [nativeCodec.hashValue(nativeTestIdentity.accountId)] },
-    proposedAt: String(rpc.state.time - 86400001),
-    matureAt: String(rpc.state.time - 1),
-    configurationNonce: "0",
-  });
-  const B = (value) => ({ type: "ByteString", value: Buffer.from(value, "hex").toString("base64") });
-  const H = (value) => B(Buffer.from(value, "hex").reverse().toString("hex"));
-  const I = (value) => ({ type: "Integer", value: String(value) });
-  const A = (value) => ({ type: "Array", value });
-  function setPending(value) {
-    rpc.add("getPendingModuleCall", [nativeCodec.hashValue(nativeTestIdentity.accountId), nativeCodec.stringValue(role)], value ? A([
-      I(1), H(value.accountId), I(role === "verifier" ? 0 : 1),
-      A([H(binding.contract), H(binding.codeHash)]), A([H(binding.contract), H(binding.codeHash)]),
-      B(Buffer.from(value.method).toString("hex")), A([H(value.accountId)]),
-      I(value.proposedAt), I(value.matureAt), I(value.configurationNonce),
-    ]) : { type: "Any", value: null });
-  }
-  setPending(makePending());
-  const Client = createNativeClientClass(nativeCodec);
-  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
-  let walletCalls = 0;
-  const wallet = {
-    account: async () => custody,
-    network: async () => 123,
-    invoke: async (request) => { walletCalls++; return { request }; },
-  };
+function exactTools(overrides = {}) {
   return {
-    rpc, client,
-    workspace: createNativeWorkspace({ makeClient: () => client, wallet }),
-    called: () => walletCalls,
-    replace() { setPending(makePending("replacePolicy")); },
-    clear() { setPending(null); },
-  };
-}
-
-test("guarded policy cancellation preserves the selected intent and cannot fall back to wallet invoke", async () => {
-  for (const role of ["verifier", "hook"]) {
-    const f = policyFixture(role);
-    await f.workspace.connect({});
-    const inspected = await f.workspace.inspectPolicy({ accountId: nativeTestIdentity.accountId, role });
-    assert.equal(inspected.role, role);
-    assert.equal(inspected.chainTime, f.rpc.state.time);
-    assert.equal(inspected.pending.method, "setPolicy");
-    const review = await f.workspace.lifecycle({
-      accountId: nativeTestIdentity.accountId, action: "cancelModuleCall", role,
-      feePayer: custody, expectedPending: inspected.pending,
-    });
-    assert.equal(review.submission, "native-sdk");
-    assert.equal(review.walletSupported, false);
-    assert.equal(review.request, null);
-    assert.equal(review.plan.requiresExactScript, true);
-    assert.match(review.plan.pendingCallBytes, /^400a[0-9a-f]+$/);
-    assert.notEqual(review.plan.script, nativeCodec.dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, "cancelModuleCall", [
-      nativeCodec.hashValue(nativeTestIdentity.accountId), nativeCodec.stringValue(role),
-    ]));
-    assert.equal(review.plan.role, role);
-    assert.deepEqual(review.plan.pending, inspected.pending);
-    assert.deepEqual(review.requiredAuthorities, [custody]);
-    await assert.rejects(() => f.workspace.submit(review), /exact-script/);
-    assert.equal(f.called(), 0);
-  }
-});
-
-test("pending cancellation refuses a changed inspected intent and stale SDK export even with unchanged account state", async () => {
-  const f = policyFixture();
-  await f.workspace.connect({});
-  const inspected = await f.workspace.inspectPolicy({ accountId: nativeTestIdentity.accountId, role: "verifier" });
-  const input = {
-    accountId: nativeTestIdentity.accountId, action: "cancelModuleCall", role: "verifier",
-    expectedPending: inspected.pending, feePayer: custody, submission: "native-sdk",
-  };
-  const review = await f.workspace.lifecycle(input);
-  const exported = await f.workspace.exportReview(review);
-  assert.equal(exported.recipe.input.role, "verifier");
-  f.replace();
-  await assert.rejects(() => f.workspace.exportReview(review), /pending|intent|changed/i);
-  const { rebuildNativeReview } = await import("../src/features/native/nativeWorkspace.js");
-  await assert.rejects(() => rebuildNativeReview(f.client, exported), /pending|intent|changed/i);
-  await assert.rejects(() => f.workspace.lifecycle(input), /pending.*changed|changed.*pending/i);
-  f.clear();
-  const empty = await f.workspace.inspectPolicy({ accountId: nativeTestIdentity.accountId, role: "verifier" });
-  assert.equal(empty.pending, null);
-});
-
-test("changing policy inputs during inspection prevents a stale pending card", async () => {
-  const f = policyFixture();
-  await f.workspace.connect({});
-  let finish;
-  const result = new Promise((resolve) => { finish = resolve; });
-  f.client.getPendingModuleCall = async () => result;
-  const inspection = f.workspace.inspectPolicy({
-    accountId: nativeTestIdentity.accountId, role: "verifier",
-  });
-  f.workspace.clearReview();
-  finish(null);
-  await assert.rejects(() => inspection, /inputs changed/i);
-});
-
-test("all three mature activations use only the unrelated payer in wallet and SDK reviews", async () => {
-  const rpc = createNativeRpcFixture();
-  rpc.state.registered = true;
-  const Client = createNativeClientClass(nativeCodec);
-  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
-  const state = await client.getAccount(nativeTestIdentity.accountId);
-  client.getAccount = async () => ({ ...state,
-    pendingVerifier: { matureAt: "1" }, pendingHook: { matureAt: "1" },
-    pendingRecoveryAddress: { matureAt: "1" },
-  });
-  const workspace = createNativeWorkspace({ makeClient: () => client });
-  await workspace.connect({});
-  for (const action of ["activateVerifier", "activateHook", "activateRecoveryAddress"]) {
-    for (const submission of ["wallet-invoke", "native-sdk"]) {
-      const review = await workspace.lifecycle({ accountId: state.accountId, action, feePayer: "66".repeat(20), submission });
-      assert.deepEqual(review.requiredAuthorities, []);
-      assert.equal(review.signers.length, 1);
-      assert.equal(review.signers[0].scopes, submission === "native-sdk" ? "None" : "CalledByEntry");
-      assert.equal(review.walletSupported, submission === "wallet-invoke");
-      assert.match(review.description, /anyone/i);
-    }
-  }
-});
-test("SDK execution signer order is fee payer, proxy, remaining custody authority", async () => {
-  const f = fixture();
-  f.client.rpc.send = async (method) =>
-    method === "getblockcount" ? 1 : { time: 1000 };
-  const prepared = {
-    account: f.state,
-    channel: "0",
-    operation: {
-      targetContract: recovery,
-      method: "ping",
-      args: [],
-      deadline: "2000",
-      signature: "",
-    },
-  };
-  f.client.prepareOperation = async () => prepared;
-  f.client.buildExecution = () => ({
-    kind: "execution",
-    accountId: f.state.accountId,
-    accountAddress: f.state.accountAddress,
-    requiredAuthorities: [custody],
-    proxySigner: {
-      account: "0x" + f.state.accountAddress,
-      scopes: "CustomContracts",
-      allowedcontracts: ["0x" + recovery],
-    },
-    script: "abcd",
-    preparedOperations: [prepared],
-  });
-  await f.workspace.connect({});
-  const result = await f.workspace.operation({
-    accountId: f.state.accountId,
-    deadline: "2000",
-    feePayer: recovery,
-  });
-  assert.deepEqual(
-    result.signers.map((s) => s.account),
-    ["0x" + recovery, "0x" + f.state.accountAddress, "0x" + custody],
-  );
-  assert.deepEqual(
-    result.signers.map((s) => s.scopes),
-    ["None", "CustomContracts", "CustomContracts"],
-  );
-});
-
-test("custody may cancel configuration proposals during recovery without enabling new configuration", async () => {
-  const f = fixture();
-  const pending = { matureAt: "1" };
-  const state = {
-    ...f.state,
-    pendingVerifier: pending,
-    pendingHook: pending,
-    pendingRecoveryAddress: pending,
-    pendingRecovery: { matureAt: "2000" },
-  };
-  f.client.rpc.send = async (method) =>
-    method === "getblockcount" ? 1 : { time: 1000 };
-  f.client.buildAction = async ({ action }) => ({
-    kind: "lifecycle",
-    accountId: state.accountId,
-    accountState: state,
-    method: action,
-    requiredAuthorities: [custody],
-    script: "abcd",
-  });
-  await f.workspace.connect({});
-  for (const target of ["Verifier", "Hook", "RecoveryAddress"]) {
-    const review = await f.workspace.lifecycle({
-      accountId: state.accountId,
-      action: "cancel" + target,
-      feePayer: custody,
-    });
-    assert.deepEqual(review.plan.requiredAuthorities, [custody]);
-    assert.equal(review.walletSupported, true);
-    for (const verb of ["propose", "activate"])
-      assert.match(
-        actionBlockReason(state, verb + target, 1000),
-        /Configuration is blocked/,
-      );
-    assert.match(
-      actionBlockReason(
-        { ...state, ["pending" + target]: null },
-        "cancel" + target,
-        1000,
-      ),
-      /No matching configuration proposal/,
-    );
-    assert.match(
-      actionBlockReason(
-        { ...state, pendingRecovery: null, status: "Frozen" },
-        "propose" + target,
-        1000,
-      ),
-      /Configuration is blocked/,
-    );
-  }
-});
-
-test("GAS limits remain exact decimal integers and reject implicit or rounded fees", () => {
-  assert.equal(nativeGasLimit("0.00000001"), "1");
-  assert.equal(nativeGasLimit("1.23456789"), "123456789");
-  assert.equal(nativeGasLimit("0"), "0");
-  for (const invalid of ["", "1e2", "-1", "0.000000001", "01", "Infinity", "92233720369"])
-    assert.throws(() => nativeGasLimit(invalid), /fee|GAS/);
-});
-
-function exactImportFixture(overrides = {}) {
-  let sends = 0;
-  const tools = {
-    importArtifact: async (_client, review, _text, caps) => Object.freeze({
-      review, txid: "0x" + "ab".repeat(32), rawTransaction: "aa",
-      fees: { system: "10", network: "1", total: "11" }, caps,
-      transaction: { validUntilBlock: 20 },
-    }),
+    importArtifact: async (_client, review, _text, caps) =>
+      Object.freeze({
+        review,
+        txid: "0x" + "ab".repeat(32),
+        rawTransaction: "aa",
+        fees: { system: "10", network: "1", total: "11" },
+        caps,
+        transaction: { validUntilBlock: 20 },
+      }),
     preflight: async () => ({ snapshot: { height: 10 }, state: "HALT" }),
     broadcast: async (_client, _transaction, { assertCurrent }) => {
-      assertCurrent(); sends++;
+      assertCurrent();
       return { txid: "0x" + "ab".repeat(32), submitted: true };
     },
     receipt: async () => ({ confirmed: true, succeeded: true, vmState: "HALT" }),
     ...overrides,
   };
-  return { ...fixture({ transactionTools: tools }), tools, sends: () => sends };
 }
-const exactReview = async (f) => {
-  await f.workspace.connect({});
-  return f.workspace.registration({ custodyAddress: custody, recoveryAddress: recovery, salt, submission: "native-sdk" });
-};
+
+async function exactFixture(overrides = {}) {
+  const rpc = createNativeRpcFixture();
+  const client = new Client({ rpcClient: rpc, networkMagic: 123 });
+  const tools = exactTools(overrides);
+  const workspace = createNativeWorkspace({ makeClient: () => client, transactionTools: tools });
+  await workspace.connect({});
+  const review = await workspace.registration({
+    custodyAddress: custody,
+    salt,
+    recoveryTimelockDays: 7,
+    submission: "native-sdk",
+  });
+  return { rpc, client, tools, workspace, review };
+}
+
 const importCaps = { maxSystemFee: "100", maxNetworkFee: "100", maxTotalFee: "200" };
 
-function recoveryCancellationFixture(options = {}) {
-  const f = fixture(options);
-  let chainTime = 1000;
-  f.state.pendingRecovery = { address: "33".repeat(20), proposedAt: "0", matureAt: "2000", configurationNonce: "0" };
-  f.client.rpc.send = async (method) => method === "getblockcount" ? 1 : { time: chainTime };
-  f.client.buildAction = async ({ accountId, action }) => ({
-    kind: "lifecycle", accountId, accountState: structuredClone(f.state), method: action,
-    requiredAuthorities: [], authorityPolicy: "recovery-or-custody-before-maturity",
-    script: nativeCodec.dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, action, [nativeCodec.hashValue(accountId)]),
-  });
-  return { ...f, time(value) { chainTime = value; } };
-}
-
-test("cancellation authority is separate from payer and forces exact signing only when needed", async () => {
-  const f = recoveryCancellationFixture();
-  await f.workspace.connect({});
-  const payer = "66".repeat(20);
-  for (const authority of [custody, recovery]) {
-    const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: payer, cancellationAuthority: authority });
-    assert.equal(review.cancellationAuthority, authority);
-    assert.equal(review.feePayer, payer);
-    assert.equal(review.submission, "native-sdk");
-    assert.equal(review.request, null);
-    assert.deepEqual(review.requiredAuthorities, [authority]);
-    assert.deepEqual(review.plan.requiredAuthorities, [], "the client-issued plan is not rewritten");
-    assert.deepEqual(review.signers, [{ account: "0x" + payer, scopes: "None" },
-      { account: "0x" + authority, scopes: "CustomContracts", allowedcontracts: ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT] }]);
-  }
-  for (const authority of [custody, recovery]) {
-    const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: authority });
-    assert.equal(review.cancellationAuthority, authority);
-    assert.equal(review.submission, "wallet-invoke");
-    assert.deepEqual(review.signers, [{ account: "0x" + authority, scopes: "CalledByEntry" }]);
-    f.wallet.account = async () => authority;
-    const sent = await f.workspace.submit(review);
-    assert.equal(sent.request.operation, "cancelRecovery");
-    assert.deepEqual(sent.request.args, [{ type: "Hash160", value: "0x" + f.state.accountId }]);
-  }
-  const crossing = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: recovery, cancellationAuthority: custody });
-  assert.equal(crossing.signers[0].scopes, "None", "an unselected recovery payer gains no authority scope");
-  assert.deepEqual(crossing.requiredAuthorities, [custody]);
-});
-
-test("recovery cancellation uses chain maturity with strict custody boundary and rejects unrelated authority", async () => {
-  const f = recoveryCancellationFixture();
-  await f.workspace.connect({});
-  const input = { accountId: f.state.accountId, action: "cancelRecovery", feePayer: "66".repeat(20) };
-  for (const now of [1999, 2000, 2001]) {
-    f.time(now);
-    await f.workspace.lifecycle({ ...input, cancellationAuthority: recovery });
-    if (now < 2000) await f.workspace.lifecycle({ ...input, cancellationAuthority: custody });
-    else await assert.rejects(() => f.workspace.lifecycle({ ...input, cancellationAuthority: custody }), /before maturity/);
-  }
-  for (const authority of ["77".repeat(20), "00".repeat(20), "bad"])
-    await assert.rejects(() => f.workspace.lifecycle({ ...input, cancellationAuthority: authority }));
-  f.state.pendingRecovery = null;
-  await assert.rejects(() => f.workspace.lifecycle({ ...input, cancellationAuthority: recovery }), /No custody recovery/);
-});
-
-test("cancellation export and rebuild bind actual authority, scopes and current chain time", async () => {
-  const { rebuildNativeReview } = await import("../src/features/native/nativeWorkspace.js");
-  const f = recoveryCancellationFixture();
-  await f.workspace.connect({});
-  const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: "66".repeat(20), cancellationAuthority: custody });
-  const exported = await f.workspace.exportReview(review);
-  assert.equal(exported.cancellationAuthority, custody);
-  assert.equal(Object.hasOwn(exported.recipe.input, "cancellationAuthority"), false);
-  assert.deepEqual(await rebuildNativeReview(f.client, exported), review.plan);
-  for (const change of [
-    (copy) => { copy.cancellationAuthority = recovery; },
-    (copy) => { copy.requiredAuthorities = [recovery]; },
-    (copy) => { copy.signers[0].scopes = "CustomContracts"; },
-    (copy) => { copy.signers.reverse(); },
-    (copy) => { copy.feePayer = recovery; },
-  ]) {
-    const copy = structuredClone(exported); change(copy);
-    await assert.rejects(() => rebuildNativeReview(f.client, copy), /authority|signer|payer|scope/i);
-  }
-  f.time(2000);
-  await assert.rejects(() => f.workspace.exportReview(review), /before maturity/);
-  await assert.rejects(() => rebuildNativeReview(f.client, exported), /before maturity/);
-});
-
-test("legacy version-one cancellation exports rebuild only with the exact same-payer authority roster", async () => {
-  const { rebuildNativeReview } = await import("../src/features/native/nativeWorkspace.js");
-  const f = recoveryCancellationFixture();
-  await f.workspace.connect({});
-  const review = await f.workspace.lifecycle({ accountId: f.state.accountId, action: "cancelRecovery", feePayer: custody, submission: "native-sdk" });
-  const legacy = structuredClone(await f.workspace.exportReview(review));
-  delete legacy.cancellationAuthority;
-  assert.deepEqual(await rebuildNativeReview(f.client, legacy), review.plan);
-  assert.equal(Object.hasOwn(legacy, "cancellationAuthority"), false, "legacy input is not rewritten");
-  for (const change of [
-    (copy) => { copy.feePayer = "66".repeat(20); },
-    (copy) => { copy.requiredAuthorities = [recovery]; },
-    (copy) => { copy.signers[0].scopes = "None"; delete copy.signers[0].allowedcontracts; },
-    (copy) => { copy.cancellationAuthority = null; },
-    (copy) => { copy.cancellationAuthority = undefined; },
-    (copy) => { copy.recipe.input.cancellationAuthority = recovery; },
-  ]) {
-    const copy = structuredClone(legacy); change(copy);
-    await assert.rejects(() => rebuildNativeReview(f.client, copy));
-  }
-  f.time(2000);
-  await assert.rejects(() => rebuildNativeReview(f.client, legacy), /before maturity/);
-});
-
-test("cancellation authority changes invalidate pending imported transactions and delayed reviews", async () => {
-  let importedReview;
-  const f = recoveryCancellationFixture({ transactionTools: { importArtifact: async (_client, review) => { importedReview = review; return {}; } } });
-  await f.workspace.connect({});
-  const input = { accountId: f.state.accountId, action: "cancelRecovery", feePayer: "66".repeat(20), cancellationAuthority: custody };
-  const first = await f.workspace.lifecycle(input);
-  const imported = await f.workspace.importSigned(first, "{}", importCaps);
-  assert.equal(importedReview, first);
-  await f.workspace.lifecycle({ ...input, cancellationAuthority: recovery });
-  await assert.rejects(() => f.workspace.exportReview(first), /stale/);
-  await assert.rejects(() => f.workspace.preflightSigned(imported), /stale/);
-  const beforeMaturity = await f.workspace.lifecycle(input);
-  f.time(2000);
-  await assert.rejects(() => f.workspace.importSigned(beforeMaturity, "{}", importCaps), /before maturity/);
-});
-
-test("custody cancellation cannot cross maturity during simulation or before wallet approval", async () => {
-  const f = recoveryCancellationFixture();
-  await f.workspace.connect({});
-  const input = { accountId: f.state.accountId, action: "cancelRecovery", feePayer: custody };
-  const review = await f.workspace.lifecycle(input);
-  f.time(2000);
-  await assert.rejects(() => f.workspace.submit(review), /before maturity/);
-  assert.equal(f.called(), 0);
-  f.time(1999);
-  f.client.simulate = async () => {
-    f.time(2000);
-    return { state: "HALT", gasConsumed: "10", failedTransfers: [] };
-  };
-  await assert.rejects(() => f.workspace.lifecycle(input), /before maturity/);
-  assert.equal(f.workspace.review, null);
-});
-
-test("cancellation review rebuilds through SDK signing and real browser witness import with independent payer", async () => {
-  const crypto = await import("node:crypto");
-  const { createRequire } = await import("node:module");
-  const require = createRequire(new URL("../../sdk/js/package.json", import.meta.url));
-  const { NativeSmartAccountClient } = require("./src/native");
-  const { rebuildNativeReview } = await import("../src/features/native/nativeWorkspace.js");
-  // Existing public offline fixture scalars from the SDK multisig tests.
-  function fixtureWallet(scalar) {
-    const bytes = Buffer.alloc(32); bytes[31] = scalar;
-    const ec = crypto.createECDH("prime256v1"); ec.setPrivateKey(bytes);
-    const publicPoint = ec.getPublicKey(undefined, "uncompressed");
-    const key = crypto.createPrivateKey({ format: "jwk", key: { kty: "EC", crv: "P-256",
-      x: publicPoint.subarray(1, 33).toString("base64url"), y: publicPoint.subarray(33).toString("base64url"), d: bytes.toString("base64url") } });
-    const verificationScript = "0c21" + ec.getPublicKey(undefined, "compressed").toString("hex") + "4156e7b327";
-    const account = crypto.createHash("ripemd160").update(crypto.createHash("sha256").update(Buffer.from(verificationScript, "hex")).digest()).digest().reverse().toString("hex");
-    return { account, verificationScript, sign(data) { return crypto.sign("sha256", Buffer.from(data, "hex"), { key, dsaEncoding: "ieee-p1363" }).toString("hex"); } };
-  }
-  const owner = fixtureWallet(2), guardian = fixtureWallet(3), independent = fixtureWallet(41);
-  const rpc = createNativeRpcFixture();
-  rpc.state.registered = true;
-  rpc.state.time = 1900000000000;
-  const identity = nativeCodec.deriveIdentity({ networkMagic: 123, custodyAddress: owner.account, salt });
-  const accountRead = nativeCodec.dynamicCall(NATIVE_SMART_ACCOUNT_CONTRACT, "getAccount", [nativeCodec.hashValue(identity.accountId)], 5);
-  const H = (value) => ({ type: "ByteString", value: Buffer.from(value, "hex").reverse().toString("base64") });
-  const I = (value) => ({ type: "Integer", value: String(value) });
-  let replacement = "55".repeat(20);
-  const rpcClient = { async send(method, params) {
-    if (method === "calculatenetworkfee") return { networkfee: "50" };
-    if (method === "invokescript" && Buffer.from(params[0], "base64").toString("hex") === accountRead) {
-      const record = rpc.record();
-      record.value[1] = H(identity.accountId); record.value[2] = H(identity.accountAddress);
-      record.value[3] = H(owner.account); record.value[4] = H(guardian.account);
-      record.value[12] = { type: "Array", value: [H(replacement), I(1899999999000), I(1900000001000), I(0)] };
-      return { state: "HALT", stack: [record], gasconsumed: "100000", minimumrequiredfee: "100000" };
-    }
-    return rpc.send(method, params);
-  } };
-  const makeClient = () => new NativeSmartAccountClient({ networkMagic: 123, rpcClient });
-  const workspace = createNativeWorkspace({ makeClient });
-  await workspace.connect({});
-  const caps = { maxSystemFee: "200000", maxNetworkFee: "100", maxTotalFee: "200100" };
-  for (const [payer, authority] of [[independent, owner], [independent, guardian], [guardian, owner], [owner, owner], [guardian, guardian]]) {
-    const review = await workspace.lifecycle({ accountId: identity.accountId, action: "cancelRecovery", feePayer: payer.account,
-      cancellationAuthority: authority.account, submission: "native-sdk" });
-    const exported = await workspace.exportReview(review);
-    const sdk = makeClient();
-    const plan = await rebuildNativeReview(sdk, exported);
-    const prepared = await sdk.prepareTransaction(plan, { feePayer: payer, authoritySigners: payer === authority ? [] : [authority],
-      cancellationAuthority: exported.cancellationAuthority, nonce: 42, validUntilBlock: 50, ...caps });
-    const signed = await sdk.signTransaction(prepared);
-    const artifact = sdk.exportSignedTransaction(signed);
-    const imported = await workspace.importSigned(review, JSON.stringify(artifact), caps);
-    assert.equal(imported.txid, signed.txid);
-    assert.equal(imported.witnesses.length, payer === authority ? 1 : 2);
-    assert.equal(imported.transaction.signers[0].scopes, payer === authority ? "CustomContracts" : "None");
-    assert.equal(imported.transaction.signers.at(-1).account, "0x" + authority.account);
-    assert.deepEqual(imported.transaction.signers.at(-1).allowedcontracts, ["0x" + NATIVE_SMART_ACCOUNT_CONTRACT]);
-    const changedRoster = structuredClone(artifact);
-    changedRoster.transaction.signers[0].scopes = "Global";
-    await assert.rejects(() => workspace.importSigned(review, JSON.stringify(changedRoster), caps), /scope|canonical|signer/);
-    replacement = "56".repeat(20);
-    await assert.rejects(() => workspace.importSigned(review, JSON.stringify(artifact), caps), /account changed/);
-    replacement = "55".repeat(20);
-  }
-  assert.equal(rpc.state.calls.some(({ method }) => method === "sendrawtransaction"), false);
-});
-
-test("imported transaction remains bound to the current review and fee limits across async work", async () => {
-  const f = exactImportFixture();
-  const review = await exactReview(f);
-  const imported = await f.workspace.importSigned(review, "{}", importCaps);
+test("an imported transaction stays bound to the current review and fee limits", async () => {
+  const f = await exactFixture();
+  const imported = await f.workspace.importSigned(f.review, "{}", importCaps);
   assert.equal((await f.workspace.preflightSigned(imported)).state, "HALT");
   f.workspace.clearImported();
-  await assert.rejects(() => f.workspace.broadcastSigned(imported), /stale/);
-  assert.equal(f.sends(), 0);
+  await assert.rejects(() => f.workspace.broadcastSigned(imported), /stale/i);
+
   let finish, started;
-  const importingStarted = new Promise((resolve) => { started = resolve; });
-  f.tools.importArtifact = () => new Promise((resolve) => { finish = resolve; started(); });
-  const importing = f.workspace.importSigned(review, "{}", importCaps);
-  await importingStarted;
+  const importing = new Promise((resolve) => (started = resolve));
+  f.tools.importArtifact = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+      started();
+    });
+  const pending = f.workspace.importSigned(f.review, "{}", importCaps);
+  await importing;
   f.workspace.clearReview();
   finish(Object.freeze({ txid: imported.txid }));
-  await assert.rejects(() => importing, /changed/);
+  await assert.rejects(() => pending, /changed/i);
 });
 
 test("a changed review during the broadcast preflight never reaches submission", async () => {
   let resume;
-  const pending = new Promise((resolve) => { resume = resolve; });
+  const gate = new Promise((resolve) => (resume = resolve));
   let sent = 0;
-  const f = exactImportFixture({ broadcast: async (_c, _tx, { assertCurrent }) => {
-    await pending;
-    assertCurrent();
-    sent++;
-  } });
-  const review = await exactReview(f);
-  const imported = await f.workspace.importSigned(review, "{}", importCaps);
+  const f = await exactFixture({
+    broadcast: async (_client, _transaction, { assertCurrent }) => {
+      await gate;
+      assertCurrent();
+      sent++;
+    },
+  });
+  const imported = await f.workspace.importSigned(f.review, "{}", importCaps);
   const broadcasting = f.workspace.broadcastSigned(imported);
   f.workspace.clearReview();
   resume();
-  await assert.rejects(() => broadcasting, /stale/);
+  await assert.rejects(() => broadcasting, /stale/i);
   assert.equal(sent, 0);
 });
 
-test("uncertain submission retains same transaction for receipt and cannot be retried", async () => {
+test("an uncertain submission keeps the same transaction for its receipt and cannot be retried", async () => {
   let attempts = 0;
-  const f = exactImportFixture({ broadcast: async (_c, tx, { assertCurrent }) => {
-    assertCurrent(); attempts++;
-    throw Object.assign(Error("timed out"), { submissionAttempted: true, txid: tx.txid });
-  } });
-  const review = await exactReview(f);
-  const imported = await f.workspace.importSigned(review, "{}", importCaps);
-  await assert.rejects(() => f.workspace.broadcastSigned(imported), { message: "timed out", submissionAttempted: true });
-  await assert.rejects(() => f.workspace.broadcastSigned(imported), /already attempted/);
-  await assert.rejects(() => f.workspace.importSigned(review, "{}", importCaps), /current exact-script review/);
-  f.change(); // Receipt must remain available after a successful transaction changes account state.
+  const f = await exactFixture({
+    broadcast: async (_client, tx, { assertCurrent }) => {
+      assertCurrent();
+      attempts++;
+      throw Object.assign(Error("timed out"), {
+        submissionAttempted: true,
+        txid: tx.txid,
+      });
+    },
+  });
+  const imported = await f.workspace.importSigned(f.review, "{}", importCaps);
+  await assert.rejects(() => f.workspace.broadcastSigned(imported), {
+    message: "timed out",
+    submissionAttempted: true,
+  });
+  await assert.rejects(() => f.workspace.broadcastSigned(imported), /already attempted/i);
+  await assert.rejects(() => f.workspace.importSigned(f.review, "{}", importCaps), /current exact-script review/i);
   assert.equal((await f.workspace.confirmSigned(imported)).succeeded, true);
   assert.equal(attempts, 1);
 });
 
-test("archived receipts survive executed state and expiry without gaining submission authority", async () => {
+test("archived receipts survive expiry without gaining submission authority", async () => {
   let restoredChecks = 0;
-  const f = exactImportFixture({
+  const f = await exactFixture({
     restoreForReceipt: async (_client, review) => {
       assert.equal(review.format, "neo-native-reviewed-request");
       return Object.freeze({ txid: "0x" + "ab".repeat(32), receiptOnly: true });
     },
-    receipt: async () => { restoredChecks++; return { confirmed: true, succeeded: true }; },
+    receipt: async () => {
+      restoredChecks++;
+      return { confirmed: true, succeeded: true };
+    },
   });
-  await f.workspace.connect({});
-  f.change();
-  const restored = await f.workspace.restoreReceipt('{"format":"neo-native-reviewed-request","version":1}', "{}");
+  const restored = await f.workspace.restoreReceipt(
+    '{"format":"neo-native-reviewed-request","version":1}',
+    "{}",
+  );
   assert.equal((await f.workspace.confirmRestoredReceipt(restored)).succeeded, true);
-  await assert.rejects(() => f.workspace.preflightSigned(restored), /stale/);
-  await assert.rejects(() => f.workspace.broadcastSigned(restored), /stale/);
-  assert.equal(f.sends(), 0);
+  await assert.rejects(() => f.workspace.preflightSigned(restored), /stale/i);
+  await assert.rejects(() => f.workspace.broadcastSigned(restored), /stale/i);
   f.workspace.clearReview();
-  assert.equal((await f.workspace.confirmRestoredReceipt(restored)).confirmed, true, "changing new form inputs does not invalidate a read-only archived receipt");
+  assert.equal(
+    (await f.workspace.confirmRestoredReceipt(restored)).confirmed,
+    true,
+    "editing new-form inputs does not invalidate a read-only archived receipt",
+  );
   f.workspace.clearArchived();
-  await assert.rejects(() => f.workspace.confirmRestoredReceipt(restored), /files changed/);
+  await assert.rejects(() => f.workspace.confirmRestoredReceipt(restored), /files changed/i);
   assert.equal(restoredChecks, 2);
 });
 
 test("archived receipt restoration is revoked by a network change during verification", async () => {
   let finish;
-  const f = exactImportFixture({ restoreForReceipt: () => new Promise((resolve) => { finish = resolve; }) });
-  await f.workspace.connect({});
+  const f = await exactFixture({
+    restoreForReceipt: () => new Promise((resolve) => (finish = resolve)),
+  });
   const restoring = f.workspace.restoreReceipt("{}", "{}");
   await Promise.resolve();
   f.workspace.invalidate();
   finish(Object.freeze({ receiptOnly: true }));
-  await assert.rejects(() => restoring, /Stale/);
+  await assert.rejects(() => restoring, /stale/i);
 });
 
-test("registration review requires the new guardian witness and refuses single-wallet handoff", async () => {
-  const f = fixture();
-  await f.workspace.connect({ rpcUrl: "http://localhost:1234", networkMagic: 123 });
-  const review = await f.workspace.registration({ custodyAddress: custody, recoveryAddress: recovery, salt });
-  assert.deepEqual(review.requiredAuthorities, [custody, recovery]);
-  assert.equal(review.walletSupported, false);
-  await assert.rejects(f.workspace.submit(review), /multiple-authority/);
-  assert.equal(f.called(), 0);
+test("canonical native modules are shipped byte-identically to the frontend", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { createHash } = await import("node:crypto");
+  const hash = (value) => createHash("sha256").update(value).digest("hex");
+  for (const name of [
+    "nativeSmartAccount.mjs",
+    "nativeSmartAccountClient.mjs",
+    "nativeTransactionArtifact.mjs",
+    "nativeWalletWitness.mjs",
+    "proxyWitness.mjs",
+  ])
+    assert.equal(
+      hash(await readFile(new URL("../src/shared/" + name, import.meta.url))),
+      hash(await readFile(new URL("../../shared/" + name, import.meta.url))),
+      name + " must match the canonical shared source",
+    );
+});
+
+test("the native workspace UI is bound to the v4 surface only", () => {
+  const source = readFileSync(
+    new URL("../src/features/native/NativeAccountWorkspace.vue", import.meta.url),
+    "utf8",
+  );
+  for (const removed of [
+    "buildSessionArguments",
+    "buildMultiSigArguments",
+    "NATIVE_MULTISIG_LIMITS",
+    "inspectPolicy",
+    "activatePolicy",
+    "workspace.policy(",
+    "pendingRecoveryAddress",
+  ])
+    assert.equal(source.includes(removed), false, `${removed} must not survive in the UI`);
+  assert.match(source, /workspace\.configuration\(/);
+  assert.match(source, /workspace\.inspectConfiguration\(/);
 });

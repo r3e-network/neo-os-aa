@@ -29,80 +29,116 @@ cd sdk/js && npm test
 
 ## SDK API 参考
 
+下列代码均为 v4 客户端（自定义内核用 `sdk/js/src/index.js`，原生内核用共享的
+`nativeSmartAccountClient.mjs`）。两者驱动同一个 13 字段操作与同一套 `SA_*` 词汇。v3 调用
+（`registerAccount`、`createAccountPayload`、`getVerifier`、`updateHook`）无法解析：不存在别名。
+
 ### 账户生命周期
 
+v4 身份只在创建时提交一次：`accountId = hash160('aa524704' || custody || salt)`。盐是 1..128
+字节的公开唯一性输入，恢复时间锁为 7..90 天，按毫秒传入。
+
 ```javascript
-const accountIdHash = client.deriveRegistrationAccountIdHash({
-  verifierContractHash,
-  verifierParamsHex,
-  hookContractHash,
-  backupOwnerAddress,
-  escapeTimelock: 7 * 24 * 60 * 60,
+const { createSmartAccountClient } = require('./sdk/js/src');
+
+const client = await createSmartAccountClient({ rpcUrl, contractHash, networkMagic });
+await client.discover(); // 固定 protocolVersion 与 implementationId
+
+const identity = client.deriveIdentity({ custodyAddress: custody, salt });
+
+// createAccount(Hash160 accountId, Hash160 custody, ByteArray salt,
+//               Integer recoveryTimelockMs, Array actions)
+const plan = client.buildCreateAccountScript({
+  custodyAddress: custody,
+  salt,
+  recoveryTimelockMs: 30 * 86_400_000,
 });
 
-const payload = client.createAccountPayload({
-  verifierContractHash,
-  verifierParamsHex,
-  hookContractHash,
-  backupOwnerAddress,
-  escapeTimelock: 7 * 24 * 60 * 60,
-});
-
-const state = await client.getAccountState(accountIdHash);
+const state = await client.getAccount(identity.accountId);
 ```
 
-已部署核心上的 `registerAccounts` 在一笔交易中注册多个账户；SDK 没有批量载荷构造器，因此按账户分别构造 `createAccountPayload`，再通过该入口提交。
+创建调用携带派生 id、托管地址、盐与时间锁；创建时不选择任何验证器或钩子。`state` 返回控制记录
+（托管、恢复权限方与时间锁、权限 epoch、配置 nonce、钩子顺序修订号）、已安装模块与待确认的配置意图。
 
-### 已移除的 V2 接口
+### 模块与配置意图
 
-V1/V2 的角色模型已不存在。V3 账户没有管理员、经理或阈值状态，SDK 只保留抛出 `LEGACY_V3_REMOVED` 的移除存根：
+模块在创建之后安装。配置变更先提案，成熟 24 小时后才可确认或取消；在确认之前账户不会发生任何变化。
 
-- `client.getAccountsByAdmin()`、`client.getAccountsByManager()` —— V3 已移除：无参数，总是抛出 `LEGACY_V3_REMOVED`；请改用 `getAccountState(accountIdHash)` 逐账户读取。
-- `client.getAccountAddressesByAdmin()`、`client.getAccountAddressesByManager()` —— 同样原因在 V3 移除。
-- `client.createAccountBatchPayload(...)`、`client.getAdmins(...)`、`client.getAdminThreshold(...)`、`client.getManagers(...)` —— 本 SDK 中从未存在的已移除名称。
-- `client.getManagerThreshold(...)`、`client.executePayload(...)`、`client.executeUnifiedByAddressPayload(...)` —— 本 SDK 中从未存在的已移除名称；当前构造器是 `createAccountPayload` 与 `UserOperationBuilder`。
+```javascript
+const propose = client.buildConfigurationScript({
+  kind: 'propose',
+  accountId: identity.accountId,
+  // [1, moduleTypeCode, moduleHash, profileDigest, initData]
+  actions: [installAction],
+  readSet: [],
+});
+
+const confirm = client.buildConfigurationScript({
+  kind: 'confirm',
+  accountId: identity.accountId,
+  intentId: intent.intentId,
+});
+```
+
+`getModules(accountId, 'validator' | 'hook', { cursor, limit })` 分页读取已安装实例，
+`getModule(accountId, moduleId)` 读取单个实例，`getPendingConfiguration(accountId)` 返回意图、
+成熟时间与动作摘要。每个模块只暴露自身的只读方法（`getModuleProfile`、`getConfig`、
+`getSessionKey`、`getThreshold`、`getPublicKey`、`getDailyLimit` 等），因为生命周期回调由核心合约持有。
 
 ### 执行
 
-V3 通过 `executeUserOp(accountId, op)` 执行（批量时为 `executeUserOps(accountId, ops)`）；`executeUnified` / `executeUnifiedByAddress` 包装已被移除，在任何已部署清单与合约源码中都不存在。用 SDK 的 `UserOperationBuilder` 构造操作，并按 V3 布局签名类型化数据：
+单个操作使用 `executeUserOp(accountId, op)`，批量使用 `executeUserOps(accountId, ops)`。操作就是
+v4 的 13 字段数组：版本、目标、方法、参数、nonce、nonce 子键、截止时间、验证器 id、凭证代数、
+权限 epoch、配置 nonce、签名、钩子证明。按核心校验的类型化数据签名：
 
 ```javascript
-const { createUserOpBuilder, buildV3UserOperationTypedData } = require('./sdk/js/src');
+const operation = {
+  targetContract,
+  method: 'transfer',
+  args: [{ type: 'Hash160', value: recipient }, { type: 'Integer', value: '100000000' }],
+  nonce,
+  nonceSubkey,
+  deadline,
+  validatorId: 1,
+  credentialGeneration: 1,
+  authorityEpoch,
+  configurationNonce,
+  signature,
+  hookProofs: [],
+};
 
-const userOp = createUserOpBuilder()
-  .setAccountId(accountIdHash)
-  .setTarget(targetContract)
-  .setMethod('transfer')
-  .setArgs([{ type: 'Hash160', value: recipient }, { type: 'Integer', value: '100000000' }])
-  .build();
-
-const typedData = buildV3UserOperationTypedData(userOp);
+const typedData = buildUserOperationTypedData({
+  chainId,
+  verifyingContract: proxyAddress,
+  accountId,
+  coreContractHash,
+  validatorId: operation.validatorId,
+  targetContract: operation.targetContract,
+  method: operation.method,
+  argsHashHex,
+  nonce: operation.nonce,
+  deadline: operation.deadline,
+  operationDigest,
+});
 ```
 
 ### 赞助执行（Paymaster）
 
+赞助保持 v4 操作不变：赞助方付费，账户仍用自己的验证器签名授权操作。若批量中各操作的目标合约或
+方法不一致，客户端会拒绝构造，因为核心对整个信封只结算一次报销。
+
 ```javascript
-// 查询赞助方余额
-const balance = await client.querySponsorBalance(paymasterHash, sponsorAddress);
-
-// 提交前校验（中继预检）
-const ok = await client.validatePaymasterOp({
-  paymasterHash, sponsorAddress, accountAddress,
-  targetContract, method, reimbursementAmount
-});
-
-// 构造赞助执行载荷
-const payload = client.createSponsoredUserOpPayload({
-  accountScriptHash, userOp, paymasterHash,
-  sponsorAddress, reimbursementAmount
-});
-
-// 构造赞助批量载荷
-const batchPayload = client.createSponsoredBatchPayload({
-  accountScriptHash, userOps, paymasterHash,
-  sponsorAddress, reimbursementAmount
+const plan = client.buildSponsoredExecutionScript({
+  accountId,
+  operations: [operation], // 1..32，同一目标合约与方法
+  paymaster: paymasterHash,
+  sponsor: sponsorAddress,
+  reimbursementAmount: '1000000', // 必须为正
 });
 ```
+
+单笔时 `plan.method` 为 `executeSponsoredUserOp`，批量时为 `executeSponsoredUserOps`。存款、策略与
+计数器都在 Paymaster 合约上：
 
 ### Paymaster 合约方法（链上）
 

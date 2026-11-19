@@ -21,12 +21,12 @@ class NativeBuildTests(unittest.TestCase):
 
     def fixture(self, root):
         contracts = root / "contracts"; native = contracts / "plugins/native-profile"; native.mkdir(parents=True)
-        parameters = root / "docs/proposals/smartaccount-native-profile-v2-parameters.json"
+        parameters = root / "docs/proposals/smartaccount-native-profile-v4-parameters.json"
         parameters.parent.mkdir(parents=True)
-        parameters.write_bytes((Path(__file__).resolve().parents[1] / "docs/proposals/smartaccount-native-profile-v2-parameters.json").read_bytes())
+        parameters.write_bytes((Path(__file__).resolve().parents[1] / "docs/proposals/smartaccount-native-profile-v4-parameters.json").read_bytes())
         (root / "Directory.Build.props").write_text("<Project><PropertyGroup><NeoSmartContractFrameworkVersion>3.10.1</NeoSmartContractFrameworkVersion><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><RestoreLockedMode>true</RestoreLockedMode></PropertyGroup></Project>")
         (root / "nuget.config").write_text('<configuration><packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources></configuration>')
-        (native / "profiles.json").write_text(json.dumps({"NeoNativeVerifier": {"project": "Verifier.Native.csproj", "role": "verifier", "configurationMethods": ["setConfig"], "compositeVerifier": False, "compositeProfile": ""}}))
+        (native / "profiles.json").write_text(json.dumps({"NeoWitnessValidator": {"project": "Verifier.Native.csproj", "role": "verifier", "configurationMethods": ["setConfig"], "compositeVerifier": False, "compositeProfile": ""}}))
         project = '<Project><ItemGroup><Compile Include="../../module.cs" /></ItemGroup></Project>'
         (native / "Verifier.Native.csproj").write_text(project)
         (native / "Second.Native.csproj").write_text(project)
@@ -48,7 +48,7 @@ class NativeBuildTests(unittest.TestCase):
             root = Path(tmp).resolve(); contracts = self.fixture(root)
             lock = contracts / "plugins/native-profile/packages.Verifier.Native.lock.json"; lock.write_text('{"version":1}')
             _, pins = builder.collect_inputs(contracts)
-            self.assertEqual({"Directory.Build.props", "nuget.config", "contracts/plugins/native-profile/profiles.json", "docs/proposals/smartaccount-native-profile-v2-parameters.json",
+            self.assertEqual({"Directory.Build.props", "nuget.config", "contracts/plugins/native-profile/profiles.json", "docs/proposals/smartaccount-native-profile-v4-parameters.json",
                               "contracts/plugins/native-profile/Verifier.Native.csproj", "contracts/plugins/native-profile/Second.Native.csproj", "contracts/module.cs",
                               "contracts/plugins/native-profile/packages.Verifier.Native.lock.json"}, set(pins))
             lock.unlink(); lock.symlink_to(contracts / "module.cs")
@@ -84,10 +84,10 @@ class NativeBuildTests(unittest.TestCase):
                 self.assertEqual(str(cache), kwargs["env"]["NUGET_PACKAGES"])
                 self.assertEqual('{"version":1}', (scratch / "contracts/plugins/native-profile/packages.Verifier.Native.lock.json").read_text())
                 self.assertEqual("#define SMARTACCOUNT_NATIVE\nclass Module {}", (scratch / "contracts/module.cs").read_text())
-                raw = Path(command[-1]); value = manifest(); value["name"] = "NeoNativeVerifier"
-                (raw / "NeoNativeVerifier.manifest.json").write_text(json.dumps(value))
+                raw = Path(command[-1]); value = manifest()
+                (raw / "NeoWitnessValidator.manifest.json").write_text(json.dumps(value))
                 body = b'NEF3' + bytes(64) + bytes(5) + b'\x01\x40'
-                (raw / "NeoNativeVerifier.nef").write_bytes(body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4])
+                (raw / "NeoWitnessValidator.nef").write_bytes(body + hashlib.sha256(hashlib.sha256(body).digest()).digest()[:4])
                 return subprocess.CompletedProcess(command, 0, "", "")
             with patch.object(builder.subprocess, "check_output", return_value="nccs test"), \
                  patch.object(builder.subprocess, "run", side_effect=compile_project), \
@@ -97,7 +97,9 @@ class NativeBuildTests(unittest.TestCase):
             self.assertEqual(2, len(calls)); self.assertNotEqual(calls[0], calls[1])
             self.assertEqual(result["builds"][0], result["builds"][1])
             self.assertEqual("class Module {}", (contracts / "module.cs").read_text())
-            self.assertEqual(2, json.loads((root / "output/NeoNativeVerifier.manifest.json").read_text())["extra"]["smartAccount"]["abiVersion"])
+            # Admission is read-only in v4: the compiler manifest is published byte for byte.
+            self.assertEqual((root / "output/NeoWitnessValidator.manifest.json").read_text(),
+                             json.dumps(manifest()))
 
     def test_compiler_lock_mutation_fails_without_publishing_artifacts(self):
         with tempfile.TemporaryDirectory() as tmp:

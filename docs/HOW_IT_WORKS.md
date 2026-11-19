@@ -45,14 +45,16 @@ The result is:
 
 V3 has no admin, manager or threshold state and no reverse indices: that V1/V2 role model was
 removed in the V3 rewrite, and the SDK keeps `getAccountsByAdmin`/`getAccountsByManager` only as
-stubs that throw `LEGACY_V3_REMOVED`. Per-account state is read with `getAccountState(accountIdHash)`,
+stubs that throw `LEGACY_V3_REMOVED`. Per-account state is read with `getAccount(accountId)`,
 one account at a time.
 
-- **Batch creation:** `registerAccounts(UInt160[], UInt160, ByteString[], UInt160, UInt160, Integer)`
-  on the deployed core registers several accounts in one transaction; the SDK has no batch payload
-  builder, so build one `createAccountPayload` per account and submit them through that entrypoint.
-- **Registration authority:** `registerAccount` requires the witness of the `backupOwner` argument
-  (`contracts/custom/SmartAccount.Accounts.cs:75`), not of the transaction sender.
+- **Batch creation:** `createAccounts(UInt160[] accountIds, UInt160 custody, ByteString[] salts, Integer recoveryTimelockMs)`
+  creates several accounts for one custody in a single transaction (1-64 entries, all or nothing);
+  a batch entry installs no modules, so configuration afterwards travels the 24-hour intent path.
+- **Creation authority:** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)`
+  requires the `custody` witness (`contracts/custom/SmartAccount.Accounts.cs`). The initial
+  configuration actions install atomically for a fresh account; every later change is a
+  `proposeConfiguration` → 24 h → `confirmConfiguration` intent.
 
 ## 3. Choose the Right Path
 
@@ -122,7 +124,7 @@ That means:
 
 ## 7. Human-Readable Domain Access
 
-The frontend can use `.matrix` domains as a discovery layer. During account creation, a compatible Neo wallet can submit a single batched transaction that both creates the SA and registers the `.matrix` domain to the signer wallet. Later, the frontend resolves the domain back to the controlling wallet address. V3 keeps no reverse index, so a domain does not list the SA accounts it controls: read each one with `getAccountState(accountIdHash)`.
+The frontend can use `.matrix` domains as a discovery layer. During account creation, a compatible Neo wallet can submit a single batched transaction that both creates the SA and registers the `.matrix` domain to the signer wallet. Later, the frontend resolves the domain back to the controlling wallet address. V3 keeps no reverse index, so a domain does not list the SA accounts it controls: read each one with `getAccount(accountId)`.
 
 ## 8. How a User Uses the Website
 
@@ -226,8 +228,8 @@ If you are learning the system for the first time, read these pages in order:
 - **Operator link** — a scoped link for relay, broadcast, receipts, and link rotation
 - **Relay preflight** — a server-backed simulation of a relay-ready invocation before submission
 - **Meta invocation** — the SA payload created from EVM typed-data signatures; it targets `executeUserOp`
-- **Account discovery** — reading one account's state with `getAccountState(accountIdHash)`; the V1/V2 reverse indices were removed, so there is no admin/manager role query
-- **Batch registration** — registering several accounts in one transaction with `registerAccounts` (no shared governance: every account carries its own verifier, hook and backup owner)
+- **Account discovery** — reading one account's state with `getAccount(accountId)`; the V1/V2 reverse indices were removed, so there is no admin/manager role query
+- **Batch registration** — creating several accounts for one custody in one transaction with `createAccounts` (no shared governance: every account carries its own validator instances, hook order and recovery timelock)
 - **Paymaster** — on-chain contract (`SAPaymaster`) that holds sponsor GAS deposits and reimburses relays after successful execution
 - **Sponsor** — an address that deposits GAS into the Paymaster and creates policies to fund operations for other accounts
 - **Sponsorship policy** — configuration defining which accounts, contracts, methods, and budgets a sponsor will fund

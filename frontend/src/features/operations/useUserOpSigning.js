@@ -1,84 +1,112 @@
 import {
   buildExecuteUserOpInvocation,
-  buildV3UserOperationTypedData,
+  buildUserOperation,
+  buildUserOperationTypedData,
+  composeOperationNonce,
   computeArgsHash,
-  fetchV3Nonce,
-  fetchV3Verifier,
+  computeOperationDigest,
+  fetchNonce,
+  fetchOperationRoute,
   recoverPublicKeyFromTypedDataSignature,
   toCompactEcdsaSignature,
+  DEFAULT_NONCE_SUBKEY,
 } from './metaTx.js';
 import { EC } from '../../config/errorCodes.js';
 
-// The V3 verifier binds UserOperation signatures to the Neo N3 network magic of
-// the *connected* network: the magic is baked into the EIP-712 domain chainId
-// the on-chain verifier checks, so a testnet-signed domain fails to verify on
-// mainnet and vice versa. Callers thread the active network magic
-// (RUNTIME_CONFIG.networkMagic / runtime.networkMagic) into `chainId`; this
-// constant remains only as the legacy testnet fallback for callers that have no
-// runtime network resolved yet.
-export const V3_USER_OP_CHAIN_ID = 894710606;
+// The domain chainId is the *active* network magic: the validator rebuilds the
+// domain from its own protocol settings, so a signature made for another
+// network cannot verify. Callers thread the runtime magic in; the testnet value
+// remains only as the fallback for a caller with no resolved network.
+export const DEFAULT_USER_OP_CHAIN_ID = 894710606;
 
-// Signatures stay valid for one hour, matching the contract-side deadline
-// window both views used before this core was extracted.
+// Signatures stay valid for one hour, well inside the core's deadline window.
 export const USER_OP_DEADLINE_MS = 60 * 60 * 1000;
 
 /**
- * Resolve everything a V3 UserOperation signature needs from chain state:
- * the canonical args hash, the bound verifier, the current channel-0 nonce,
- * and a fresh deadline.
+ * Resolve everything a v4 operation signature needs: the account control
+ * record, the validator instance it routes to (id, credential generation and
+ * verifying contract), the canonical args hash, the next nonce in that
+ * instance's namespace and a fresh deadline.
  *
- * Callers pass their surface-specific error codes so toasts keep their
- * existing translations. `deps` allows tests to inject the chain readers.
+ * `deps` lets tests inject the chain readers.
  */
-export async function prepareV3UserOpContext({
+export async function prepareUserOpRoute({
   rpcUrl,
   saContractHash,
-  accountIdHash,
+  accountId,
   operationBody = {},
-  missingAccountError = EC.v3AccountIdHashMissing,
-  missingVerifierError = EC.noVerifierConfigured,
+  networkMagic = DEFAULT_USER_OP_CHAIN_ID,
+  nonceSubkey = DEFAULT_NONCE_SUBKEY,
   deadlineMs = USER_OP_DEADLINE_MS,
+  missingAccountError = EC.accountIdHashMissing,
   deps = {},
 }) {
   const {
+    fetchOperationRoute: fetchRouteImpl = fetchOperationRoute,
     computeArgsHash: computeArgsHashImpl = computeArgsHash,
-    fetchV3Verifier: fetchV3VerifierImpl = fetchV3Verifier,
-    fetchV3Nonce: fetchV3NonceImpl = fetchV3Nonce,
+    fetchNonce: fetchNonceImpl = fetchNonce,
   } = deps;
 
-  if (!accountIdHash) {
-    throw new Error(missingAccountError);
-  }
+  if (!accountId) throw new Error(missingAccountError);
 
   const deadline = Date.now() + deadlineMs;
+  const route = await fetchRouteImpl({ rpcUrl, saContractHash, accountId });
   const argsHashHex = await computeArgsHashImpl({
     rpcUrl,
     saContractHash,
     args: operationBody?.args || [],
   });
-  const verifierHash = await fetchV3VerifierImpl({
+  const sequence = await fetchNonceImpl({
     rpcUrl,
     saContractHash,
-    accountIdHash,
+    accountId,
+    validatorId: route.validatorId,
+    nonceSubkey,
   });
-  if (!verifierHash) {
-    throw new Error(missingVerifierError);
-  }
-  const nonce = await fetchV3NonceImpl({
-    rpcUrl,
-    saContractHash,
-    accountIdHash,
-    channel: 0n,
+  const nonce = composeOperationNonce({
+    // The namespace digest binds the account's current authority epoch, so the
+    // channel is the one the core will recompute from its own state.
+    context: {
+      networkMagic,
+      coreContractHash: saContractHash,
+      accountId,
+      authorityEpoch: route.authorityEpoch,
+    },
+    route,
+    sequence,
+    nonceSubkey,
   });
 
-  return { argsHashHex, verifierHash, nonce, deadline };
+  // The unsigned operation and its §4.3 digest: the typed-data path signs it,
+  // and an opaque proof (zkLogin ticket) is attached to the same envelope.
+  const operation = buildUserOperation({
+    targetContract: operationBody?.targetContract,
+    method: operationBody?.method,
+    args: operationBody?.args || [],
+    nonce,
+    nonceSubkey,
+    deadline,
+    validatorId: route.validatorId,
+    credentialGeneration: route.credentialGeneration,
+    authorityEpoch: route.authorityEpoch,
+    configurationNonce: route.configurationNonce,
+  });
+  const operationDigest = computeOperationDigest({
+    networkMagic,
+    coreContractHash: saContractHash,
+    accountId,
+    operation,
+  });
+
+  return { route, argsHashHex, nonce, deadline, nonceSubkey, chainId: networkMagic, operation, operationDigest };
 }
 
 /**
- * Full EVM UserOperation signing core shared by HomeOperationsWorkspace and
- * TransactionInfoView: prepare chain context, build the V3 typed data, sign
- * it via the injected signer, and return the contract-aligned signature
- * record plus the executeUserOp invocation.
+ * Full EVM operation signing core shared by the operations workspace and
+ * TransactionInfoView: prepare the route, build the codec operation, digest it
+ * with §4.3, build the EIP-712 typed data the validator verifies, sign it, and
+ * return the contract-aligned signature record plus the executeUserOp
+ * invocation.
  *
  * The caller stays responsible for surface-specific concerns: connecting the
  * EVM wallet, immutable-draft guards, appending the record, and toasts.
@@ -86,13 +114,13 @@ export async function prepareV3UserOpContext({
 export async function signUserOpWithEvm({
   rpcUrl,
   saContractHash,
-  accountIdHash,
+  accountId,
   operationBody = {},
   signerId,
   signTypedData,
-  chainId = V3_USER_OP_CHAIN_ID,
+  networkMagic = DEFAULT_USER_OP_CHAIN_ID,
+  nonceSubkey = DEFAULT_NONCE_SUBKEY,
   missingAccountError,
-  missingVerifierError,
   deadlineMs,
   deps = {},
 }) {
@@ -100,64 +128,61 @@ export async function signUserOpWithEvm({
     throw new Error(EC.evmProviderMissing);
   }
 
-  const { argsHashHex, verifierHash, nonce, deadline } = await prepareV3UserOpContext({
+  const { route, argsHashHex, nonce, deadline, chainId, operation: unsigned, operationDigest } = await prepareUserOpRoute({
     rpcUrl,
     saContractHash,
-    accountIdHash,
+    accountId,
     operationBody,
-    missingAccountError,
-    missingVerifierError,
+    networkMagic,
+    nonceSubkey,
     deadlineMs,
+    missingAccountError,
     deps,
   });
 
-  const typedData = buildV3UserOperationTypedData({
+  const typedData = buildUserOperationTypedData({
     chainId,
-    verifyingContract: verifierHash,
-    accountIdHash,
+    verifyingContract: route.verifyingContract,
+    accountId,
     coreContractHash: saContractHash,
-    targetContract: operationBody?.targetContract,
-    method: operationBody?.method,
+    validatorId: route.validatorId,
+    targetContract: unsigned.targetContract,
+    method: unsigned.method,
     argsHashHex,
     nonce,
     deadline,
+    operationDigest,
   });
 
   const signature = await signTypedData(typedData);
   const contractSignature = toCompactEcdsaSignature(signature);
-  const publicKey = recoverPublicKeyFromTypedDataSignature({
-    typedData,
-    signature,
-  });
+  const publicKey = recoverPublicKeyFromTypedDataSignature({ typedData, signature });
 
-  const metaInvocation = buildExecuteUserOpInvocation({
-    saContractHash,
-    accountIdHash,
-    targetContract: operationBody?.targetContract,
-    method: operationBody?.method,
-    methodArgs: operationBody?.args || [],
-    nonce,
-    deadline,
-    signatureHex: contractSignature,
-  });
+  const operation = { ...unsigned, signature: contractSignature };
+  const metaInvocation = buildExecuteUserOpInvocation({ saContractHash, accountId, operation });
 
   return {
     argsHashHex,
-    verifierHash,
-    nonce,
-    deadline,
+    operationDigest,
+    validatorId: route.validatorId,
+    verifyingContract: route.verifyingContract,
+    nonce: String(nonce),
+    deadline: String(deadline),
     typedData,
+    operation,
     metaInvocation,
     signatureRecord: {
       signerId,
       kind: 'evm',
       signatureHex: contractSignature,
       publicKey,
-      payloadDigest: argsHashHex,
+      payloadDigest: operationDigest,
       metadata: {
         typedData,
-        verifierHash,
+        verifierHash: route.verifyingContract,
+        validatorId: String(route.validatorId),
         argsHashHex,
+        operationDigest,
         nonce: String(nonce),
         deadline: String(deadline),
         metaInvocation,

@@ -293,7 +293,7 @@ class GateAgreementTests(unittest.TestCase):
     def test_gate_pins_agree_with_this_lane(self):
         gate = self.gate()
         self.assertEqual(gate.SCOPES['interop-fee-order'],source.SCOPE)
-        self.assertEqual(len(gate.SCOPES),22)
+        self.assertEqual(len(gate.SCOPES),21)
         self.assertEqual(gate.CERTIFICATES['interop-fee-order'],
                          ('certificateSha256','InteropFeeArtifact.v'))
         self.assertEqual(tuple(gate.INTEROP_FEE_CONTROLS),source.EXPECTED_CONTROLS)

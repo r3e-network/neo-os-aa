@@ -12,7 +12,7 @@
 flowchart LR
   User[用户 / 操作员] --> UI[前端工作台]
   UI --> Master[SmartAccount 主合约]
-  Master --> Policies[角色 + 策略 + 限额]
+  Master --> Policies[模块实例 + 策略 + 限额]
   Master --> Target[目标合约]
   Master --> Proxy[确定性验证代理地址]
 ```
@@ -83,12 +83,13 @@ sequenceDiagram
 
 所有执行路径都会经过同一套保护逻辑：
 
-- 账户是否存在
-- 角色 / 阈值鉴权
-- 可选的自定义验证器
-- 方法白名单
-- 黑名单 / 白名单
-- 最大转账限额
+- 账户是否存在且处于活跃状态
+- authority epoch、nonce 通道与 deadline 校验
+- 路由到的 validator 实例，或由默认授权开关控制的托管内置路径
+- 可选的、由多个 validator 实例组成的阈值策略
+- 有序钩子序列（`preCheck` 正向、`postCheck` 反向）
+- 各模块自身的策略，例如目标白名单、代币限制与每日限额
+- 账户挂牌时的市场托管锁
 
 ## 7. 前端与 Supabase 的数据流
 

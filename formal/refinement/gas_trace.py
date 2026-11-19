@@ -18,9 +18,12 @@ except ImportError:
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 COMMIT = 'd10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d'
-NEF_SHA = '9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76'
-MANIFEST_SHA = 'a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31'
-START, END, INIT = 18900, 19181, 29996
+NEF_SHA = '2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb'
+MANIFEST_SHA = 'f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f'
+# The v4 artifact keeps the byte-identical 281-byte helper body; it moved from
+# 18900 to 36048 and the initializer from 29996 to 43470. Every helper-internal
+# offset below therefore carries the same +17148 shift.
+START, END, INIT = 36048, 36329, 43470
 SOURCES = {
  'ApplicationEngine.cs': '97b08bfe754bc51ed8418316b45d3805dccff76ef51fbd43ac9b663eacb4d5eb',
  'ApplicationEngine.OpCodePrices.cs': '9835961f56aacb0d4df903dad7b98ab33ee3a1e75ea98189228b000f7ed0a447',
@@ -136,7 +139,7 @@ def extract_fees(sources):
                 sourceFrontendVerified=False)
 
 def bind_artifact(nef=None, manifest=None):
-    nef = Path(nef) if nef else REPO / 'contracts/bin/public/SmartAccountV3.nef'
+    nef = Path(nef) if nef else REPO / 'contracts/bin/public/SmartAccount.nef'
     manifest = Path(manifest) if manifest else nef.with_suffix('.manifest.json')
     raw, raw_manifest = nef.read_bytes(), manifest.read_bytes()
     require(digest(raw) == NEF_SHA and digest(raw_manifest) == MANIFEST_SHA, 'Unreviewed helper artifact identity')
@@ -145,15 +148,23 @@ def bind_artifact(nef=None, manifest=None):
     selected = [i for i in instructions if START <= i['offset'] < END]
     require(len(selected) == 116 and selected[0]['offset'] == START and selected[-1]['offset'] == END-1,
             'Incorrect 281-byte/116-instruction helper boundary')
-    for token, method in [(3, 'serialize'), (4, 'deserialize')]:
-        entry = decoded['tokens'][token]
-        require(entry['method'] == method and entry['hashLittleEndian'] == 'c0ef39ceE0e4e925c6c2a06A79e1440Dd86fceac'.lower()
+    # Token indices are a compiler decision, not a protocol property: the v3 build
+    # numbered serialize(3)/deserialize(4), the v4 build deserialize(2)/serialize(3).
+    # Resolve both codec tokens by name so a renumbering cannot read as a codec change.
+    codec_tokens = {}
+    for token, entry in enumerate(decoded['tokens']):
+        if entry['method'] not in ('serialize', 'deserialize'):
+            continue
+        require(entry['hashLittleEndian'] == 'c0ef39ceE0e4e925c6c2a06A79e1440Dd86fceac'.lower()
                 and entry['parametersCount'] == 1 and entry['hasReturnValue'] and entry['callFlags'] == 15,
                 'Actual native codec token mismatch')
+        require(entry['method'] not in codec_tokens.values(), 'Duplicate native codec token')
+        codec_tokens[token] = entry['method']
+    require(sorted(codec_tokens.values()) == ['deserialize', 'serialize'], 'Missing native codec token')
     abi = json.loads(raw_manifest)['abi']['methods']
     require(next(m for m in abi if m['name'] == '_initialize')['offset'] == INIT, 'Initializer ABI drift')
     return dict(instructions=selected, initializer=[i for i in instructions if INIT <= i['offset']],
-                nefSha256=digest(raw), manifestSha256=digest(raw_manifest),
+                nefSha256=digest(raw), manifestSha256=digest(raw_manifest), codecTokens=codec_tokens,
                 helperSha256=digest(decoded['script'][START:END]), scriptSha256=digest(decoded['script']))
 
 def enumerate_paths(instructions):
@@ -209,23 +220,24 @@ def derive(bound, fees):
                 coefficient += fixed_price
             elif i['name'] == 'CALLT':
                 index = int.from_bytes(bytes.fromhex(i['operandHex']), 'little')
-                require(index in (3, 4), 'Unpriced helper native token')
-                method = 'serialize' if index == 3 else 'deserialize'
+                require(index in bound['codecTokens'], 'Unpriced helper native token')
+                method = bound['codecTokens'][index]
                 wrapper_price = sum(fees['opcodes'][op] for op in fees['nativeWrapper'])
                 fixed_price = fees['syscalls']['System.Contract.CallNative']['fixed']
                 cpu_price = fees['nativeCpu'][method]
                 coefficient += wrapper_price + fixed_price + cpu_price
-            events.append(dict(pc=pc, execution=coefficient, storage=pc == 19172, opcode=opcode_price, fixed=fixed_price, native=cpu_price, wrapper=wrapper_price))
+            events.append(dict(pc=pc, execution=coefficient, storage=pc == 36320, opcode=opcode_price, fixed=fixed_price, native=cpu_price, wrapper=wrapper_price))
         path['events'] = events
         path['executionCoefficient'] = sum(e['execution'] for e in events)
-        path['absent'] = dict(path['decisions'])[18927] == 'fallthrough'
-        path['reset'] = dict(path['decisions'])[18978] == 'fallthrough'
+        path['absent'] = dict(path['decisions'])[36075] == 'fallthrough'
+        path['reset'] = dict(path['decisions'])[36126] == 'fallthrough'
     init = bound['initializer']
-    require(len(init) == 182 and init[-1]['name'] == 'RET', 'Initializer path drift')
+    require(len(init) == 236 and init[-1]['name'] == 'RET', 'Initializer path drift')
     require(all(i['name'] in fees['opcodes'] and i['name'] not in ('CALLT', 'SYSCALL') and
                 (i['edges'] == [{'kind': 'fallthrough', 'target': i['offset']+i['size']}] or i == init[-1]) for i in init),
             'Initializer must be fully priced and branch-free')
-    return dict(paths=paths, initializer=init, initializerCoefficient=sum(fees['opcodes'][i['name']] for i in init),
+    return dict(paths=paths, initializer=init, codecTokens=bound['codecTokens'],
+                initializerCoefficient=sum(fees['opcodes'][i['name']] for i in init),
                 maxExecutionCoefficient=max(p['executionCoefficient'] for p in paths), maxStorageBytes=71,
                 artifact={k: v for k, v in bound.items() if k.endswith('Sha256')}, fees=fees)
 
@@ -267,13 +279,13 @@ def check_runtime_events(receipt, model, selected, nodes, billed, shape):
             syscall = int.from_bytes(bytes.fromhex(instruction['operandHex']), 'little')
             require(syscall in by_hash, 'Unpriced runtime syscall')
             additional = by_hash[syscall]['fixed'] * e
-            if pc == 19172: additional += billed * s * f
+            if pc == 36320: additional += billed * s * f
         add('CapReimbursementToActualCost', core_hash, instruction, additional,
             instruction['name'] != 'ABORTMSG')
         if instruction['name'] == 'CALLT':
             token = int.from_bytes(bytes.fromhex(instruction['operandHex']), 'little')
-            require(token in (3, 4), 'Unsupported runtime native token')
-            method = 'serialize' if token == 3 else 'deserialize'
+            require(token in model['codecTokens'], 'Unsupported runtime native token')
+            method = model['codecTokens'][token]
             # Native method offsets are observed, while the complete wrapper
             # instruction bytes/order and charges come from the pinned source.
             first = len(expected)
@@ -303,7 +315,7 @@ def check_runtime_events(receipt, model, selected, nodes, billed, shape):
                 and receipt_amount(row.get('OpcodePico')) == opcode
                 and receipt_amount(row.get('AdditionalPico')) == additional,
                 'Runtime event charge or cumulative accounting mismatch')
-        if method == 'CapReimbursementToActualCost' and instruction['offset'] == 19172:
+        if method == 'CapReimbursementToActualCost' and instruction['offset'] == 36320:
             require(row.get('StorageKeyHex') == '21' and type(row.get('StorageValueLength')) is int
                     and row['StorageValueLength'] == 39, 'Runtime Put argument drift')
         else:
@@ -354,7 +366,7 @@ def crosscheck_runtime(model, directory):
         e, s, f = int(receipt['execPicoFactor']), receipt['storagePriceDatoshi'], int(receipt['feeFactor'])
         require(e >= 0 and s >= 0, 'Negative runtime fee configuration')
         billed = 0
-        put = [r for r in helper if r['Pc'] == 19172]
+        put = [r for r in helper if r['Pc'] == 36320]
         if put:
             require(len(put) == 1 and put[0]['StorageKeyHex'] == '21', 'Runtime Put argument drift')
             billed = put_size(None if shape == 'absent' else 39, put[0]['StorageValueLength'])

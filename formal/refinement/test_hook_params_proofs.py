@@ -1,5 +1,4 @@
-"""Private hook helper exact-byte certificates and input identity controls."""
-import copy
+"""v4 hook argument view byte binding, and the retired certificate receipt."""
 import hashlib
 import json
 from pathlib import Path
@@ -14,6 +13,7 @@ from unittest.mock import patch
 if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from formal.refinement import hook_params_proofs as proofs
+from formal.refinement import hook_params_source
 import formal.refinement.export.test_export as export_tests
 
 
@@ -23,27 +23,31 @@ class HookParamsProofTests(unittest.TestCase):
         export_tests.ExportTests.setUpClass()
         cls.inventory=export_tests.ExportTests().actual_inventory()
 
-    def test_complete_hook_kernel_alias_frame_and_controls(self):
+    def test_helper_region_and_opcodes_are_bound(self):
+        bound=proofs.bind_method(self.inventory)
+        raw=next(Path(name).read_bytes() for name in self.inventory['inputs'] if name.endswith('SmartAccount.nef'))
+        again=proofs.bind_method(self.inventory)
+        self.assertEqual(bound,again)
+        self.assertGreater(bound['end']-bound['start'],0)
+        self.assertGreater(bound['instructionCount'],0)
+        self.assertEqual(len(bound['methodSha256']),64)
+        self.assertEqual(bound['nefSha256'],proofs.sha(raw))
+        self.assertTrue(set(bound['opcodes']) <= proofs.HELPER_OPCODES)
+        self.assertIn(64,bound['opcodes'])  # RET closes the helper
+        self.assertEqual(bound['projection']['viewFields'],list(hook_params_source.VIEW_FIELDS))
+        self.assertEqual(bound['projection']['deepCopiedFields'],[3,12])
+
+    def test_certificate_is_retired_for_the_v4_view(self):
         with tempfile.TemporaryDirectory() as directory:
-            receipt=proofs.run_proofs(self.inventory,directory)
-            self.assertTrue(receipt['kernelChecked'])
-            self.assertFalse(receipt['fullImplementationVerified'])
-            self.assertFalse(receipt['vmCorrespondenceProven'])
-            self.assertEqual(receipt['methodRange'],[15136,15160])
-            self.assertEqual((receipt['byteCount'],receipt['instructionCount']),(24,21))
-            self.assertEqual(receipt['fullUnprovedEntrypointCount'],109)
-            self.assertGreaterEqual(len(receipt['semanticControls']),4)
-            self.assertTrue(all(c['definitionsAccepted'] and c['proofRejected'] for c in receipt['semanticControls']))
-            self.assertIn('complete_hook_reference_refinement',receipt['closedDeclarations']['HookArtifact'])
-            self.assertTrue({'source_hook_complete','vm_hook_complete','hook_existing_heap_and_frame',
-                             'hook_null_operation_fault','hook_missing_arguments_fault','hook_short_record_fault',
-                             'hook_dangling_operation_fault','hook_success_has_no_timeout'} <=
-                            set(receipt['closedDeclarations']['HookArtifact']))
-            self.assertIn('tuple_argument_alias_unchanged',receipt['closedDeclarations']['HookParams'])
-            self.assertEqual(receipt['sourceTreeSha256'],proofs.sha(json.dumps(self.inventory['source'],sort_keys=True,separators=(',',':')).encode()))
+            with self.assertRaises(ValueError) as raised:
+                proofs.run_proofs(self.inventory,directory)
+            self.assertFalse(any(Path(directory).iterdir()))
+        message=str(raised.exception)
+        self.assertIn('BuildHookOperationParams',message)
+        self.assertIn('BuildCanonicalOperationView',message)
 
     def test_nef_identity_and_decode_use_same_read(self):
-        path=next(Path(n) for n in self.inventory['inputs'] if n.endswith('SmartAccountV3.nef'))
+        path=next(Path(n) for n in self.inventory['inputs'] if n.endswith('SmartAccount.nef'))
         original_read=Path.read_bytes;original=original_read(path);changed=bytearray(original);changed[4]^=1
         changed[-4:]=hashlib.sha256(hashlib.sha256(changed[:-4]).digest()).digest()[:4]
         reads=[]

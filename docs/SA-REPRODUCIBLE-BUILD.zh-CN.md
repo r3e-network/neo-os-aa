@@ -66,8 +66,7 @@ NEF 哈希、校验和、完整 manifest 与 RPC script 回读连接起来。它
 ### 公开与私有画像
 
 `contracts/bin/public` 中的默认核心使用已发布的 `System.Contract.Call`：签名验证为只读，而验证器的
-`postExecute` 保留写权限用于记账。它不发出任何 `System.Contract.CallWithGasLimit`。四个验证器
-回调测试运行在已发布的 TestEngine 上；`tests/localchain/test_public_profile.py` 在一次性发布的
+钩子的 `postCheck` 保留写权限用于记账。它不发出任何 `System.Contract.CallWithGasLimit`。模块回调测试运行在已发布的 TestEngine 上；`tests/localchain/test_public_profile.py` 在一次性发布的
 neoxp 上执行一次已签名操作。
 
 `bash contracts/compile.sh` 还会在 `contracts/bin/platform` 中单独构建私有核心。若只想构建该画像，
@@ -82,9 +81,9 @@ neoxp 上执行一次已签名操作。
 
 ### 公开验证器发布选择
 
-`scripts/deploy_latest_aa_verifiers.js` 与其他公开部署脚本一样，通过同一个受限工件路径 helper，从
-`contracts/bin/public/verifiers/` 选择 SessionKeyVerifier，从 `contracts/bin/public/` 选择
-SocialRecoveryVerifier。若那对经复核的公开 NEF／manifest 缺失，它必须失败；它绝不能回退到历史
+`scripts/deploy_latest_sa_validators.js` 与其他公开部署脚本一样，通过同一个受限工件路径 helper，从
+`contracts/bin/public/validators/` 选择 SessionKeyValidator，从 `contracts/bin/public/` 选择
+SocialRecoveryService。若那对经复核的公开 NEF／manifest 缺失，它必须失败；它绝不能回退到历史
 `contracts/build` 固定样例或私有／原生画像。被选中的 manifest 必须匹配预期的模块名、版本与
 账户 ID ABI。在现有的授权核心绑定检查能够成功之前，部署回读必须匹配被选中的 NEF script 与完整
 manifest。

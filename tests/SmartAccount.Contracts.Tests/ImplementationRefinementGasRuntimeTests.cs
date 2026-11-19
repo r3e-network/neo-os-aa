@@ -28,12 +28,14 @@ namespace SmartAccount.Contracts.Tests;
 public class ImplementationRefinementGasRuntimeTests
 {
     private const long HostingGas = 100_00000000;
-    private const int HelperEntry = 18900, HelperEnd = 19181, InitializeEntry = 29996;
+    // Re-anchored to the v4 artifact: the helper body is byte-identical and
+    // moved by 17148 bytes (18900 -> 36048); `_initialize` moved independently.
+    private const int HelperEntry = 36048, HelperEnd = 36329, InitializeEntry = 43470;
     private sealed record Charge(int Sequence, string ScriptHash, int Pc, string OpCode, string InstructionHex,
         string Method, string BeforePico, string AfterPico, string OpcodePico, string AdditionalPico, bool Completed,
         string? StorageKeyHex = null, int? StorageValueLength = null);
     private sealed record Result(bool Fault, long Datoshi, BigInteger RawPico, IReadOnlyList<Charge> Trace, UInt160 Core,
-        StackItem? Value, uint StoragePrice, BigInteger ExecPico, string? Error);
+        StackItem? Value, uint StoragePrice, BigInteger ExecPico, string? Error, string NefSha256, string ManifestSha256);
 
     [TestMethod]
     [DataRow("absent")]
@@ -52,14 +54,14 @@ public class ImplementationRefinementGasRuntimeTests
         Assert.AreEqual(shape == "exhausted", r.Fault, r.Error);
         if (r.Fault)
         {
-            Assert.AreEqual(19076, helper[^1].Pc);
+            Assert.AreEqual(36224, helper[^1].Pc);
             Assert.IsFalse(helper[^1].Completed);
-            Assert.IsFalse(helper.Any(c => c.Pc == 19172));
+            Assert.IsFalse(helper.Any(c => c.Pc == 36320));
         }
         else
         {
-            Assert.AreEqual(19180, helper[^1].Pc);
-            Assert.IsTrue(helper.Any(c => c.Pc == 19172 && c.Completed));
+            Assert.AreEqual(36328, helper[^1].Pc);
+            Assert.IsTrue(helper.Any(c => c.Pc == 36320 && c.Completed));
             Assert.AreEqual(new BigInteger(shape == "same" ? 6 : 7), r.Value!.GetInteger());
         }
         bool deserialize = r.Trace.Any(c => c.ScriptHash == NativeContract.StdLib.Hash.ToString() && c.Method == "deserialize");
@@ -76,7 +78,7 @@ public class ImplementationRefinementGasRuntimeTests
             uint hash = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(Convert.FromHexString(syscall.InstructionHex).AsSpan(1));
             InteropDescriptor descriptor = ApplicationEngine.Services[hash];
             BigInteger expectedFee = descriptor.FixedPrice * r.ExecPico;
-            if (syscall.Pc == 19172)
+            if (syscall.Pc == 36320)
             {
                 // Actual value is a 39-byte canonical ledger. The new key is
                 // one byte; same-length overwrite charges ceil(39/4)=10 bytes.
@@ -106,7 +108,7 @@ public class ImplementationRefinementGasRuntimeTests
         Assert.IsTrue(pure.Length >= 2);
         Assert.IsTrue(pure.All(c => c.AdditionalPico == "0"), "Pure body must have no hidden native/syscall charge");
         if (expected == "true") Assert.IsTrue(r.Value!.GetBoolean());
-        else Assert.AreEqual("org.r3e.neo.smart-account.v3", System.Text.Encoding.UTF8.GetString(r.Value!.GetSpan()));
+        else Assert.AreEqual("org.r3e.neo.smart-account.v4", System.Text.Encoding.UTF8.GetString(r.Value!.GetSpan()));
         WriteReceipt("public-" + method, r);
     }
 
@@ -152,8 +154,10 @@ public class ImplementationRefinementGasRuntimeTests
             name,
             artifacts = new
             {
-                nefSha256 = "9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76",
-                manifestSha256 = "a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31"
+                // The receipt must state the bytes this run actually executed:
+                // a copied pin here once let a receipt describe the wrong build.
+                nefSha256 = r.NefSha256,
+                manifestSha256 = r.ManifestSha256
             },
             runtime = new { neo = RuntimeIdentity(typeof(ApplicationEngine)), vm = RuntimeIdentity(typeof(ExecutionEngine)) },
             priceTable = ApplicationEngine.OpCodePriceTable,
@@ -216,7 +220,7 @@ public class ImplementationRefinementGasRuntimeTests
             active = new Charge(rows.Count, hash.ToString(), pc, instruction.OpCode.ToString(),
                 Convert.ToHexString(Enumerable.Range(pc, instruction.Size).Select(i => (byte)context.Script[i]).ToArray()).ToLowerInvariant(),
                 Method(hash, pc), Raw(app).ToString(), "", opcode.ToString(), "", false);
-            if (hash == core && pc == 19172)
+            if (hash == core && pc == 36320)
             {
                 // Read the actual outgoing native Storage.Put arguments; never
                 // mutate the stack, contract state, fee amount or fee counter.
@@ -246,8 +250,8 @@ public class ImplementationRefinementGasRuntimeTests
         string dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/public"));
         byte[] rawNef = File.ReadAllBytes(Path.Combine(dir, "SmartAccount.nef"));
         byte[] rawManifest = File.ReadAllBytes(Path.Combine(dir, "SmartAccount.manifest.json"));
-        Assert.AreEqual("9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76", Hash(rawNef));
-        Assert.AreEqual("a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31", Hash(rawManifest));
+        Assert.AreEqual("2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb", Hash(rawNef));
+        Assert.AreEqual("f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f", Hash(rawManifest));
         Assert.AreEqual("cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a", Hash(File.ReadAllBytes(typeof(ApplicationEngine).Assembly.Location)));
         Assert.AreEqual("cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9", Hash(File.ReadAllBytes(typeof(ExecutionEngine).Assembly.Location)));
         RuntimeFixture fx = new();
@@ -314,6 +318,7 @@ public class ImplementationRefinementGasRuntimeTests
         // No commit: this lane observes execution and fees, not block persistence.
         return new Result(fault, app.FeeConsumed, Raw(app), inspector.Trace, hash,
             fault ? null : app.ResultStack.Pop(), (uint)StoragePriceField.GetValue(app)!,
-            (BigInteger)ExecField.GetValue(app)!, app.FaultException?.Message);
+            (BigInteger)ExecField.GetValue(app)!, app.FaultException?.Message,
+            Hash(rawNef), Hash(rawManifest));
     }
 }

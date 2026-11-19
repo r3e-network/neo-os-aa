@@ -66,7 +66,6 @@
         :account-address-script-hash="accountAddressScriptHash"
         :account-id-prefill="accountIdPrefill"
         :neo-wallet-address="neoWalletAddress"
-        :recovery-verifier-prefill="recoveryVerifierPrefill"
         :recovery-new-owner-prefill="recoveryNewOwnerPrefill"
         :recovery-expiry-prefill="recoveryExpiryPrefill"
         :auto-preview-recovery="autoPreviewRecovery"
@@ -105,9 +104,6 @@ const accountAddressScriptHash = computed(() => {
   }
   return raw;
 });
-const recoveryVerifierPrefill = computed(() =>
-  String(route.query.recoveryVerifier || "").trim(),
-);
 const recoveryNewOwnerPrefill = computed(() =>
   String(route.query.recoveryNewOwner || "").trim(),
 );

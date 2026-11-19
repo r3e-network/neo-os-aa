@@ -203,7 +203,7 @@
           "
           :class="{ 'btn-loading': busy === 'refreshState' }"
           :disabled="busy === 'refreshState' || !resolvedAccountId"
-          @click="refreshVerifierStateAction"
+          @click="refreshRecoveryStateAction"
         >
           {{
             busy === "refreshState"
@@ -245,17 +245,17 @@
         }}</span>
       </div>
 
-      <DidVerifierStateGrid :verifier-state="verifierState" />
+      <DidRecoveryStateGrid :recovery-state="recoveryState" />
 
       <DidPendingStateCards
-        :verifier-state="verifierState"
+        :recovery-state="recoveryState"
         :busy="busy"
         @finalize="finalizeRecoveryAction"
         @cancel="cancelRecoveryAction"
         @revoke="revokeSessionAction"
       />
 
-      <DidMaintenanceList :items="maintenanceItems" />
+      <DidMaintenanceList :items="configIntentItems" />
 
       <div class="grid gap-6 xl:grid-cols-3">
         <section
@@ -323,21 +323,21 @@
           </button>
 
           <div
-            v-if="zkloginVerifierParamsHex"
+            v-if="delegatedIdentityParamsHex"
             class="rounded-xl border border-sa-info/20 bg-sa-info/5 p-4 space-y-3"
           >
             <div class="flex items-start justify-between gap-4">
               <div>
                 <p class="text-xs uppercase text-sa-info font-bold">
                   {{
-                    t("didPanel.zkloginParamsTitle", "ZK Login Verifier Params")
+                    t("didPanel.delegatedIdentityParamsTitle", "Delegated Identity Params")
                   }}
                 </p>
                 <p class="mt-1 text-xs text-sa-muted">
                   {{
                     t(
-                      "didPanel.zkloginParamsHint",
-                      "Use this hex when deploying/binding the ZkLoginVerifier plugin for the currently connected Web3Auth identity.",
+                      "didPanel.delegatedIdentityParamsHint",
+                      "Use this hex when installing the DelegatedIdentityValidator for the currently connected Web3Auth identity.",
                     )
                   }}
                 </p>
@@ -346,17 +346,17 @@
                 class="btn-secondary btn-xs"
                 :aria-label="
                   t(
-                    'didPanel.copyZkloginParams',
-                    'Copy ZK login verifier params',
+                    'didPanel.copyDelegatedIdentityParams',
+                    'Copy delegated identity params',
                   )
                 "
-                :disabled="!zkloginVerifierParamsHex"
-                @click="copyZkloginVerifierParams"
+                :disabled="!delegatedIdentityParamsHex"
+                @click="copyDelegatedIdentityParams"
               >
                 <span class="flex items-center gap-1.5">
                   <svg
                     aria-hidden="true"
-                    v-if="copiedKey !== 'zklogin-params'"
+                    v-if="copiedKey !== 'delegated-identity-params'"
                     class="w-3.5 h-3.5"
                     fill="none"
                     stroke="currentColor"
@@ -385,7 +385,7 @@
                     ></path>
                   </svg>
                   {{
-                    copiedKey === "zklogin-params"
+                    copiedKey === "delegated-identity-params"
                       ? t("operations.copied", "Copied!")
                       : t("operations.copy", "Copy")
                   }}
@@ -394,7 +394,7 @@
             </div>
 
             <p class="font-mono text-xs break-all text-sa-text">
-              0x{{ zkloginVerifierParamsHex }}
+              0x{{ delegatedIdentityParamsHex }}
             </p>
 
             <details
@@ -418,29 +418,29 @@
                   ></path>
                 </svg>
                 {{
-                  t("didPanel.zkloginParamsDetails", "Show underlying fields")
+                  t("didPanel.delegatedIdentityParamsDetails", "Show underlying fields")
                 }}
               </summary>
               <div class="mt-3 space-y-3">
-                <div v-if="zkloginPublicKey" class="space-y-1">
+                <div v-if="delegatedIdentityPublicKey" class="space-y-1">
                   <div class="flex items-center justify-between gap-3">
                     <p class="text-xs uppercase text-sa-muted font-bold">
-                      {{ t("didPanel.zkloginSignerKey", "Signer Public Key") }}
+                      {{ t("didPanel.delegatedIdentitySignerKey", "Signer Public Key") }}
                     </p>
                     <button
                       class="btn-secondary btn-xs"
                       :aria-label="
                         t(
-                          'didPanel.copyZkloginPublicKey',
-                          'Copy zklogin signer public key',
+                          'didPanel.copyDelegatedIdentityPublicKey',
+                          'Copy delegated identity public key',
                         )
                       "
-                      @click="copyZkloginPublicKey"
+                      @click="copyDelegatedIdentityPublicKey"
                     >
                       <span class="flex items-center gap-1.5">
                         <svg
                           aria-hidden="true"
-                          v-if="copiedKey !== 'zklogin-pubkey'"
+                          v-if="copiedKey !== 'delegated-identity-pubkey'"
                           class="w-3.5 h-3.5"
                           fill="none"
                           stroke="currentColor"
@@ -469,7 +469,7 @@
                           ></path>
                         </svg>
                         {{
-                          copiedKey === "zklogin-pubkey"
+                          copiedKey === "delegated-identity-pubkey"
                             ? t("operations.copied", "Copied!")
                             : t("operations.copy", "Copy")
                         }}
@@ -477,31 +477,31 @@
                     </button>
                   </div>
                   <p class="font-mono text-xs break-all text-sa-muted">
-                    0x{{ zkloginPublicKey }}
+                    0x{{ delegatedIdentityPublicKey }}
                   </p>
                 </div>
 
-                <div v-if="zkloginMasterNullifier" class="space-y-1">
+                <div v-if="delegatedIdentityMasterNullifier" class="space-y-1">
                   <div class="flex items-center justify-between gap-3">
                     <p class="text-xs uppercase text-sa-muted font-bold">
                       {{
-                        t("didPanel.zkloginMasterNullifier", "Master Nullifier")
+                        t("didPanel.delegatedIdentityMasterNullifier", "Master Nullifier")
                       }}
                     </p>
                     <button
                       class="btn-secondary btn-xs"
                       :aria-label="
                         t(
-                          'didPanel.copyZkloginMasterNullifier',
-                          'Copy zklogin master nullifier',
+                          'didPanel.copyDelegatedIdentityNullifier',
+                          'Copy identity master nullifier',
                         )
                       "
-                      @click="copyZkloginMasterNullifier"
+                      @click="copyDelegatedIdentityNullifier"
                     >
                       <span class="flex items-center gap-1.5">
                         <svg
                           aria-hidden="true"
-                          v-if="copiedKey !== 'zklogin-master-nullifier'"
+                          v-if="copiedKey !== 'delegated-identity-nullifier'"
                           class="w-3.5 h-3.5"
                           fill="none"
                           stroke="currentColor"
@@ -530,7 +530,7 @@
                           ></path>
                         </svg>
                         {{
-                          copiedKey === "zklogin-master-nullifier"
+                          copiedKey === "delegated-identity-nullifier"
                             ? t("operations.copied", "Copied!")
                             : t("operations.copy", "Copy")
                         }}
@@ -538,7 +538,7 @@
                     </button>
                   </div>
                   <p class="font-mono text-xs break-all text-sa-muted">
-                    0x{{ zkloginMasterNullifier }}
+                    0x{{ delegatedIdentityMasterNullifier }}
                   </p>
                 </div>
               </div>
@@ -558,22 +558,19 @@
               {{
                 t(
                   "didPanel.stepRecoveryHint",
-                  "Submit a Morpheus recovery request through the bound verifier for the currently connected Web3Auth identity.",
+                  "Submit a Morpheus recovery request through the delegated recovery service for the currently connected Web3Auth identity.",
                 )
               }}
             </p>
           </div>
-          <label for="did-panel-recovery-verifier-hash" class="block text-sm">
-            <span class="text-sa-muted">{{
-              t("didPanel.recoveryVerifierHash", "Recovery Verifier Hash")
-            }}</span>
-            <input
-              id="did-panel-recovery-verifier-hash"
-              v-model="recoveryVerifierHash"
-              class="mt-1 input-field"
-              :placeholder="t('operations.hexPlaceholder', '0x...')"
-            />
-          </label>
+          <div class="block text-sm">
+            <p class="text-sa-muted">{{
+              t("didPanel.recoveryServiceHash", "Recovery Service")
+            }}</p>
+            <p class="mt-1 font-mono text-xs break-all text-sa-text">
+              {{ recoveryServiceHash || t("didPanel.unset", "unset") }}
+            </p>
+          </div>
           <label for="did-panel-recovery-new-owner" class="block text-sm">
             <span class="text-sa-muted">{{
               t("didPanel.newOwnerAddress", "New Owner Address / Script Hash")
@@ -653,29 +650,26 @@
               }}
             </p>
           </div>
-          <label for="did-panel-proxy-verifier-hash" class="block text-sm">
-            <span class="text-sa-muted">{{
-              t("didPanel.proxyVerifierHash", "Proxy Verifier Hash")
-            }}</span>
-            <input
-              id="did-panel-proxy-verifier-hash"
-              v-model="proxyVerifierHash"
-              class="mt-1 input-field"
-              :placeholder="t('operations.hexPlaceholder', '0x...')"
-            />
-          </label>
+          <div class="block text-sm">
+            <p class="text-sa-muted">{{
+              t("didPanel.proxyServiceHash", "Private Session Service")
+            }}</p>
+            <p class="mt-1 font-mono text-xs break-all text-sa-text">
+              {{ proxyServiceHash || t("didPanel.unset", "unset") }}
+            </p>
+          </div>
           <div class="rounded-xl border border-sa-border p-3 space-y-2">
             <p class="text-sm">Action identities require a separate owner-wallet enrollment. Recovery factors do not grant session access.</p>
             <label for="did-panel-action-identity" class="block text-sm">Action master nullifier (32 bytes)</label>
-            <input id="did-panel-action-identity" v-model="actionMasterNullifier" class="input-field" :placeholder="zkloginMasterNullifier || '0x...'" />
+            <input id="did-panel-action-identity" v-model="actionMasterNullifier" class="input-field" :placeholder="delegatedIdentityMasterNullifier || '0x...'" />
             <div class="flex gap-3">
-              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="manageActionIdentity(true)">Enroll action identity — owner signature</button>
-              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="manageActionIdentity(false)">Revoke action identity — owner signature</button>
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyRecoveryState?.actionProtocolVersion) !== 4" @click="manageActionIdentity(true)">Enroll action identity — owner signature</button>
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyRecoveryState?.actionProtocolVersion) !== 4" @click="manageActionIdentity(false)">Revoke action identity — owner signature</button>
             </div>
-            <div v-if="proxyVerifierState?.activeSession?.active" class="text-sm">
-              <p v-if="!proxyVerifierState.actionSessionAuthorized">Stored session requires current-owner approval or a new session from an enrolled identity.</p>
-              <p>Stored executor: {{ proxyVerifierState.activeSession.executor }}; expiry: {{ proxyVerifierState.activeSession.expiresAt }}</p>
-              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyVerifierState?.actionProtocolVersion) !== 4" @click="reauthorizeActionSession">Reauthorize this displayed session — owner signature</button>
+            <div v-if="proxyRecoveryState?.activeSession?.active" class="text-sm">
+              <p v-if="!proxyRecoveryState.actionSessionAuthorized">Stored session requires current-owner approval or a new session from an enrolled identity.</p>
+              <p>Stored executor: {{ proxyRecoveryState.activeSession.executor }}; expiry: {{ proxyRecoveryState.activeSession.expiresAt }}</p>
+              <button class="btn-secondary" :disabled="Boolean(busy) || !hasProxyPreviewContext || Number(proxyRecoveryState?.actionProtocolVersion) !== 4" @click="reauthorizeActionSession">Reauthorize this displayed session — owner signature</button>
             </div>
           </div>
           <label for="did-panel-proxy-executor" class="block text-sm">
@@ -807,8 +801,7 @@ import { useDidConnection } from "@/composables/useDidConnection.js";
 import {
   morpheusDidService,
   fetchAccountIdentity,
-  fetchAccountMaintenanceState,
-  fetchUnifiedVerifierState,
+  fetchAccountRecoveryState,
 } from "@/services/morpheusDidService.js";
 import { notificationService } from "@/services/notificationService.js";
 import { getSmartAccountHash } from "@/services/walletService.js";
@@ -817,7 +810,7 @@ import { sanitizeHex } from "@/utils/hex.js";
 import { RUNTIME_CONFIG } from "@/config/runtimeConfig.js";
 import { translateError } from "@/config/errorCodes.js";
 import DidIdentitySummaryGrids from "./DidIdentityPanel/DidIdentitySummaryGrids.vue";
-import DidVerifierStateGrid from "./DidIdentityPanel/DidVerifierStateGrid.vue";
+import DidRecoveryStateGrid from "./DidIdentityPanel/DidRecoveryStateGrid.vue";
 import DidPendingStateCards from "./DidIdentityPanel/DidPendingStateCards.vue";
 import DidMaintenanceList from "./DidIdentityPanel/DidMaintenanceList.vue";
 
@@ -835,10 +828,6 @@ const props = defineProps({
     default: "",
   },
   neoWalletAddress: {
-    type: String,
-    default: "",
-  },
-  recoveryVerifierPrefill: {
     type: String,
     default: "",
   },
@@ -902,30 +891,31 @@ const canSmsNotice = computed(() =>
   Boolean(notificationService.canSms && didProfile.value?.phone),
 );
 const resolvedAccountId = ref("");
-const verifierState = ref(null);
-const verifierStateContext = ref(null);
-const proxyVerifierState = ref(null);
-const proxyVerifierStateContext = ref(null);
-const maintenanceState = ref(null);
+const recoveryState = ref(null);
+const recoveryStateContext = ref(null);
+// Recovery and private-session views read one on-chain snapshot, so the
+// "proxy" surface mirrors the same state instead of a second contract read.
+const proxyRecoveryState = computed(() => recoveryState.value);
+const proxyRecoveryStateContext = computed(() => recoveryStateContext.value);
 const busy = ref("");
 const resultJson = ref("");
 const { copiedKey, markCopied, copyText: clipboardCopy } = useClipboard();
 const expanded = ref(true);
 const bindResponse = ref(null);
 
-const zkloginVerifierParamsHex = computed(() =>
+const delegatedIdentityParamsHex = computed(() =>
   sanitizeHex(
     bindResponse.value?.zklogin_verifier_params_hex ||
       bindResponse.value?.verifier_params_hex ||
       "",
   ),
 );
-const zkloginPublicKey = computed(() =>
+const delegatedIdentityPublicKey = computed(() =>
   sanitizeHex(
     bindResponse.value?.public_key || bindResponse.value?.publicKey || "",
   ),
 );
-const zkloginMasterNullifier = computed(() =>
+const delegatedIdentityMasterNullifier = computed(() =>
   sanitizeHex(
     bindResponse.value?.master_nullifier ||
       bindResponse.value?.masterNullifier ||
@@ -936,10 +926,14 @@ const zkloginMasterNullifier = computed(() =>
 const vaultAccount = ref("");
 const claimType = ref("Web3Auth_PrimaryIdentity");
 const claimValue = ref("verified");
-const recoveryVerifierHash = ref("");
 const recoveryNewOwner = ref("");
 const recoveryExpiryMinutes = ref(30);
-const proxyVerifierHash = ref("");
+// Both surfaces resolve the service the installed ActionSessionValidator
+// delegates to; the user never types a service hash.
+const recoveryServiceHash = computed(() =>
+  sanitizeHex(recoveryState.value?.recoveryServiceHash || ""),
+);
+const proxyServiceHash = computed(() => recoveryServiceHash.value);
 const proxyExecutor = ref("");
 const proxyExpiryMinutes = ref(15);
 const actionMasterNullifier = ref("");
@@ -949,12 +943,12 @@ const bindStatusLabel = computed(() =>
     : t("didPanel.statusConnectDid", "(connect Web3Auth)"),
 );
 const recoveryStatusLabel = computed(() =>
-  verifierState.value?.pendingRecovery?.active
+  recoveryState.value?.pendingRecovery?.active
     ? t("didPanel.statusPending", "(pending)")
     : t("didPanel.statusReady", "(ready)"),
 );
 const sessionStatusLabel = computed(() =>
-  proxyVerifierState.value?.activeSession?.active && proxyVerifierState.value?.actionSessionAuthorized
+  proxyRecoveryState.value?.activeSession?.active && proxyRecoveryState.value?.actionSessionAuthorized
     ? t("didPanel.statusActive", "(active)")
     : t("didPanel.statusReady", "(ready)"),
 );
@@ -970,77 +964,23 @@ function formatScheduledTimestamp(value) {
   return `${date.toISOString()} (${raw})`;
 }
 
-const maintenanceItems = computed(() => {
-  if (!maintenanceState.value) return [];
-  const items = [];
-  if (maintenanceState.value.pendingVerifierCall?.active) {
-    items.push({
-      id: "pending-verifier-call",
-      title: t(
-        "didPanel.pendingVerifierCall",
-        "Pending Verifier Maintenance Call",
-      ),
-      description: t(
-        "didPanel.pendingVerifierCallHint",
-        "A delayed verifier maintenance request is staged and can only be confirmed after the contract timelock expires.",
-      ),
-      executeAfter: formatScheduledTimestamp(
-        maintenanceState.value.pendingVerifierCall.executeAfter,
-      ),
-      moduleHash: maintenanceState.value.pendingVerifierCall.moduleHash,
-      callHash: maintenanceState.value.pendingVerifierCall.callHash,
-    });
-  }
-  if (maintenanceState.value.pendingHookCall?.active) {
-    items.push({
-      id: "pending-hook-call",
-      title: t("didPanel.pendingHookCall", "Pending Hook Maintenance Call"),
-      description: t(
-        "didPanel.pendingHookCallHint",
-        "A delayed hook maintenance request is staged and can only be confirmed after the contract timelock expires.",
-      ),
-      executeAfter: formatScheduledTimestamp(
-        maintenanceState.value.pendingHookCall.executeAfter,
-      ),
-      moduleHash: maintenanceState.value.pendingHookCall.moduleHash,
-      callHash: maintenanceState.value.pendingHookCall.callHash,
-    });
-  }
-  if (maintenanceState.value.pendingVerifierUpdate?.active) {
-    items.push({
-      id: "pending-verifier-update",
-      title: t("didPanel.pendingVerifierUpdate", "Pending Verifier Rotation"),
-      description: t(
-        "didPanel.pendingVerifierUpdateHint",
-        "A verifier rotation is queued behind the V3 config-update timelock.",
-      ),
-      executeAfter: formatScheduledTimestamp(
-        maintenanceState.value.pendingVerifierUpdate.executeAfter,
-      ),
-      moduleHash: "",
-      callHash: "",
-    });
-  }
-  if (maintenanceState.value.pendingHookUpdate?.active) {
-    items.push({
-      id: "pending-hook-update",
-      title: t("didPanel.pendingHookUpdate", "Pending Hook Rotation"),
-      description: t(
-        "didPanel.pendingHookUpdateHint",
-        "A hook rotation is queued behind the V3 config-update timelock.",
-      ),
-      executeAfter: formatScheduledTimestamp(
-        maintenanceState.value.pendingHookUpdate.executeAfter,
-      ),
-      moduleHash: "",
-      callHash: "",
-    });
-  }
-  return items;
+const configIntentItems = computed(() => {
+  const intents = recoveryState.value?.pendingConfiguration?.intents || [];
+  return intents.map((intent) => ({
+    id: `config-intent-${intent.intentId}`,
+    title: t("didPanel.configIntentTitle", "Configuration Intent #{intentId}", {
+      intentId: intent.intentId,
+    }),
+    description: t(
+      "didPanel.configIntentHint",
+      "One 24-hour intent holds {count} action(s); confirmation re-requires the custody witness.",
+      { count: intent.actionCount },
+    ),
+    matureAt: formatScheduledTimestamp(intent.matureAt),
+    expiresAt: formatScheduledTimestamp(intent.expiresAt),
+    actionDigest: intent.actionDigest,
+  }));
 });
-const prefillRecoveryVerifier = computed(() =>
-  String(props.recoveryVerifierPrefill || "").trim(),
-);
 const prefillRecoveryNewOwner = computed(() =>
   String(props.recoveryNewOwnerPrefill || "").trim(),
 );
@@ -1077,22 +1017,15 @@ function toExpiry(minutes) {
 }
 
 let accountContextRequestId = 0;
-let verifierStateRequestId = 0;
-let proxyVerifierStateRequestId = 0;
+let recoveryStateRequestId = 0;
 async function refreshAccountContext() {
   const requestId = ++accountContextRequestId;
-  // Invalidate all earlier reads before clearing context, including an in-flight
-  // verifier response from another core with the same account-ID prefill.
-  ++verifierStateRequestId;
-  ++proxyVerifierStateRequestId;
+  // Invalidate earlier reads before clearing context, including an in-flight
+  // state response from another core with the same account-ID prefill.
+  ++recoveryStateRequestId;
   resolvedAccountId.value = "";
-  recoveryVerifierHash.value = "";
-  proxyVerifierHash.value = "";
-  verifierState.value = null;
-  verifierStateContext.value = null;
-  proxyVerifierState.value = null;
-  proxyVerifierStateContext.value = null;
-  maintenanceState.value = null;
+  recoveryState.value = null;
+  recoveryStateContext.value = null;
   if (!props.accountIdPrefill && !props.accountAddressScriptHash) return;
   try {
     const identity = await fetchAccountIdentity({
@@ -1103,8 +1036,6 @@ async function refreshAccountContext() {
     });
     if (requestId !== accountContextRequestId) return;
     resolvedAccountId.value = identity.accountIdHex;
-    recoveryVerifierHash.value = prefillRecoveryVerifier.value || identity.verifierHash;
-    proxyVerifierHash.value = identity.verifierHash;
   } catch (error) {
     if (requestId !== accountContextRequestId) return;
     if (import.meta.env.DEV)
@@ -1124,15 +1055,11 @@ watch(
 
 watch(
   () => [
-    prefillRecoveryVerifier.value,
     prefillRecoveryNewOwner.value,
     prefillRecoveryExpiryMinutes.value,
     props.autoPreviewRecovery,
   ],
   () => {
-    if (prefillRecoveryVerifier.value) {
-      recoveryVerifierHash.value = prefillRecoveryVerifier.value;
-    }
     if (prefillRecoveryNewOwner.value) {
       recoveryNewOwner.value = prefillRecoveryNewOwner.value;
     }
@@ -1147,108 +1074,58 @@ watch(
   { immediate: true },
 );
 
-const effectiveProxyVerifierHash = computed(
-  () => proxyVerifierHash.value || recoveryVerifierHash.value,
-);
-
-function getVerifierContext(verifier) {
-  const contextHash = (value) => hasNonZeroHash160(value) ? normalizeHashOrAddress(value) : "";
+function getRecoveryContext() {
+  const contextHash = (value) => (hasNonZeroHash160(value) ? normalizeHashOrAddress(value) : "");
   return {
     rpcUrl: RUNTIME_CONFIG.rpcUrl,
     saContractHash: contextHash(props.saContractHash || getSmartAccountHash()),
     accountIdHex: contextHash(resolvedAccountId.value),
-    verifierHash: contextHash(verifier),
   };
 }
 
-function sameVerifierContext(left, right) {
+function sameRecoveryContext(left, right) {
   return Boolean(left && right &&
     left.rpcUrl === right.rpcUrl &&
     left.saContractHash === right.saContractHash &&
-    left.accountIdHex === right.accountIdHex &&
-    left.verifierHash === right.verifierHash);
+    left.accountIdHex === right.accountIdHex);
 }
 
 watch(
-  () => getVerifierContext(recoveryVerifierHash.value),
-  (context) => { void refreshVerifierState(context); },
+  () => getRecoveryContext(),
+  (context) => { void refreshRecoveryState(context); },
   { flush: "sync" },
 );
 
-watch(
-  () => getVerifierContext(effectiveProxyVerifierHash.value),
-  (context) => { void refreshProxyVerifierState(context); },
-  { flush: "sync" },
-);
-
-async function refreshVerifierState(context) {
-  const requestId = ++verifierStateRequestId;
-  verifierState.value = null;
-  verifierStateContext.value = null;
-  maintenanceState.value = null;
+async function refreshRecoveryState(context) {
+  const requestId = ++recoveryStateRequestId;
+  recoveryState.value = null;
+  recoveryStateContext.value = null;
   if (!context.accountIdHex || !context.saContractHash) return false;
   try {
-    const [maintenance, state] = await Promise.all([
-      fetchAccountMaintenanceState({
-        rpcUrl: context.rpcUrl,
-        saContractHash: context.saContractHash,
-        accountIdHex: context.accountIdHex,
-      }),
-      context.verifierHash ? fetchUnifiedVerifierState({
-        rpcUrl: context.rpcUrl,
-        verifierHash: context.verifierHash,
-        accountIdHex: context.accountIdHex,
-      }) : Promise.resolve(null),
-    ]);
-    if (requestId !== verifierStateRequestId ||
-        !sameVerifierContext(context, getVerifierContext(recoveryVerifierHash.value))) return false;
-    maintenanceState.value = maintenance;
-    verifierState.value = state;
-    verifierStateContext.value = context;
-    return true;
-  } catch (error) {
-    if (requestId !== verifierStateRequestId) return false;
-    if (import.meta.env.DEV)
-      console.error("[DidIdentityPanel] refreshVerifierState failed:", error?.message);
-    toast.error(translateError(error?.message, t));
-    return false;
-  }
-}
-
-async function refreshProxyVerifierState(context) {
-  const requestId = ++proxyVerifierStateRequestId;
-  proxyVerifierState.value = null;
-  proxyVerifierStateContext.value = null;
-  if (!context.accountIdHex || !context.saContractHash || !context.verifierHash) return false;
-  try {
-    const state = await fetchUnifiedVerifierState({
+    const state = await fetchAccountRecoveryState({
       rpcUrl: context.rpcUrl,
-      verifierHash: context.verifierHash,
+      saContractHash: context.saContractHash,
       accountIdHex: context.accountIdHex,
     });
-    if (requestId !== proxyVerifierStateRequestId ||
-        !sameVerifierContext(context, getVerifierContext(effectiveProxyVerifierHash.value))) return false;
-    if (!hasVerifierPreviewContext(state, context, effectiveProxyVerifierHash.value)) return false;
-    proxyVerifierState.value = state;
-    proxyVerifierStateContext.value = context;
+    if (requestId !== recoveryStateRequestId ||
+        !sameRecoveryContext(context, getRecoveryContext())) return false;
+    recoveryState.value = state;
+    recoveryStateContext.value = context;
     return true;
   } catch (error) {
-    if (requestId !== proxyVerifierStateRequestId) return false;
+    if (requestId !== recoveryStateRequestId) return false;
     if (import.meta.env.DEV)
-      console.error("[DidIdentityPanel] refreshProxyVerifierState failed:", error?.message);
+      console.error("[DidIdentityPanel] refreshRecoveryState failed:", error?.message);
     toast.error(translateError(error?.message, t));
     return false;
   }
 }
 
-async function refreshVerifierStateAction() {
+async function refreshRecoveryStateAction() {
   busy.value = "refreshState";
   try {
-    const [recoveryRefreshed, proxyRefreshed] = await Promise.all([
-      refreshVerifierState(getVerifierContext(recoveryVerifierHash.value)),
-      refreshProxyVerifierState(getVerifierContext(effectiveProxyVerifierHash.value)),
-    ]);
-    if (recoveryRefreshed || proxyRefreshed) {
+    const refreshed = await refreshRecoveryState(getRecoveryContext());
+    if (refreshed) {
       publishStatus(t("didPanel.refreshChainState", "Refresh Chain State"));
     }
   } finally {
@@ -1274,14 +1151,13 @@ watch(
   { immediate: true },
 );
 
-function hasVerifierPreviewContext(state, context, verifier) {
-  const expected = getVerifierContext(verifier);
+function hasRecoveryPreviewContext(state, context) {
+  const expected = getRecoveryContext();
   return Boolean(
     state &&
-    sameVerifierContext(context, expected) &&
-    hasNonZeroHash160(state.verifierHash) &&
+    sameRecoveryContext(context, expected) &&
+    hasNonZeroHash160(state.recoveryServiceHash) &&
     hasNonZeroHash160(state.saContract) &&
-    normalizeHashOrAddress(state.verifierHash) === expected.verifierHash &&
     normalizeHashOrAddress(state.saContract) === expected.saContractHash &&
     hasRequiredText(state.network) &&
     hasRequiredText(state.accountIdText) &&
@@ -1289,43 +1165,51 @@ function hasVerifierPreviewContext(state, context, verifier) {
     hasNonZeroHash160(resolvedAccountId.value),
   );
 }
-const hasPreviewContext = computed(() => hasVerifierPreviewContext(
-  verifierState.value, verifierStateContext.value, recoveryVerifierHash.value,
+const hasPreviewContext = computed(() => hasRecoveryPreviewContext(
+  recoveryState.value, recoveryStateContext.value,
 ));
-const hasProxyPreviewContext = computed(() => hasVerifierPreviewContext(
-  proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value,
+const hasProxyPreviewContext = computed(() => hasRecoveryPreviewContext(
+  proxyRecoveryState.value, proxyRecoveryStateContext.value,
 ));
 const canInvokeRecovery = computed(
   () =>
-    didConnected.value &&
-    recoveryVerifierHash.value &&
-    recoveryNewOwner.value &&
-    resolvedAccountId.value,
+    Boolean(
+      didConnected.value &&
+      recoveryState.value?.recoveryServiceHash &&
+      recoveryNewOwner.value &&
+      resolvedAccountId.value,
+    ),
 );
 const canPreviewRecovery = computed(
   () =>
-    canInvokeRecovery.value &&
-    hasPreviewContext.value &&
-    hasNonZeroHash160(recoveryVerifierHash.value) &&
-    hasNonZeroHash160(recoveryNewOwner.value),
+    Boolean(
+      canInvokeRecovery.value &&
+      hasPreviewContext.value &&
+      hasNonZeroHash160(recoveryState.value?.recoveryServiceHash) &&
+      hasNonZeroHash160(recoveryNewOwner.value),
+    ),
 );
 const canInvokeProxy = computed(
   () =>
-    didConnected.value &&
-    effectiveProxyVerifierHash.value &&
-    proxyExecutor.value &&
-    resolvedAccountId.value &&
-    Number(proxyVerifierState.value?.actionProtocolVersion) === 4 &&
-    /^[1-9][0-9]*$/.test(String(proxyVerifierState.value?.actionAuthorizationEpoch || "")),
+    Boolean(
+      didConnected.value &&
+      recoveryServiceHash.value &&
+      proxyExecutor.value &&
+      resolvedAccountId.value &&
+      Number(proxyRecoveryState.value?.actionProtocolVersion) === 4 &&
+      /^[1-9][0-9]*$/.test(String(proxyRecoveryState.value?.actionAuthorizationEpoch || "")),
+    ),
 );
 const canPreviewProxy = computed(
   () =>
-    canInvokeProxy.value &&
-    hasProxyPreviewContext.value &&
-    Number(proxyVerifierState.value?.actionProtocolVersion) === 4 &&
-    /^[1-9][0-9]*$/.test(String(proxyVerifierState.value?.actionAuthorizationEpoch || "")) &&
-    hasNonZeroHash160(effectiveProxyVerifierHash.value) &&
-    hasNonZeroHash160(proxyExecutor.value),
+    Boolean(
+      canInvokeProxy.value &&
+      hasProxyPreviewContext.value &&
+      Number(proxyRecoveryState.value?.actionProtocolVersion) === 4 &&
+      /^[1-9][0-9]*$/.test(String(proxyRecoveryState.value?.actionAuthorizationEpoch || "")) &&
+      hasNonZeroHash160(recoveryServiceHash.value) &&
+      hasNonZeroHash160(proxyExecutor.value),
+    ),
 );
 
 watch(
@@ -1334,7 +1218,7 @@ watch(
     didConnected.value,
     canPreviewRecovery.value,
     resolvedAccountId.value,
-    recoveryVerifierHash.value,
+    recoveryServiceHash.value,
     recoveryNewOwner.value,
     recoveryExpiryMinutes.value,
   ],
@@ -1450,21 +1334,21 @@ async function resolveServiceDidAction() {
 }
 
 async function previewRecoveryAction() {
-  if (!canPreviewRecovery.value || !hasVerifierPreviewContext(
-    verifierState.value, verifierStateContext.value, recoveryVerifierHash.value,
+  if (!canPreviewRecovery.value || !hasRecoveryPreviewContext(
+    recoveryState.value, recoveryStateContext.value,
   )) return;
   busy.value = "previewRecovery";
   try {
     const response = await morpheusDidService.previewRecoveryTicket({
-      network: verifierState.value?.network,
-      saContract: verifierState.value?.saContract,
-      verifierContract: recoveryVerifierHash.value,
+      network: recoveryState.value?.network,
+      saContract: recoveryState.value?.saContract,
+      verifierContract: recoveryServiceHash.value,
       accountId: resolvedAccountId.value,
-      accountIdText: verifierState.value?.accountIdText,
+      accountIdText: recoveryState.value?.accountIdText,
       accountIdRaw: resolvedAccountId.value,
-      accountAddress: verifierState.value?.accountAddress,
+      accountAddress: recoveryState.value?.accountAddress,
       newOwner: recoveryNewOwner.value,
-      recoveryNonce: verifierState.value?.recoveryNonce || 0,
+      recoveryNonce: recoveryState.value?.recoveryNonce || 0,
       expiresAt: toExpiry(recoveryExpiryMinutes.value),
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1480,7 +1364,7 @@ async function invokeRecoveryAction() {
   busy.value = "invokeRecovery";
   try {
     const response = await morpheusDidService.invokeRecoveryRequest({
-      verifierHash: recoveryVerifierHash.value,
+      verifierHash: recoveryServiceHash.value,
       accountIdHex: resolvedAccountId.value,
       newOwner: recoveryNewOwner.value,
       expiresAt: toExpiry(recoveryExpiryMinutes.value),
@@ -1502,21 +1386,21 @@ async function invokeRecoveryAction() {
 }
 
 async function previewProxyAction() {
-  if (!canPreviewProxy.value || !hasVerifierPreviewContext(
-    proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value,
+  if (!canPreviewProxy.value || !hasRecoveryPreviewContext(
+    proxyRecoveryState.value, proxyRecoveryStateContext.value,
   )) return;
   busy.value = "previewProxy";
   try {
     const response = await morpheusDidService.previewActionTicket({
-      network: proxyVerifierState.value?.network,
-      saContract: proxyVerifierState.value?.saContract,
-      verifierContract: effectiveProxyVerifierHash.value,
+      network: proxyRecoveryState.value?.network,
+      saContract: proxyRecoveryState.value?.saContract,
+      verifierContract: recoveryServiceHash.value,
       accountId: resolvedAccountId.value,
-      accountIdText: proxyVerifierState.value?.accountIdText,
+      accountIdText: proxyRecoveryState.value?.accountIdText,
       accountIdRaw: resolvedAccountId.value,
       executor: proxyExecutor.value,
-      sessionNonce: proxyVerifierState.value?.sessionNonce || 0,
-      authorizationEpoch: proxyVerifierState.value?.actionAuthorizationEpoch,
+      sessionNonce: proxyRecoveryState.value?.sessionNonce || 0,
+      authorizationEpoch: proxyRecoveryState.value?.actionAuthorizationEpoch,
       expiresAt: toExpiry(proxyExpiryMinutes.value),
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1529,11 +1413,11 @@ async function previewProxyAction() {
 }
 
 async function invokeProxyAction() {
-  if (!canInvokeProxy.value || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
+  if (!canInvokeProxy.value || !hasRecoveryPreviewContext(proxyRecoveryState.value, proxyRecoveryStateContext.value)) return;
   busy.value = "invokeProxy";
   try {
     const response = await morpheusDidService.invokeProxySessionRequest({
-      verifierHash: effectiveProxyVerifierHash.value,
+      verifierHash: recoveryServiceHash.value,
       accountIdHex: resolvedAccountId.value,
       executor: proxyExecutor.value,
       expiresAt: toExpiry(proxyExpiryMinutes.value),
@@ -1557,12 +1441,12 @@ async function invokeProxyAction() {
 // Every management operation is an explicit owner-wallet transaction. The
 // read provenance guard is UX protection; current-owner witness is enforced on-chain.
 async function manageActionIdentity(enabled) {
-  if (Number(proxyVerifierState.value?.actionProtocolVersion) !== 4 || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
-  const masterNullifier = actionMasterNullifier.value || zkloginMasterNullifier.value;
+  if (Number(proxyRecoveryState.value?.actionProtocolVersion) !== 4 || !hasRecoveryPreviewContext(proxyRecoveryState.value, proxyRecoveryStateContext.value)) return;
+  const masterNullifier = actionMasterNullifier.value || delegatedIdentityMasterNullifier.value;
   if (!/^[0-9a-f]{64}$/i.test(sanitizeHex(masterNullifier))) return;
   busy.value = "actionEnrollment";
   try {
-    const response = await morpheusDidService.setActionIdentity({ verifierHash: effectiveProxyVerifierHash.value,
+    const response = await morpheusDidService.setActionIdentity({ verifierHash: recoveryServiceHash.value,
       accountIdHex: resolvedAccountId.value, masterNullifier, enabled });
     resultJson.value = JSON.stringify(response, null, 2);
   } catch (err) { toast.error(translateError(err?.message, t)); }
@@ -1570,12 +1454,12 @@ async function manageActionIdentity(enabled) {
 }
 
 async function reauthorizeActionSession() {
-  if (Number(proxyVerifierState.value?.actionProtocolVersion) !== 4 || !hasVerifierPreviewContext(proxyVerifierState.value, proxyVerifierStateContext.value, effectiveProxyVerifierHash.value)) return;
-  const session = proxyVerifierState.value?.activeSession;
+  if (Number(proxyRecoveryState.value?.actionProtocolVersion) !== 4 || !hasRecoveryPreviewContext(proxyRecoveryState.value, proxyRecoveryStateContext.value)) return;
+  const session = proxyRecoveryState.value?.activeSession;
   if (!session?.active) return;
   busy.value = "reauthorizeAction";
   try {
-    const response = await morpheusDidService.reauthorizeActiveActionSession({ verifierHash: effectiveProxyVerifierHash.value,
+    const response = await morpheusDidService.reauthorizeActiveActionSession({ verifierHash: recoveryServiceHash.value,
       accountIdHex: resolvedAccountId.value, session: { ...session } });
     resultJson.value = JSON.stringify(response, null, 2);
   } catch (err) { toast.error(translateError(err?.message, t)); }
@@ -1586,8 +1470,7 @@ async function finalizeRecoveryAction() {
   busy.value = "finalizeRecovery";
   try {
     const response = await morpheusDidService.finalizeRecovery({
-      verifierHash:
-        recoveryVerifierHash.value || effectiveProxyVerifierHash.value,
+      verifierHash: recoveryServiceHash.value,
       accountIdHex: resolvedAccountId.value,
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1596,7 +1479,7 @@ async function finalizeRecoveryAction() {
       "recovery_finalized",
       t("didPanel.activity.recoveryFinalized", "Morpheus recovery finalized"),
     );
-    await refreshVerifierStateAction();
+    await refreshRecoveryStateAction();
   } catch (err) {
     toast.error(translateError(err?.message, t));
   } finally {
@@ -1608,8 +1491,7 @@ async function cancelRecoveryAction() {
   busy.value = "cancelRecovery";
   try {
     const response = await morpheusDidService.cancelRecovery({
-      verifierHash:
-        recoveryVerifierHash.value || effectiveProxyVerifierHash.value,
+      verifierHash: recoveryServiceHash.value,
       accountIdHex: resolvedAccountId.value,
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1618,7 +1500,7 @@ async function cancelRecoveryAction() {
       "recovery_cancelled",
       t("didPanel.activity.recoveryCancelled", "Morpheus recovery cancelled"),
     );
-    await refreshVerifierStateAction();
+    await refreshRecoveryStateAction();
   } catch (err) {
     toast.error(translateError(err?.message, t));
   } finally {
@@ -1630,7 +1512,7 @@ async function revokeSessionAction() {
   busy.value = "revokeSession";
   try {
     const response = await morpheusDidService.revokeProxySession({
-      verifierHash: effectiveProxyVerifierHash.value,
+      verifierHash: recoveryServiceHash.value,
       accountIdHex: resolvedAccountId.value,
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1642,7 +1524,7 @@ async function revokeSessionAction() {
         "Morpheus private session revoked",
       ),
     );
-    await refreshVerifierStateAction();
+    await refreshRecoveryStateAction();
   } catch (err) {
     toast.error(translateError(err?.message, t));
   } finally {
@@ -1655,22 +1537,22 @@ async function copyResult() {
   if (await clipboardCopy(resultJson.value)) markCopied("result");
 }
 
-async function copyZkloginVerifierParams() {
-  if (!zkloginVerifierParamsHex.value) return;
-  if (await clipboardCopy(`0x${sanitizeHex(zkloginVerifierParamsHex.value)}`))
-    markCopied("zklogin-params");
+async function copyDelegatedIdentityParams() {
+  if (!delegatedIdentityParamsHex.value) return;
+  if (await clipboardCopy(`0x${sanitizeHex(delegatedIdentityParamsHex.value)}`))
+    markCopied("delegated-identity-params");
 }
 
-async function copyZkloginPublicKey() {
-  if (!zkloginPublicKey.value) return;
-  if (await clipboardCopy(`0x${sanitizeHex(zkloginPublicKey.value)}`))
-    markCopied("zklogin-pubkey");
+async function copyDelegatedIdentityPublicKey() {
+  if (!delegatedIdentityPublicKey.value) return;
+  if (await clipboardCopy(`0x${sanitizeHex(delegatedIdentityPublicKey.value)}`))
+    markCopied("delegated-identity-pubkey");
 }
 
-async function copyZkloginMasterNullifier() {
-  if (!zkloginMasterNullifier.value) return;
-  if (await clipboardCopy(`0x${sanitizeHex(zkloginMasterNullifier.value)}`))
-    markCopied("zklogin-master-nullifier");
+async function copyDelegatedIdentityNullifier() {
+  if (!delegatedIdentityMasterNullifier.value) return;
+  if (await clipboardCopy(`0x${sanitizeHex(delegatedIdentityMasterNullifier.value)}`))
+    markCopied("delegated-identity-nullifier");
 }
 
 async function sendEmailNoticeAction() {
@@ -1682,8 +1564,7 @@ async function sendEmailNoticeAction() {
       payload: {
         sa_contract: props.saContractHash || getSmartAccountHash(),
         account_id: resolvedAccountId.value || "",
-        verifier:
-          recoveryVerifierHash.value || effectiveProxyVerifierHash.value || "",
+        verifier: recoveryServiceHash.value || "",
       },
     });
     resultJson.value = JSON.stringify(response, null, 2);
@@ -1708,8 +1589,7 @@ async function sendSmsNoticeAction() {
       payload: {
         sa_contract: props.saContractHash || getSmartAccountHash(),
         account_id: resolvedAccountId.value || "",
-        verifier:
-          recoveryVerifierHash.value || effectiveProxyVerifierHash.value || "",
+        verifier: recoveryServiceHash.value || "",
       },
     });
     resultJson.value = JSON.stringify(response, null, 2);

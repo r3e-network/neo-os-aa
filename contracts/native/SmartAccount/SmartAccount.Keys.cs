@@ -14,7 +14,6 @@
 // regenerate it via scripts/sync_native_smartaccount.py.
 
 #pragma warning disable IDE0051
-using Neo.Cryptography.ECC;
 using Neo.VM.Types;
 using System;
 
@@ -22,6 +21,11 @@ namespace Neo.SmartContract.Native
 {
     partial class SmartAccount
     {
+        /// <summary>
+        /// ABI validator for the `canonicalP256PublicKey` argument: the value
+        /// must be an exact ByteString. The curve check itself lives in the
+        /// method so a wrong encoding is a clean fault, never a silent accept.
+        /// </summary>
         private sealed class P256PublicKeyAttribute : ValidatorAttribute
         {
             public override void Validate(StackItem item)
@@ -29,26 +33,6 @@ namespace Neo.SmartContract.Native
                 if (item is not ByteString)
                     throw new FormatException("A P-256 public key must be an exact ByteString.");
             }
-        }
-
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.None)]
-        private static byte[] CanonicalP256PublicKey([P256PublicKey] byte[] publicKey)
-        {
-            byte[] compressed;
-            if (publicKey.Length == 33 && publicKey[0] is 2 or 3)
-                compressed = publicKey;
-            else if (publicKey.Length == 65 && publicKey[0] == 4)
-            {
-                compressed = new byte[33];
-                compressed[0] = (byte)(2 | (publicKey[64] & 1));
-                publicKey.AsSpan(1, 32).CopyTo(compressed.AsSpan(1));
-            }
-            else throw new FormatException("A canonical P-256 public key requires a 33-byte compressed or 65-byte uncompressed encoding.");
-
-            var point = ECPoint.DecodePoint(compressed, ECCurve.Secp256r1);
-            if (publicKey.Length == 65 && !publicKey.AsSpan().SequenceEqual(point.EncodePoint(false)))
-                throw new FormatException("The uncompressed P-256 public key is not a point on the curve.");
-            return point.EncodePoint(true).AsSpan().ToArray();
         }
     }
 }

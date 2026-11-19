@@ -30,9 +30,44 @@ def evaluate(expression):
 
 
 class Projector(source.Projector):
+    def big_value(self, node):
+        """Fold one already-validated BigInteger constant expression.
+
+        `source.Projector.expr` owns the strict operator/conversion/intrinsic and
+        Roslyn-constant checks; this fold only turns that accepted tree into the
+        single integer a static slot holds, so the emitted initializer stays
+        inside the arithmetic model the certificate already covers.
+        """
+        kind, children = node["kind"], node["children"]
+        if kind == "Literal":
+            value = self.literal(node)
+            require(value[0] == "EVal" and value[1][0] == "VInt", "Integer literal required")
+            return value[1][1]
+        if kind == "PropertyReference":
+            identifier, descendants = self.member(node, is_property=True)
+            require(identifier == "P:System.Numerics.BigInteger.One" and not descendants,
+                    "Unknown BigInteger source constant")
+            return 1
+        if kind == "Conversion":
+            return self.big_value(children[0])
+        require(kind == "Binary" and len(children) == 2, "Unsupported BigInteger initializer expression")
+        operator = node["details"].get("operator")
+        left = self.big_value(children[0])
+        if operator == "LeftShift":
+            count = self.literal(children[1])
+            require(count[0] == "EVal" and count[1][0] == "VInt" and 0 <= count[1][1] < 512,
+                    "Shift count outside the declared exponent domain")
+            return left << count[1][1]
+        right = self.big_value(children[1])
+        require(operator in ("Add", "Subtract", "Multiply"), "Unsupported BigInteger operation")
+        return {"Add": left + right, "Subtract": left - right, "Multiply": left * right}[operator]
+
     def integer_expression(self, node):
         self.header(node)
         kind, typ, children = node["kind"], node["type"], node["children"]
+        if typ == source.BIG:
+            self.expr(node)
+            return ["Number", self.big_value(node)]
         if kind == "Literal":
             value = self.literal(node)
             require(value[0] == "EVal" and value[1][0] == "VInt", "Integer literal required")

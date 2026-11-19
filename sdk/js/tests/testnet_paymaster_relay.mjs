@@ -1,48 +1,88 @@
 #!/usr/bin/env node
 
+/**
+ * v4 relay runbook: `executeUserOp` submitted through the relay with paymaster
+ * pre-authorization.
+ *
+ * v3 relayed a six-field user operation to a pre-deployed core, bootstrapped the
+ * account with `registerAccount`, and signed typed data whose operation payload
+ * ended at the deadline. Protocol v4 has none of that: an account is created
+ * from custody plus salt, the verifier is a module instance installed by action,
+ * and the operation is the 13-field array whose field 11 signature covers a
+ * channel nonce, the routing ids and the §4.3 digest.
+ *
+ * This runbook therefore:
+ *
+ *   1. deploys its own v4 core and Web3AuthValidator and binds them together,
+ *      so the relay target exists without depending on a public v4 deployment;
+ *   2. creates (or, when the salt and key are reused, adopts) a validator-routed
+ *      account and checks the installed key is the one this run signs with;
+ *   3. asks the paymaster to authorize the exact relayed operation — the relay
+ *      derives the downstream target/method from the v4 operation layout, so an
+ *      incorrect derivation is refused by the paymaster policy instead of being
+ *      relayed blindly;
+ *   4. submits the operation through `frontend/api/relay-transaction.js` and
+ *      proves the relayed transaction HALTs and returns the GAS symbol;
+ *   5. proves the relay still refuses an operation outside the deployed core's
+ *      ABI (no fee is spent on that refusal).
+ *
+ * Environment:
+ *   TEST_WIF | NEO_TESTNET_WIF          relay signer (required)
+ *   MORPHEUS_RUNTIME_TOKEN | PHALA_API_TOKEN | PHALA_SHARED_SECRET
+ *                                       paymaster bearer token (required)
+ *   MORPHEUS_PAYMASTER_APP_ID           dapp id the paymaster allowlists
+ *   MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH
+ *                                       local authorize handler; when present the
+ *                                       account/target allowlist is applied per
+ *                                       request instead of on the remote worker
+ *   PAYMASTER_ACCOUNT_ID                optional; when set the derived account
+ *                                       must match it, because a remote policy is
+ *                                       already pinned to that id
+ *   SKIP_PAYMASTER_ALLOWLIST_UPDATE=1   keep the local handler's own allowlist
+ *                                       instead of re-scoping it to this run
+ *   SA_RELAY_EVM_PRIVATE_KEY            optional secp256k1 key of the validator
+ *   SA_RELAY_ACCOUNT_SALT               optional 20-byte hex salt
+ *
+ * A runbook, not a gate: `npm test` does not run it, and the v4 core is not
+ * deployed to a public testnet yet.
+ */
+
 import http from "node:http";
-import { randomBytes } from "node:crypto";
 import { createRequire } from "node:module";
+import { randomBytes } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import paymasterRuntimeConfig from "./paymaster-runtime-config.js";
 import localPaymasterHandlerHelpers from "./local-paymaster-handler.js";
 
 const require = createRequire(import.meta.url);
-const { resolveLocalPaymasterHandlerPath } = localPaymasterHandlerHelpers;
-
-const { rpc, sc, wallet, experimental, tx, u, CONST } = require("@cityofzion/neon-js");
 const { ethers } = require("ethers");
-const { buildV3UserOperationTypedData, sanitizeHex } = require("../src/metaTx");
-const { SmartAccountClient } = require("../src/index");
-const { resolveTestnetRpcUrl } = require("./testnet-rpc.js");
+const { CONST: neonConst } = require("@cityofzion/neon-js");
+const h = require("./testnet-v4-harness.js");
+
+const { resolveLocalPaymasterHandlerPath } = localPaymasterHandlerHelpers;
+const { resolvePaymasterAuthorizeEndpoint } = paymasterRuntimeConfig;
 
 const relayModule = await import("../../../frontend/api/relay-transaction.js");
 const relayHandler = relayModule.default;
 
 const TEST_WIF = process.env.TEST_WIF || process.env.NEO_TESTNET_WIF || "";
-let RPC_URL = process.env.TESTNET_RPC_URL || "";
-const CORE_HASH = process.env.SA_CORE_HASH_TESTNET || "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2";
-const WEB3AUTH_VERIFIER_HASH = process.env.SA_WEB3AUTH_VERIFIER_HASH_TESTNET || "0x7147f9a508594a7656a25f45d0a7a7dede7c227f";
 const PAYMASTER_APP_ID = process.env.MORPHEUS_PAYMASTER_APP_ID || "ddff154546fe22d15b65667156dd4b7c611e6093";
+const PAYMASTER_DAPP_ID = String(process.env.MORPHEUS_PAYMASTER_DAPP_ID || PAYMASTER_APP_ID).trim();
 const PAYMASTER_API_TOKEN =
   process.env.MORPHEUS_RUNTIME_TOKEN
   || process.env.PHALA_API_TOKEN
   || process.env.PHALA_SHARED_SECRET
   || "";
-const { resolvePaymasterAuthorizeEndpoint } = paymasterRuntimeConfig;
 const PAYMASTER_ENDPOINT = resolvePaymasterAuthorizeEndpoint(process.env);
 const LOCAL_PAYMASTER_HANDLER_PATH = resolveLocalPaymasterHandlerPath();
-const PAYMASTER_DAPP_ID = String(process.env.MORPHEUS_PAYMASTER_DAPP_ID || PAYMASTER_APP_ID).trim();
 const EXPLICIT_PAYMASTER_ACCOUNT_ID = (process.env.PAYMASTER_ACCOUNT_ID || "").trim();
-const SKIP_PAYMASTER_ALLOWLIST_UPDATE =
-  process.env.SKIP_PAYMASTER_ALLOWLIST_UPDATE === "1"
-  || (
-    process.env.SKIP_PAYMASTER_ALLOWLIST_UPDATE !== "0"
-    && !EXPLICIT_PAYMASTER_ACCOUNT_ID
-    && !LOCAL_PAYMASTER_HANDLER_PATH
-  );
-const GAS_HASH = CONST.NATIVE_CONTRACT_HASH.GasToken;
-const REGISTRATION_ESCAPE_TIMELOCK = 604800;
+// A remote policy may already allow the derived account, in which case the local
+// handler must not be re-scoped per request. Default: re-scope whenever the
+// runbook serves the local handler, since a fresh deployment derives a new id.
+const SKIP_PAYMASTER_ALLOWLIST_UPDATE = process.env.SKIP_PAYMASTER_ALLOWLIST_UPDATE === "1";
+const EVM_PRIVATE_KEY = String(process.env.SA_RELAY_EVM_PRIVATE_KEY || "").trim();
+const ACCOUNT_SALT = String(process.env.SA_RELAY_ACCOUNT_SALT || "").trim();
+const GAS_HASH = neonConst.NATIVE_CONTRACT_HASH.GasToken;
 const LOCAL_PAYMASTER_SIGNER_ENV_KEYS = [
   "NEO_TESTNET_WIF",
   "NEO_N3_WIF",
@@ -83,14 +123,13 @@ if (!PAYMASTER_API_TOKEN) {
   process.exit(1);
 }
 
-function normalizeHash(value) {
-  const hex = sanitizeHex(value || "");
-  return hex ? `0x${hex}` : "";
+if (!LOCAL_PAYMASTER_HANDLER_PATH && !PAYMASTER_ENDPOINT) {
+  console.error("No paymaster authorize endpoint: set MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH or MORPHEUS_PAYMASTER_TESTNET_ENDPOINT.");
+  process.exit(1);
 }
 
-function isUnauthorizedBootstrapError(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /Unauthorized/i.test(message);
+function normalizeHash(value) {
+  return h.normalizeHash(value);
 }
 
 function createResponse() {
@@ -112,156 +151,78 @@ function createResponse() {
   };
 }
 
-function hash160Param(value) {
-  return sc.ContractParam.hash160(sanitizeHex(value));
-}
-
-function byteArrayParam(hexValue) {
-  return sc.ContractParam.byteArray(u.HexString.fromHex(sanitizeHex(hexValue), true));
-}
-
-function integerParam(value) {
-  if (typeof value === "bigint") return sc.ContractParam.integer(value.toString());
-  return sc.ContractParam.integer(value);
-}
-
-function stringParam(value) {
-  return sc.ContractParam.string(String(value));
-}
-
-function arrayParam(values = []) {
-  return sc.ContractParam.array(...values);
-}
-
-function emptyByteArrayParam() {
-  return sc.ContractParam.byteArray(u.HexString.fromHex("", true));
-}
-
-function userOpJsonParam({ targetContract, method, args = [], nonce = 0n, deadline = 0n, signatureHex = "" }) {
-  return {
-    type: "Struct",
-    value: [
-      { type: "Hash160", value: normalizeHash(targetContract) },
-      { type: "String", value: String(method) },
-      { type: "Array", value: args },
-      { type: "Integer", value: String(nonce) },
-      { type: "Integer", value: String(deadline) },
-      { type: "ByteArray", value: `0x${sanitizeHex(signatureHex)}` },
-    ],
-  };
-}
-
-async function waitForAppLog(client, txid, label, timeoutMs = 180000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const appLog = await client.getApplicationLog(txid);
-      if (appLog?.executions?.length) return appLog;
-    } catch {}
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+/** A canonical VM value as the relay's parameter DTO. */
+function relayParam(value) {
+  switch (value?.type) {
+    case "Null":
+      return { type: "Any", value: null };
+    case "Boolean":
+      return { type: "Boolean", value: value.value };
+    case "Integer":
+      return { type: "Integer", value: String(value.value) };
+    case "ByteString":
+      return { type: "ByteArray", value: `0x${value.value}` };
+    case "Array":
+      return { type: "Array", value: value.value.map(relayParam) };
+    default:
+      throw new Error(`unsupported VM type ${value?.type}`);
   }
-  throw new Error(`${label}: timed out waiting for application log`);
 }
 
-function assertHalt(appLog, label) {
-  const execution = appLog?.executions?.[0];
-  if (!execution) throw new Error(`${label}: missing execution`);
-  const vmState = String(execution.vmstate || execution.state || "");
-  if (!vmState.includes("HALT")) {
-    throw new Error(`${label}: expected HALT, got ${vmState} ${execution.exception || ""}`.trim());
-  }
-  return execution;
+/**
+ * The signed operation as the relay transports it. The codec builds the
+ * canonical array — including field 11 — so the relay publishes the same bytes
+ * the validator signed.
+ */
+function operationParamJson(op) {
+  return relayParam(h.codec.operationValue(op));
 }
 
-async function invokePersisted(client, contractHash, account, networkMagic, operation, params = [], signers = undefined) {
-  const contract = new experimental.SmartContract(sanitizeHex(contractHash), {
-    account,
-    networkMagic,
-    rpcAddress: RPC_URL,
-    blocksTillExpiry: 200,
-  });
-  const txid = await contract.invoke(operation, params, signers);
-  const appLog = await waitForAppLog(client, txid, operation);
-  const execution = assertHalt(appLog, operation);
-  return { txid, appLog, execution };
-}
-
-async function invokeRead(client, contractHash, operation, params = []) {
-  const result = await client.invokeFunction(sanitizeHex(contractHash), operation, params);
-  if (String(result?.state || "").includes("FAULT")) {
-    throw new Error(`${operation} fault: ${result.exception || "VM fault"}`);
-  }
-  return result?.stack?.[0];
-}
-
-function decodeIntStack(item) {
-  return BigInt(item?.value || "0");
-}
-
-function decodeByteStringHex(item) {
-  if (!item || item.type !== "ByteString" || !item.value) return "";
-  return Buffer.from(item.value, "base64").toString("hex");
-}
-
-function buildLocalPaymasterOverrides(accountId) {
-  const normalized = normalizeHash(accountId).toLowerCase();
-  const normalizedTarget = normalizeHash(CORE_HASH).toLowerCase();
+function buildLocalPaymasterOverrides(accountId, coreHash) {
   return {
     MORPHEUS_PAYMASTER_TESTNET_ENABLED: "true",
     MORPHEUS_PAYMASTER_TESTNET_POLICY_ID: "testnet-sa",
     MORPHEUS_PAYMASTER_TESTNET_ALLOW_DAPPS: PAYMASTER_DAPP_ID,
-    MORPHEUS_PAYMASTER_TESTNET_ALLOW_ACCOUNTS: normalized,
-    MORPHEUS_PAYMASTER_TESTNET_ALLOW_TARGETS: normalizedTarget,
-    MORPHEUS_PAYMASTER_TESTNET_ALLOW_METHODS: "executeUserOp,executeUnifiedByAddress",
+    MORPHEUS_PAYMASTER_TESTNET_ALLOW_ACCOUNTS: normalizeHash(accountId).toLowerCase(),
+    MORPHEUS_PAYMASTER_TESTNET_ALLOW_TARGETS: normalizeHash(coreHash).toLowerCase(),
+    MORPHEUS_PAYMASTER_TESTNET_ALLOW_METHODS: "executeUserOp,executeSponsoredUserOp",
     MORPHEUS_PAYMASTER_TESTNET_MAX_GAS_UNITS: String(process.env.MORPHEUS_PAYMASTER_TESTNET_MAX_GAS_UNITS || 5_000_000),
   };
 }
 
-async function callRemotePaymaster(
-  payload,
-  {
-    allowlistAccountId = EXPLICIT_PAYMASTER_ACCOUNT_ID || null,
-    skipAllowlistUpdate = SKIP_PAYMASTER_ALLOWLIST_UPDATE,
-  } = {},
-) {
-  const bodyBase64 = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
-  const normalizedAllowlistAccountId = normalizeHash(allowlistAccountId);
+async function callRemotePaymaster(payload, { allowlistAccountId = null, coreHash = "" } = {}) {
   if (LOCAL_PAYMASTER_HANDLER_PATH) {
     const snapshot = new Map();
-    const localOverrides = (!skipAllowlistUpdate && normalizedAllowlistAccountId)
-      ? buildLocalPaymasterOverrides(normalizedAllowlistAccountId)
+    const overrides = allowlistAccountId && !SKIP_PAYMASTER_ALLOWLIST_UPDATE
+      ? buildLocalPaymasterOverrides(allowlistAccountId, coreHash)
       : null;
-    if (localOverrides) {
-      for (const [key, value] of Object.entries(localOverrides)) {
+    if (overrides) {
+      for (const [key, value] of Object.entries(overrides)) {
         snapshot.set(key, process.env[key]);
         process.env[key] = value;
       }
     }
     for (const key of LOCAL_PAYMASTER_SIGNER_ENV_KEYS) {
-      if (!snapshot.has(key)) {
-        snapshot.set(key, process.env[key]);
-      }
+      if (!snapshot.has(key)) snapshot.set(key, process.env[key]);
       delete process.env[key];
     }
     for (const key of LOCAL_PAYMASTER_RUNTIME_ENV_KEYS) {
-      if (!snapshot.has(key)) {
-        snapshot.set(key, process.env[key]);
-      }
+      if (!snapshot.has(key)) snapshot.set(key, process.env[key]);
     }
     try {
       process.env.PHALA_API_TOKEN = process.env.PHALA_API_TOKEN || process.env.MORPHEUS_RUNTIME_TOKEN || process.env.PHALA_SHARED_SECRET || "";
       const { default: handler } = await import(pathToFileURL(LOCAL_PAYMASTER_HANDLER_PATH).href);
-      const req = new Request("http://local/paymaster/authorize", {
+      const request = new Request("http://local/paymaster/authorize", {
         method: "POST",
         headers: {
           authorization: `Bearer ${PAYMASTER_API_TOKEN}`,
           "content-type": "application/json",
         },
-        body: Buffer.from(bodyBase64, "base64").toString("utf8"),
+        body: JSON.stringify(payload),
       });
-      const res = await handler(req);
-      const body = await res.json().catch(() => ({}));
-      return { status: res.status, body };
+      const response = await handler(request);
+      const body = await response.json().catch(() => ({}));
+      return { status: response.status, body };
     } finally {
       for (const [key, value] of snapshot.entries()) {
         if (value == null) delete process.env[key];
@@ -269,40 +230,33 @@ async function callRemotePaymaster(
       }
     }
   }
-  if (PAYMASTER_ENDPOINT) {
-    const response = await fetch(PAYMASTER_ENDPOINT, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${PAYMASTER_API_TOKEN}`,
-        "content-type": "application/json",
-      },
-      body: Buffer.from(bodyBase64, "base64").toString("utf8"),
-    });
-    const body = await response.json().catch(() => ({}));
-    return { status: response.status, body };
-  }
-  throw new Error("no paymaster authorize endpoint configured (set MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH or the paymaster authorize endpoint)");
+
+  const response = await fetch(PAYMASTER_ENDPOINT, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${PAYMASTER_API_TOKEN}`,
+      "x-phala-token": PAYMASTER_API_TOKEN,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = await response.json().catch(() => ({}));
+  return { status: response.status, body };
 }
 
-async function startPaymasterProxy({
-  allowlistAccountId = EXPLICIT_PAYMASTER_ACCOUNT_ID || null,
-  skipAllowlistUpdate = SKIP_PAYMASTER_ALLOWLIST_UPDATE,
-} = {}) {
+async function startPaymasterProxy({ accountId, coreHash }) {
   const sockets = new Set();
   const server = http.createServer(async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
-    if (req.url !== "/paymaster") {
+    if (!["/paymaster", "/paymaster/authorize"].includes(req.url)) {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "not_found" }));
       return;
     }
     try {
-      const remote = await callRemotePaymaster(body, {
-        allowlistAccountId,
-        skipAllowlistUpdate,
-      });
+      const remote = await callRemotePaymaster(body, { allowlistAccountId: accountId, coreHash });
       res.writeHead(Number(remote.status || 200), { "content-type": "application/json" });
       res.end(JSON.stringify(remote.body || {}));
     } catch (error) {
@@ -319,169 +273,197 @@ async function startPaymasterProxy({
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : 0;
   return {
-    server,
-    endpoint: `http://127.0.0.1:${port}/paymaster`,
+    endpoint: `http://127.0.0.1:${port}/paymaster/authorize`,
     async close() {
-      for (const socket of sockets) {
-        socket.destroy();
-      }
-      await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     },
   };
 }
 
-async function main() {
-  RPC_URL = await resolveTestnetRpcUrl({ env: process.env });
-  const account = new wallet.Account(TEST_WIF);
-  const rpcClient = new rpc.RPCClient(RPC_URL);
-  const version = await rpcClient.getVersion();
-  const networkMagic = Number(version.protocol.network);
-  const saClient = new SmartAccountClient(RPC_URL, CORE_HASH);
-  const deriveBootstrapAccountId = ({ verifierContractHash = "", verifierParamsHex = "" } = {}) => saClient.deriveRegistrationAccountIdHash({
-    verifierContractHash,
-    verifierParamsHex,
-    backupOwnerAddress: account.scriptHash,
-    escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
-  });
-
-  const evmSigner = ethers.Wallet.createRandom();
-  const verifierPubKey = sanitizeHex(evmSigner.signingKey.publicKey);
-  const defaultBootstrapAccountId = sanitizeHex(
-    EXPLICIT_PAYMASTER_ACCOUNT_ID
-    || deriveBootstrapAccountId({
-      verifierContractHash: WEB3AUTH_VERIFIER_HASH,
-      verifierParamsHex: verifierPubKey,
-    })
-  );
-  let accountId = defaultBootstrapAccountId;
-  let skipAllowlistUpdate = SKIP_PAYMASTER_ALLOWLIST_UPDATE;
-
-  console.log(JSON.stringify({
-    rpc: RPC_URL,
-    coreHash: normalizeHash(CORE_HASH),
-    verifierHash: normalizeHash(WEB3AUTH_VERIFIER_HASH),
-    relayAddress: account.address,
-    relayScriptHash: normalizeHash(account.scriptHash),
-    accountId: normalizeHash(accountId),
-    verifierPubKey: `0x${verifierPubKey}`,
-  }, null, 2));
-
-  async function bootstrapAccount(targetAccountId) {
-    let register = null;
-    try {
-      register = await invokePersisted(
-        rpcClient,
-        CORE_HASH,
-        account,
-        networkMagic,
-        "registerAccount",
-        [
-          hash160Param(targetAccountId),
-          hash160Param(WEB3AUTH_VERIFIER_HASH),
-          byteArrayParam(verifierPubKey),
-          hash160Param("0".repeat(40)),
-          hash160Param(account.scriptHash),
-          integerParam(REGISTRATION_ESCAPE_TIMELOCK),
-        ],
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("Account already exists")) throw error;
-      console.log(`registerAccount skipped for existing account ${normalizeHash(targetAccountId)}`);
-    }
-
-    return {
-      register,
-      updateVerifier: null,
-    };
-  }
-
-  let register = null;
-  let updateVerifier;
+/** The v4 account: created on first run, adopted when salt and key are reused. */
+async function ensureAccount(chain, sdk, { salt, evmPubKey, web3Auth }) {
+  const identity = sdk.deriveIdentity({ custodyAddress: chain.account.scriptHash, salt });
+  let state = null;
   try {
-    ({ register, updateVerifier } = await bootstrapAccount(accountId));
-  } catch (error) {
-    const usingReusableBootstrapAccount = skipAllowlistUpdate && normalizeHash(accountId) === normalizeHash(defaultBootstrapAccountId);
-    if (!usingReusableBootstrapAccount || !isUnauthorizedBootstrapError(error)) {
-      throw error;
-    }
-    accountId = deriveBootstrapAccountId({
-      verifierContractHash: WEB3AUTH_VERIFIER_HASH,
-      verifierParamsHex: verifierPubKey,
-    });
-    skipAllowlistUpdate = false;
-    console.warn(
-      `Reusable paymaster bootstrap account was rejected; falling back to disposable account ${normalizeHash(accountId)}`
-    );
-    ({ register, updateVerifier } = await bootstrapAccount(accountId));
+    state = await sdk.getAccount(identity.accountId);
+  } catch (_) {
+    state = null;
   }
+
+  if (!state) {
+    const install = await h.installActionFor(chain, {
+      moduleType: h.VALIDATOR_MODULE_TYPE,
+      moduleHash: web3Auth.hash,
+      initData: [h.codec.stringValue("setPublicKey"), h.codec.byteStringValue(evmPubKey)],
+    });
+    const created = await h.createAccount(chain, sdk, { custody: chain.account, salt, actions: [install] });
+    return { ...created, created: true };
+  }
+
+  const modules = await h.moduleIds(sdk, identity.accountId, h.VALIDATOR_MODULE_TYPE);
+  if (modules.moduleIds.length === 0) {
+    throw new Error(`account ${normalizeHash(identity.accountId)} exists but carries no validator; use another salt`);
+  }
+  const stored = Buffer.from(
+    (await h.readAndDecode(chain, web3Auth.hash, "getPublicKey", [
+      h.hash160Param(identity.accountId),
+      h.integerParam(modules.moduleIds[0]),
+    ])).value || "",
+    "base64",
+  ).toString("hex");
+  if (stored.toUpperCase() !== evmPubKey.toUpperCase()) {
+    throw new Error(`account ${normalizeHash(identity.accountId)} already holds another validator key; use another salt or SA_RELAY_EVM_PRIVATE_KEY`);
+  }
+  return { ...identity, txid: null, created: false };
+}
+
+async function main() {
+  const chain = await h.connect({ wif: TEST_WIF });
+  const relayAccount = chain.account;
+  const evmSigner = EVM_PRIVATE_KEY ? new ethers.Wallet(EVM_PRIVATE_KEY) : ethers.Wallet.createRandom();
+  const evmPubKey = h.sanitizeHex(evmSigner.signingKey.compressedPublicKey);
+  const salt = ACCOUNT_SALT || randomBytes(20).toString("hex");
+  if (!/^[0-9a-f]{40}$/i.test(salt)) throw new Error("SA_RELAY_ACCOUNT_SALT must be 20 bytes of hex");
 
   console.log(JSON.stringify({
-    registerTxid: register?.txid || null,
-    updateVerifierTxid: updateVerifier?.txid || null,
+    rpc: chain.rpcUrl,
+    networkMagic: chain.networkMagic,
+    relayAddress: relayAccount.address,
+    relayScriptHash: normalizeHash(relayAccount.scriptHash),
+    accountSalt: salt,
+    evmAddress: evmSigner.address,
+    verifierPubKey: evmPubKey,
   }, null, 2));
 
-  if (!skipAllowlistUpdate) {
-    console.log("Using per-request remote paymaster overrides for allowlist validation...");
-    const paymasterPolicy = await callRemotePaymaster({
-      network: "testnet",
-      target_chain: "neo_n3",
-      account_id: normalizeHash(accountId),
-      dapp_id: PAYMASTER_DAPP_ID,
-      target_contract: normalizeHash(CORE_HASH),
-      method: "executeUserOp",
-      userop_target_contract: normalizeHash(GAS_HASH),
-      userop_method: "symbol",
-      estimated_gas_units: 2_000_000,
-      operation_hash: `0x${Buffer.from(randomBytes(32)).toString("hex")}`,
-    }, {
-      allowlistAccountId: accountId,
-      skipAllowlistUpdate,
-    });
-    console.log(JSON.stringify({
-      paymasterPolicyId: paymasterPolicy?.body?.policy_id || null,
-      allowAccounts: paymasterPolicy?.body?.policy?.allow_accounts || [],
-    }, null, 2));
+  // -------------------------------------------------------------------------
+  // 1. Deploy the v4 core and the validator module.
+  // -------------------------------------------------------------------------
+
+  h.logSection("1. Deploy core and Web3AuthValidator");
+  const core = await h.deployCore(chain);
+  const web3Auth = await h.deployModule(chain, core.hash, "validators/Web3AuthValidator");
+  const sdk = h.clientFor(chain, core.hash);
+  const protocol = await sdk.getProtocolInfo();
+  if (protocol.protocolVersion !== "4") throw new Error(`core reports protocol ${protocol.protocolVersion}, expected 4`);
+  console.log(JSON.stringify({ core, web3Auth, protocol }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // 2. The account the relayed operation addresses.
+  // -------------------------------------------------------------------------
+
+  h.logSection("2. Create or adopt the validator-routed account");
+  const account = await ensureAccount(chain, sdk, { salt, evmPubKey, web3Auth });
+  const accountId = account.accountId;
+  const state = await sdk.getAccount(accountId);
+  const validatorModules = await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE);
+  const validatorId = validatorModules.moduleIds[0];
+  const validatorRecord = await h.moduleState(sdk, accountId, validatorId);
+  console.log(JSON.stringify({
+    accountId: normalizeHash(accountId),
+    virtualAddress: account.accountAddress,
+    created: account.created,
+    createTxid: account.txid,
+    validatorId,
+    credentialGeneration: validatorRecord.credentialGeneration,
+    defaultOperationAuthorization: state.defaultOperationAuthorization,
+  }, null, 2));
+
+  if (EXPLICIT_PAYMASTER_ACCOUNT_ID && EXPLICIT_PAYMASTER_ACCOUNT_ID.toLowerCase() !== normalizeHash(accountId).toLowerCase()) {
+    console.warn(
+      `PAYMASTER_ACCOUNT_ID ${EXPLICIT_PAYMASTER_ACCOUNT_ID} differs from the derived account ${normalizeHash(accountId)}; a remote policy pinned to the former will deny this run.`,
+    );
   }
-  const paymasterProxy = await startPaymasterProxy({
-    allowlistAccountId: accountId,
-    skipAllowlistUpdate,
-  });
 
-  const nonce = decodeIntStack(await invokeRead(rpcClient, CORE_HASH, "getNonce", [hash160Param(accountId), integerParam(0)]));
-  const argsHashHex = await saClient.computeArgsHash([]);
-  const deadline = BigInt(Date.now() + (60 * 60 * 1000));
-  const typedData = buildV3UserOperationTypedData({
-    chainId: networkMagic,
-    verifyingContract: sanitizeHex(WEB3AUTH_VERIFIER_HASH),
-    accountIdHash: accountId,
-    coreContractHash: sanitizeHex(CORE_HASH),
-    targetContract: sanitizeHex(GAS_HASH),
+  // -------------------------------------------------------------------------
+  // 3. The signed operation and the paymaster pre-authorization it implies.
+  // -------------------------------------------------------------------------
+
+  h.logSection("3. Sign the operation and ask the paymaster");
+  const routing = {
+    validatorId: String(validatorId),
+    credentialGeneration: validatorRecord.credentialGeneration,
+    authorityEpoch: state.authorityEpoch,
+    nonceSubkey: "00".repeat(32),
+  };
+  const nonce = await h.nextNonce(sdk, accountId, routing);
+  const op = h.operation({
+    targetContract: GAS_HASH,
     method: "symbol",
-    argsHashHex,
     nonce,
-    deadline,
+    validatorId: validatorId,
+    credentialGeneration: validatorRecord.credentialGeneration,
+    authorityEpoch: state.authorityEpoch,
   });
-  const signature = ethers.Signature.from(await evmSigner.signTypedData(typedData.domain, typedData.types, typedData.message));
-  const compactSignature = `${sanitizeHex(signature.r)}${sanitizeHex(signature.s)}`;
+  const argsHashHex = await h.operationArgsHash(chain, core.hash, op.args);
+  const signedOp = await h.signOperationForWeb3Auth(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId,
+    operation: op,
+    argsHashHex,
+    signer: evmSigner,
+  });
 
-  const response = createResponse();
+  const paymasterPolicy = await callRemotePaymaster({
+    network: "testnet",
+    target_chain: "neo_n3",
+    account_id: normalizeHash(accountId),
+    dapp_id: PAYMASTER_DAPP_ID,
+    target_contract: normalizeHash(core.hash),
+    method: "executeUserOp",
+    userop_target_contract: normalizeHash(GAS_HASH),
+    userop_method: "symbol",
+    estimated_gas_units: 2_000_000,
+    operation_hash: `0x${randomBytes(32).toString("hex")}`,
+  }, { allowlistAccountId: accountId, coreHash: core.hash });
+  if (Number(paymasterPolicy?.status) !== 200 || paymasterPolicy?.body?.approved !== true) {
+    throw new Error(`paymaster did not authorize the operation: ${JSON.stringify(paymasterPolicy, null, 2)}`);
+  }
+  console.log(JSON.stringify({
+    policyId: paymasterPolicy.body.policy_id || null,
+    approvalDigest: paymasterPolicy.body.approval_digest || null,
+    allowAccounts: paymasterPolicy.body.policy?.allow_accounts || [],
+  }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // 4. Relay the operation.
+  // -------------------------------------------------------------------------
+
+  h.logSection("4. Relay executeUserOp");
+  const paymasterProxy = await startPaymasterProxy({ accountId, coreHash: core.hash });
+  const metaInvocation = {
+    scriptHash: normalizeHash(core.hash),
+    operation: "executeUserOp",
+    args: [
+      { type: "Hash160", value: normalizeHash(accountId) },
+      operationParamJson(signedOp),
+    ],
+  };
+
   const snapshot = {
     SA_RELAY_RPC_URL: process.env.SA_RELAY_RPC_URL,
     SA_RELAY_WIF: process.env.SA_RELAY_WIF,
     SA_RELAY_ALLOWED_HASH: process.env.SA_RELAY_ALLOWED_HASH,
     MORPHEUS_NETWORK: process.env.MORPHEUS_NETWORK,
     MORPHEUS_PAYMASTER_TESTNET_ENDPOINT: process.env.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT,
+    SA_RELAY_MAX_SYSTEM_FEE: process.env.SA_RELAY_MAX_SYSTEM_FEE,
+    SA_RELAY_MAX_NETWORK_FEE: process.env.SA_RELAY_MAX_NETWORK_FEE,
+    SA_RELAY_MAX_TOTAL_FEE: process.env.SA_RELAY_MAX_TOTAL_FEE,
   };
 
-  process.env.SA_RELAY_RPC_URL = RPC_URL;
+  process.env.SA_RELAY_RPC_URL = chain.rpcUrl;
   process.env.SA_RELAY_WIF = TEST_WIF;
-  process.env.SA_RELAY_ALLOWED_HASH = normalizeHash(CORE_HASH);
+  process.env.SA_RELAY_ALLOWED_HASH = normalizeHash(core.hash);
   process.env.MORPHEUS_NETWORK = "testnet";
   process.env.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT = paymasterProxy.endpoint;
+  // The relay refuses to sign a sponsored broadcast without an explicit fee
+  // ceiling; pin the runbook's defaults unless the operator narrowed them.
+  process.env.SA_RELAY_MAX_SYSTEM_FEE = snapshot.SA_RELAY_MAX_SYSTEM_FEE || "50000000";
+  process.env.SA_RELAY_MAX_NETWORK_FEE = snapshot.SA_RELAY_MAX_NETWORK_FEE || "5000000";
+  process.env.SA_RELAY_MAX_TOTAL_FEE = snapshot.SA_RELAY_MAX_TOTAL_FEE || "55000000";
 
   try {
-    console.log("Submitting executeUserOp via SA relay with paymaster pre-authorization...");
+    const response = createResponse();
     await relayHandler({
       method: "POST",
       headers: {},
@@ -490,52 +472,93 @@ async function main() {
         paymaster: {
           account_id: normalizeHash(accountId),
           dapp_id: PAYMASTER_DAPP_ID,
-          operation_hash: `0x${Buffer.from(randomBytes(32)).toString("hex")}`,
+          operation_hash: `0x${randomBytes(32).toString("hex")}`,
         },
-        metaInvocation: {
-          scriptHash: normalizeHash(CORE_HASH),
-          operation: "executeUserOp",
-          args: [
-            { type: "Hash160", value: normalizeHash(accountId) },
-            userOpJsonParam({
-              targetContract: normalizeHash(GAS_HASH),
-              method: "symbol",
-              args: [],
-              nonce,
-              deadline,
-              signatureHex: compactSignature,
-            }),
-          ],
-        },
+        metaInvocation,
       },
     }, response);
+
+    if (response.statusCode !== 200 || !response.payload?.txid) {
+      throw new Error(`relay submission failed: ${JSON.stringify(response.payload || {}, null, 2)}`);
+    }
+
+    const appLog = await h.waitForAppLog(chain, response.payload.txid, "relay executeUserOp");
+    const execution = h.assertHalt(appLog, "relay executeUserOp");
+    const result = h.stackText(execution.stack?.[0]);
+    if (result !== "GAS") throw new Error(`relayed operation returned ${result}, expected GAS`);
+    const after = await sdk.getNonce(accountId, routing);
+    if (BigInt(after.sequence) !== 1n) throw new Error(`relayed operation left the channel at sequence ${after.sequence}, expected 1`);
+
+    console.log(JSON.stringify({
+      txid: response.payload.txid,
+      result,
+      paymaster: response.payload.paymaster || null,
+      nonceSequence: after.sequence,
+      vmstate: execution.vmstate || execution.state || "",
+    }, null, 2));
+
+    // -----------------------------------------------------------------------
+    // 5. The relay refuses an operation the deployed ABI does not export.
+    // -----------------------------------------------------------------------
+
+    h.logSection("5. Relay refuses an operation outside the ABI");
+    const refused = createResponse();
+    await relayHandler({
+      method: "POST",
+      headers: {},
+      socket: { remoteAddress: `paymaster-relay-refusal-${Date.now()}` },
+      body: {
+        metaInvocation: {
+          scriptHash: normalizeHash(core.hash),
+          operation: "registerAccount",
+          args: [],
+        },
+      },
+    }, refused);
+    if (refused.statusCode !== 400 || refused.payload?.error !== "relay_meta_invocation_not_allowed") {
+      throw new Error(`relay did not refuse an out-of-ABI operation: ${JSON.stringify(refused.payload || {}, null, 2)}`);
+    }
+    console.log(JSON.stringify({
+      status: refused.statusCode,
+      error: refused.payload.error,
+      reason: refused.payload.reason || null,
+    }, null, 2));
+
+    h.logSection("Summary");
+    console.log(JSON.stringify({
+      rpc: chain.rpcUrl,
+      coreHash: normalizeHash(core.hash),
+      verifierHash: normalizeHash(web3Auth.hash),
+      accountId: normalizeHash(accountId),
+      validatorId,
+      relayTxid: response.payload.txid,
+      paymaster: {
+        policyId: paymasterPolicy.body.policy_id || null,
+        approvalDigest: paymasterPolicy.body.approval_digest || null,
+      },
+      execution: {
+        vmstate: execution.vmstate || execution.state || "",
+        result,
+      },
+      refusal: {
+        operation: "registerAccount",
+        error: refused.payload.error,
+      },
+    }, null, 2));
   } finally {
     process.env.SA_RELAY_RPC_URL = snapshot.SA_RELAY_RPC_URL;
     process.env.SA_RELAY_WIF = snapshot.SA_RELAY_WIF;
     process.env.SA_RELAY_ALLOWED_HASH = snapshot.SA_RELAY_ALLOWED_HASH;
     process.env.MORPHEUS_NETWORK = snapshot.MORPHEUS_NETWORK;
     process.env.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT = snapshot.MORPHEUS_PAYMASTER_TESTNET_ENDPOINT;
+    process.env.SA_RELAY_MAX_SYSTEM_FEE = snapshot.SA_RELAY_MAX_SYSTEM_FEE;
+    process.env.SA_RELAY_MAX_NETWORK_FEE = snapshot.SA_RELAY_MAX_NETWORK_FEE;
+    process.env.SA_RELAY_MAX_TOTAL_FEE = snapshot.SA_RELAY_MAX_TOTAL_FEE;
     await paymasterProxy.close();
   }
-
-  if (response.statusCode !== 200 || !response.payload?.txid) {
-    throw new Error(`relay submission failed: ${JSON.stringify(response.payload || {}, null, 2)}`);
-  }
-
-  const appLog = await waitForAppLog(rpcClient, response.payload.txid, "relay executeUserOp");
-  const execution = assertHalt(appLog, "relay executeUserOp");
-
-  console.log(JSON.stringify({
-    txid: response.payload.txid,
-    paymaster: response.payload.paymaster || null,
-    execution: {
-      vmstate: execution.vmstate || execution.state || "",
-      stack: execution.stack || [],
-    },
-  }, null, 2));
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error?.stack || error?.message || String(error));
   process.exit(1);
 });

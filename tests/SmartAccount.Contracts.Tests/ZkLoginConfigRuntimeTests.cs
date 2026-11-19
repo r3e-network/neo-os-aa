@@ -1,4 +1,5 @@
 using System;
+using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
@@ -6,114 +7,117 @@ using Neo.SmartContract.Testing.Exceptions;
 
 namespace SmartAccount.Contracts.Tests;
 
+/// <summary>
+/// Delegated-identity configuration boundary (docs/SA-MODULE-PROTOCOL.md §9, §5).
+///
+/// v3 carried the identity config as a length-prefixed credential blob on
+/// <c>registerAccount</c> and re-pointed it through <c>callVerifier</c>. v4 has no
+/// registration blob: the identity is custody‖salt (§16.1) and the validator is
+/// configured like any other module, by an exact-arity command array either as
+/// <c>initData</c> at install or through a 24h configuration intent. The invariants
+/// kept here are the ones that mattered: no trailing payload may ride along with a
+/// config, and the provider must fit the one-byte wire length prefix the proof
+/// format uses (§5).
+/// </summary>
 [TestClass]
 public class ZkLoginConfigRuntimeTests
 {
-    private static readonly UInt160 Owner =
-        UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
+    private static readonly byte[] SignerPublicKey = BuildSignerKey();
+    private static readonly byte[] MasterNullifier = BuildMasterNullifier();
 
-    private const uint EscapeTimelock = 2_592_000;
+    private sealed class Harness
+    {
+        public RuntimeFixture Fx { get; } = new();
+        public UInt160 Core { get; }
+        public UInt160 Verifier { get; }
+        public P256SessionKey CustodyKey { get; } = new();
+        public UInt160 Custody { get; }
+
+        public Harness()
+        {
+            Core = Fx.Deploy("SmartAccount");
+            Verifier = Fx.Deploy("validators/DelegatedIdentityValidator", Core.ToArray());
+            Custody = RuntimeFixture.CustodyOf(CustodyKey);
+        }
+
+        public UInt160 Create(params object?[] configData)
+        {
+            object[] install = configData.Length == 0
+                ? Fx.InstallValidator(Verifier)
+                : Fx.InstallValidator(Verifier, configData);
+            return Fx.CreateAccount(Core, Custody, "zklogin", (object)install);
+        }
+
+        public BigInteger ModuleId(UInt160 accountId) =>
+            Fx.FindModuleId(Core, accountId, RuntimeFixture.ModuleTypeNameValidator, Verifier);
+
+        public string Provider(UInt160 accountId) =>
+            Fx.Call(Verifier, "getProvider", accountId, ModuleId(accountId)).GetString();
+
+        public BigInteger Propose(UInt160 accountId, params object[] actions) =>
+            Fx.ProposeConfiguration(Core, accountId, Custody, actions);
+
+        public void Confirm(UInt160 accountId, BigInteger intentId, params object[] actions) =>
+            Fx.ConfirmConfiguration(Core, accountId, Custody, intentId, actions);
+    }
 
     [TestMethod]
-    public void ConfigBlobRejectsTrailingBytesAtTheVerifierBoundary()
+    public void TrailingArgumentBeyondTheVerifierWireShapeIsRejected()
     {
-        RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccount");
-        UInt160 verifier = fixture.Deploy("verifiers/ZkLoginVerifier", wallet.ToArray());
+        Harness h = new();
 
-        byte[] canonical = BuildConfigBlob();
-        byte[] trailing = new byte[canonical.Length + 1];
-        Buffer.BlockCopy(canonical, 0, trailing, 0, canonical.Length);
-        trailing[^1] = 0xA5;
+        // A config command array is exact-arity: an element beyond the four canonical
+        // fields is a shape fault, not a silently ignored payload.
+        TestException fault = Assert.ThrowsExactly<TestException>(() =>
+            h.Create("setConfig", SignerPublicKey, "google", MasterNullifier, new byte[] { 0xA5 }));
+        StringAssert.Contains(fault.Message, "Invalid config arguments");
 
-        UInt160 accountId = fixture.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            verifier,
-            trailing,
-            UInt160.Zero,
-            Owner,
-            EscapeTimelock);
-
-        fixture.SetSigners(Owner);
-        TestException exception = Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
-            wallet,
-            "registerAccount",
-            accountId,
-            verifier,
-            trailing,
-            UInt160.Zero,
-            Owner,
-            EscapeTimelock));
-
-        StringAssert.Contains(exception.Message, "Invalid zklogin config length");
+        Assert.AreEqual(0,
+            h.Fx.ModuleIds(h.Core, h.Fx.CallUInt160(h.Core, "computeAccountIdentity", h.Custody,
+                RuntimeFixture.Salt("zklogin")), RuntimeFixture.ModuleTypeNameValidator).Length,
+            "A rejected install must not allocate an instance");
     }
 
     [TestMethod]
     public void SetConfigRejectsProviderLongerThanTheWireLengthPrefix()
     {
-        RuntimeFixture fixture = new();
-        UInt160 wallet = fixture.Deploy("SmartAccount");
-        UInt160 verifier = fixture.Deploy("verifiers/ZkLoginVerifier", wallet.ToArray());
-        byte[] canonical = BuildConfigBlob();
-        UInt160 accountId = fixture.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            verifier,
-            canonical,
-            UInt160.Zero,
-            Owner,
-            EscapeTimelock);
+        Harness h = new();
+        UInt160 accountId = h.Create("setConfig", SignerPublicKey, "google", MasterNullifier);
+        BigInteger moduleId = h.ModuleId(accountId);
 
-        fixture.SetSigners(Owner);
-        fixture.CallVoid(
-            wallet,
-            "registerAccount",
-            accountId,
-            verifier,
-            canonical,
-            UInt160.Zero,
-            Owner,
-            EscapeTimelock);
+        // Positive control: a provider that fits the one-byte length prefix configures.
+        Assert.AreEqual("google", h.Provider(accountId));
+        CollectionAssert.AreEqual(MasterNullifier,
+            h.Fx.CallBytes(h.Verifier, "getMasterNullifier", accountId, moduleId));
 
-        string oversizedProvider = new('p', 256);
-        byte[] signerPublicKey = new byte[33];
-        signerPublicKey[0] = 0x02;
-        byte[] masterNullifier = new byte[32];
+        // 256 bytes cannot be encoded by the U8 length prefix the proof format uses,
+        // so the command is rejected and the instance keeps its previous config.
+        byte[] oversized = new byte[256];
+        for (int i = 0; i < oversized.Length; i++) oversized[i] = (byte)'p';
+        object action = RuntimeFixture.ConfigureModule(moduleId,
+            new object?[] { "setConfig", SignerPublicKey, oversized, MasterNullifier });
 
-        // CallVerifier uses a two-phase, one-day timelock.  The first call only
-        // commits the exact configuration hash; the second reaches SetConfig.
-        fixture.CallBoolean(
-            wallet,
-            "callVerifier",
-            accountId,
-            "setConfig",
-            new object[] { accountId, signerPublicKey, oversizedProvider, masterNullifier });
-        fixture.AdvanceTime(TimeSpan.FromDays(1));
-
-        TestException exception = Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
-            wallet,
-            "callVerifier",
-            accountId,
-            "setConfig",
-            new object[] { accountId, signerPublicKey, oversizedProvider, masterNullifier }));
-
-        StringAssert.Contains(exception.Message, "Provider must be 1-255 bytes");
+        BigInteger intentId = h.Propose(accountId, action);
+        h.Fx.AdvanceTime(TimeSpan.FromHours(24) + TimeSpan.FromMinutes(1));
+        TestException fault = Assert.ThrowsExactly<TestException>(() =>
+            h.Confirm(accountId, intentId, action));
+        StringAssert.Contains(fault.Message, "Provider must be 1-255 bytes");
+        Assert.AreEqual("google", h.Provider(accountId),
+            "A rejected configure must leave the committed identity untouched");
     }
 
-    private static byte[] BuildConfigBlob()
+    private static byte[] BuildSignerKey()
     {
-        byte[] provider = System.Text.Encoding.UTF8.GetBytes("google");
-        byte[] blob = new byte[1 + 1 + 33 + 1 + provider.Length + 32];
-        int cursor = 0;
-        blob[cursor++] = 0x01;
-        blob[cursor++] = 33;
-        blob[cursor++] = 0x02;
-        cursor += 32;
-        blob[cursor++] = (byte)provider.Length;
-        Buffer.BlockCopy(provider, 0, blob, cursor, provider.Length);
-        cursor += provider.Length;
-        for (int i = 0; i < 32; i++) blob[cursor + i] = (byte)(i + 1);
-        return blob;
+        byte[] key = new byte[33];
+        key[0] = 0x02;
+        for (int i = 1; i < key.Length; i++) key[i] = (byte)i;
+        return key;
+    }
+
+    private static byte[] BuildMasterNullifier()
+    {
+        byte[] nullifier = new byte[32];
+        for (int i = 0; i < nullifier.Length; i++) nullifier[i] = (byte)(i + 1);
+        return nullifier;
     }
 }

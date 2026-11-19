@@ -337,7 +337,7 @@ def run_proofs(inventory, output_dir):
     for filename, expected in inventory["inputs"].items():
         require(digest(filename) == expected, "Inventory input drift: " + filename)
     nef_paths = [Path(p) for p, h in inventory["inputs"].items()
-                 if p.endswith("SmartAccountV3.nef") and h == inventory["nef"]["sha256"]]
+                 if p.endswith("SmartAccount.nef") and h == inventory["nef"]["sha256"]]
     require(len(nef_paths) == 1, "Ambiguous actual NEF input")
     spec = importlib.util.spec_from_file_location("sa_refinement_binding", ROOT / "verify.py")
     binding = importlib.util.module_from_spec(spec); spec.loader.exec_module(binding)

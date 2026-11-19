@@ -3,13 +3,13 @@
     <div class="mb-4 flex items-center justify-between">
       <div>
         <h2 class="text-lg font-bold text-sa-text">
-          {{ t("operations.loadAccountTitle", "Load V3 Account") }}
+          {{ t("operations.loadAccountTitle", "Load Account") }}
         </h2>
         <p class="text-sm text-sa-muted">
           {{
             t(
               "operations.loadAccountSubtitle",
-              "Enter the 20-byte accountId hash captured when the V3 account was registered. The virtual SA address is derived locally from that identity root.",
+              "Enter the 20-byte accountId hash captured when the account was created. The virtual SA address is derived locally from that identity root.",
             )
           }}
         </p>
@@ -17,7 +17,7 @@
           {{
             t(
               "operations.loadAccountHelp",
-              "Use the accountId shown in Create Account, Address Market, or an existing draft. Neo address and .matrix reverse discovery are intentionally not used for V3 loading.",
+              "Use the accountId shown in Create Account, Address Market, or an existing draft. Neo address and .matrix reverse discovery are intentionally not used for loading.",
             )
           }}
         </p>

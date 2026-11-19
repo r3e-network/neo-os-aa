@@ -1,1879 +1,634 @@
-const { rpc, sc, u, wallet } = require('./neonCompat');
-const metaTxExports = require('./metaTx');
-const { withRetry } = require('./retry');
-const { EC, createError, mapRpcError, formatError } = require('./errors');
-const {
-  validateNeoAddress,
-  validateHash160,
-  validateHexString,
-  validatePublicKey,
-  validateAccountId,
-  validateAddressOrHash160,
-  validateEIP712Fields,
-  validateOptions,
-  validateRpcUrl,
-  sanitizeHex,
-} = require('./validation');
-// Shared registration account-id deriver (single source of truth for the
-// payload layout and byte-order conventions; also consumed by the frontend).
-const { createRegistrationAccountIdDeriver } = require('../../../shared/registrationAccountId.mjs');
+/**
+ * Neo Smart Account v4 SDK — custom-kernel client.
+ *
+ * The custom kernel is a deployed contract (any script hash) that implements
+ * the same v4 protocol as the native one, plus the market-escrow, platform
+ * registrar, metadata and sponsored-execution services. Two constants differ
+ * from the native kernel and both are constructor identity, never options:
+ *
+ * - `contractHash`: where the kernel answers;
+ * - `callFlags`: 15 (CallFlags.All), because the custom proxy calls its own
+ *   `verify(accountId)` with full flags while the native proxy pushes 5.
+ *
+ * Everything protocol-shaped is inherited from the one shared client: the 13
+ * field operation, the 191-bit channel nonce, the operation/message digests,
+ * configuration intents, module queries, account actions, the ABI gate and the
+ * `SA_*` vocabulary. This file adds only what the custom kernel has and the
+ * native one does not, and never re-implements a shared derivation.
+ *
+ * Only entry points a caller of this client can actually satisfy are exposed as
+ * plans. The market escrow writes assert the caller is the registered market and
+ * the registrar writes assert the caller is the registrar, so they stay reads
+ * here and are driven by their own contracts; the ABI gate still pins that the
+ * deployment carries them.
+ *
+ * Removed v3 surface: `registerAccount`, `getVerifier`, `updateVerifier`,
+ * `getHook`, `updateHook`, `createAccountPayload`, verifier/hook update
+ * confirmations, `getAccountsByAdmin`, `createSponsoredUserOpPayload` with a
+ * 6-field operation. There is no alias: a v3 call fails to resolve.
+ */
 
-// Result rules for token transfers, shared with the relay route and the wallet (shared/transferOutcome.mjs).
+const { rpc, wallet } = require('./neonCompat');
+const { codec } = require('./codec');
+const {
+  EC,
+  createError,
+  mapRpcError,
+  formatError,
+  SA_ERRORS,
+  SA_ERROR_CODES,
+} = require('./errors');
+const { validateHash160, validateRpcUrl } = require('./validation');
+const { withRetry, isRetryableError } = require('./retry');
+const {
+  createNativeClientClass,
+  declaredType,
+  NATIVE_REQUIRED_ABI,
+  NATIVE_REQUIRED_EVENTS,
+} = require('../../../shared/nativeSmartAccountClient.mjs');
+const { PROTOCOL_VERSION } = require('../../../shared/nativeSmartAccount.mjs');
+const { createNativeTransactionTools } = require('./native/transaction');
+const metaTx = require('./metaTx');
 const transferOutcome = require('../../../shared/transferOutcome.mjs');
-const { normalizeRelayContractParameter, MAX_RELAY_PARAMETER_DEPTH } = require('../../../shared/relayContractParameter.mjs');
-const { toMultiSigRpcParameter } = require('../../../shared/multiSigCore.mjs');
-// Registration-time session key blob layout, shared with the frontend and
-// the Python live validators (single source of truth: shared/sessionKeyBlob.mjs).
 const sessionKeyBlob = require('../../../shared/sessionKeyBlob.mjs');
 
-const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({
-  hash160: (value) => sanitizeHex(u.hash160(value)),
+/** The custom kernel pushes CallFlags.All in its proxy verification script. */
+const CUSTOM_PROXY_CALL_FLAGS = 15;
+/** `SmartAccount.State.cs` pins this implementation id. */
+const CUSTOM_IMPLEMENTATION_ID = 'org.r3e.neo.smart-account.v4';
+
+const H = codec.hashValue;
+const freeze = (value) => {
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach(freeze);
+    Object.freeze(value);
+  }
+  return value;
+};
+
+/**
+ * Custom-only ABI, pinned by type (parameter names are not a byte-positional
+ * contract, types and arity are). A kernel that answers the v4 core ABI but
+ * lacks these is a different deployment than the one this SDK drives, and the
+ * client refuses it at discovery instead of failing mid-transaction.
+ */
+const CUSTOM_REQUIRED_ABI = freeze({
+  enterMarketEscrow: [['Hash160', 'Hash160', 'Integer'], 'Void'],
+  cancelMarketEscrow: [['Hash160', 'Integer'], 'Void'],
+  settleMarketEscrow: [['Hash160', 'Integer', 'Hash160'], 'Void'],
+  setMarketService: [['Hash160', 'Boolean'], 'Void'],
+  isMarketService: [['Hash160'], 'Boolean'],
+  getMarketEscrowContract: [['Hash160'], 'Hash160'],
+  getMarketEscrowListingId: [['Hash160'], 'Integer'],
+  isMarketEscrowActive: [['Hash160'], 'Boolean'],
+  isAccountFrozen: [['Hash160'], 'Boolean'],
+  isOwnerOnlyRecovery: [['Hash160'], 'Boolean'],
+  isExecutionActive: [['Hash160'], 'Boolean'],
+  isUserOpExecutionActive: [[], 'Boolean'],
+  isMigrationRequired: [['Hash160'], 'Boolean'],
+  markMigrationRequired: [['Hash160'], 'Void'],
+  getMigrationState: [['Hash160'], 'Array'],
+  computeAccountIdentity: [['Hash160', 'ByteArray'], 'Hash160'],
+  computeRegistrationAccountId: [
+    ['Hash160', 'ByteArray', 'Hash160', 'Hash160', 'Integer'],
+    'Hash160',
+  ],
+  computePlatformAccountId: [['ByteArray', 'Hash160', 'Integer'], 'Hash160'],
+  computeStablePlatformAccountId: [['ByteArray', 'Integer'], 'Hash160'],
+  registerPlatformAccount: [['Hash160', 'ByteArray', 'Hash160', 'Integer'], 'Void'],
+  registerStablePlatformAccount: [['Hash160', 'ByteArray', 'Hash160', 'Integer'], 'Void'],
+  applyPlatformAccountOwnerRotation: [
+    ['Hash160', 'ByteArray', 'Hash160', 'Hash160'],
+    'Void',
+  ],
+  getAccountIdByProxy: [['Hash160'], 'Hash160'],
+  getPlatformAccountBinding: [['Hash160'], 'ByteArray'],
+  proposePlatformRegistrar: [['Hash160'], 'Void'],
+  confirmPlatformRegistrar: [[], 'Void'],
+  cancelPlatformRegistrar: [[], 'Void'],
+  getPlatformRegistrar: [[], 'Hash160'],
+  getPendingPlatformRegistrar: [[], 'Hash160'],
+  getPlatformRegistrarAvailableAt: [[], 'Integer'],
+  getProxyScriptHash: [['Hash160'], 'Hash160'],
+  computeArgsHash: [['Array'], 'ByteArray'],
+  setMetadataUri: [['Hash160', 'String'], 'Void'],
+  getMetadataUri: [['Hash160'], 'String'],
+  executeSponsoredUserOp: [
+    ['Hash160', 'Any', 'Hash160', 'Hash160', 'Integer'],
+    'Any',
+  ],
+  executeSponsoredUserOps: [
+    ['Hash160', 'Array', 'Hash160', 'Hash160', 'Integer'],
+    'Array',
+  ],
 });
 
 /**
- * Normalizes an address or contract hash to a 40-character hex string.
- * Handles both Neo addresses (N-prefixed) and hex hashes.
- *
- * @param {string} addressHex - Neo address or contract hash
- * @returns {string} 40-character hex string
- * @throws {Error} If address is invalid
- * @private
+ * Custom methods the account's custody authorises directly (§9). `setMetadataUri`
+ * is the only one: `enterMarketEscrow` / `cancelMarketEscrow` /
+ * `settleMarketEscrow` assert `Runtime.CallingScriptHash` is the registered
+ * market, and the registrar methods assert the caller is the registrar, so a
+ * script this client builds could never satisfy them. They stay in the ABI
+ * gate (a deployment fingerprint) and are driven by their own contracts.
  */
-function normalizeAddress(addressHex) {
-  if (!addressHex) {
+const CUSTODY_ACTIONS = freeze(['setMetadataUri']);
+
+const asArray = (value, label) => {
+  if (!value || value.type !== 'Array' || !Array.isArray(value.value)) {
+    throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: `malformed ${label}` });
+  }
+  return value.value;
+};
+const asUint = (value, label) => {
+  if (typeof value !== 'bigint') {
+    throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: `malformed ${label}` });
+  }
+  return value.toString();
+};
+const asBytes = (value, label) => {
+  if (!(value instanceof Uint8Array)) {
+    throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: `malformed ${label}` });
+  }
+  return Buffer.from(value);
+};
+const asHash = (value, label) => {
+  const bytes = asBytes(value, label);
+  if (bytes.length !== 20) {
+    throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: `malformed ${label}` });
+  }
+  return bytes.reverse().toString('hex');
+};
+const asText = (value, label) => asBytes(value, label).toString('utf8');
+
+function normalizeAddress(address) {
+  if (typeof address !== 'string' || !address.trim()) {
     throw createError(EC.VALIDATION_ADDRESS_INVALID);
   }
-
-  const clean = addressHex.trim();
-  let hex = clean;
-
-  // Check if it's a Neo address (N-prefixed Base58)
+  const clean = address.trim();
   if (clean.startsWith('N') && clean.length === 34) {
-    validateNeoAddress(clean);
     return wallet.getScriptHashFromAddress(clean).toLowerCase();
   }
-
-  // Remove 0x prefix
-  if (hex.startsWith('0x')) hex = hex.slice(2);
-
-  // Validate as Hash160
+  const hex = clean.replace(/^0x/i, '').toLowerCase();
   validateHash160(hex);
-
-  return hex.toLowerCase();
+  return hex;
 }
 
-/**
- * Decodes a ByteString stack item to UTF-8 text.
- *
- * @param {Object} item - Stack item from RPC response
- * @returns {string} Decoded text
- * @private
- */
-function decodeByteStringStackText(item) {
-  if (!item) return '';
-  if (item.type === 'ByteString' && item.value) {
-    return Buffer.from(item.value, 'base64').toString('utf8');
+/** Wraps a transport so transient read failures retry once, not every call. */
+function retryingTransport(transport, options) {
+  if (!transport || typeof transport.send !== 'function') {
+    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'rpcClient must expose send' });
   }
-  if (item.type === 'String' && item.value) {
-    return String(item.value);
-  }
-  return '';
-}
-
-// Stack-item decode helpers shared with the frontend via shared/metaTxCore.mjs.
-const {
-  decodeStackBoolean,
-  decodeHash160Stack,
-  decodeValidationPreviewStack,
-  decodeAccountDescriptorStack,
-  decodeUserOpSimulationStack,
-} = metaTxExports;
-
-// Both sponsored builders and the signing hash use the same typed byte boundary.
-//
-// The relay carries a contract parameter as a DTO and refuses anything it cannot name, so an
-// argument list has to be checked recursively before it is embedded: an unknown type, a kind the
-// relay does not carry, a non-null Any, an untyped nested value or an over-deep nesting would
-// otherwise be coerced into the untyped carrier the relay later refuses, or executed as different
-// arguments than the account signed. The walk below validates every node with the relay's own
-// normalizer (one source of truth for the kind and value rules) and, on the first refusal, names
-// the argument path that caused it.
-function argumentPath(segments) {
-  return segments.reduce((path, segment) => (/^[0-9]+$/.test(String(segment))
-    ? `${path}[${segment}]`
-    : `${path}.${segment}`), '');
-}
-
-// One path segment or several; the walk builds both an index and a Map-entry path.
-function extendPath(segments, segment) {
-  return segments.concat(Array.isArray(segment) ? segment : [segment]);
-}
-
-function walkRelayArgument(value, segments, depth) {
-  const path = `userOp.Args${argumentPath(segments)}`;
-  if (depth > MAX_RELAY_PARAMETER_DEPTH) {
-    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
-      hint: `${path}: Contract parameter: nesting exceeds maximum depth of ${MAX_RELAY_PARAMETER_DEPTH}`,
-    });
-  }
-  // A raw value is not a contract parameter at all: name it here rather than letting the array
-  // wrap it in the untyped carrier the relay refuses.
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: Contract parameter: typed contract parameter required` });
-  }
-  const recurse = (item, segment) => walkRelayArgument(item, extendPath(segments, segment), depth + 1);
-  // A container the relay refuses is refused with the path this walk reached, not with the path of the
-  // argument list: "Contract parameter: Array requires an array" alone tells a caller that something
-  // nested is malformed but not which node, while the sibling refusals above and below name it.
-  const atPath = (normalize) => {
-    try {
-      return normalize();
-    } catch (error) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: ${error.message}` });
-    }
+  if (options === false) return transport;
+  return {
+    ...transport,
+    send: (method, params) => withRetry(`rpc.${method}`, () => transport.send(method, params), options),
   };
-  if (value.type === 'Array' || value.type === 'Struct') {
-    if (!Array.isArray(value.value)) {
-      return atPath(() => normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
-    }
-    return { type: 'Array', value: value.value.map((item, index) => recurse(item, index)) };
-  }
-  if (value.type === 'Map') {
-    if (!Array.isArray(value.value)) {
-      return atPath(() => normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
-    }
-    // An entry that is not an entry is malformed at its own index; the key and value below keep the
-    // paths their own recursion gives them.
-    const entries = value.value.map((entry, index) => {
-      if (entry && typeof entry === 'object') return entry;
-      return atPath(() => normalizeRelayContractParameter({ type: 'Map', value: [entry] }, { depth: 0, byteEncoding: 'mixed', allowClasses: true }));
-    });
-    return { type: 'Map', value: entries.map((entry, index) => ({
-      key: recurse(entry.key, ['value', index, 'key']),
-      value: recurse(entry.value, ['value', index, 'value']),
-    })) };
-  }
-  try {
-    return normalizeRelayContractParameter(value, { depth: 0, byteEncoding: 'mixed', allowClasses: true });
-  } catch (error) {
-    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `${path}: ${error.message}` });
-  }
 }
 
-function userOpArgsParameter(args, baseDepth = 0) {
-  if (args === undefined || args === null) args = [];
-  if (!Array.isArray(args)) {
-    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'userOp.Args must be an array' });
-  }
-  const items = args.map((item, index) => walkRelayArgument(item, [index], baseDepth + 1));
-  try {
-    return normalizeRelayContractParameter({ type: 'Array', value: items }, {
-      depth: baseDepth, byteEncoding: 'mixed', allowClasses: true,
-    });
-  } catch (error) {
-    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `userOp.Args: ${error.message}` });
-  }
-}
+const CustomKernel = createNativeClientClass(codec, {
+  callFlags: CUSTOM_PROXY_CALL_FLAGS,
+  nativeCore: false,
+  implementationId: CUSTOM_IMPLEMENTATION_ID,
+});
 
-function sponsoredUserOpParameter(op, depth) {
-  try {
-    return normalizeRelayContractParameter({ type: 'Array', value: [
-      { type: 'Hash160', value: normalizeAddress(op.TargetContract) },
-      { type: 'String', value: op.Method },
-      userOpArgsParameter(op.Args, depth - 1),
-      { type: 'Integer', value: op.Nonce },
-      { type: 'Integer', value: op.Deadline },
-      { type: 'ByteArray', value: `0x${sanitizeHex(op.Signature || '')}` },
-    ] }, { depth: depth - 2 });
-  } catch (error) {
-    if (error.code === EC.VALIDATION_OPTIONS_REQUIRED.code) throw error;
-    throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: `userOp: ${error.message}` });
-  }
-}
+const transactionTools = createNativeTransactionTools(codec);
 
-// This optional custom ABI is checked against the deployed manifest before
-// reading its permanent mode. Missing/incompatible methods are unsupported;
-// invalid RPC data is an error, never a false capability or mode value.
-function supportsCustomOwnerOnlyRecovery(contractState, expectedCore) {
-  if (contractState?.state === 'FAULT') {
-    throw createError(EC.CONTRACT_VM_FAULT, { exception: contractState.exception });
-  }
-  const methods = contractState?.manifest?.abi?.methods;
-  const abiTypes = new Set(['Any', 'Boolean', 'Integer', 'ByteArray', 'String', 'Hash160',
-    'Hash256', 'PublicKey', 'Signature', 'Array', 'Map', 'InteropInterface', 'Void']);
-  if (typeof contractState?.hash !== 'string'
-      || !/^(?:0x)?[0-9a-f]{40}$/i.test(contractState.hash)
-      || sanitizeHex(contractState.hash) !== expectedCore || !Array.isArray(methods)) {
-    throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Malformed or mismatched custom contract state' });
-  }
-  for (const method of methods) {
-    if (!method || typeof method.name !== 'string' || !method.name
-        || !Array.isArray(method.parameters) || typeof method.safe !== 'boolean'
-        || !Number.isSafeInteger(method.offset) || method.offset < 0
-        || !abiTypes.has(method.returntype)
-        || method.parameters.some((parameter) => !parameter
-          || typeof parameter.name !== 'string' || !parameter.name
-          || !abiTypes.has(parameter.type) || parameter.type === 'Void')) {
-      throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Malformed custom ABI descriptor' });
+class SmartAccountClient extends CustomKernel {
+  /**
+   * @param {Object} options
+   * @param {string} [options.rpcUrl] - endpoint when no transport is supplied
+   * @param {Object} [options.rpcClient] - transport exposing `send(method,params)`
+   * @param {number} options.networkMagic - chain id the digests bind
+   * @param {string} options.contractHash - the deployed custom kernel
+   * @param {Object|false} [options.retry] - retry profile, `false` to disable
+   */
+  constructor({ rpcUrl, rpcClient, networkMagic, contractHash, retry } = {}) {
+    if (!contractHash) throw createError(EC.VALIDATION_CONTRACT_HASH_REQUIRED);
+    if (networkMagic === undefined || networkMagic === null) {
+      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'networkMagic is required' });
     }
-  }
-  return [
-    ['finalizeEscapeToOwner', 'Void', false],
-    ['isOwnerOnlyRecovery', 'Boolean', true],
-  ].every(([name, returntype, safe]) => {
-    const candidates = methods.filter((method) => method.name === name);
-    return candidates.length === 1 && candidates[0].returntype === returntype
-      && candidates[0].safe === safe && candidates[0].parameters.length === 1
-      && candidates[0].parameters[0].type === 'Hash160';
-  });
-}
-
-const DEFAULT_RPC_READ_RETRY_ATTEMPTS = 4;
-const DEFAULT_RPC_READ_RETRY_DELAY_MS = 250;
-
-/**
- * Retries transient RPC read failures.
- *
- * Thin wrapper over the shared withRetry helper (src/retry.js) so the SDK
- * uses a single retryable-error classification everywhere, while keeping the
- * historical read-path profile: 4 attempts with fast sub-second backoff.
- *
- * @param {Function} fn - The RPC call to retry
- * @param {number} attempts - Maximum attempts (default 4)
- * @returns {Promise<*>} Result of fn
- * @private
- */
-function invokeRpcReadWithRetry(fn, attempts = DEFAULT_RPC_READ_RETRY_ATTEMPTS) {
-  return withRetry('rpc read', () => fn(), {
-    maxAttempts: attempts,
-    baseDelayMs: DEFAULT_RPC_READ_RETRY_DELAY_MS,
-    backoffMultiplier: 2,
-    maxDelayMs: 1000,
-  });
-}
-
-/**
- * Neo N3 Smart Account SDK Client.
- *
- * The SDK provides methods for:
- * - Creating and managing smart accounts
- * - Building UserOperations for signing
- * - Validating operations before submission
- * - Managing verifiers and hooks
- *
- * @example
- * ```javascript
- * const { SmartAccountClient } = require('@r3e-network/neo-smart-account');
- *
- * const client = new SmartAccountClient(
- *   'https://rpc.example.com',
- *   '0x1234...40chars'
- * );
- *
- * // Derive a virtual account address
- * const account = client.deriveVirtualAccount('0x04...seed');
- * console.log('Account address:', account.address);
- *
- * // Create a new account registration payload
- * const payload = client.createAccountPayload({
- *   verifierContractHash: '0xabcd...verifier',
- *   hookContractHash: '0xef01...hook',
- *   backupOwnerAddress: '0x1234...owner',
- * });
- * ```
- */
-class SmartAccountClient {
-  /**
-   * Creates a new SmartAccountClient instance.
-   *
-   * @param {string} rpcUrl - RPC endpoint URL (http:// or https://)
-   * @param {string} masterContractHash - Master contract hash (40 hex chars)
-   * @throws {Error} If RPC URL or contract hash is invalid
-   */
-  constructor(rpcUrl, masterContractHash) {
-    validateRpcUrl(rpcUrl);
-    this.rpcClient = new rpc.RPCClient(rpcUrl);
-    this.masterContractHash = sanitizeHex(masterContractHash);
-  }
-
-  async invokeScriptWithRetry(script, signers = []) {
-    return invokeRpcReadWithRetry(() => this.rpcClient.invokeScript(script, signers));
-  }
-
-  async invokeFunctionWithRetry(scriptHash, operation, params = [], signers = undefined) {
-    return invokeRpcReadWithRetry(() => this.rpcClient.invokeFunction(scriptHash, operation, params, signers));
+    if (!rpcClient && !rpcUrl) throw createError(EC.VALIDATION_RPC_URL_REQUIRED);
+    if (rpcUrl) validateRpcUrl(rpcUrl);
+    const transport = retryingTransport(rpcClient ?? new rpc.RPCClient(rpcUrl), retry);
+    super({
+      rpcClient: transport,
+      networkMagic,
+      contractHash,
+      callFlags: CUSTOM_PROXY_CALL_FLAGS,
+    });
   }
 
   /**
-   * Builds a direct core call for irreversible custom owner-only recovery.
-   * This is not a UserOperation and must be signed by the backup owner after
-   * the escape timelock. It never installs a replacement module.
-   * @param {Object} options Exactly one accountScriptHash/accountAddress (account ID, not asset proxy).
-   * @returns {Object} Contract invocation payload; construction does not establish deployment support.
+   * Pins the deployment: the v4 core ABI (shared gate) plus the custom-only
+   * services this client builds and reads.
    */
-  createFinalizeEscapeToOwnerPayload(options) {
-    const { accountScriptHash = '', accountAddress = '' } = options || {};
-    if (Boolean(accountScriptHash) === Boolean(accountAddress)) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, {
-        hint: 'Supply exactly one of accountScriptHash or accountAddress',
+  async _discover() {
+    const profile = await super._discover();
+    if (profile.implementationId !== CUSTOM_IMPLEMENTATION_ID) {
+      throw createError(EC.CONTRACT_ABI_MISMATCH, {
+        hint: `implementation id ${profile.implementationId} is not the custom kernel`,
       });
     }
-    const accountId = normalizeAddress(accountScriptHash || accountAddress);
-    if (accountId === '0'.repeat(40)) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, { hint: 'Account ID must be nonzero' });
+    const state = await this._send('getcontractstate', ['0x' + this.contractHash]);
+    const methods = state?.manifest?.abi?.methods;
+    if (!Array.isArray(methods)) {
+      throw createError(EC.CONTRACT_ABI_MISMATCH, { hint: 'missing custom manifest ABI' });
     }
-    validateHash160(this.masterContractHash);
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'finalizeEscapeToOwner',
-      args: [sc.ContractParam.hash160(accountId)],
-    };
-  }
-
-  /**
-   * Reads deployed custom owner-only recovery capability and permanent mode.
-   * Unsupported manifests return a null mode; malformed state, RPC errors, VM
-   * faults and non-Boolean mode responses throw. No capability is cached.
-   * @param {string} accountHashOrAddress Account ID hash or equivalent address, never the asset proxy.
-   * @returns {Promise<Object>} {supported:false, ownerOnlyRecovery:null} or {supported:true, ownerOnlyRecovery:boolean}.
-   */
-  async getOwnerOnlyRecoveryStatus(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    if (accountId === '0'.repeat(40)) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, { hint: 'Account ID must be nonzero' });
-    }
-    validateHash160(this.masterContractHash);
-    const contractState = await invokeRpcReadWithRetry(() =>
-      this.rpcClient.send('getcontractstate', [`0x${this.masterContractHash}`]));
-    if (!supportsCustomOwnerOnlyRecovery(contractState, this.masterContractHash)) {
-      return { supported: false, ownerOnlyRecovery: null };
-    }
-    const response = await this.invokeFunctionWithRetry(this.masterContractHash,
-      'isOwnerOnlyRecovery', [{ type: 'Hash160', value: accountId }], []);
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-    if (response?.state !== 'HALT' || !Array.isArray(response.stack) || response.stack.length !== 1
-        || response.stack[0]?.type !== 'Boolean' || typeof response.stack[0].value !== 'boolean') {
-      throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'Expected one HALT Boolean owner-only recovery value' });
-    }
-    return { supported: true, ownerOnlyRecovery: response.stack[0].value };
-  }
-
-  /**
-   * Builds the verification script for an account.
-   *
-   * @param {string} accountIdHex - Account ID hash (40 hex chars)
-   * @returns {string} Verification script hex
-   */
-  buildVerifyScript(accountIdHex) {
-    const normalizedAccountId = this.deriveAccountIdHash(accountIdHex);
-    const byteLength = normalizedAccountId.length / 2;
-
-    return [
-      '0c',
-      byteLength.toString(16).padStart(2, '0'),
-      sanitizeHex(u.reverseHex(normalizedAccountId)),
-      '11c01f0c06766572696679',
-      '0c14',
-      sanitizeHex(u.reverseHex(this.masterContractHash)),
-      '41627d5b52',
-    ].join('');
-  }
-
-  /**
-   * Derives the account ID hash from a seed or existing hash.
-   *
-   * @param {string} accountIdHexOrSeed - Account ID hex or seed string
-   * @returns {string} 40-character account ID hash
-   * @throws {Error} If account seed is empty
-   */
-  deriveAccountIdHash(accountIdHexOrSeed) {
-    const normalized = sanitizeHex(accountIdHexOrSeed || '');
-    if (!normalized) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED);
-    }
-    if (/^[0-9a-f]{40}$/i.test(normalized)) {
-      return normalized;
-    }
-    return sanitizeHex(u.hash160(normalized));
-  }
-
-  /**
-   * Derives the registration-bound account ID hash used by V3 account creation.
-   *
-   * Returns the big-endian display form, identical to the on-chain
-   * ComputeRegistrationAccountId display string and exactly what
-   * registerAccount expects as its Hash160 accountId argument. The payload
-   * layout is single-sourced in shared/registrationAccountId.mjs with the
-   * frontend; address/hash normalization keeps this SDK's validation errors.
-   *
-   * @param {Object} options - Registration options
-   * @param {string} [options.verifierContractHash=''] - Verifier contract hash
-   * @param {string} [options.verifierParamsHex=''] - Verifier parameters hex
-   * @param {string} [options.hookContractHash=''] - Hook contract hash
-   * @param {string} options.backupOwnerAddress - Backup owner address or hash160
-   * @param {number} [options.escapeTimelock=2592000] - Escape hatch timelock in seconds
-   * @returns {string} 40-character account ID hash (big-endian display form)
-   */
-  deriveRegistrationAccountIdHash(options = {}) {
-    const {
-      verifierContractHash = '',
-      verifierParamsHex = '',
-      hookContractHash = '',
-      backupOwnerAddress,
-      escapeTimelock = 30 * 24 * 60 * 60,
-    } = options;
-
-    const backupOwner = normalizeAddress(backupOwnerAddress);
-    const verifierHash = verifierContractHash ? normalizeAddress(verifierContractHash) : '';
-    const hookHash = hookContractHash ? normalizeAddress(hookContractHash) : '';
-
-    return registrationAccountIdDeriver.deriveRegistrationAccountIdDisplayHex({
-      backupOwnerHash160: backupOwner,
-      verifierHash160: verifierHash,
-      hookHash160: hookHash,
-      escapeTimelock,
-      verifierParamsHex,
-    });
-  }
-
-  /**
-   * Derives a virtual account from an account seed.
-   *
-   * @param {string} accountIdSeedHex - Account seed (hex or string)
-   * @returns {Object} Virtual account details
-   * @returns {string} returns.accountIdHash - 40-character hash
-   * @returns {string} returns.verifyScript - Verification script
-   * @returns {string} returns.scriptHash - Script hash
-   * @returns {string} returns.address - Neo address
-   */
-  deriveVirtualAccount(accountIdSeedHex) {
-    const accountIdHash = this.deriveAccountIdHash(accountIdSeedHex);
-    const verifyScript = this.buildVerifyScript(accountIdHash);
-    const scriptHash = sanitizeHex(u.reverseHex(u.hash160(verifyScript)));
-    const address = wallet.getAddressFromScriptHash(scriptHash);
-    return {
-      accountIdHash,
-      verifyScript,
-      scriptHash,
-      address,
-    };
-  }
-
-  /**
-   * Derives a Smart Account Neo address from an EVM public key.
-   *
-   * @param {string} uncompressedPubKey - Uncompressed public key (130 hex chars or with 0x prefix)
-   * @returns {string} Neo address
-   * @throws {Error} If public key is invalid
-   */
-  deriveAddressFromEVM(uncompressedPubKey) {
-    let pubKeyHex = uncompressedPubKey;
-    if (pubKeyHex.startsWith('0x')) pubKeyHex = pubKeyHex.slice(2);
-
-    // Validate public key format
-    if (pubKeyHex.length !== 130 || !/^[0-9a-f]{130}$/i.test(pubKeyHex)) {
-      throw createError(EC.VALIDATION_PUBLIC_KEY_INVALID, {
-        provided: uncompressedPubKey,
-        hint: 'Expected 130 hex characters for uncompressed public key',
-      });
-    }
-
-    const verifyScript = this.buildVerifyScript(pubKeyHex);
-    const scriptHash = sanitizeHex(u.reverseHex(u.hash160(verifyScript)));
-    return wallet.getAddressFromScriptHash(scriptHash);
-  }
-
-  /**
-   * Creates the payload required to register a new V3 Smart Account.
-   *
-   * @param {Object} options - Account creation options
-   * @param {string} [options.verifierContractHash=''] - Verifier contract hash (40 hex chars)
-   * @param {string} [options.verifierParamsHex=''] - Verifier parameters hex
-   * @param {string} [options.hookContractHash=''] - Hook contract hash (40 hex chars)
-   * @param {string} options.backupOwnerAddress - Backup owner address
-   * @param {number} [options.escapeTimelock=2592000] - Escape hatch timelock in seconds (default: 30 days)
-   * @returns {Object} Contract invocation payload
-   * @throws {Error} If required parameters are missing or invalid
-   */
-  createAccountPayload(options) {
-    validateOptions(options, ['backupOwnerAddress']);
-
-    const {
-      verifierContractHash = '',
-      verifierParamsHex = '',
-      hookContractHash = '',
-      backupOwnerAddress,
-      escapeTimelock = 30 * 24 * 60 * 60, // 30 days default
-    } = options;
-
-    if (verifierContractHash) {
-      validateHash160(verifierContractHash);
-    }
-
-    // Validate hook contract hash if provided
-    if (hookContractHash) {
-      validateHash160(hookContractHash);
-    }
-
-    // Validate backup owner address if provided
-    if (backupOwnerAddress) {
-      validateAddressOrHash160(backupOwnerAddress);
-    }
-
-    const resolvedAccountHash = this.deriveRegistrationAccountIdHash({
-      verifierContractHash,
-      verifierParamsHex,
-      hookContractHash,
-      backupOwnerAddress,
-      escapeTimelock,
-    });
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'registerAccount',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-        sc.ContractParam.hash160(verifierContractHash ? normalizeAddress(verifierContractHash) : '00'.repeat(20)),
-        sc.ContractParam.byteArray(u.HexString.fromHex(sanitizeHex(verifierParamsHex), true)),
-        sc.ContractParam.hash160(hookContractHash ? normalizeAddress(hookContractHash) : '00'.repeat(20)),
-        sc.ContractParam.hash160(backupOwnerAddress ? normalizeAddress(backupOwnerAddress) : '00'.repeat(20)),
-        sc.ContractParam.integer(escapeTimelock)
-      ],
-    };
-  }
-
-  /**
-   * Creates the registration payload for a session-key account whose first
-   * session key is installed immediately at registration time.
-   *
-   * The session key travels inside verifierParams (see
-   * shared/sessionKeyBlob.mjs for the version-0x01 blob layout), so the
-   * registration-bound account id commits to it and the verifier installs it
-   * without the 24h rotation cooldown that applies to later key changes.
-   *
-   * @param {Object} options - Account creation options
-   * @param {string} options.sessionKeyVerifierHash - SessionKeyVerifier contract hash
-   * @param {Object} options.sessionKey - Initial session key options
-   * @param {string} options.sessionKey.publicKeyHex - secp256r1 public key (33 or 65 bytes, hex)
-   * @param {string} options.sessionKey.targetContract - Target contract hash
-   * @param {string} options.sessionKey.method - Allowed target method
-   * @param {string|number|bigint} options.sessionKey.validUntilMs - Expiry (Runtime.Time ms)
-   * @param {string|number|bigint} [options.sessionKey.spendingLimitDatoshi=0] - Spending cap
-   * @param {string} [options.sessionKey.description=''] - Human-readable label
-   * @param {string} [options.hookContractHash=''] - Hook contract hash
-   * @param {string} options.backupOwnerAddress - Backup owner address
-   * @param {number} [options.escapeTimelock=2592000] - Escape hatch timelock in seconds
-   * @returns {Object} Contract invocation payload (same shape as createAccountPayload)
-   * @throws {Error} If required parameters are missing or invalid
-   */
-  createSessionKeyAccountPayload(options) {
-    validateOptions(options, ['sessionKeyVerifierHash', 'backupOwnerAddress']);
-    const { sessionKeyVerifierHash, sessionKey = {}, hookContractHash = '', backupOwnerAddress, escapeTimelock } = options;
-    const verifierParamsHex = sessionKeyBlob.buildSessionKeyRegistrationBlob(sessionKey);
-    return this.createAccountPayload({
-      verifierContractHash: sessionKeyVerifierHash,
-      verifierParamsHex,
-      hookContractHash,
-      backupOwnerAddress,
-      ...(escapeTimelock !== undefined ? { escapeTimelock } : {}),
-    });
-  }
-
-  /**
-   * Creates a payload to update the verifier for an account.
-   *
-   * @param {Object} options - Update options
-   * @param {string} [options.accountScriptHash] - Account script hash
-   * @param {string} [options.accountAddress] - Account address
-   * @param {string} options.verifierContractHash - New verifier contract hash
-   * @param {string} [options.verifierParamsHex=''] - New verifier parameters
-   * @returns {Object} Contract invocation payload
-   * @throws {Error} If required parameters are missing
-   */
-  createUpdateVerifierPayload(options) {
-    validateOptions(options, ['verifierContractHash']);
-
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-      verifierContractHash,
-      verifierParamsHex = '',
-    } = options || {};
-
-    validateHash160(verifierContractHash);
-    if (verifierParamsHex) validateHexString(verifierParamsHex);
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'updateVerifier',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-        sc.ContractParam.hash160(normalizeAddress(verifierContractHash)),
-        sc.ContractParam.byteArray(u.HexString.fromHex(sanitizeHex(verifierParamsHex), true)),
-      ],
-    };
-  }
-
-  /**
-   * Creates a payload to update the hook for an account.
-   *
-   * @param {Object} options - Update options
-   * @param {string} [options.accountScriptHash] - Account script hash
-   * @param {string} [options.accountAddress] - Account address
-   * @param {string} [options.hookContractHash=''] - New hook contract hash (empty to remove)
-   * @returns {Object} Contract invocation payload
-   * @throws {Error} If account is not specified
-   */
-  createUpdateHookPayload(options) {
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-      hookContractHash = '',
-    } = options || {};
-
-    // Validate hook contract hash if provided
-    if (hookContractHash) {
-      validateHash160(hookContractHash);
-    }
-
-    if (!accountScriptHash && !accountAddress) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, {
-        hint: 'Either accountScriptHash or accountAddress is required',
-      });
-    }
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'updateHook',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-        sc.ContractParam.hash160(hookContractHash ? normalizeAddress(hookContractHash) : '00'.repeat(20)),
-      ],
-    };
-  }
-
-  /**
-   * Creates a payload to set the metadata URI for an account.
-   *
-   * @param {Object} options - Metadata options
-   * @param {string} [options.accountScriptHash] - Account script hash
-   * @param {string} [options.accountAddress] - Account address
-   * @param {string} [options.metadataUri=''] - Metadata URI string
-   * @returns {Object} Contract invocation payload
-   * @throws {Error} If account is not specified
-   */
-  createSetMetadataUriPayload(options) {
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-      metadataUri = '',
-    } = options || {};
-
-    if (!accountScriptHash && !accountAddress) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, {
-        hint: 'Either accountScriptHash or accountAddress is required',
-      });
-    }
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'setMetadataUri',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-        sc.ContractParam.string(metadataUri),
-      ],
-    };
-  }
-
-  /**
-   * Computes the hash of contract arguments for EIP-712 signing.
-   *
-   * @param {Array} args - Contract arguments array
-   * @returns {Promise<string>} 32-byte hash (64 hex characters)
-   * @throws {Error} If computation fails or returns empty result
-   */
-  async computeArgsHash(args = []) {
-    const parameter = toMultiSigRpcParameter(userOpArgsParameter(args));
-    // Bypass neonCompat.fromJson: it supports fewer types and assumes hex bytes.
-    const response = await invokeRpcReadWithRetry(() => this.rpcClient.send('invokefunction', [
-      `0x${this.masterContractHash}`, 'computeArgsHash', [parameter], [],
-    ]));
-
-    if (response?.state === 'FAULT') {
-      const mappedError = mapRpcError({ message: response.exception });
-      if (mappedError) {
-        throw createError(mappedError, { operation: 'computeArgsHash' });
-      }
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    const argsHashHex = metaTxExports.decodeByteStringStackHex(response?.stack?.[0]);
-    if (!argsHashHex) {
-      throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'computeArgsHash returned empty result' });
-    }
-
-    return argsHashHex;
-  }
-
-  /**
-   * Generates the EIP-712 payload for signing a UserOperation.
-   * Supports both V3 (accountId-based) and legacy (bound address) formats.
-   *
-   * @param {Object} options - EIP-712 options
-   * @param {string|number} options.chainId - Chain ID for EIP-712 domain
-   * @param {string} [options.accountIdHash] - V3 account ID hash (40 hex chars)
-   * @param {string} [options.accountIdHex] - Account ID hex (derives accountIdHash)
-   * @param {string} [options.verifierHash] - Verifier contract hash (for V3)
-   * @param {string} [options.accountAddressScriptHash] - Legacy account script hash
-   * @param {string} [options.accountAddressHash] - Legacy account address hash
-   * @param {string} options.targetContract - Target contract hash (40 hex chars)
-   * @param {string} options.method - Method name
-   * @param {Array} [options.args=[]] - Method arguments
-   * @param {string|number} options.nonce - Nonce value
-   * @param {string|number} options.deadline - Deadline in Neo Runtime.Time milliseconds
-   * @returns {Promise<Object>} EIP-712 typed data structure
-   * @throws {Error} If required parameters are missing or validation fails
-   *
-   * @example
-   * ```javascript
-   * const typedData = await client.createEIP712Payload({
-   *   chainId: 860833102,
-   *   accountIdHash: 'f951...',
-   *   verifierHash: 'b410...',
-   *   targetContract: '49c0...',
-   *   method: 'transfer',
-   *   args: [{ type: 'Address', value: '0xabcd...' }],
-   *   nonce: 0,
-   *   deadline: Date.now() + 3600_000,
-   * });
-   *
-   * const signature = await signer.signTypedData(
-   *   typedData.domain,
-   *   typedData.types,
-   *   typedData.message
-   * );
-   * ```
-   */
-  async createEIP712Payload(options) {
-    if (!options || typeof options !== 'object' || Array.isArray(options)) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
-        hint: 'createEIP712Payload expects an options object',
-      });
-    }
-
-    const {
-      chainId,
-      accountAddressScriptHash,
-      accountAddressHash,
-      accountIdHash,
-      accountIdHex,
-      verifierHash,
-      targetContract,
-      method,
-      args = [],
-      nonce,
-      deadline,
-    } = options;
-
-    // Validate required fields
-    validateEIP712Fields(nonce, deadline);
-
-    if (!chainId) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'chainId is required' });
-    }
-
-    if (!targetContract) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'targetContract is required' });
-    }
-
-    if (!method) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'method is required' });
-    }
-
-    // Compute args hash
-    const argsHashHex = await this.computeArgsHash(args);
-
-    // Resolve account ID hash for V3
-    const resolvedAccountIdHash = accountIdHash
-      ? sanitizeHex(accountIdHash)
-      : accountIdHex
-        ? this.deriveVirtualAccount(accountIdHex).accountIdHash
-        : '';
-
-    // V3 path: use accountId and verifier
-    if (resolvedAccountIdHash) {
-      let resolvedVerifierHash = verifierHash;
-
-      // Auto-resolve verifier if not provided
-      if (!resolvedVerifierHash) {
-        const script = sc.createScript({
-          scriptHash: this.masterContractHash,
-          operation: 'getVerifier',
-          args: [{ type: 'Hash160', value: resolvedAccountIdHash }],
-        });
-        const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-
-        if (response?.state === 'FAULT') {
-          const mappedError = mapRpcError({ message: response.exception });
-          if (mappedError) {
-            throw createError(mappedError, { operation: 'getVerifier' });
-          }
-          throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-        }
-
-        // The node returns the UInt160 as a base64 ByteString in little-endian
-        // byte order; decode and reverse to the big-endian display form.
-        const verifierLeHex = metaTxExports.decodeByteStringStackHex(response?.stack?.[0]);
-        resolvedVerifierHash = verifierLeHex ? sanitizeHex(u.reverseHex(verifierLeHex)) : '';
-      }
-
-      if (!resolvedVerifierHash) {
-        throw createError(EC.ACCOUNT_VERIFIER_NOT_CONFIGURED, {
-          accountIdHash: resolvedAccountIdHash,
-          hint: 'No verifier is configured for this V3 account',
-        });
-      }
-
-      return metaTxExports.buildV3UserOperationTypedData({
-        chainId,
-        verifyingContract: resolvedVerifierHash,
-        accountIdHash: resolvedAccountIdHash,
-        coreContractHash: this.masterContractHash,
-        targetContract,
-        method,
-        argsHashHex,
-        nonce,
-        deadline,
-      });
-    }
-
-    // Legacy path: use bound address
-    const resolvedAccountAddressScriptHash = accountAddressScriptHash
-      ? sanitizeHex(accountAddressScriptHash)
-      : accountAddressHash
-        ? sanitizeHex(accountAddressHash)
-        : '';
-
-    if (!resolvedAccountAddressScriptHash) {
-      throw createError(EC.ACCOUNT_MISSING_BINDING);
-    }
-
-    return metaTxExports.buildMetaTransactionTypedData({
-      chainId,
-      verifyingContract: this.masterContractHash,
-      accountAddressScriptHash: resolvedAccountAddressScriptHash,
-      targetContract,
-      method,
-      argsHashHex,
-      nonce,
-      deadline,
-    });
-  }
-
-  /**
-   * Decodes an address array from a stack item.
-   *
-   * @param {Object} stackItem - Stack item from RPC response
-   * @returns {Array<string>} Array of Neo addresses
-   */
-  decodeAddressArray(stackItem) {
-    if (!stackItem || stackItem.type !== 'Array' || !Array.isArray(stackItem.value)) return [];
-    return stackItem.value.map((item) => {
-      let rawHex = '';
-      if (item.type === 'Hash160' && item.value) rawHex = sanitizeHex(item.value);
-      if (item.type === 'ByteString' && item.value) rawHex = sanitizeHex(Buffer.from(item.value, 'base64').toString('hex'));
-      if (!rawHex) return null;
-      return wallet.getAddressFromScriptHash(sanitizeHex(u.reverseHex(rawHex)));
-    }).filter(Boolean);
-  }
-
-  /**
-   * Gets the account implementation ID.
-   *
-   * @returns {Promise<string>} Implementation ID string
-   * @throws {Error} If RPC call fails
-   */
-  async getAccountImplementationId() {
-    const script = sc.createScript({
-      scriptHash: this.masterContractHash,
-      operation: 'getAccountImplementationId',
-      args: [],
-    });
-    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return decodeByteStringStackText(response?.stack?.[0]);
-  }
-
-  /**
-   * Checks if a specific execution mode is supported.
-   *
-   * @param {string} mode - Execution mode to check (e.g., 'single', 'batch')
-   * @returns {Promise<boolean>} True if mode is supported
-   * @throws {Error} If RPC call fails
-   */
-  async supportsExecutionMode(mode) {
-    const script = sc.createScript({
-      scriptHash: this.masterContractHash,
-      operation: 'supportsExecutionMode',
-      args: [{ type: 'String', value: String(mode || '') }],
-    });
-    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return decodeStackBoolean(response?.stack?.[0]);
-  }
-
-  /**
-   * Checks if a specific module type is supported.
-   *
-   * @param {string} moduleType - Module type to check (e.g., 'validator', 'executor', 'hook')
-   * @returns {Promise<boolean>} True if module type is supported
-   * @throws {Error} If RPC call fails
-   */
-  async supportsModuleType(moduleType) {
-    const script = sc.createScript({
-      scriptHash: this.masterContractHash,
-      operation: 'supportsModuleType',
-      args: [{ type: 'String', value: String(moduleType || '') }],
-    });
-    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return decodeStackBoolean(response?.stack?.[0]);
-  }
-
-  /**
-   * Checks if a specific module is installed on an account.
-   *
-   * @param {string} accountHashOrAddress - Account hash or address
-   * @param {string} moduleType - Module type (e.g., 'validator', 'executor', 'hook')
-   * @param {string} moduleHashOrAddress - Module hash or address
-   * @returns {Promise<boolean>} True if module is installed
-   * @throws {Error} If RPC call fails
-   */
-  async isModuleInstalled(accountHashOrAddress, moduleType, moduleHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const moduleHash = normalizeAddress(moduleHashOrAddress);
-
-    const script = sc.createScript({
-      scriptHash: this.masterContractHash,
-      operation: 'isModuleInstalled',
-      args: [
-        { type: 'Hash160', value: accountId },
-        { type: 'String', value: String(moduleType || '') },
-        { type: 'Hash160', value: moduleHash },
-      ],
-    });
-    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return decodeStackBoolean(response?.stack?.[0]);
-  }
-
-  /**
-   * Checks an account signature through the Neo ERC-1271 adapter surface.
-   * The returned value is the four-byte magic value as lowercase hex
-   * (0x1626ba7e means valid; 0xffffffff means invalid).
-   *
-   * @param {string} accountHashOrAddress - Account hash or address
-   * @param {string} hash - Exactly 32-byte message digest, hex encoded
-   * @param {string} signature - Compact 64-byte signature, hex encoded
-   * @returns {Promise<string>} ERC-1271-compatible magic value
-   */
-  async isValidSignature(accountHashOrAddress, hash, signature) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const messageHash = sanitizeHex(hash || '');
-    const messageSignature = sanitizeHex(signature || '');
-    validateHexString(messageHash, { byteLength: 32 });
-    // ERC-1271 callers commonly provide either EIP-2098 compact (64 bytes) or
-    // recoverable r||s||v (65 bytes). The verifier-specific adapter determines
-    // which form it supports.
-    validateHexString(messageSignature, { minLength: 64, maxLength: 65 });
-
-    const script = sc.createScript({
-      scriptHash: this.masterContractHash,
-      operation: 'isValidSignature',
-      args: [
-        { type: 'Hash160', value: accountId },
-        { type: 'ByteArray', value: messageHash },
-        { type: 'ByteArray', value: messageSignature },
-      ],
-    });
-    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-    return `0x${metaTxExports.decodeByteStringStackHex(response?.stack?.[0])}`;
-  }
-
-  /**
-   * Gets a validation preview for a UserOperation before submission.
-   * Useful for checking if the operation would pass signature validation.
-   *
-   * @param {Object} options - Preview options
-   * @param {string} [options.accountIdHash] - V3 account ID hash
-   * @param {string} [options.accountAddress] - Legacy account address
-   * @param {string} options.targetContract - Target contract hash
-   * @param {string} options.method - Method name
-   * @param {Array} [options.args=[]] - Method arguments
-   * @param {string|number} [options.nonce=0] - Nonce value
-   * @param {string|number} [options.deadline=0] - Deadline in Neo Runtime.Time milliseconds
-   * @returns {Promise<Object>} Validation preview
-   * @returns {boolean} returns.deadlineValid - Deadline is valid
-   * @returns {boolean} returns.nonceAcceptable - Nonce is acceptable
-   * @returns {boolean} returns.hasVerifier - Verifier is configured
-   * @returns {string} returns.verifier - Verifier hash (big-endian display hex)
-   * @returns {string} returns.hook - Hook hash (big-endian display hex)
-   * @throws {Error} If RPC call fails
-   */
-  async getUserOpValidationPreview({
-    accountIdHash = '',
-    accountAddress = '',
-    targetContract,
-    method,
-    args = [],
-    nonce = 0,
-    deadline = 0,
-  } = {}) {
-    const accountId = accountIdHash
-      ? normalizeAddress(accountIdHash)
-      : normalizeAddress(accountAddress);
-
-    const response = await this.invokeFunctionWithRetry(this.masterContractHash, 'previewUserOpValidation', [
-      { type: 'Hash160', value: accountId },
-      {
-        type: 'Struct',
-        value: [
-          { type: 'Hash160', value: normalizeAddress(targetContract) },
-          { type: 'String', value: String(method || '') },
-          { type: 'Array', value: args },
-          { type: 'Integer', value: String(nonce) },
-          { type: 'Integer', value: String(deadline) },
-          { type: 'ByteArray', value: '' },
-        ],
-      },
-    ]);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return decodeValidationPreviewStack(response?.stack?.[0]);
-  }
-
-  /**
-   * Reads the complete account descriptor in one call (ERC-7579-style
-   * capability discovery). Aggregates every per-getter field of
-   * getAccountState plus the market-escrow latch and the pending verifier /
-   * hook maintenance windows. Never faults on an unknown account: the result
-   * reports exists=false with zeroed fields instead.
-   *
-   * @param {string} accountHashOrAddress - Account ID hash or address
-   * @returns {Promise<Object>} Account descriptor
-   * @returns {boolean} returns.exists - Account is registered
-   * @returns {string} returns.verifier - Verifier hash (big-endian display hex)
-   * @returns {string} returns.hook - Hook hash (big-endian display hex)
-   * @returns {string} returns.backupOwner - Backup owner hash (big-endian display hex)
-   * @returns {string} returns.escapeTimelock - Escape timelock in seconds
-   * @returns {string} returns.escapeTriggeredAt - Escape trigger timestamp (ms)
-   * @returns {boolean} returns.escapeActive - Escape hatch is triggered
-   * @returns {string} returns.marketEscrowContract - Escrow contract hash
-   * @returns {string} returns.marketEscrowListingId - Escrow listing id
-   * @returns {boolean} returns.marketEscrowActive - Escrow currently blocks execution
-   * @returns {boolean} returns.pendingVerifierUpdate - Verifier update is maturing
-   * @returns {string} returns.pendingVerifierMatureAt - Verifier update maturity (ms)
-   * @returns {boolean} returns.pendingHookUpdate - Hook update is maturing
-   * @returns {string} returns.pendingHookMatureAt - Hook update maturity (ms)
-   * @throws {Error} If the RPC call itself fails
-   */
-  async describeAccount(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-
-    const response = await this.invokeFunctionWithRetry(this.masterContractHash, 'describeAccount', [
-      { type: 'Hash160', value: accountId },
-    ]);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return decodeAccountDescriptorStack(response?.stack?.[0]);
-  }
-
-  /**
-   * Non-faulting preflight of the core's execution-time checks for one
-   * operation, named after ERC-4337's EntryPoint simulateValidation so
-   * 4337-aware tooling finds the familiar entry point. Unlike
-   * getUserOpValidationPreview this never faults on an unknown account and
-   * additionally reports the two execution-relevant latches a submitter must
-   * see: an active market escrow (blocks execution) and an active escape
-   * (execution would cancel it). Signature verification and hook execution
-   * are deliberately excluded, exactly like the preview.
-   *
-   * @param {Object} options - Simulation options
-   * @param {string} [options.accountIdHash] - V3 account ID hash
-   * @param {string} [options.accountAddress] - Legacy account address
-   * @param {string} options.targetContract - Target contract hash
-   * @param {string} options.method - Method name
-   * @param {Array} [options.args=[]] - Method arguments
-   * @param {string|number} [options.nonce=0] - Nonce value
-   * @param {string|number} [options.deadline=0] - Deadline in Neo Runtime.Time milliseconds
-   * @param {Array} [options.signers] - Optional RPC signers; attach the backup
-   *   owner to learn whether the native witness fallback would authorize the
-   *   operation via nativeWitnessPresent
-   * @returns {Promise<Object>} Simulation result
-   * @returns {boolean} returns.accountExists - Account is registered
-   * @returns {boolean} returns.deadlineOk - Deadline has not passed
-   * @returns {boolean} returns.nonceOk - Nonce is acceptable
-   * @returns {boolean} returns.verifierBound - A verifier is configured
-   * @returns {boolean} returns.nativeWitnessPresent - Backup-owner witness attached
-   * @returns {boolean} returns.marketEscrowBlocks - Escrow would block execution
-   * @returns {boolean} returns.escapeActive - Escape hatch is triggered
-   * @throws {Error} If the RPC call itself fails
-   */
-  async simulateValidation({
-    accountIdHash = '',
-    accountAddress = '',
-    targetContract,
-    method,
-    args = [],
-    nonce = 0,
-    deadline = 0,
-    signers,
-  } = {}) {
-    const accountId = accountIdHash
-      ? normalizeAddress(accountIdHash)
-      : normalizeAddress(accountAddress);
-
-    const response = await this.invokeFunctionWithRetry(this.masterContractHash, 'simulateValidation', [
-      { type: 'Hash160', value: accountId },
-      {
-        type: 'Struct',
-        value: [
-          { type: 'Hash160', value: normalizeAddress(targetContract) },
-          { type: 'String', value: String(method || '') },
-          { type: 'Array', value: args },
-          { type: 'Integer', value: String(nonce) },
-          { type: 'Integer', value: String(deadline) },
-          { type: 'ByteArray', value: '' },
-        ],
-      },
-    ], signers);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return decodeUserOpSimulationStack(response?.stack?.[0]);
-  }
-
-  /**
-   * @deprecated This method is removed in V3. Role-based admin discovery no longer exists.
-   * @throws {Error} Always throws with deprecation message
-   */
-  async getAccountsByAdmin() {
-    throw createError(EC.LEGACY_V3_REMOVED, {
-      hint: 'Use getAccountState() to check individual account details',
-    });
-  }
-
-  /**
-   * @deprecated This method is removed in V3. Role-based manager discovery no longer exists.
-   * @throws {Error} Always throws with deprecation message
-   */
-  async getAccountsByManager() {
-    throw createError(EC.LEGACY_V3_REMOVED, {
-      hint: 'Use getAccountState() to check individual account details',
-    });
-  }
-
-  /**
-   * @deprecated This method is removed in V3. Role-based admin discovery no longer exists.
-   * @throws {Error} Always throws with deprecation message
-   */
-  async getAccountAddressesByAdmin() {
-    throw createError(EC.LEGACY_V3_REMOVED, {
-      hint: 'Use getAccountState() to check individual account details',
-    });
-  }
-
-  /**
-   * @deprecated This method is removed in V3. Role-based manager discovery no longer exists.
-   * @throws {Error} Always throws with deprecation message
-   */
-  async getAccountAddressesByManager() {
-    throw createError(EC.LEGACY_V3_REMOVED, {
-      hint: 'Use getAccountState() to check individual account details',
-    });
-  }
-
-  /**
-   * Gets the complete state of a smart account.
-   *
-   * All Hash160 fields are returned as big-endian display hex (the same
-   * byte order every SDK hash input accepts), regardless of the node's
-   * little-endian wire encoding.
-   *
-   * @param {string} accountHashOrAddress - Account hash or address
-   * @returns {Promise<Object>} Account state
-   * @returns {string} returns.accountId - Account ID hash (big-endian display hex)
-   * @returns {string} returns.verifier - Verifier contract hash (big-endian display hex)
-   * @returns {string} returns.hook - Hook contract hash (big-endian display hex)
-   * @returns {string} returns.backupOwner - Backup owner hash (big-endian display hex)
-   * @returns {string} returns.escapeTimelock - Escape hatch timelock (seconds)
-   * @returns {string} returns.escapeTriggeredAt - Timestamp when escape was triggered
-   * @returns {boolean} returns.escapeActive - Whether escape hatch is active
-   * @returns {string} returns.metadataUri - Metadata URI (if set)
-   * @throws {Error} If RPC call fails
-   */
-  async getAccountState(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-
-    const invokeSafe = async (operation) => {
-      const response = await this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        operation,
-        [{ type: 'Hash160', value: accountId }],
-        []
+    for (const [name, [types, returntype]] of Object.entries(CUSTOM_REQUIRED_ABI)) {
+      const found = methods.some(
+        (method) =>
+          method?.name === name &&
+          method.returntype === returntype &&
+          Array.isArray(method.parameters) &&
+          method.parameters.length === types.length &&
+          types.every((type, index) =>
+            declaredType(type, method.parameters[index]?.type),
+          ),
       );
-
-      if (response?.state === 'FAULT') {
-        throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
+      if (!found) {
+        throw createError(EC.CONTRACT_ABI_MISMATCH, { hint: `missing custom method ${name}` });
       }
+    }
+    this.profile = freeze({ ...profile, kernel: 'custom' });
+    return this.profile;
+  }
 
-      return response?.stack?.[0] || null;
-    };
+  /** Maps a script fault's `SA_*` answer onto the SDK's single vocabulary. */
+  async invokeScript(script, signers = []) {
+    try {
+      return await super.invokeScript(script, signers);
+    } catch (error) {
+      const mapped = mapRpcError(error);
+      if (!mapped || !mapped.code) throw error;
+      const failure = createError(mapped, { rpcDetail: mapped.rpcDetail });
+      failure.code = mapped.code;
+      throw failure;
+    }
+  }
 
-    const invokeOptional = async (operation) => {
-      try {
-        return await invokeSafe(operation);
-      } catch (error) {
-        if (/method not found/i.test(String(error?.message || ''))) {
-          return null;
-        }
-        throw error;
-      }
-    };
+  // ---------------------------------------------------------------------
+  // Registration (§10)
+  // ---------------------------------------------------------------------
 
-    const [verifier, hook, backupOwner, escapeTimelock, escapeTriggeredAt, escapeActive, metadataUri] = await Promise.all([
-      invokeSafe('getVerifier'),
-      invokeSafe('getHook'),
-      invokeSafe('getBackupOwner'),
-      invokeSafe('getEscapeTimelock'),
-      invokeSafe('getEscapeTriggeredAt'),
-      invokeSafe('isEscapeActive'),
-      invokeOptional('getMetadataUri'),
-    ]);
+  /** Batch form of `buildCreateAccountScript`; ids are derived, not supplied. */
+  buildCreateAccountsScript({ custodyAddress, salts, recoveryTimelockMs = 0 }) {
+    if (!Array.isArray(salts) || salts.length < 1 || salts.length > 32) {
+      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'salts must hold 1..32 entries' });
+    }
+    const identities = salts.map((salt) => this.deriveIdentity({ custodyAddress, salt }));
+    return freeze({
+      kind: 'registration',
+      method: 'createAccounts',
+      accountIds: identities.map((identity) => identity.accountId),
+      accountAddresses: identities.map((identity) => identity.accountAddress),
+      custodyAddress: codec.hex(custodyAddress, 20),
+      signers: identities.map((identity) => identity.accountAddress),
+      script: codec.dynamicCall(this.contractHash, 'createAccounts', [
+        { type: 'Array', value: identities.map((identity) => H(identity.accountId)) },
+        H(custodyAddress),
+        { type: 'Array', value: salts.map((salt) => codec.byteStringValue(salt)) },
+        codec.integerValue(codec.unsigned(recoveryTimelockMs, 64, 'recovery timelock')),
+      ]),
+    });
+  }
 
-    return {
+  /** Legacy identity of a v3 registration (migration evidence, read-only). */
+  async getRegistrationAccountId({
+    verifier,
+    verifierParams,
+    hookId,
+    backupOwner,
+    escapeTimelock,
+  }) {
+    await this._ready();
+    return asHash(
+      await this._read('computeRegistrationAccountId', [
+        H(verifier),
+        codec.byteStringValue(verifierParams),
+        H(hookId),
+        H(backupOwner),
+        codec.integerValue(codec.unsigned(escapeTimelock, 64, 'escape timelock')),
+      ]),
+      'registration account id',
+    );
+  }
+
+  // ---------------------------------------------------------------------
+  // Account actions (custody-authorised)
+  // ---------------------------------------------------------------------
+
+  freezeAccount(accountId) {
+    return this.buildAccountActionScript({ method: 'freezeAccount', accountId });
+  }
+
+  unfreezeAccount(accountId) {
+    return this.buildAccountActionScript({ method: 'unfreezeAccount', accountId });
+  }
+
+  beginRecovery(accountId, newCustody) {
+    return this.buildAccountActionScript({
+      method: 'beginRecovery',
       accountId,
-      verifier: decodeHash160Stack(verifier),
-      hook: decodeHash160Stack(hook),
-      backupOwner: decodeHash160Stack(backupOwner),
-      escapeTimelock: String(escapeTimelock?.value || '0'),
-      escapeTriggeredAt: String(escapeTriggeredAt?.value || '0'),
-      escapeActive: Boolean(escapeActive?.value),
-      metadataUri: decodeByteStringStackText(metadataUri),
-    };
-  }
-
-  /**
-   * Creates a payload to confirm a pending hook update.
-   *
-   * @param {Object} options - Confirm options
-   * @param {string} [options.accountScriptHash] - Account script hash
-   * @param {string} [options.accountAddress] - Account address
-   * @returns {Object} Contract invocation payload
-   * @throws {Error} If account is not specified
-   */
-  createConfirmHookUpdatePayload(options) {
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-    } = options || {};
-
-    if (!accountScriptHash && !accountAddress) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, {
-        hint: 'Either accountScriptHash or accountAddress is required',
-      });
-    }
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'confirmHookUpdate',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-      ],
-    };
-  }
-
-  /**
-   * Creates a payload to confirm a pending verifier update.
-   *
-   * @param {Object} options - Confirm options
-   * @param {string} [options.accountScriptHash] - Account script hash
-   * @param {string} [options.accountAddress] - Account address
-   * @returns {Object} Contract invocation payload
-   * @throws {Error} If account is not specified
-   */
-  createConfirmVerifierUpdatePayload(options) {
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-    } = options || {};
-
-    if (!accountScriptHash && !accountAddress) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, {
-        hint: 'Either accountScriptHash or accountAddress is required',
-      });
-    }
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'confirmVerifierUpdate',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-      ],
-    };
-  }
-
-  /**
-   * Creates a payload to cancel a pending hook update.
-   *
-   * @param {Object} options - Cancel options
-   * @param {string} [options.accountScriptHash] - Account script hash
-   * @param {string} [options.accountAddress] - Account address
-   * @returns {Object} Contract invocation payload
-   * @throws {Error} If account is not specified
-   */
-  createCancelHookUpdatePayload(options) {
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-    } = options || {};
-
-    if (!accountScriptHash && !accountAddress) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, {
-        hint: 'Either accountScriptHash or accountAddress is required',
-      });
-    }
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'cancelHookUpdate',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-      ],
-    };
-  }
-
-  /**
-   * Creates a payload to cancel a pending verifier update.
-   *
-   * @param {Object} options - Cancel options
-   * @param {string} [options.accountScriptHash] - Account script hash
-   * @param {string} [options.accountAddress] - Account address
-   * @returns {Object} Contract invocation payload
-   * @throws {Error} If account is not specified
-   */
-  createCancelVerifierUpdatePayload(options) {
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-    } = options || {};
-
-    if (!accountScriptHash && !accountAddress) {
-      throw createError(EC.VALIDATION_ACCOUNT_ID_REQUIRED, {
-        hint: 'Either accountScriptHash or accountAddress is required',
-      });
-    }
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'cancelVerifierUpdate',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-      ],
-    };
-  }
-
-  /**
-   * Checks if an account has a pending verifier update.
-   *
-   * @param {string} accountHashOrAddress - Account hash or address
-   * @returns {Promise<boolean>} True if there's a pending update
-   * @throws {Error} If RPC call fails
-   */
-  async getHasPendingVerifierUpdate(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const response = await this.invokeFunctionWithRetry(
-      this.masterContractHash,
-      'hasPendingVerifierUpdate',
-      [{ type: 'Hash160', value: accountId }],
-      []
-    );
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return response?.stack?.[0]?.value === true || response?.stack?.[0]?.value === 1;
-  }
-
-  /**
-   * Checks if an account has a pending hook update.
-   *
-   * @param {string} accountHashOrAddress - Account hash or address
-   * @returns {Promise<boolean>} True if there's a pending update
-   * @throws {Error} If RPC call fails
-   */
-  async getHasPendingHookUpdate(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const response = await this.invokeFunctionWithRetry(
-      this.masterContractHash,
-      'hasPendingHookUpdate',
-      [{ type: 'Hash160', value: accountId }],
-      []
-    );
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return response?.stack?.[0]?.value === true || response?.stack?.[0]?.value === 1;
-  }
-
-  /**
-   * Gets the timestamp when a pending verifier update can be confirmed.
-   *
-   * @param {string} accountHashOrAddress - Account hash or address
-   * @returns {Promise<number>} Update timestamp in Neo Runtime.Time milliseconds
-   * @throws {Error} If RPC call fails
-   */
-  async getPendingVerifierUpdateTime(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const response = await this.invokeFunctionWithRetry(
-      this.masterContractHash,
-      'getPendingVerifierUpdateTime',
-      [{ type: 'Hash160', value: accountId }],
-      []
-    );
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return response?.stack?.[0]?.value || 0;
-  }
-
-  /**
-   * Gets the timestamp when a pending hook update can be confirmed.
-   *
-   * @param {string} accountHashOrAddress - Account hash or address
-   * @returns {Promise<number>} Update timestamp in Neo Runtime.Time milliseconds
-   * @throws {Error} If RPC call fails
-   */
-  async getPendingHookUpdateTime(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const response = await this.invokeFunctionWithRetry(
-      this.masterContractHash,
-      'getPendingHookUpdateTime',
-      [{ type: 'Hash160', value: accountId }],
-      []
-    );
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return response?.stack?.[0]?.value || 0;
-  }
-
-  async getPendingVerifierCall(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const [hasPending, executeAfter, moduleHashItem, callHashItem] = await Promise.all([
-      this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        'hasPendingVerifierCall',
-        [{ type: 'Hash160', value: accountId }],
-        []
-      ),
-      this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        'getPendingVerifierCallTime',
-        [{ type: 'Hash160', value: accountId }],
-        []
-      ),
-      this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        'getPendingVerifierCallModule',
-        [{ type: 'Hash160', value: accountId }],
-        []
-      ),
-      this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        'getPendingVerifierCallHash',
-        [{ type: 'Hash160', value: accountId }],
-        []
-      ),
-    ]);
-
-    for (const response of [hasPending, executeAfter, moduleHashItem, callHashItem]) {
-      if (response?.state === 'FAULT') {
-        throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-      }
-    }
-
-    return {
-      hasPending: decodeStackBoolean(hasPending?.stack?.[0]),
-      executeAfter: String(executeAfter?.stack?.[0]?.value || '0'),
-      moduleHash: decodeHash160Stack(moduleHashItem?.stack?.[0]),
-      callHash: metaTxExports.decodeByteStringStackHex(callHashItem?.stack?.[0]),
-    };
-  }
-
-  async getPendingHookCall(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const [hasPending, executeAfter, moduleHashItem, callHashItem] = await Promise.all([
-      this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        'hasPendingHookCall',
-        [{ type: 'Hash160', value: accountId }],
-        []
-      ),
-      this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        'getPendingHookCallTime',
-        [{ type: 'Hash160', value: accountId }],
-        []
-      ),
-      this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        'getPendingHookCallModule',
-        [{ type: 'Hash160', value: accountId }],
-        []
-      ),
-      this.invokeFunctionWithRetry(
-        this.masterContractHash,
-        'getPendingHookCallHash',
-        [{ type: 'Hash160', value: accountId }],
-        []
-      ),
-    ]);
-
-    for (const response of [hasPending, executeAfter, moduleHashItem, callHashItem]) {
-      if (response?.state === 'FAULT') {
-        throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-      }
-    }
-
-    return {
-      hasPending: decodeStackBoolean(hasPending?.stack?.[0]),
-      executeAfter: String(executeAfter?.stack?.[0]?.value || '0'),
-      moduleHash: decodeHash160Stack(moduleHashItem?.stack?.[0]),
-      callHash: metaTxExports.decodeByteStringStackHex(callHashItem?.stack?.[0]),
-    };
-  }
-
-  /**
-   * Checks if an execution is currently active for an account.
-   *
-   * @param {string} accountHashOrAddress - Account hash or address
-   * @returns {Promise<boolean>} True if an execution is active
-   * @throws {Error} If RPC call fails
-   */
-  async getIsExecutionActive(accountHashOrAddress) {
-    const accountId = normalizeAddress(accountHashOrAddress);
-    const script = sc.createScript({
-      scriptHash: this.masterContractHash,
-      operation: 'isExecutionActive',
-      args: [{ type: 'Hash160', value: accountId }],
+      args: [H(newCustody)],
     });
-
-    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return response?.stack?.[0]?.value === true || response?.stack?.[0]?.value === 1;
   }
 
-  // ========================================================================
-  // Paymaster / Sponsored Transactions
-  // ========================================================================
-
-  /**
-   * Creates the payload for executing a sponsored UserOperation via Paymaster.
-   * The relay (transaction sender) is reimbursed from the sponsor's deposit.
-   * Args accept typed DTOs or ContractParam instances. Plain ByteArray values
-   * must be 0x hex or unambiguous canonical base64; bare hex is rejected.
-   * The result is a relay DTO (hex ByteArray), not direct Neo RPC JSON.
-   *
-   * @param {Object} options - Sponsored operation options
-   * @param {string} [options.accountScriptHash] - Account script hash (40 hex)
-   * @param {string} [options.accountAddress] - Account address (alternative)
-   * @param {Object} options.userOp - The UserOperation object (from UserOperationBuilder.build())
-   * @param {string} options.paymasterHash - Paymaster contract hash (40 hex)
-   * @param {string} options.sponsorAddress - Sponsor address or hash
-   * @param {string|number} options.reimbursementAmount - GAS reimbursement in fractions (10^8 = 1 GAS)
-   * @returns {Object} Contract invocation payload for executeSponsoredUserOp
-   * @throws {Error} If required parameters are missing
-   */
-  createSponsoredUserOpPayload(options) {
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-      userOp,
-      paymasterHash,
-      sponsorAddress,
-      reimbursementAmount,
-    } = options || {};
-
-    if (!userOp) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'userOp is required' });
-    }
-    if (!paymasterHash) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'paymasterHash is required' });
-    }
-    if (!sponsorAddress) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'sponsorAddress is required' });
-    }
-    if (!reimbursementAmount || reimbursementAmount <= 0) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'reimbursementAmount must be positive' });
-    }
-
-    validateHash160(paymasterHash);
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'executeSponsoredUserOp',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-        sponsoredUserOpParameter(userOp, 2),
-        sc.ContractParam.hash160(normalizeAddress(paymasterHash)),
-        sc.ContractParam.hash160(normalizeAddress(sponsorAddress)),
-        sc.ContractParam.integer(reimbursementAmount),
-      ],
-    };
+  cancelRecovery(accountId) {
+    return this.buildAccountActionScript({ method: 'cancelRecovery', accountId });
   }
 
-  /**
-   * Creates the payload for executing a sponsored batch of UserOperations.
-   *
-   * @param {Object} options - Sponsored batch options
-   * @param {string} [options.accountScriptHash] - Account script hash
-   * @param {string} [options.accountAddress] - Account address
-   * @param {Array<Object>} options.userOps - Array of UserOperation objects
-   * @param {string} options.paymasterHash - Paymaster contract hash
-   * @param {string} options.sponsorAddress - Sponsor address
-   * @param {string|number} options.reimbursementAmount - Total GAS reimbursement for the batch
-   * @returns {Object} Contract invocation payload for executeSponsoredUserOps
-   */
-  createSponsoredBatchPayload(options) {
-    const {
-      accountScriptHash = '',
-      accountAddress = '',
-      userOps,
-      paymasterHash,
-      sponsorAddress,
-      reimbursementAmount,
-    } = options || {};
-
-    if (!userOps || !Array.isArray(userOps) || userOps.length === 0) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'userOps array is required' });
-    }
-    if (!paymasterHash) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'paymasterHash is required' });
-    }
-    if (!sponsorAddress) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'sponsorAddress is required' });
-    }
-    if (!reimbursementAmount || reimbursementAmount <= 0) {
-      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'reimbursementAmount must be positive' });
-    }
-
-    validateHash160(paymasterHash);
-
-    const resolvedAccountHash = accountScriptHash
-      ? normalizeAddress(accountScriptHash)
-      : normalizeAddress(accountAddress);
-
-    const opsArray = userOps.map(op => sponsoredUserOpParameter(op, 3));
-
-    return {
-      scriptHash: this.masterContractHash,
-      operation: 'executeSponsoredUserOps',
-      args: [
-        sc.ContractParam.hash160(resolvedAccountHash),
-        { type: 'Array', value: opsArray },
-        sc.ContractParam.hash160(normalizeAddress(paymasterHash)),
-        sc.ContractParam.hash160(normalizeAddress(sponsorAddress)),
-        sc.ContractParam.integer(reimbursementAmount),
-      ],
-    };
+  executeRecovery(accountId) {
+    return this.buildAccountActionScript({ method: 'executeRecovery', accountId });
   }
 
-  /**
-   * Queries the sponsor's GAS deposit balance in a Paymaster contract.
-   *
-   * @param {string} paymasterHash - Paymaster contract hash (40 hex)
-   * @param {string} sponsorAddress - Sponsor address or hash
-   * @returns {Promise<string>} Deposit balance in GAS fractions (BigInteger string)
-   */
-  async querySponsorBalance(paymasterHash, sponsorAddress) {
-    validateHash160(paymasterHash);
-
-    const script = sc.createScript({
-      scriptHash: sanitizeHex(paymasterHash),
-      operation: 'getSponsorDeposit',
-      args: [{ type: 'Hash160', value: normalizeAddress(sponsorAddress) }],
+  revokeCredentials(accountId, moduleId) {
+    return this.buildAccountActionScript({
+      method: 'revokeCredentials',
+      accountId,
+      args: [codec.integerValue(codec.unsigned(moduleId, 64, 'module id'))],
     });
-
-    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-
-    if (response?.state === 'FAULT') {
-      throw createError(EC.CONTRACT_VM_FAULT, { exception: response.exception });
-    }
-
-    return response?.stack?.[0]?.value || '0';
   }
 
   /**
-   * Validates whether a sponsored operation would be accepted by the Paymaster.
-   * Use for relay preflight checks before submitting a transaction.
-   *
-   * @param {Object} options - Validation options
-   * @param {string} options.paymasterHash - Paymaster contract hash
-   * @param {string} options.sponsorAddress - Sponsor address
-   * @param {string} options.accountAddress - Account address or hash
-   * @param {string} options.targetContract - Target contract hash
-   * @param {string} options.method - Target method name
-   * @param {string|number} options.reimbursementAmount - Requested reimbursement
-   * @returns {Promise<boolean>} True if the operation would be accepted
+   * A custom custody-gated action (`setMetadataUri`, escrow enter/cancel).
+   * The review recipe name is part of the plan's provenance, so it is rebuilt
+   * by the same method that produced it.
    */
-  async validatePaymasterOp(options) {
-    const {
-      paymasterHash,
-      sponsorAddress,
-      accountAddress,
-      targetContract,
+  buildCustomActionScript({ method, accountId, args = [] }) {
+    if (!CUSTODY_ACTIONS.includes(method)) {
+      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
+        hint: `${method} is not a custody-authorised custom action`,
+      });
+    }
+    const id = codec.hex(accountId, 20);
+    return freeze({
+      kind: 'account',
       method,
-      reimbursementAmount,
-    } = options || {};
-
-    validateHash160(paymasterHash);
-
-    const script = sc.createScript({
-      scriptHash: sanitizeHex(paymasterHash),
-      operation: 'validatePaymasterOp',
-      args: [
-        { type: 'Hash160', value: normalizeAddress(sponsorAddress) },
-        { type: 'Hash160', value: normalizeAddress(accountAddress) },
-        { type: 'Hash160', value: normalizeAddress(targetContract) },
-        { type: 'String', value: method },
-        { type: 'Integer', value: String(reimbursementAmount) },
-      ],
+      accountId: id,
+      accountAddress: this.proxyAddress(id),
+      signers: [this.proxyAddress(id)],
+      script: codec.dynamicCall(this.contractHash, method, [H(id), ...args]),
     });
-
-    const response = await this.invokeScriptWithRetry(u.HexString.fromHex(script), []);
-
-    if (response?.state === 'FAULT') {
-      return false;
-    }
-
-    return decodeStackBoolean(response?.stack?.[0]);
   }
+
+  setMetadataUri(accountId, metadataUri) {
+    return this.buildCustomActionScript({
+      method: 'setMetadataUri',
+      accountId,
+      args: [codec.stringValue(metadataUri)],
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Market escrow state (writes belong to the market contract, §7.5)
+  // ---------------------------------------------------------------------
+
+  async getMarketEscrow(accountId) {
+    await this._ready();
+    const [contract, listingId, active] = await Promise.all([
+      this._read('getMarketEscrowContract', [H(accountId)]),
+      this._read('getMarketEscrowListingId', [H(accountId)]),
+      this._read('isMarketEscrowActive', [H(accountId)]),
+    ]);
+    return freeze({
+      marketContract: asHash(contract, 'market contract'),
+      listingId: asUint(listingId, 'listing id'),
+      active: active === true,
+    });
+  }
+
+  async isMarketService(marketContract) {
+    await this._ready();
+    return (await this._read('isMarketService', [H(marketContract)])) === true;
+  }
+
+  // ---------------------------------------------------------------------
+  // Platform registrar (registrar/admin-sourced; ids stay v3-stable)
+  // ---------------------------------------------------------------------
+
+  async computePlatformAccountId({ appBinding, backupOwner, escapeTimelock }) {
+    await this._ready();
+    return asHash(
+      await this._read('computePlatformAccountId', [
+        codec.byteStringValue(appBinding),
+        H(backupOwner),
+        codec.integerValue(codec.unsigned(escapeTimelock, 64, 'escape timelock')),
+      ]),
+      'platform account id',
+    );
+  }
+
+  async computeStablePlatformAccountId({ appBinding, escapeTimelock }) {
+    await this._ready();
+    return asHash(
+      await this._read('computeStablePlatformAccountId', [
+        codec.byteStringValue(appBinding),
+        codec.integerValue(codec.unsigned(escapeTimelock, 64, 'escape timelock')),
+      ]),
+      'stable platform account id',
+    );
+  }
+
+  async getPlatformAccountBinding(accountId) {
+    await this._ready();
+    const binding = await this._read('getPlatformAccountBinding', [H(accountId)]);
+    return binding === null ? null : asBytes(binding, 'platform binding').toString('hex');
+  }
+
+  async getAccountIdByProxy(proxy) {
+    await this._ready();
+    return asHash(await this._read('getAccountIdByProxy', [H(proxy)]), 'account id');
+  }
+
+  async getProxyScriptHash(accountId) {
+    await this._ready();
+    return asHash(await this._read('getProxyScriptHash', [H(accountId)]), 'proxy script hash');
+  }
+
+  async getPlatformRegistrar() {
+    await this._ready();
+    return asHash(await this._read('getPlatformRegistrar'), 'platform registrar');
+  }
+
+  async getPendingPlatformRegistrar() {
+    await this._ready();
+    return asHash(await this._read('getPendingPlatformRegistrar'), 'pending registrar');
+  }
+
+  async getPlatformRegistrarAvailableAt() {
+    await this._ready();
+    return asUint(await this._read('getPlatformRegistrarAvailableAt'), 'registrar maturity');
+  }
+
+  // ---------------------------------------------------------------------
+  // Metadata, migration and sponsored execution
+  // ---------------------------------------------------------------------
+
+  async getMetadataUri(accountId) {
+    await this._ready();
+    return asText(await this._read('getMetadataUri', [H(accountId)]), 'metadata uri');
+  }
+
+  async isMigrationRequired(accountId) {
+    await this._ready();
+    return (await this._read('isMigrationRequired', [H(accountId)])) === true;
+  }
+
+  async getMigrationState(accountId) {
+    await this._ready();
+    const state = asArray(await this._read('getMigrationState', [H(accountId)]), 'migration state');
+    if (state.length !== 6) {
+      throw createError(EC.CONTRACT_INVOCATION_FAILED, { hint: 'malformed migration state' });
+    }
+    return freeze({
+      status: asUint(state[0], 'migration status'),
+      manifestDigest: asBytes(state[1], 'manifest digest').toString('hex'),
+      classification: asText(state[2], 'classification'),
+      legacyModuleCount: asUint(state[3], 'legacy module count'),
+      legacyScopeInvalidated: state[4] === true,
+      importedAt: asUint(state[5], 'imported time'),
+    });
+  }
+
+  /**
+   * Sponsored execution keeps the v4 operation: the sponsor pays, the account
+   * still authorises the operation with its own validator signature.
+   */
+  buildSponsoredExecutionScript({
+    accountId,
+    operations,
+    paymaster,
+    sponsor,
+    reimbursementAmount,
+  }) {
+    const list = Array.isArray(operations) ? operations : [operations];
+    if (list.length < 1 || list.length > 32) {
+      throw createError(EC.OPERATION_BATCH_EMPTY, { hint: '1..32 operations required' });
+    }
+    if (codec.unsigned(reimbursementAmount, 63, 'reimbursement') === 0n) {
+      // The core requires a positive reimbursement (`> 0`, not `>= 0`).
+      throw createError(EC.VALIDATION_OPTIONS_REQUIRED, { hint: 'reimbursement must be positive' });
+    }
+    // The core settles one reimbursement for the whole envelope against the
+    // first operation's target and method, so a mixed batch would revert.
+    const target = codec.hex(list[0]?.targetContract, 20);
+    const callMethod = String(list[0]?.method ?? '');
+    for (const operation of list) {
+      if (
+        codec.hex(operation?.targetContract, 20) !== target ||
+        String(operation?.method ?? '') !== callMethod
+      ) {
+        throw createError(EC.VALIDATION_OPTIONS_REQUIRED, {
+          hint: 'sponsored batches must share one target contract and method',
+        });
+      }
+    }
+    const id = codec.hex(accountId, 20);
+    const method = list.length === 1 ? 'executeSponsoredUserOp' : 'executeSponsoredUserOps';
+    const values = list.map((operation) => codec.operationValue(operation));
+    return freeze({
+      kind: 'execution',
+      method,
+      accountId: id,
+      accountAddress: this.proxyAddress(id),
+      proxyCallFlags: this.callFlags,
+      batch: list.length !== 1,
+      operations: Object.freeze([...list]),
+      signers: [this.proxyAddress(id)],
+      paymaster: codec.hex(paymaster, 20),
+      sponsor: codec.hex(sponsor, 20),
+      reimbursementAmount: codec.unsigned(reimbursementAmount, 63, 'reimbursement').toString(),
+      script: codec.dynamicCall(this.contractHash, method, [
+        H(id),
+        list.length === 1 ? values[0] : { type: 'Array', value: values },
+        H(paymaster),
+        H(sponsor),
+        codec.integerValue(codec.unsigned(reimbursementAmount, 63, 'reimbursement')),
+      ]),
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Transaction lifecycle (shared with the native client)
+  // ---------------------------------------------------------------------
+
+  prepareTransaction(plan, options) {
+    return transactionTools.prepareNativeTransaction(this, plan, options);
+  }
+
+  signTransaction(prepared) {
+    return transactionTools.signNativeTransaction(this, prepared);
+  }
+
+  exportSignedTransaction(signed) {
+    return transactionTools.exportSignedTransaction(this, signed);
+  }
+
+  preflightTransaction(signed) {
+    return transactionTools.preflightNativeTransaction(this, signed);
+  }
+
+  broadcastTransaction(signed) {
+    return transactionTools.broadcastNativeTransaction(this, signed);
+  }
+
+  getTransactionReceipt(signed) {
+    return transactionTools.getNativeTransactionReceipt(this, signed);
+  }
+}
+
+/**
+ * @param {Object} options - see {@link SmartAccountClient}
+ * @returns {SmartAccountClient}
+ */
+function createSmartAccountClient(options) {
+  return new SmartAccountClient(options);
 }
 
 module.exports = {
   SmartAccountClient,
-  ...require('./native'),
-  ...require('./proxyWitness'),
-  ...require('./multisig'),
-  // Meta-tx exports
-  buildMetaTransactionTypedData: metaTxExports.buildMetaTransactionTypedData,
-  buildV3UserOperationTypedData: metaTxExports.buildV3UserOperationTypedData,
-  buildContractCompatibleStructHash: metaTxExports.buildContractCompatibleStructHash,
-  buildContractCompatibleDomainSeparator: metaTxExports.buildContractCompatibleDomainSeparator,
-  buildWeb3AuthSigningPayload: metaTxExports.buildWeb3AuthSigningPayload,
-  decodeByteStringStackHex: metaTxExports.decodeByteStringStackHex,
-  toBytes20Word: metaTxExports.toBytes20Word,
-  toAddressWord: metaTxExports.toAddressWord,
-  toUint256Word: metaTxExports.toUint256Word,
-  sanitizeHex: metaTxExports.sanitizeHex,
-  // Token transfer result rules (shared with the relay route and the wallet)
+  createSmartAccountClient,
+  // Protocol identity
+  codec,
+  PROTOCOL_VERSION,
+  CUSTOM_PROXY_CALL_FLAGS,
+  CUSTOM_IMPLEMENTATION_ID,
+  CUSTOM_REQUIRED_ABI,
+  NATIVE_REQUIRED_ABI,
+  NATIVE_REQUIRED_EVENTS,
+  normalizeAddress,
+  // Operations
+  UserOperationBuilder: require('./UserOpBuilder').UserOperationBuilder,
+  createUserOpBuilder: require('./UserOpBuilder').createUserOpBuilder,
+  // Signing surfaces
+  ...metaTx,
+  // Errors
+  EC,
+  SA_ERRORS,
+  SA_ERROR_CODES,
+  createError,
+  mapRpcError,
+  formatError,
+  // Transfer result rules (shared with the relay route and the wallet)
   TRANSFER_RETURNED_FALSE: transferOutcome.TRANSFER_RETURNED_FALSE,
   TRANSFER_RETURNED_FALSE_MESSAGE: transferOutcome.TRANSFER_RETURNED_FALSE_MESSAGE,
   findFailedTransferInInvocation: transferOutcome.findFailedTransferInInvocation,
   findFailedTransferInExecution: transferOutcome.findFailedTransferInExecution,
   isProxySourcedTransfer: transferOutcome.isProxySourcedTransfer,
-  // Export new modules
-  EC,
-  createError,
-  mapRpcError,
-  formatError,
-  UserOperationBuilder: require('./UserOpBuilder').UserOperationBuilder,
-  createUserOpBuilder: require('./UserOpBuilder').createUserOpBuilder,
-  simulateUserOperation: require('./simulation').simulateUserOperation,
-  preFlightCheck: require('./simulation').preFlightCheck,
-  // ERC-4337 shape adapters (shape mapping + simulateValidation-style preflight)
-  toErc4337UserOperation: require('./erc4337').toErc4337UserOperation,
-  estimateUserOperationGas: require('./erc4337').estimateUserOperationGas,
-  // Session-key registration blob (shared layout with the live validators)
-  buildSessionKeyRegistrationBlob: sessionKeyBlob.buildSessionKeyRegistrationBlob,
+  // Session-key installation blob (shared layout with the session validator)
+  buildSessionKeyInstallCommand: sessionKeyBlob.buildSessionKeyInstallCommand,
+  buildSessionKeyClearCommand: sessionKeyBlob.buildSessionKeyClearCommand,
   buildSessionKeyPermission: sessionKeyBlob.buildSessionKeyPermission,
-  SESSION_KEY_BLOB_VERSION: sessionKeyBlob.SESSION_KEY_BLOB_VERSION,
+  SESSION_KEY_INSTALL_COMMAND: sessionKeyBlob.SESSION_KEY_INSTALL_COMMAND,
+  SESSION_KEY_CLEAR_COMMAND: sessionKeyBlob.SESSION_KEY_CLEAR_COMMAND,
   MAX_SESSION_KEY_DESCRIPTION_BYTES: sessionKeyBlob.MAX_SESSION_KEY_DESCRIPTION_BYTES,
   MAX_SESSION_DURATION_MS: sessionKeyBlob.MAX_SESSION_DURATION_MS,
-  // Retry utility
-  withRetry: require('./retry').withRetry,
-  isRetryableError: require('./retry').isRetryableError,
+  // Simulation and preflight: evidence for a review, never permission
+  ...require('./simulation'),
+  // Retry utility, one classification for every retry layer
+  withRetry,
+  isRetryableError,
+  ...require('./proxyWitness'),
+  ...require('./multisig'),
+  ...require('./native'),
 };

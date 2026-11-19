@@ -35,7 +35,7 @@ test("discovered account strings exist in both locales", () => {
     for (const key of [
       "discoveredRegisteredAccounts",
       "registeredAtBlock",
-      "verifierShort",
+      "validatorShort",
       "discoverNotConfigured",
       "discoverNotConfiguredHint",
       "noAccountsHint",

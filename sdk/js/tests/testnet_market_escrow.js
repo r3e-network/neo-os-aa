@@ -1,396 +1,451 @@
 #!/usr/bin/env node
+/**
+ * v4 testnet market escrow runbook.
+ *
+ * v3 listed an account by calling the market, which flipped a verifier/hook
+ * pair off at settlement. v4 escrows the account *control*: the market records
+ * a (market, listingId) binding at the account's control revision, and
+ * settlement sweeps every module instance, threshold policy, hook order,
+ * message-subject set, pending intent and nonce channel, rotates custody to the
+ * buyer and re-enables the built-in route — callback-free.
+ *
+ * That shift adds two admin gates the v3 runbook did not need:
+ *
+ * - the core must register the market (`setMarketService`) before the market
+ *   may drive `enterMarketEscrow`;
+ * - the market must allowlist the core (`setAllowedSA`) before it accepts a
+ *   listing.
+ *
+ * Both admins are the deploying wallet, so the runbook configures them right
+ * after deployment. The scenario then proves:
+ *
+ * 1. a module-backed account (TeeKeyValidator + WhitelistHook) lists itself;
+ * 2. the account stays operable while escrowed, and a second listing of the
+ *    same account is refused;
+ * 3. the buyer pays, settles, and receives a clean account: modules swept,
+ *    custody rotated, built-in route re-enabled;
+ * 4. the buyer can immediately operate with the built-in route while the
+ *    seller's old key no longer signs for the account.
+ *
+ * Runbooks are not gates: the v4 core is not deployed to a public testnet yet,
+ * so this script is exercised only against a local chain that carries the v4
+ * artifacts built by `bash contracts/compile.sh`.
+ */
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { rpc, sc, wallet, experimental, tx, u, CONST } = require('@cityofzion/neon-js');
-const { ethers } = require('ethers');
+const crypto = require("crypto");
+const { CONST, wallet } = require("@cityofzion/neon-js");
 
-const { extractDeployedContractHash } = require('../src/deployLog');
-const { SmartAccountClient } = require('../src/index');
-const { sanitizeHex } = require('../src/metaTx');
-const { resolveTestnetRpcUrl } = require('./testnet-rpc');
-
-let RPC_URL = process.env.TESTNET_RPC_URL || '';
-const TEST_WIF = process.env.TEST_WIF || '';
-
-if (!TEST_WIF) {
-  console.error('TEST_WIF is required.');
-  process.exit(1);
-}
+const h = require("./testnet-v4-harness");
 
 const GAS_HASH = CONST.NATIVE_CONTRACT_HASH.GasToken;
-const ZERO_HASH160 = '0000000000000000000000000000000000000000';
-const REGISTRATION_ESCAPE_TIMELOCK = 604800;
+const SALT_BYTES = 20;
+const LISTING_PRICE = 10_000_000n; // 0.1 GAS, above the market's 0.01 GAS floor
+const BUYER_FUNDING = 30_000_000n; // covers the price plus both network fees
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
 }
 
-function isRetryableRpcError(error) {
-  const message = error instanceof Error ? error.message : String(error || '');
-  return /socket hang up|ECONNRESET|ETIMEDOUT|fetch failed|network error|EAI_AGAIN|ECONNREFUSED|EADDRNOTAVAIL|socket disconnected before secure TLS connection was established|TLS connection was established|premature close|invalid response body/i.test(message);
+function saltHex() {
+  return crypto.randomBytes(SALT_BYTES).toString("hex");
 }
 
-async function withRpcRetry(label, fn, attempts = 5) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableRpcError(error) || attempt >= attempts) throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[rpc-retry] ${label} attempt ${attempt}/${attempts} failed: ${message}`);
-      await sleep(1500 * attempt);
-    }
-  }
-  throw lastError;
-}
-
-function repoRoot() {
-  return path.resolve(__dirname, '..', '..', '..');
-}
-
-function artifactPaths(baseName) {
+function nonceRouting(descriptor, validatorId = "0", credentialGeneration = "1") {
   return {
-    nef: path.join(repoRoot(), 'contracts', 'bin', 'public', `${baseName}.nef`),
-    manifest: path.join(repoRoot(), 'contracts', 'bin', 'public', `${baseName}.manifest.json`),
+    validatorId,
+    credentialGeneration,
+    authorityEpoch: descriptor.authorityEpoch,
+    nonceSubkey: "00".repeat(32),
   };
 }
 
-function loadArtifact(baseName, uniqueSuffix) {
-  const paths = artifactPaths(baseName);
-  const nef = sc.NEF.fromBuffer(fs.readFileSync(paths.nef));
-  const manifestJson = JSON.parse(fs.readFileSync(paths.manifest, 'utf8'));
-  manifestJson.name = `${manifestJson.name}-${uniqueSuffix}`;
-  const manifest = sc.ContractManifest.fromJson(manifestJson);
-  return { nef, manifest };
-}
-
-function normalizeHash(value) {
-  const hex = sanitizeHex(value || '');
-  return hex ? `0x${hex}` : '';
-}
-
-function buildConfig(account, networkMagic) {
-  return {
-    account,
-    networkMagic,
-    rpcAddress: RPC_URL,
-    blocksTillExpiry: 200,
-  };
-}
-
-function hash160Param(value) {
-  return sc.ContractParam.hash160(sanitizeHex(value));
-}
-
-function integerParam(value) {
-  return sc.ContractParam.integer(typeof value === 'bigint' ? value.toString() : String(value));
-}
-
-function stringParam(value) {
-  return sc.ContractParam.string(String(value));
-}
-
-function byteArrayParam(hexValue = '') {
-  return sc.ContractParam.byteArray(u.HexString.fromHex(sanitizeHex(hexValue), true));
-}
-
-function anyParam(value) {
-  return sc.ContractParam.any(value);
-}
-
-function makeSigner(scriptHash) {
-  return new tx.Signer({ account: scriptHash, scopes: tx.WitnessScope.CalledByEntry });
-}
-
-function makeCustomContractSigner(scriptHash, allowedContracts = []) {
-  return new tx.Signer({
-    account: scriptHash,
-    scopes: tx.WitnessScope.CustomContracts,
-    allowedContracts: allowedContracts.map((value) => sanitizeHex(value)),
-  });
-}
-
-async function waitForAppLog(client, txid, label, timeoutMs = 300000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const appLog = await client.getApplicationLog(txid);
-      if (appLog?.executions?.length) return appLog;
-    } catch (_) {}
-    await sleep(3000);
-  }
-  throw new Error(`${label}: timed out waiting for application log for ${txid}`);
-}
-
-function assertVmState(appLog, label, expected = 'HALT') {
-  const execution = appLog?.executions?.[0];
-  if (!execution) throw new Error(`${label}: missing execution log`);
-  const vmState = String(execution.vmstate || execution.state || '');
-  if (!vmState.includes(expected)) {
-    throw new Error(`${label}: expected ${expected}, got ${vmState} ${execution.exception || ''}`.trim());
-  }
-  return execution;
-}
-
-async function deployContract(client, account, networkMagic, baseName, uniqueSuffix) {
-  const { nef, manifest } = loadArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(
-    experimental.getContractHash(u.HexString.fromHex(account.scriptHash), nef.checksum, manifest.name)
-  );
-  const txid = await withRpcRetry(`deploy ${baseName}`, () => experimental.deployContract(nef, manifest, buildConfig(account, networkMagic)));
-  const appLog = await waitForAppLog(client, txid, `deploy ${baseName}`);
-  assertVmState(appLog, `deploy ${baseName}`, 'HALT');
-  return { txid, hash: normalizeHash(extractDeployedContractHash(appLog) || predictedHash), manifestName: manifest.name };
-}
-
-async function authorizeHook(client, coreHash, hookHash, account, networkMagic) {
-  return invokePersisted(client, hookHash, account, networkMagic, 'setAuthorizedCore', [
-    hash160Param(coreHash),
-  ]);
-}
-
-async function authorizeVerifier(client, coreHash, verifierHash, account, networkMagic) {
-  return invokePersisted(client, verifierHash, account, networkMagic, 'setAuthorizedCore', [
-    hash160Param(coreHash),
-  ]);
-}
-
-async function invokePersisted(client, contractHash, account, networkMagic, operation, params = [], signers = undefined) {
-  const contract = new experimental.SmartContract(sanitizeHex(contractHash), buildConfig(account, networkMagic));
-  const preview = await withRpcRetry(`${sanitizeHex(contractHash)}.${operation}.preview`, () => contract.testInvoke(operation, params, signers));
-  const systemFeeOverride = String(preview?.state || '').includes('FAULT')
-    ? u.BigInteger.fromDecimal('1', 8)
-    : u.BigInteger.fromDecimal(preview.gasconsumed, 0);
-  const txid = await withRpcRetry(
-    `${sanitizeHex(contractHash)}.${operation}.invoke`,
-    () => new experimental.SmartContract(
-      sanitizeHex(contractHash),
-      {
-        ...buildConfig(account, networkMagic),
-        systemFeeOverride,
-      }
-    ).invoke(operation, params, signers),
-  );
-  const appLog = await waitForAppLog(client, txid, operation);
-  assertVmState(appLog, operation, 'HALT');
-  return { txid, appLog };
-}
-
-async function invokeRead(client, contractHash, operation, params = [], signers = undefined) {
-  return withRpcRetry(`${sanitizeHex(contractHash)}.${operation}`, () => client.invokeFunction(sanitizeHex(contractHash), operation, params, signers));
-}
-
-function decodeHash160(item) {
-  if (!item) return '';
-  if (item.type === 'Hash160') return normalizeHash(item.value);
-  if (item.type === 'ByteString') return normalizeHash(u.reverseHex(Buffer.from(item.value || '', 'base64').toString('hex')));
-  return '';
-}
-
-function decodeInteger(item) {
-  if (!item) return '0';
-  if (item.type === 'Integer') return String(item.value || '0');
-  if (item.type === 'ByteString') return String(BigInt(`0x${Buffer.from(item.value || '', 'base64').toString('hex') || '0'}`));
-  return '0';
-}
-
-async function invokeMultiPersisted(client, account, networkMagic, calls = [], signers = undefined) {
-  const builder = new sc.ScriptBuilder();
-  for (const call of calls) {
-    builder.emitAppCall(sanitizeHex(call.scriptHash), call.operation, call.args || []);
-  }
-  const scriptHex = builder.build();
-  const transaction = new tx.Transaction();
-  transaction.script = u.HexString.fromHex(scriptHex);
-  await experimental.txHelpers.setBlockExpiry(transaction, buildConfig(account, networkMagic), 200);
-  transaction.signers = signers && signers.length > 0 ? signers : [makeSigner(account.scriptHash)];
-  const preview = await withRpcRetry('rpc.invokeScript', () => client.invokeScript(scriptHex, transaction.signers)).catch(() => null);
-  if (preview && !String(preview?.state || '').includes('FAULT')) {
-    transaction.systemFee = u.BigInteger.fromDecimal(preview.gasconsumed, 0);
-  } else {
-    transaction.systemFee = u.BigInteger.fromDecimal('1', 8);
-  }
-  await experimental.txHelpers.addFees(transaction, buildConfig(account, networkMagic));
-  transaction.sign(account, networkMagic);
-  const txid = await withRpcRetry('rpc.sendRawTransaction', () => client.sendRawTransaction(transaction));
-  const appLog = await waitForAppLog(client, txid, 'invokeMulti');
-  assertVmState(appLog, 'invokeMulti', 'HALT');
-  return { txid, appLog };
-}
-
-function randomAccountId() {
-  return Buffer.from(ethers.randomBytes(20)).toString('hex');
-}
-
-function validationRunId() {
-  return (process.env.SA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString('hex')}`).toLowerCase();
+/**
+ * A TeeKeyValidator operation: the signature field is the module's own
+ * `keyId ‖ r‖s` DTO, so the runbook reads the key id from the module instead of
+ * recomputing it, and signs the §4.3 digest with the custody key the module was
+ * installed with.
+ */
+async function signTeeOperation(chain, core, tee, { accountId, moduleId, keyId, operation: op }) {
+  const digest = h.operationDigest(chain, core.hash, accountId, op);
+  const signature = wallet.sign(digest, chain.account.privateKey);
+  return { ...op, validatorId: moduleId, signature: `${keyId}${signature}` };
 }
 
 async function main() {
-  RPC_URL = await resolveTestnetRpcUrl({ env: process.env });
-  const seller = new wallet.Account(TEST_WIF);
+  const chain = await h.connect();
+  const seller = chain.account;
+  const sellerHash = h.normalizeHash(seller.scriptHash);
   const buyer = new wallet.Account();
-  const client = new rpc.RPCClient(RPC_URL);
-  const version = await withRpcRetry('rpc.getVersion', () => client.getVersion());
-  const networkMagic = Number(version.protocol.network);
-  const deploymentTag = process.env.SA_VALIDATION_DEPLOY_TAG || `validation-market-escrow-${validationRunId()}`;
-  const price = 10000000n;
 
   console.log(JSON.stringify({
-    rpc: RPC_URL,
-    networkMagic,
-    seller: { address: seller.address, scriptHash: normalizeHash(seller.scriptHash) },
-    buyer: { address: buyer.address, scriptHash: normalizeHash(buyer.scriptHash) },
+    rpc: chain.rpcUrl,
+    networkMagic: chain.networkMagic,
+    runId: chain.runId,
+    seller: { address: seller.address, scriptHash: sellerHash },
+    buyer: { address: buyer.address, scriptHash: h.normalizeHash(buyer.scriptHash) },
   }, null, 2));
 
-  const core = await deployContract(client, seller, networkMagic, 'SmartAccount', `${deploymentTag}-core`);
-  const market = await deployContract(client, seller, networkMagic, 'SAAddressMarket', `${deploymentTag}-market`);
-  const teeVerifier = await deployContract(client, seller, networkMagic, 'TEEVerifier', `${deploymentTag}-tee`);
-  const whitelistHook = await deployContract(client, seller, networkMagic, 'WhitelistHook', `${deploymentTag}-whitelist`);
-  await authorizeVerifier(client, core.hash, teeVerifier.hash, seller, networkMagic);
-  await authorizeHook(client, core.hash, whitelistHook.hash, seller, networkMagic);
+  // -------------------------------------------------------------------------
+  // Deployment and the two admin allowlists the v4 escrow requires.
+  // -------------------------------------------------------------------------
 
-  const saClient = new SmartAccountClient(RPC_URL, core.hash);
-  const accountId = saClient.deriveRegistrationAccountIdHash({
-    verifierContractHash: teeVerifier.hash,
-    verifierParamsHex: sanitizeHex(seller.publicKey),
-    hookContractHash: whitelistHook.hash,
-    backupOwnerAddress: seller.scriptHash,
-    escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
-  });
+  h.logSection("Deploy Contracts");
+  const core = await h.deployCore(chain);
+  const market = await h.deployContract(chain, "SAAddressMarket", `${chain.deploymentTag}-market`);
+  const tee = await h.deployModule(chain, core.hash, "validators/TeeKeyValidator");
+  const whitelist = await h.deployModule(chain, core.hash, "hooks/WhitelistHook");
 
-  await invokePersisted(client, core.hash, seller, networkMagic, 'registerAccount', [
-    hash160Param(accountId),
-    hash160Param(teeVerifier.hash),
-    byteArrayParam(sanitizeHex(seller.publicKey)),
-    hash160Param(whitelistHook.hash),
-    hash160Param(seller.scriptHash),
-    integerParam(REGISTRATION_ESCAPE_TIMELOCK),
-  ], [makeSigner(seller.scriptHash)]);
-
-  const hookConfigRequest = await invokePersisted(client, core.hash, seller, networkMagic, 'callHook', [
-    hash160Param(accountId),
-    stringParam('setWhitelist'),
-    sc.ContractParam.array(
-      hash160Param(accountId),
-      hash160Param(GAS_HASH),
-      sc.ContractParam.boolean(true),
-    ),
-  ], [makeSigner(seller.scriptHash)]);
-
-  const verifierBeforeSale = await invokeRead(client, teeVerifier.hash, 'getPublicKey', [hash160Param(accountId)]);
-  const hookStateBeforeSale = await invokeRead(client, whitelistHook.hash, 'isWhitelisted', [hash160Param(accountId), hash160Param(GAS_HASH)]);
-  if (!Buffer.from(verifierBeforeSale?.stack?.[0]?.value || '', 'base64').length) {
-    throw new Error('verifier state should exist before sale');
-  }
-  console.log(JSON.stringify({
-    hookConfigRequest: hookConfigRequest.txid,
-    hookConfigResult: hookConfigRequest.execution?.stack?.[0] || null,
-    hookStateBeforeSale: hookStateBeforeSale?.stack?.[0]?.value ?? null,
-    note: 'WhitelistHook configuration is timelocked on V3, so the first callHook(setWhitelist) only records a pending maintenance request.',
-  }, null, 2));
-
-  await invokePersisted(client, market.hash, seller, networkMagic, 'createListing', [
-    hash160Param(core.hash),
-    hash160Param(accountId),
-    integerParam(price),
-    stringParam('testnet escrow smoke'),
-    stringParam(''),
-  ], [makeCustomContractSigner(seller.scriptHash, [market.hash, core.hash])]);
-
-  const escrowActive = await invokeRead(client, core.hash, 'isMarketEscrowActive', [hash160Param(accountId)]);
-  if (escrowActive?.stack?.[0]?.value !== true) {
-    throw new Error('escrow should be active after listing');
-  }
-
-  const lockedUpdate = await invokeRead(
-    client,
+  // The core admin is the deploying wallet, so both allowlists are written by
+  // the same transaction signer that deployed the contracts.
+  const sellerSigner = h.makeCustomContractSigner(seller.scriptHash, [market.hash, core.hash]);
+  const marketService = await h.invokePersisted(
+    chain,
     core.hash,
-    'updateHook',
-    [hash160Param(accountId), hash160Param(ZERO_HASH160)],
-    [makeSigner(seller.scriptHash)]
+    "setMarketService",
+    [h.hash160Param(market.hash), h.boolParam(true)],
+    [h.makeSigner(seller.scriptHash)],
   );
-  if (!String(lockedUpdate?.state || '').includes('FAULT')) {
-    throw new Error('updateHook should fault while escrow is active');
-  }
-
-  await invokePersisted(client, GAS_HASH, seller, networkMagic, 'transfer', [
-    hash160Param(seller.scriptHash),
-    hash160Param(buyer.scriptHash),
-    integerParam(30000000n),
-    anyParam(null),
-  ], [makeSigner(seller.scriptHash)]);
-
-  await invokeMultiPersisted(client, buyer, networkMagic, [
-    {
-      scriptHash: GAS_HASH,
-      operation: 'transfer',
-      args: [
-        hash160Param(buyer.scriptHash),
-        hash160Param(market.hash),
-        integerParam(price),
-        integerParam(1),
-      ],
-    },
-    {
-      scriptHash: market.hash,
-      operation: 'settleListing',
-      args: [
-        integerParam(1),
-        hash160Param(buyer.scriptHash),
-        hash160Param(buyer.scriptHash),
-      ],
-    },
-  ], [makeSigner(buyer.scriptHash)]);
-
-  const listing = await invokeRead(client, market.hash, 'getListing', [integerParam(1)]);
-  const listingArray = listing?.stack?.[0]?.value || [];
-  const status = decodeInteger(listingArray[7]);
-  const buyerRecorded = decodeHash160(listingArray[8]);
-  const backupOwner = await invokeRead(client, core.hash, 'getBackupOwner', [hash160Param(accountId)]);
-  const verifierAfterSale = await invokeRead(client, core.hash, 'getVerifier', [hash160Param(accountId)]);
-  const hookAfterSale = await invokeRead(client, core.hash, 'getHook', [hash160Param(accountId)]);
-  const escrowAfter = await invokeRead(client, core.hash, 'isMarketEscrowActive', [hash160Param(accountId)]);
-
-  if (status !== '2') {
-    throw new Error(`listing should be sold, got status=${status}`);
-  }
-  if (buyerRecorded !== normalizeHash(buyer.scriptHash)) {
-    throw new Error(`listing buyer mismatch: ${buyerRecorded}`);
-  }
-  if (decodeHash160(backupOwner?.stack?.[0]) !== normalizeHash(buyer.scriptHash)) {
-    throw new Error('backup owner did not rotate to buyer');
-  }
-  if (decodeHash160(verifierAfterSale?.stack?.[0]) !== normalizeHash(ZERO_HASH160)) {
-    throw new Error('verifier should be cleared after sale');
-  }
-  if (decodeHash160(hookAfterSale?.stack?.[0]) !== normalizeHash(ZERO_HASH160)) {
-    throw new Error('hook should be cleared after sale');
-  }
-  if (escrowAfter?.stack?.[0]?.value !== false) {
-    throw new Error('escrow should be cleared after settlement');
-  }
-
+  const allowedCore = await h.invokePersisted(
+    chain,
+    market.hash,
+    "setAllowedSA",
+    [h.hash160Param(core.hash), h.boolParam(true)],
+    [h.makeSigner(seller.scriptHash)],
+  );
+  const marketRegistered = await h.readAndDecode(chain, core.hash, "isMarketService", [h.hash160Param(market.hash)]);
+  const coreAllowed = await h.readAndDecode(chain, market.hash, "isAllowedSA", [h.hash160Param(core.hash)]);
+  assert(marketRegistered?.value === true, "core did not register the market service");
+  assert(coreAllowed?.value === true, "market did not allowlist the core");
   console.log(JSON.stringify({
     core,
     market,
-    teeVerifier,
-    whitelistHook,
-    listingId: 1,
-    accountId: normalizeHash(accountId),
-    buyerRecorded,
-    backupOwner: decodeHash160(backupOwner?.stack?.[0]),
-    verifierAfterSale: decodeHash160(verifierAfterSale?.stack?.[0]),
-    hookAfterSale: decodeHash160(hookAfterSale?.stack?.[0]),
+    tee,
+    whitelist,
+    marketService: marketService.txid,
+    allowedCore: allowedCore.txid,
+    marketRegistered: marketRegistered.value,
+    coreAllowed: coreAllowed.value,
+  }, null, 2));
+
+  const sdk = h.clientFor(chain, core.hash);
+
+  // -------------------------------------------------------------------------
+  // A module-backed account for sale: enclave-key validator + whitelist hook.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Register Module-Backed Account");
+  const accountIdSalt = saltHex();
+  const validatorInstall = await h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: tee.hash,
+    initData: [h.codec.stringValue("setPublicKey"), h.codec.byteStringValue(seller.publicKey)],
+  });
+  const hookInstall = await h.installActionFor(chain, {
+    moduleType: h.HOOK_MODULE_TYPE,
+    moduleHash: whitelist.hash,
+    initData: [h.codec.stringValue("allowTarget"), h.codec.hashValue(GAS_HASH)],
+  });
+  const account = await h.createAccount(chain, sdk, {
+    custody: seller,
+    salt: accountIdSalt,
+    actions: [validatorInstall, hookInstall],
+  });
+  const accountId = account.accountId;
+  const descriptor = await sdk.getAccount(accountId);
+  assert(descriptor.defaultOperationAuthorization === false, "installing a validator must turn the built-in route off");
+
+  const validatorModules = await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE);
+  const hookModules = await h.moduleIds(sdk, accountId, h.HOOK_MODULE_TYPE);
+  assert(validatorModules.moduleIds.length === 1, "expected exactly one validator instance");
+  assert(hookModules.moduleIds.length === 1, "expected exactly one hook instance");
+  const validatorId = validatorModules.moduleIds[0];
+  const validatorRecord = await h.moduleState(sdk, accountId, validatorId);
+  const keyIdItem = await h.readAndDecode(chain, tee.hash, "getKeyId", [
+    h.hash160Param(accountId),
+    h.integerParam(validatorId),
+  ]);
+  const keyId = Buffer.from(keyIdItem?.value || "", "base64").toString("hex");
+  assert(keyId.length === 64, "the validator did not publish a key id for its configured key");
+  console.log(JSON.stringify({
+    txid: account.txid,
+    accountId: h.normalizeHash(accountId),
+    virtualAddress: account.accountAddress,
+    validatorId,
+    hookId: hookModules.moduleIds[0],
+    keyId,
+    defaultOperationAuthorization: descriptor.defaultOperationAuthorization,
+  }, null, 2));
+
+  h.logSection("Module Authorization Before Listing");
+  const preSaleNonce = await h.nextNonce(sdk, accountId, nonceRouting(descriptor, validatorId, validatorRecord.credentialGeneration));
+  const preSaleOp = await signTeeOperation(chain, core, tee, {
+    accountId,
+    moduleId: validatorId,
+    keyId,
+    operation: h.operation({
+      targetContract: GAS_HASH,
+      method: "symbol",
+      nonce: preSaleNonce,
+      validatorId,
+      credentialGeneration: validatorRecord.credentialGeneration,
+      authorityEpoch: descriptor.authorityEpoch,
+    }),
+  });
+  const preSaleExec = await h.executeOperation(chain, sdk, { accountId, operation: preSaleOp });
+  const preSaleResult = h.stackText(preSaleExec.appLog.executions[0].stack[0]);
+  assert(preSaleResult === "GAS", `validator route returned ${preSaleResult}, expected GAS`);
+  console.log(JSON.stringify({ txid: preSaleExec.txid, result: preSaleResult }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // Listing: the market drives the core's escrow entry.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Create Listing");
+  const createListing = await h.invokePersisted(
+    chain,
+    market.hash,
+    "createListing",
+    [
+      h.hash160Param(core.hash),
+      h.hash160Param(accountId),
+      h.integerParam(LISTING_PRICE),
+      h.stringParam("testnet escrow smoke"),
+      h.stringParam(""),
+    ],
+    [sellerSigner],
+  );
+  const listingCountItem = await h.readAndDecode(chain, market.hash, "getListingCount");
+  const listingId = Number(h.decodeInteger(listingCountItem));
+  const escrowActive = await h.readAndDecode(chain, core.hash, "isMarketEscrowActive", [h.hash160Param(accountId)]);
+  const escrowed = await sdk.getAccount(accountId);
+  assert(escrowActive?.value === true, "the core does not report an active escrow after listing");
+  assert(escrowed.marketEscrowActive === true, "the account descriptor does not report the escrow marker");
+  console.log(JSON.stringify({
+    txid: createListing.txid,
+    listingId,
+    escrowActive: escrowActive.value,
+    marketEscrowActive: escrowed.marketEscrowActive,
+    controlRevision: escrowed.controlRevision,
+  }, null, 2));
+
+  h.logSection("Second Listing Refused While Escrowed");
+  const doubleListing = await h.testInvoke(
+    chain,
+    market.hash,
+    "createListing",
+    [
+      h.hash160Param(core.hash),
+      h.hash160Param(accountId),
+      h.integerParam(LISTING_PRICE),
+      h.stringParam("duplicate"),
+      h.stringParam(""),
+    ],
+    [sellerSigner],
+  );
+  assert(String(doubleListing.state || "").includes("FAULT"), "a second listing of an escrowed account should fault");
+  assert(
+    /market escrow|SA_MARKET_LOCKED/i.test(String(doubleListing.exception || "")),
+    `second listing faulted for another reason: ${doubleListing.exception}`,
+  );
+  console.log(JSON.stringify({
+    state: doubleListing.state,
+    exception: doubleListing.exception,
+  }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // Escrow must not freeze the account: modules keep authorizing while listed.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Module Authorization While Escrowed");
+  const duringEscrowNonce = await h.nextNonce(sdk, accountId, nonceRouting(escrowed, validatorId, validatorRecord.credentialGeneration));
+  const duringEscrowOp = await signTeeOperation(chain, core, tee, {
+    accountId,
+    moduleId: validatorId,
+    keyId,
+    operation: h.operation({
+      targetContract: GAS_HASH,
+      method: "symbol",
+      nonce: duringEscrowNonce,
+      validatorId,
+      credentialGeneration: validatorRecord.credentialGeneration,
+      authorityEpoch: escrowed.authorityEpoch,
+    }),
+  });
+  const duringEscrowExec = await h.executeOperation(chain, sdk, { accountId, operation: duringEscrowOp });
+  const duringEscrowResult = h.stackText(duringEscrowExec.appLog.executions[0].stack[0]);
+  assert(duringEscrowResult === "GAS", `escrowed account returned ${duringEscrowResult}, expected GAS`);
+  console.log(JSON.stringify({ txid: duringEscrowExec.txid, result: duringEscrowResult }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // Payment and settlement.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Fund Buyer");
+  const funding = await h.invokePersisted(
+    chain,
+    GAS_HASH,
+    "transfer",
+    [
+      h.hash160Param(seller.scriptHash),
+      h.hash160Param(buyer.scriptHash),
+      h.integerParam(BUYER_FUNDING),
+      h.anyParam(null),
+    ],
+    [h.makeSigner(seller.scriptHash)],
+  );
+  console.log(JSON.stringify({ txid: funding.txid, amount: BUYER_FUNDING.toString() }, null, 2));
+
+  h.logSection("Buyer Pays Listing");
+  // The market's OnNEP17Payment records a pending payment keyed by (listing,
+  // payer); its data payload is the listing id, exactly as in v3.
+  const payment = await h.invokePersisted(
+    chain,
+    GAS_HASH,
+    "transfer",
+    [
+      h.hash160Param(buyer.scriptHash),
+      h.hash160Param(market.hash),
+      h.integerParam(LISTING_PRICE),
+      h.integerParam(listingId),
+    ],
+    [h.makeSigner(buyer.scriptHash)],
+    { account: buyer },
+  );
+  const pending = await h.readAndDecode(chain, market.hash, "getPendingPaymentOf", [
+    h.integerParam(listingId),
+    h.hash160Param(buyer.scriptHash),
+  ]);
+  assert(h.decodeInteger(pending) === LISTING_PRICE.toString(), "the market did not record the buyer's payment");
+  console.log(JSON.stringify({ txid: payment.txid, pendingPayment: h.decodeInteger(pending) }, null, 2));
+
+  h.logSection("Settle Listing");
+  const settle = await h.invokePersisted(
+    chain,
+    market.hash,
+    "settleListing",
+    [
+      h.integerParam(listingId),
+      h.hash160Param(buyer.scriptHash),
+      h.hash160Param(buyer.scriptHash),
+    ],
+    [h.makeSigner(buyer.scriptHash)],
+    { account: buyer },
+  );
+  const listingItem = await h.readAndDecode(chain, market.hash, "getListing", [h.integerParam(listingId)]);
+  const listingFields = listingItem?.value || [];
+  const status = h.decodeInteger(listingFields[7]);
+  const buyerRecorded = h.decodeHash160(listingFields[8]);
+  const settled = await sdk.getAccount(accountId);
+  const escrowAfter = await h.readAndDecode(chain, core.hash, "isMarketEscrowActive", [h.hash160Param(accountId)]);
+  const validatorsAfter = await h.moduleIds(sdk, accountId, h.VALIDATOR_MODULE_TYPE);
+  const hooksAfter = await h.moduleIds(sdk, accountId, h.HOOK_MODULE_TYPE);
+  const hookOrderAfter = await sdk.getHookOrder(accountId);
+  const pendingAfter = await h.readAndDecode(chain, market.hash, "getPendingPaymentOf", [
+    h.integerParam(listingId),
+    h.hash160Param(buyer.scriptHash),
+  ]);
+
+  assert(status === "2", `listing should be sold, got status=${status}`);
+  assert(buyerRecorded === h.normalizeHash(buyer.scriptHash), `listing buyer mismatch: ${buyerRecorded}`);
+  assert(
+    String(settled.custodyAddress).toLowerCase().endsWith(h.sanitizeHex(buyer.scriptHash)),
+    "settlement did not rotate custody to the buyer",
+  );
+  assert(settled.marketEscrowActive === false, "settlement left the escrow marker on the account");
+  assert(settled.defaultOperationAuthorization === true, "settlement must re-enable the built-in route");
+  assert(
+    BigInt(settled.authorityEpoch) === BigInt(escrowed.authorityEpoch) + 1n,
+    `authority epoch should advance once: ${escrowed.authorityEpoch} -> ${settled.authorityEpoch}`,
+  );
+  assert(escrowAfter?.value === false, "settlement did not clear the core escrow");
+  assert(validatorsAfter.moduleIds.length === 0, `settlement left ${validatorsAfter.moduleIds.length} validator instances`);
+  assert(hooksAfter.moduleIds.length === 0, `settlement left ${hooksAfter.moduleIds.length} hook instances`);
+  assert(hookOrderAfter.hookIds.length === 0, `settlement left ${hookOrderAfter.hookIds.length} hooks in the order`);
+  assert(h.decodeInteger(pendingAfter) === "0", "settlement left a pending payment behind");
+  console.log(JSON.stringify({
+    txid: settle.txid,
     status,
+    buyerRecorded,
+    custody: settled.custodyAddress,
+    authorityEpoch: settled.authorityEpoch,
+    defaultOperationAuthorization: settled.defaultOperationAuthorization,
+    marketEscrowActive: settled.marketEscrowActive,
+    validatorsAfter: validatorsAfter.moduleIds,
+    hooksAfter: hooksAfter.moduleIds,
+    hookOrder: hookOrderAfter.hookIds,
+    pendingAfter: h.decodeInteger(pendingAfter),
+  }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // The buyer receives a clean, immediately usable account.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Buyer Operates The Swept Account");
+  const buyerNonce = await h.nextNonce(sdk, accountId, nonceRouting(settled));
+  const buyerOp = h.signOperationWithCustody(chain, core.hash, {
+    accountId,
+    operation: h.operation({
+      targetContract: GAS_HASH,
+      method: "symbol",
+      nonce: buyerNonce,
+      authorityEpoch: settled.authorityEpoch,
+    }),
+    signer: buyer,
+  });
+  const buyerExec = await h.executeOperation(chain, sdk, { accountId, operation: buyerOp });
+  const buyerResult = h.stackText(buyerExec.appLog.executions[0].stack[0]);
+  assert(buyerResult === "GAS", `buyer built-in route returned ${buyerResult}, expected GAS`);
+  console.log(JSON.stringify({ txid: buyerExec.txid, result: buyerResult }, null, 2));
+
+  h.logSection("Seller Key No Longer Signs");
+  const sellerRetryNonce = await h.nextNonce(sdk, accountId, nonceRouting(settled));
+  const sellerOp = h.signOperationWithCustody(chain, core.hash, {
+    accountId,
+    operation: h.operation({
+      targetContract: GAS_HASH,
+      method: "symbol",
+      nonce: sellerRetryNonce,
+      authorityEpoch: settled.authorityEpoch,
+    }),
+    signer: seller,
+  });
+  const sellerRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    h.executionPlan(sdk, { accountId, operations: [sellerOp] }),
+    /SA_VALIDATION_REJECTED|SA_MODULE_NOT_ROUTABLE/i,
+    "operation signed by the seller's custody key after settlement",
+  );
+  console.log(JSON.stringify({ sellerRefusal }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // Summary — the last JSON object is what the validation suite reads.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Summary");
+  console.log(JSON.stringify({
+    core,
+    market,
+    teeVerifier: tee,
+    whitelistHook: whitelist,
+    listingId,
+    accountId: h.normalizeHash(accountId),
+    seller: sellerHash,
+    buyerRecorded,
+    buyer: h.normalizeHash(buyer.scriptHash),
+    custodyAfterSale: settled.custodyAddress,
+    status,
+    txids: {
+      createListing: createListing.txid,
+      funding: funding.txid,
+      payment: payment.txid,
+      settle: settle.txid,
+      buyerExecute: buyerExec.txid,
+    },
   }, null, 2));
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error?.stack || error?.message || String(error));
   process.exit(1);
 });

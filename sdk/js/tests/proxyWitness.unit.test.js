@@ -1,252 +1,285 @@
+/**
+ * The proxy witness (docs/SA-MODULE-PROTOCOL.md §16.1).
+ *
+ * The proxy verification script carries no secret: it calls `core.verify(
+ * accountId)`, and the core accepts it only when the whole transaction is one
+ * `executeUserOp`/`executeUserOps` call on that core for that account. So the
+ * proxy witness has exactly one safe construction, and this suite pins it:
+ *
+ * - the transaction script is one shaped v4 call and nothing else;
+ * - the proxy signer's rule is exactly one Allow/CalledByContract(core);
+ * - the proxy is never the fee payer;
+ * - the proxy address is derived by the caller and pinned to the core's answer.
+ *
+ * The v3 Or(core, target) rule and the verifier-scope target are gone: the
+ * operation's own 13-field target is the only authorized target, and it is
+ * covered by the validator signature inside executeUserOp.
+ */
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const { sc, u } = require('@cityofzion/neon-js');
 const {
-  PROXY_SCOPE_TARGET_REQUIRED,
+  DEFAULT_CALL_FLAGS,
   buildExecuteUserOpScript,
   buildProxyWalletSignRequest,
   buildProxyWitnessTransaction,
   createProxyVerificationScript,
   createProxyWitness,
   resolveProxyWitnessTransaction,
-} = require('../src/proxyWitness');
-const coreHash = '0123456789abcdef0123456789abcdef01234567';
-const accountId = '89abcdef0123456789abcdef0123456789abcdef';
-const targetContract = 'a'.repeat(40);
-const scopeTarget = targetContract;
-const feePayer = 'b'.repeat(40);
-const buyer = 'c'.repeat(40);
+} = require('../src/index');
+const { codec } = require('../src/index');
 
-test('proxy script is the exact contract derivation, with display hashes reversed once', () => {
-  const script = createProxyVerificationScript({ coreHash, accountId });
-  assert.equal(script, `0c14${Buffer.from(accountId, 'hex').reverse().toString('hex')}11c01f0c067665726966790c14${Buffer.from(coreHash, 'hex').reverse().toString('hex')}41627d5b52`);
-  const expectedProxyHash = crypto.createHash('ripemd160').update(crypto.createHash('sha256').update(Buffer.from(script, 'hex')).digest()).digest().reverse().toString('hex');
-  const result = createProxyWitness({ coreHash, accountId, targetContract, scopeTarget, feePayer, expectedProxyHash });
-  assert.equal(result.signer.account, expectedProxyHash);
-  assert.equal(result.witness.invocationScript, '');
-  assert.equal(result.witness.verificationScript, script);
-  assert.deepEqual(result.signer, { account: expectedProxyHash, scopes: 'WitnessRules', rules: [{ action: 'Allow', condition: { type: 'Or', expressions: [
-    { type: 'CalledByContract', hash: coreHash }, { type: 'CalledByContract', hash: targetContract },
-  ] } }] });
-});
+const CORE = '0123456789abcdef0123456789abcdef01234567';
+const ACCOUNT = '89abcdef0123456789abcdef0123456789abcdef';
+const PAYER = 'b'.repeat(40);
+const TARGET = 'a'.repeat(40);
+const ZERO_SUBKEY = '00'.repeat(32);
 
-test('proxy witness fails closed on scope, identity, payer or malformed hashes', () => {
-  const valid = { coreHash, accountId, targetContract, scopeTarget, feePayer };
-  const result = createProxyWitness(valid);
-  assert.throws(() => createProxyWitness({ ...valid, scopeTarget: '0'.repeat(40) }), /scope/i);
-  assert.throws(() => createProxyWitness({ ...valid, scopeTarget: feePayer }), /scope/i);
-  assert.throws(() => createProxyWitness({ ...valid, expectedProxyHash: feePayer }), /proxy/i);
-  assert.throws(() => createProxyWitness({ ...valid, feePayer: result.signer.account }), /fee payer/i);
-  for (const field of ['coreHash', 'accountId', 'targetContract', 'feePayer']) {
-    assert.throws(() => createProxyWitness({ ...valid, [field]: '0x11zz' }), /hash/i);
-  }
-});
+const addressOf = (script) =>
+  crypto
+    .createHash('ripemd160')
+    .update(crypto.createHash('sha256').update(Buffer.from(script, 'hex')).digest())
+    .digest()
+    .reverse()
+    .toString('hex');
+const PROXY = addressOf(createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT }));
 
-// ---------------------------------------------------------------------------------------
-// The proxy-witness transaction builder (CU-39).
-// ---------------------------------------------------------------------------------------
-
-const HASH = (value) => ({ type: 'Hash160', value: `0x${value}` });
-
-function userOperation({ target = targetContract, method = 'transfer', args = null, nonce = '0', deadline = '9999999999999', signature = '01'.repeat(64) } = {}) {
+/** A 13-field v4 operation as the VM value the core expects (§4). */
+function operation(overrides = {}) {
   return {
-    type: 'Struct',
-    value: [
-      HASH(target),
-      { type: 'String', value: method },
-      { type: 'Array', value: args === null ? [HASH('1'.repeat(40)), HASH(buyer), { type: 'Integer', value: '1000' }, { type: 'ByteArray', value: '0x' }] : args },
-      { type: 'Integer', value: String(nonce) },
-      { type: 'Integer', value: String(deadline) },
-      { type: 'ByteArray', value: `0x${signature}` },
+    version: 4,
+    targetContract: TARGET,
+    method: 'transfer',
+    args: [
+      // A hash argument is a ByteString of the stored byte order in v4.
+      codec.hashValue('1'.repeat(40)),
+      { type: 'Integer', value: '1000' },
     ],
+    nonce: '0',
+    nonceSubkey: ZERO_SUBKEY,
+    deadline: '9999999999999',
+    validatorId: '1',
+    credentialGeneration: '1',
+    authorityEpoch: '1',
+    configurationNonce: '0',
+    signature: '01'.repeat(64),
+    hookProofs: [],
+    ...overrides,
   };
 }
-
-function invocation({ operation = 'executeUserOp', ops = null, core = coreHash, account = accountId, batch = false } = {}) {
-  const list = ops === null ? [userOperation()] : ops;
-  const second = batch || operation.endsWith('Ops')
-    ? { type: 'Array', value: list }
-    : list[0];
-  return {
-    scriptHash: `0x${core}`,
-    operation,
-    args: [HASH(account), second],
-  };
-}
-
-// The relay's own conversion of a normalized relay DTO (frontend/api/relayHelpers.js).
-function toRpcParameter(parameter) {
-  switch (parameter.type) {
-    case 'Hash160': return sc.ContractParam.hash160(parameter.value);
-    case 'Hash256': return sc.ContractParam.hash256(parameter.value);
-    case 'PublicKey': return sc.ContractParam.publicKey(parameter.value);
-    case 'Integer': return sc.ContractParam.integer(parameter.value);
-    case 'Boolean': return sc.ContractParam.boolean(parameter.value);
-    case 'String': return sc.ContractParam.string(parameter.value);
-    case 'ByteArray': return sc.ContractParam.byteArray(u.HexString.fromHex(String(parameter.value).slice(2), true));
-    case 'Array': return sc.ContractParam.array(...parameter.value.map(toRpcParameter));
-    case 'Struct': return sc.ContractParam.array(...parameter.value.map(toRpcParameter));
-    case 'Any': return sc.ContractParam.any(null);
-    default: throw new Error(`unexpected parameter type ${parameter.type}`);
-  }
-}
-
-function neonScript(inv) {
-  return sc.createScript({
-    scriptHash: inv.scriptHash,
-    operation: inv.operation,
-    args: inv.args.map(toRpcParameter),
-  });
-}
-
-test('the shape-bound executeUserOp script is byte-identical to the node assembler', () => {
-  const cases = [
-    { name: 'single transfer', inv: invocation() },
-    {
-      name: 'batch of two',
-      inv: invocation({
-        operation: 'executeUserOps',
-        ops: [userOperation({ nonce: '1' }), userOperation({ target: targetContract, nonce: '2', method: 'transfer' })],
-      }),
-    },
-    {
-      name: 'empty signature and nested arguments',
-      inv: invocation({
-        ops: [userOperation({
-          signature: '',
-          args: [
-            { type: 'Array', value: [HASH(buyer), { type: 'Integer', value: '17' }] },
-            { type: 'Struct', value: [{ type: 'Boolean', value: true }, { type: 'Boolean', value: false }, { type: 'Any', value: null }] },
-            { type: 'String', value: '' },
-            { type: 'ByteArray', value: '0xdeadbeef' },
-            { type: 'Integer', value: '-2' },
-            { type: 'Integer', value: String(2n ** 200n) },
-          ],
-        })],
-      }),
-    },
-  ];
-  for (const { name, inv } of cases) {
-    assert.equal(buildExecuteUserOpScript({ coreHash, accountId, invocation: inv }), neonScript(inv), name);
-  }
+const value = (op = operation()) => codec.operationValue(op);
+// The client builds this argument with `codec.hashValue`, so the witness is
+// tested against what a plan actually contains, not a v3 spelling.
+const ACCOUNT_ARG = codec.hashValue(ACCOUNT);
+const invocation = (op = operation(), entry = 'executeUserOp') => ({
+  operation: entry,
+  scriptHash: CORE,
+  args: [
+    ACCOUNT_ARG,
+    entry === 'executeUserOps' ? { type: 'Array', value: [value(op)] } : value(op),
+  ],
 });
 
-test('the shape-bound script refuses every envelope that is not one executeUserOp(s) call', () => {
-  for (const operation of ['executeSponsoredUserOp', 'executeSponsoredUserOps', 'transfer', 'executeUserOpExtra', '']) {
-    assert.throws(
-      () => buildExecuteUserOpScript({ coreHash, accountId, invocation: invocation({ operation }) }),
-      /executeUserOp/,
-      operation,
-    );
-  }
-  assert.throws(() => buildExecuteUserOpScript({ coreHash, accountId, invocation: invocation({ core: 'd'.repeat(40) }) }), /core/i);
-  assert.throws(() => buildExecuteUserOpScript({ coreHash, accountId, invocation: invocation({ account: 'e'.repeat(40) }) }), /account/i);
-  const three = invocation();
-  three.args = [...three.args, { type: 'Integer', value: '1' }];
-  assert.throws(() => buildExecuteUserOpScript({ coreHash, accountId, invocation: three }), /two arguments/i);
-  const notHash = invocation();
-  notHash.args = [{ type: 'String', value: accountId }, notHash.args[1]];
-  assert.throws(() => buildExecuteUserOpScript({ coreHash, accountId, invocation: notHash }), /account/i);
-  const emptyOps = invocation({ operation: 'executeUserOps', ops: [] });
-  assert.throws(() => buildExecuteUserOpScript({ coreHash, accountId, invocation: emptyOps }), /operation/i);
-});
-
-test('the builder refuses when no scope target exists', () => {
-  const base = { coreHash, accountId, invocation: invocation(), feePayer };
-  for (const scopeTargetValue of [undefined, null, '', '0x', '0'.repeat(40), '0x' + '0'.repeat(40)]) {
-    assert.throws(
-      () => buildProxyWitnessTransaction({ ...base, scopeTarget: scopeTargetValue }),
-      (error) => error && error.message === PROXY_SCOPE_TARGET_REQUIRED,
-      String(scopeTargetValue),
-    );
-  }
-  assert.throws(() => buildProxyWitnessTransaction({ ...base, scopeTarget: coreHash }), /core/i);
-  assert.throws(() => buildProxyWitnessTransaction({ ...base, scopeTarget: 'd'.repeat(40) }), /scope target/i);
-});
-
-test('the builder assembles the fee payer, the WitnessRules proxy signer and the proxy witness', () => {
-  const inv = invocation();
-  const built = buildProxyWitnessTransaction({ coreHash, accountId, invocation: inv, scopeTarget, feePayer });
-  const expected = createProxyWitness({ coreHash, accountId, targetContract, scopeTarget, feePayer });
-  assert.equal(built.script, neonScript(inv));
-  assert.equal(built.operation, 'executeUserOp');
-  assert.equal(built.proxyHash, expected.signer.account);
-  assert.deepEqual(built.proxyWitness, expected.witness);
-  assert.equal(built.signers.length, 2);
-  assert.deepEqual(built.signers[0], { account: feePayer, scopes: 'CalledByEntry' });
-  assert.deepEqual(built.signers[1], expected.signer);
-  assert.deepEqual(built.proxySigner, expected.signer);
-  assert.deepEqual(built.feePayerSigner, built.signers[0]);
-});
-
-test('the batch builder binds every operation to the one configured scope target', () => {
-  const inv = invocation({ operation: 'executeUserOps', ops: [userOperation({ nonce: '1' }), userOperation({ nonce: '2' })] });
-  const built = buildProxyWitnessTransaction({ coreHash, accountId, invocation: inv, scopeTarget, feePayer });
-  assert.equal(built.operation, 'executeUserOps');
-  assert.equal(built.script, neonScript(inv));
-  const mixed = invocation({
-    operation: 'executeUserOps',
-    ops: [userOperation({ nonce: '1' }), userOperation({ target: 'd'.repeat(40), nonce: '2' })],
-  });
-  assert.throws(() => buildProxyWitnessTransaction({ coreHash, accountId, invocation: mixed, scopeTarget, feePayer }), /scope target/i);
-});
-
-test('the proxy can never pay the enclosing transaction fees', () => {
-  const inv = invocation();
-  const built = buildProxyWitnessTransaction({ coreHash, accountId, invocation: inv, scopeTarget, feePayer });
-  assert.throws(
-    () => buildProxyWitnessTransaction({ coreHash, accountId, invocation: inv, scopeTarget, feePayer: built.proxyHash }),
-    /fee payer/i,
+test('the proxy verification script is the exact core derivation, at the kernel call flags', () => {
+  const custom = createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT });
+  assert.equal(
+    custom,
+    `0c14${Buffer.from(ACCOUNT, 'hex').reverse().toString('hex')}11c01f0c06` +
+      `${Buffer.from('verify', 'utf8').toString('hex')}0c14${Buffer.from(CORE, 'hex').reverse().toString('hex')}41627d5b52`,
   );
+  assert.equal(DEFAULT_CALL_FLAGS, 15);
+  // The native kernel's proxy pushes CallFlags.ReadOnly; the same account id at
+  // a different kernel is a different address, so the flag is never assumed.
+  const native = createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT, callFlags: 5 });
+  assert.equal(native, custom.replace('11c01f', '11c015'));
+  assert.notEqual(addressOf(native), addressOf(custom));
+  assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT, callFlags: 17 }), /flags/);
+  assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: '0'.repeat(40) }), /accountId/);
+  assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: '11zz' }), /accountId/);
 });
 
-test('the browser-wallet signing path expresses the fee payer in custom scopes', () => {
-  const inv = invocation();
-  const built = buildProxyWitnessTransaction({ coreHash, accountId, invocation: inv, scopeTarget, feePayer });
-
-  const custom = buildProxyWalletSignRequest({ transaction: built, scope: 'CustomContracts', allowedContracts: [coreHash, targetContract] });
-  assert.deepEqual(custom.feePayerSigner, { account: feePayer, scopes: 'CustomContracts', allowedContracts: [coreHash, targetContract] });
-  assert.deepEqual(custom.signers[0], custom.feePayerSigner);
-  assert.deepEqual(custom.signers[1], built.proxySigner);
-  assert.equal(custom.script, built.script);
-  assert.deepEqual(custom.proxyWitness, built.proxyWitness);
-
-  const global = buildProxyWalletSignRequest({ transaction: built, scope: 'Global' });
-  assert.deepEqual(global.feePayerSigner, { account: feePayer, scopes: 'Global' });
-
-  const direct = buildProxyWitnessTransaction({
-    coreHash, accountId, invocation: inv, scopeTarget, feePayer,
-    feePayerScope: 'CustomContracts', feePayerAllowedContracts: [coreHash],
+test('the proxy witness is one WitnessRules signer with an empty invocation script', () => {
+  const { signer, witness } = createProxyWitness({
+    coreHash: CORE,
+    accountId: ACCOUNT,
+    proxyHash: PROXY,
+    feePayer: PAYER,
+    expectedProxyHash: PROXY,
   });
-  assert.deepEqual(direct.feePayerSigner, { account: feePayer, scopes: 'CustomContracts', allowedContracts: [coreHash] });
+  assert.deepEqual(signer, {
+    account: PROXY,
+    scopes: 'WitnessRules',
+    rules: [{ action: 'Allow', condition: { type: 'CalledByContract', hash: CORE } }],
+  });
+  assert.equal(witness.invocationScript, '');
+  assert.equal(witness.verificationScript, createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT }));
 
-  assert.throws(() => buildProxyWalletSignRequest({ transaction: built, scope: 'WitnessRules' }), /scope/i);
-  assert.throws(() => buildProxyWalletSignRequest({ transaction: built, scope: 'CustomContracts' }), /allow/i);
-  assert.throws(() => buildProxyWalletSignRequest({ transaction: built, scope: 'CustomContracts', allowedContracts: [] }), /allow/i);
+  const valid = { coreHash: CORE, accountId: ACCOUNT, proxyHash: PROXY, feePayer: PAYER };
+  // The proxy address is never guessed from a hash the caller made up.
+  assert.throws(() => createProxyWitness({ ...valid, expectedProxyHash: PAYER }), /differs from the core/);
+  assert.throws(() => createProxyWitness({ ...valid, proxyHash: undefined }), /proxyHash must be a nonzero Hash160/);
+  assert.throws(() => createProxyWitness({ ...valid, proxyHash: '0'.repeat(40) }), /proxyHash/);
+  assert.throws(() => createProxyWitness({ ...valid, feePayer: PROXY }), /cannot be the fee payer/);
+  for (const field of ['coreHash', 'accountId', 'feePayer']) {
+    assert.throws(() => createProxyWitness({ ...valid, [field]: '0x11zz' }), /Hash160/);
+  }
 });
 
-test('the resolver takes the scope state from its reader and never from the caller', async () => {
-  const inv = invocation();
+test('the transaction script is one shaped executeUserOp call and nothing else', () => {
+  const script = buildExecuteUserOpScript({ coreHash: CORE, accountId: ACCOUNT, invocation: invocation() });
+  // The one call the core's verification context accepts: the account id, the
+  // 13-field operation, and nothing else in the script.
+  assert.equal(
+    script,
+    codec.dynamicCall(CORE, 'executeUserOp', [ACCOUNT_ARG, value(operation())]),
+  );
+  assert.match(script, /41627d5b52$/);
+  // The display-hex Hash160 spelling of the same account names the same
+  // account and emits the same bytes, so a caller cannot authorize a script
+  // that differs from the one the plan sends.
+  assert.equal(
+    buildExecuteUserOpScript({
+      coreHash: CORE,
+      accountId: ACCOUNT,
+      invocation: { ...invocation(), args: [{ type: 'Hash160', value: ACCOUNT }, value(operation())] },
+    }),
+    script,
+  );
+  const batch = buildExecuteUserOpScript({
+    coreHash: CORE,
+    accountId: ACCOUNT,
+    invocation: invocation(undefined, 'executeUserOps'),
+  });
+  assert.notEqual(batch, script);
+
+  const op = operation();
+  const rejects = [
+    [invocation(op, 'executeSponsoredUserOp'), /executeUserOp or executeUserOps/],
+    [{ ...invocation(op), operation: 'setAdmin' }, /executeUserOp or executeUserOps/],
+    [{ ...invocation(op), scriptHash: TARGET }, /different core/],
+    [{ ...invocation(op), args: [codec.hashValue(PAYER), value(op)] }, /does not name this account/],
+    [{ ...invocation(op), args: [{ type: 'Hash160', value: '11zz' }, value(op)] }, /does not name this account/],
+    [{ ...invocation(op), args: [value(op)] }, /exactly two arguments/],
+    [{ ...invocation(op), args: [ACCOUNT_ARG, value(op), value(op)] }, /exactly two arguments/],
+    [{ ...invocation(op), args: [ACCOUNT_ARG, { type: 'Array', value: [] }] }, /13-field user operation/],
+    // A batch with no operations authorizes nothing.
+    [{ ...invocation(op, 'executeUserOps'), args: [ACCOUNT_ARG, { type: 'Array', value: [] }] }, /at least one user operation/],
+    // The v3 6-field envelope is refused, never adapted.
+    [{ ...invocation(op), args: [ACCOUNT_ARG, { type: 'Array', value: [{ type: 'Integer', value: '1' }] }] }, /13-field user operation/],
+  ];
+  for (const [bad, pattern] of rejects) {
+    assert.throws(() => buildExecuteUserOpScript({ coreHash: CORE, accountId: ACCOUNT, invocation: bad }), pattern);
+  }
+  assert.throws(() => buildExecuteUserOpScript({ coreHash: CORE, accountId: ACCOUNT }), /invocation required/);
+});
+
+test('the built transaction keeps the fee payer first and the proxy second', () => {
+  const transaction = buildProxyWitnessTransaction({
+    coreHash: CORE,
+    accountId: ACCOUNT,
+    invocation: invocation(),
+    proxyHash: PROXY,
+    feePayer: PAYER,
+  });
+  assert.equal(transaction.signers.length, 2);
+  assert.equal(transaction.signers[0].account, PAYER);
+  assert.equal(transaction.signers[0].scopes, 'CalledByEntry');
+  assert.deepEqual(transaction.signers[1], transaction.proxySigner);
+  assert.equal(transaction.proxyWitness.verificationScript, createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT }));
+  assert.equal(transaction.witness, transaction.proxyWitness);
+  assert.equal(transaction.operation, 'executeUserOp');
+
+  // A fee payer allowlist is only expressible with the CustomContracts scope.
+  assert.throws(
+    () => buildProxyWitnessTransaction({ coreHash: CORE, accountId: ACCOUNT, invocation: invocation(), proxyHash: PROXY, feePayer: PAYER, feePayerAllowedContracts: [CORE] }),
+    /only meaningful with the CustomContracts scope/,
+  );
+  assert.throws(
+    () => buildProxyWitnessTransaction({ coreHash: CORE, accountId: ACCOUNT, invocation: invocation(), proxyHash: PROXY, feePayer: PAYER, feePayerScope: 'CustomContracts' }),
+    /requires a nonempty allowlist/,
+  );
+  const scoped = buildProxyWitnessTransaction({
+    coreHash: CORE,
+    accountId: ACCOUNT,
+    invocation: invocation(),
+    proxyHash: PROXY,
+    feePayer: PAYER,
+    feePayerScope: 'CustomContracts',
+    feePayerAllowedContracts: [CORE, TARGET],
+  });
+  assert.deepEqual(scoped.signers[0], { account: PAYER, scopes: 'CustomContracts', allowedContracts: [CORE, TARGET] });
+  // The proxy is still never a payer and never gains a second rule.
+  assert.equal(scoped.signers[1].rules.length, 1);
+});
+
+test('the browser-wallet request re-scopes the payer and keeps the proxy rule', () => {
+  const transaction = buildProxyWitnessTransaction({
+    coreHash: CORE,
+    accountId: ACCOUNT,
+    invocation: invocation(),
+    proxyHash: PROXY,
+    feePayer: PAYER,
+  });
+  const request = buildProxyWalletSignRequest({ transaction, scope: 'CustomContracts', allowedContracts: [CORE] });
+  assert.deepEqual(request.signers[0], { account: PAYER, scopes: 'CustomContracts', allowedContracts: [CORE] });
+  assert.deepEqual(request.signers[1], transaction.proxySigner);
+  assert.equal(request.script, transaction.script);
+  assert.equal(request.witness, transaction.proxyWitness);
+  const global = buildProxyWalletSignRequest({ transaction, scope: 'Global' });
+  assert.deepEqual(global.signers[0], { account: PAYER, scopes: 'Global' });
+  assert.throws(() => buildProxyWalletSignRequest({}), /built proxy-witness transaction is required/);
+  assert.throws(() => buildProxyWalletSignRequest({ transaction: { signers: [{}] } }), /built proxy-witness transaction is required/);
+  assert.throws(() => buildProxyWalletSignRequest({ transaction, scope: 'WitnessRules' }), /not expressible/);
+});
+
+test('the resolver takes the expected proxy address from its reader only', async () => {
   const seen = [];
-  const built = await resolveProxyWitnessTransaction({
-    coreHash,
-    accountId,
-    invocation: inv,
-    feePayer,
+  const transaction = await resolveProxyWitnessTransaction({
+    coreHash: CORE,
+    accountId: ACCOUNT,
+    invocation: invocation(),
+    proxyHash: PROXY,
+    feePayer: PAYER,
     readState: async (request) => {
       seen.push(request);
-      return { scopeTarget, expectedProxyHash: undefined };
+      return { proxyHash: PROXY };
     },
   });
-  assert.deepEqual(seen, [{ coreHash, accountId }]);
-  assert.deepEqual(built, buildProxyWitnessTransaction({ coreHash, accountId, invocation: inv, scopeTarget, feePayer }));
+  assert.deepEqual(seen, [{ coreHash: CORE, accountId: ACCOUNT }]);
+  assert.equal(transaction.proxyHash, PROXY);
+
+  // A core that answers a different address, or a caller-supplied pin, fails.
   await assert.rejects(
-    resolveProxyWitnessTransaction({ coreHash, accountId, invocation: inv, feePayer, readState: async () => ({}) }),
-    (error) => error && error.message === PROXY_SCOPE_TARGET_REQUIRED,
+    resolveProxyWitnessTransaction({
+      coreHash: CORE,
+      accountId: ACCOUNT,
+      invocation: invocation(),
+      proxyHash: PROXY,
+      feePayer: PAYER,
+      readState: async () => ({ proxyHash: PAYER }),
+    }),
+    /differs from the core/,
   );
   await assert.rejects(
-    resolveProxyWitnessTransaction({ coreHash, accountId, invocation: inv, feePayer }),
-    /reader/i,
+    resolveProxyWitnessTransaction({
+      coreHash: CORE,
+      accountId: ACCOUNT,
+      invocation: invocation(),
+      proxyHash: PROXY,
+      feePayer: PAYER,
+      readState: async () => null,
+    }),
+    /nonzero Hash160/,
+  );
+  await assert.rejects(
+    resolveProxyWitnessTransaction({
+      coreHash: CORE,
+      accountId: ACCOUNT,
+      invocation: invocation(),
+      proxyHash: PROXY,
+      feePayer: PAYER,
+    }),
+    /proxy-state reader is required/,
   );
 });

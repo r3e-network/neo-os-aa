@@ -16,7 +16,7 @@ namespace SmartAccount
     /// </summary>
     [DisplayName("SAAddressMarket")]
     [ManifestExtra("Description", "Trustless escrow market for Neo Smart Account addresses")]
-    [ContractPermission("*", "getBackupOwner")]
+    [ContractPermission("*", "getAccount")]
     [ContractPermission("*", "enterMarketEscrow")]
     [ContractPermission("*", "cancelMarketEscrow")]
     [ContractPermission("*", "settleMarketEscrow")]
@@ -33,7 +33,7 @@ namespace SmartAccount
         // capital locked, so the seller must not be able to invalidate it (cancel/reprice).
         private static readonly byte[] Prefix_PendingCount = new byte[] { 0x04 };
         // Admin-managed allowlist of canonical SA core hashes a listing may be backed by. A
-        // listing trusts its SA contract for getBackupOwner/escrow calls, so only audited cores
+        // listing trusts its SA contract for getAccount/escrow calls, so only audited cores
         // may be referenced — otherwise a seller could back a listing with a malicious contract.
         private static readonly byte[] Prefix_AllowedSA = new byte[] { 0x05 };
         private static readonly byte[] Prefix_Admin = new byte[] { 0xF0 };
@@ -404,7 +404,9 @@ namespace SmartAccount
 
         private static UInt160 RequireBackupOwner(UInt160 saContract, UInt160 accountId)
         {
-            UInt160 backupOwner = (UInt160)Contract.Call(saContract, "getBackupOwner", CallFlags.ReadOnly, new object[] { accountId });
+            object[] control = (object[])Contract.Call(saContract, "getAccount", CallFlags.ReadOnly, new object[] { accountId });
+            ExecutionEngine.Assert((bool)control[0], "Backup owner not configured");
+            UInt160 backupOwner = (UInt160)control[2];
             ExecutionEngine.Assert(backupOwner != null && backupOwner != UInt160.Zero, "Backup owner not configured");
             return backupOwner!;
         }

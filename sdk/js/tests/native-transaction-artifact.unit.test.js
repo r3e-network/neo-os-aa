@@ -1,426 +1,628 @@
+/**
+ * The signed-artifact transport (SA-MODULE-PROTOCOL.md §11 review exchange).
+ *
+ * A signed artifact is the only thing that crosses a wallet boundary, so this
+ * suite is about what the transport re-derives rather than trusts: the bytes
+ * from the transaction fields, the hash from the bytes, the sign data from the
+ * network magic, every witness signature from the account it names, the proxy
+ * witness from the account id and the core, and the fees from the caps the
+ * reviewer approved.
+ *
+ * The artifacts here are produced by the SDK's own review-sign-export path over
+ * a fake node; nothing is hand-assembled, so a refusal always means the
+ * transport disagreed with the SDK, never with the fixture.
+ */
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
-const { createNativeTransactionArtifactTools, validateNativeSignedPreflight, NATIVE_SIGNED_ARTIFACT_MAX_CHARS } = require("../../../shared/nativeTransactionArtifact.mjs");
+const {
+  createNativeTransactionArtifactTools,
+  validateNativeSignedPreflight,
+  NATIVE_SIGNED_ARTIFACT_MAX_CHARS,
+} = require("../../../shared/nativeTransactionArtifact.mjs");
 const { createNativeWalletWitnessTools } = require("../../../shared/nativeWalletWitness.mjs");
-const { NativeSmartAccountClient, nativeCodec: c } = require("../src/native");
-const fixture = require("./fixtures/native-signed-registration.json");
-const executionFixture = require("./fixtures/native-signed-execution.json");
-const clone = (value) => JSON.parse(JSON.stringify(value));
-const hash = (hex) => crypto.createHash("sha256").update(Buffer.from(hex, "hex")).digest("hex");
-const hash160 = (hex) => Buffer.from(crypto.createHash("ripemd160").update(Buffer.from(hash(hex), "hex")).digest()).reverse().toString("hex");
-const caps = { maxSystemFee: "300000", maxNetworkFee: "100000", maxTotalFee: "400000" };
-function setup(source = fixture) {
-  const data = clone(source), calls = [];
-  let state = {
-    blockCount: 10,
-    preflight: {
-      hash: data.artifact.txid, network: 123, snapshot: { height: 9, hash: "0x" + "aa".repeat(32) },
-      simulation: { mode: "single-transaction-next-block", height: 10, timestamp: "1700000000000", primaryIndex: 0, view: 0, transactionCount: 1, onPersist: "HALT", nextConsensus: "0x" + "bb".repeat(20) },
-      verification: "Succeed", state: "HALT", relayed: false, mempoolChecked: false, gasconsumed: "10", minimumrequiredfee: "100000", stack: [{ type: "Boolean", value: true }],
-    },
-    transaction: { hash: data.artifact.txid, blockhash: "0x" + "cc".repeat(32) },
-    wire: Buffer.from(data.artifact.rawTransaction, "hex").toString("base64"),
-    log: { txid: data.artifact.txid, executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Boolean", value: true }] }] },
-    send: true,
-  };
-  const client = {
-    networkMagic: 123, profile: data.review.profile,
-    async discover() { calls.push({ method: "discover" }); return this.profile; },
-    async revalidatePlan(plan) { assert.equal(plan, data.review.plan); calls.push({ method: "revalidatePlan" }); },
-    rpc: { async send(method, params) {
-      calls.push({ method, params });
-      if (method === "getblockcount") return state.blockCount;
-      if (method === "invoketransaction") return typeof state.preflight === "function" ? state.preflight() : clone(state.preflight);
-      if (method === "sendrawtransaction") { if (state.send instanceof Error) throw state.send; return state.send; }
-      if (method === "getrawtransaction") return params[1] ? state.transaction : state.wire;
-      if (method === "getapplicationlog") return state.log;
-      throw Error("Unexpected fixture method: " + method);
-    } },
-  };
-  // Default wallet verification is the same WebCrypto implementation used in browsers.
-  const tools = createNativeTransactionArtifactTools({ codec: c, sha256: hash, walletWitness: createNativeWalletWitnessTools({ hash160 }) });
-  const load = () => tools.importArtifact(client, data.review, JSON.stringify(data.artifact), caps);
-  return { data, client, tools, calls, state, load };
+const {
+  CAPS,
+  c,
+  clone,
+  createNode,
+  executionReview,
+  registrationReview,
+  wallet,
+} = require("./helpers/nativeTransactionNode");
+const v3Artifact = require("./fixtures/native-signed-registration.json");
+
+const sha256 = (hex) =>
+  crypto.createHash("sha256").update(Buffer.from(hex, "hex")).digest("hex");
+const hash160 = (hex) =>
+  Buffer.from(
+    crypto
+      .createHash("ripemd160")
+      .update(crypto.createHash("sha256").update(Buffer.from(hex, "hex")).digest())
+      .digest(),
+  )
+    .reverse()
+    .toString("hex");
+
+/**
+ * The transport under test. Only `hash160` is injected: signature verification
+ * runs the same WebCrypto P-256 verifier a browser wallet uses, so a witness
+ * that passes here would pass in the page.
+ */
+const tools = createNativeTransactionArtifactTools({
+  codec: c,
+  sha256,
+  walletWitness: createNativeWalletWitnessTools({ hash160 }),
+});
+/** Canonical re-encoding, so a tamper test can rebuild every derived field. */
+const encoding = createNativeTransactionArtifactTools({ codec: c, sha256 });
+
+const importArtifact = (node, review, artifact, caps = CAPS) =>
+  tools.importArtifact(node.client, review, JSON.stringify(artifact), caps);
+
+/** Rebuild every field the transport re-derives after a tampered edit. */
+function reseal(artifact) {
+  const bytes = encoding.bytes({
+    networkMagic: artifact.networkMagic,
+    transaction: artifact.transaction,
+    witnesses: artifact.witnesses,
+  });
+  return Object.assign({}, artifact, bytes);
 }
 
-test("portable signed-artifact transport exposes bounded import and shared preflight", () => {
+function preflightOf(artifact, overrides = {}) {
+  return {
+    hash: artifact.txid,
+    network: artifact.networkMagic,
+    snapshot: { height: 99, hash: "0x" + "aa".repeat(32) },
+    simulation: {
+      mode: "single-transaction-next-block",
+      height: 100,
+      timestamp: "1700000000000",
+      primaryIndex: 0,
+      view: 0,
+      transactionCount: 1,
+      onPersist: "HALT",
+      nextConsensus: "0x" + "bb".repeat(20),
+    },
+    verification: "Succeed",
+    state: "HALT",
+    relayed: false,
+    mempoolChecked: false,
+    gasconsumed: "10",
+    minimumrequiredfee: "100",
+    stack: [{ type: "Boolean", value: true }],
+    ...overrides,
+  };
+}
+
+function confirmed(node, artifact, execution) {
+  node.state.tx = { hash: artifact.txid, blockhash: "0x" + "cc".repeat(32) };
+  node.state.wire = Buffer.from(artifact.rawTransaction, "hex").toString("base64");
+  node.state.log = {
+    txid: artifact.txid,
+    executions: [
+      {
+        trigger: "Application",
+        vmstate: "HALT",
+        stack: [{ type: "Boolean", value: true }],
+        ...execution,
+      },
+    ],
+  };
+}
+
+test("the transport exposes bounded import and the shared preflight validator", () => {
   assert.equal(typeof createNativeTransactionArtifactTools, "function");
   assert.equal(typeof validateNativeSignedPreflight, "function");
   assert.equal(NATIVE_SIGNED_ARTIFACT_MAX_CHARS, 1048576);
 });
 
-test("static public registration artifact imports with exact review, fees and real browser crypto verification", async () => {
-  const f = setup(), imported = await f.load();
-  assert.equal(imported.txid, fixture.artifact.txid);
-  assert.equal(imported.rawTransaction, fixture.artifact.rawTransaction);
-  assert.deepEqual(imported.fees, { system: "200000", network: "50000", total: "250000" });
+test("a v3 artifact is refused before any node is asked", async () => {
+  const node = createNode();
+  await assert.rejects(
+    importArtifact(node, v3Artifact.review, v3Artifact.artifact),
+    /profile has unsupported or missing fields/,
+  );
+  // The artifact alone is already unusable: the v4 profile is discovered, not
+  // declared, so a v3 profile digest can never bind to a live core.
+  await assert.rejects(
+    importArtifact(node, v3Artifact.review, { ...v3Artifact.artifact, witnesses: [] }),
+    /profile has unsupported or missing fields/,
+  );
+  assert.deepEqual(node.calls, []);
+});
+
+test("export binds canonical bytes, hash, sign data and carries no callbacks", async () => {
+  const node = createNode();
+  const { artifact, prepared, signed } = await registrationReview(node);
+  assert.deepEqual(Object.keys(artifact).sort(), [
+    "format",
+    "networkMagic",
+    "profile",
+    "rawTransaction",
+    "signData",
+    "transaction",
+    "txid",
+    "unsignedHex",
+    "version",
+    "witnesses",
+  ]);
+  assert.equal(artifact.format, "neo-native-signed-transaction");
+  assert.equal(artifact.version, 1);
+  assert.equal(artifact.txid, "0x" + Buffer.from(sha256(artifact.unsignedHex), "hex").reverse().toString("hex"));
+  assert.equal(artifact.signData, Buffer.from(artifact.networkMagic.toString(16).padStart(8, "0"), "hex").reverse().toString("hex") + sha256(artifact.unsignedHex));
+  assert.ok(artifact.rawTransaction.startsWith(artifact.unsignedHex));
+  assert.equal(artifact.profile.contract, node.client.contractHash);
+  assert.equal(artifact.profile.implementationId, "NativeSmartAccount/v4");
+  assert.equal(artifact.witnesses.length, artifact.transaction.signers.length);
+  assert.deepEqual(artifact.transaction.signers, prepared.review.signers);
+  // The archive is data: a wallet loading it must not have to run SDK code.
+  assert.deepEqual(JSON.parse(JSON.stringify(artifact)), artifact);
+  assert.equal(JSON.stringify(signed).includes("sign("), false);
+  assert.ok(Object.isFrozen(artifact));
+});
+
+test("import returns the reviewed bytes and submits nothing", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  node.calls.length = 0;
+  const imported = await importArtifact(node, review, artifact);
+  assert.equal(imported.txid, artifact.txid);
+  assert.equal(imported.rawTransaction, artifact.rawTransaction);
+  assert.deepEqual(imported.fees, { system: "200", network: "50", total: "250" });
   assert.ok(Object.isFrozen(imported.transaction.signers));
-  assert.equal(f.calls.filter((call) => call.method === "sendrawtransaction").length, 0);
-  assert.equal((await f.tools.preflight(f.client, imported)).verification, "Succeed");
+  assert.deepEqual(node.calls.map((call) => call.method), ["getblockcount"]);
 });
 
-test("static public execution artifact validates its canonical proxy witness and strict token outcome", async () => {
-  const f = setup(executionFixture), imported = await f.load();
-  assert.equal(imported.witnesses[1].invocation, "");
-  assert.equal((await f.tools.preflight(f.client, imported)).state, "HALT");
-  f.state.preflight.stack = [{ type: "Boolean", value: false }];
-  await assert.rejects(f.tools.preflight(f.client, imported), /token transfer/);
-});
-
-test("artifact schema and input limits reject unknown data before any RPC", async () => {
-  const f = setup();
-  for (const text of [" ".repeat(NATIVE_SIGNED_ARTIFACT_MAX_CHARS + 1), "{", "null", "[]", JSON.stringify({ ...fixture.artifact, secret: "not-accepted" })]) {
-    await assert.rejects(f.tools.importArtifact(f.client, f.data.review, text, caps));
-    assert.equal(f.calls.length, 0);
-  }
-});
-
-test("canonical transaction encoding rejects altered fields, byte casing, hashes and witnesses", async () => {
+test("import refuses canonical byte drift and unknown artifact fields", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  node.calls.length = 0;
   const changes = [
-    (a) => { a.transaction.nonce++; },
-    (a) => { a.transaction.systemFee = "0200000"; },
-    (a) => { a.transaction.networkFee = "-1"; },
-    (a) => { a.transaction.script = a.transaction.script.toUpperCase(); },
-    (a) => { a.transaction.attributes = []; },
-    (a) => { a.transaction.signers[0].allowedcontracts.push(a.transaction.signers[0].allowedcontracts[0]); },
-    (a) => { a.transaction.signers[0].scopes = "Global"; },
-    (a) => { a.transaction.validUntilBlock = 1.5; },
-    (a) => { a.txid = "0x" + "00".repeat(32); },
-    (a) => { a.signData = "00" + a.signData.slice(2); },
-    (a) => { a.unsignedHex += "00"; },
-    (a) => { a.rawTransaction += "00"; },
-    (a) => { a.witnesses.push(a.witnesses[0]); },
-    (a) => { a.witnesses[0].verification += "00"; },
+    (a) => (a.txid = "0x" + "00".repeat(32)),
+    (a) => (a.signData = "00" + a.signData.slice(2)),
+    (a) => (a.unsignedHex += "00"),
+    (a) => (a.rawTransaction += "00"),
+    (a) => (a.witnesses.pop()),
+    (a) => a.witnesses.push(a.witnesses[0]),
+    (a) => (a.networkMagic = 124),
+    (a) => (a.secret = "not-accepted"),
+    (a) => delete a.signData,
   ];
   for (const change of changes) {
-    const f = setup(); change(f.data.artifact);
-    await assert.rejects(f.load());
-    assert.equal(f.calls.length, 0);
+    const tampered = clone(artifact);
+    change(tampered);
+    await assert.rejects(importArtifact(node, review, tampered));
   }
-});
-
-test("canonical re-encoded artifact still rejects an invalid wallet signature", async () => {
-  const f = setup(), prior = f.data.artifact.witnesses[0].invocation;
-  const bad = "0c40" + "00".repeat(64);
-  f.data.artifact.witnesses[0].invocation = bad;
-  f.data.artifact.rawTransaction = f.data.artifact.rawTransaction.replace(prior, bad);
-  await assert.rejects(f.load(), /signature|witness/);
-  assert.equal(f.calls.length, 0);
-});
-
-test("canonical re-encoded proxy witness still rejects invocation bytes or an altered verification script", async () => {
-  for (const field of ["invocation", "verification"]) {
-    const f = setup(executionFixture), witness = f.data.artifact.witnesses[1];
-    const tail = "00" + (witness.verification.length / 2).toString(16).padStart(2, "0") + witness.verification;
-    assert.ok(f.data.artifact.rawTransaction.endsWith(tail));
-    if (field === "invocation") witness.invocation = "00";
-    else witness.verification = "00" + witness.verification.slice(2);
-    const replacement = (witness.invocation.length / 2).toString(16).padStart(2, "0") + witness.invocation + (witness.verification.length / 2).toString(16).padStart(2, "0") + witness.verification;
-    f.data.artifact.rawTransaction = f.data.artifact.rawTransaction.slice(0, -tail.length) + replacement;
-    await assert.rejects(f.load(), /noncanonical native proxy witness/);
+  for (const text of [" ".repeat(NATIVE_SIGNED_ARTIFACT_MAX_CHARS + 1), "{", "null", "[]"]) {
+    await assert.rejects(tools.importArtifact(node.client, review, text, CAPS));
   }
+  assert.equal(node.calls.some((call) => call.method === "getblockcount"), false);
 });
 
-test("network, profile, script, payer, signer order and scopes must match the current review", async () => {
+test("import refuses a transaction field that is not canonical", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
   const changes = [
-    (f) => { f.client.networkMagic = 124; },
-    (f) => { f.data.review.profile.profileParameterDigest = "11".repeat(32); },
-    (f) => { f.data.review.plan.script += "40"; },
-    (f) => { f.data.review.feePayer = "11".repeat(20); },
-    (f) => { f.data.review.signers[0].allowedcontracts = ["0x" + "11".repeat(20)]; },
-    (f) => { f.data.review.signers.push({ account: "0x" + "11".repeat(20), scopes: "None" }); },
-    (f) => { f.data.review.submission = "wallet-invoke"; },
+    (a) => {
+      a.transaction.nonce++;
+    },
+    (a) => {
+      a.transaction.systemFee = "0200";
+    },
+    (a) => {
+      a.transaction.networkFee = "-1";
+    },
+    (a) => {
+      a.transaction.script = a.transaction.script.toUpperCase();
+    },
+    (a) => {
+      a.transaction.validUntilBlock = 1.5;
+    },
+    // A v4 signer carries only its scope: groups and allowlists are not part of
+    // the transactions this SDK builds, and a witness rule belongs to the proxy.
+    (a) => {
+      a.transaction.signers[0].scopes = "Global";
+    },
+    (a) => {
+      a.transaction.signers[0].rules = [];
+    },
+    (a) => {
+      a.transaction.signers[1].allowedcontracts.push("0x" + "11".repeat(20));
+    },
   ];
   for (const change of changes) {
-    const f = setup(); change(f);
-    await assert.rejects(f.load());
-    assert.equal(f.calls.length, 0);
-  }
-  const f = setup(executionFixture); f.data.review.signers.reverse();
-  await assert.rejects(f.load(), /signer order/);
-});
-
-test("explicit fee caps, reviewed admission and expiry all constrain import", async () => {
-  for (const low of [{ ...caps, maxSystemFee: "199999" }, { ...caps, maxNetworkFee: "49999" }, { ...caps, maxTotalFee: "249999" }, {}, { ...caps, maxSystemFee: 9007199254740992 }]) {
-    const f = setup();
-    await assert.rejects(f.tools.importArtifact(f.client, f.data.review, JSON.stringify(f.data.artifact), low));
-  }
-  const lowBudget = setup(); lowBudget.data.review.simulation.minimumRequiredFee = "200001";
-  await assert.rejects(lowBudget.load(), /admission/);
-  for (const height of [0, -1, 50, 51, 1.5, "10"]) {
-    const f = setup(); f.state.blockCount = height;
-    await assert.rejects(f.load(), /block|expire/);
+    const tampered = clone(artifact);
+    change(tampered);
+    await assert.rejects(importArtifact(node, review, tampered));
   }
 });
 
-test("complete signed preflight checks every declared block and execution boundary", async () => {
+test("import refuses a wallet witness whose signature does not verify", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  node.calls.length = 0;
+  for (const edit of [
+    (w) => {
+      w.invocation = "0c40" + "00".repeat(64);
+    },
+    (w) => {
+      w.invocation = w.invocation.slice(0, -2) + "00";
+    },
+    (w) => {
+      w.verification = "0c21" + "02" + "11".repeat(32) + "4156e7b327";
+    },
+  ]) {
+    const tampered = clone(artifact);
+    edit(tampered.witnesses[1]);
+    await assert.rejects(importArtifact(node, review, reseal(tampered)), /witness|signature/);
+  }
+  assert.equal(node.calls.some((call) => call.method === "getblockcount"), false);
+});
+
+test("import refuses a proxy witness that is not the one the core derives", async () => {
+  const node = createNode();
+  const authorizer = wallet();
+  node.setAccount({ custody: authorizer.account });
+  const { artifact, review } = await executionReview(node);
+  assert.equal(review.signers[1].scopes, "WitnessRules");
+  assert.equal(artifact.witnesses[1].invocation, "");
+  const tampered = clone(artifact);
+  tampered.witnesses[1].verification = "00" + tampered.witnesses[1].verification.slice(2);
+  await assert.rejects(importArtifact(node, review, reseal(tampered)), /noncanonical native proxy witness/);
+  const signed = clone(artifact);
+  signed.witnesses[1].invocation = "0c40" + "00".repeat(64);
+  await assert.rejects(importArtifact(node, review, reseal(signed)), /noncanonical native proxy witness/);
+});
+
+test("import refuses a review for another network, profile, script, payer or signer set", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
   const changes = [
-    (r) => { r.hash = "0x" + "00".repeat(32); }, (r) => { r.network = 124; },
-    (r) => { r.verification = "Failed"; }, (r) => { r.state = "FAULT"; },
-    (r) => { r.relayed = true; }, (r) => { delete r.mempoolChecked; },
-    (r) => { r.snapshot.height = "9"; }, (r) => { r.snapshot.hash = "aa"; },
-    (r) => { r.simulation.mode = "application-only"; }, (r) => { r.simulation.height++; },
-    (r) => { r.simulation.onPersist = "FAULT"; }, (r) => { r.simulation.view = 1; },
-    (r) => { r.simulation.transactionCount = 2; }, (r) => { r.simulation.timestamp = 10; },
-    (r) => { r.simulation.timestamp = "18446744073709551616"; }, (r) => { r.simulation.primaryIndex = 256; },
-    (r) => { r.simulation.nextConsensus = "0x" + "AA".repeat(20); },
-    (r) => { r.minimumrequiredfee = "200001"; }, (r) => { delete r.stack; },
-    (r) => { r.snapshot.height = 49; r.simulation.height = 50; },
+    (r) => {
+      r.plan.script += "40";
+    },
+    (r) => {
+      r.plan.accountId = "44".repeat(20);
+    },
+    (r) => {
+      r.feePayer = "44".repeat(20);
+    },
+    (r) => {
+      r.signers[0].scopes = "Global";
+    },
+    (r) => {
+      r.signers[1].allowedcontracts = ["0x" + "44".repeat(20)];
+    },
+    (r) => {
+      r.signers.push({ account: "0x" + "44".repeat(20), scopes: "None" });
+    },
+    (r) => {
+      r.signers.reverse();
+    },
+    (r) => {
+      r.submission = "wallet-invoke";
+    },
+    (r) => {
+      r.profile.implementationId = "org.r3e.neo.smart-account.v4";
+    },
   ];
   for (const change of changes) {
-    const f = setup(), imported = await f.load(); change(f.state.preflight);
-    await assert.rejects(f.tools.broadcast(f.client, imported));
-    assert.equal(f.calls.filter((call) => call.method === "sendrawtransaction").length, 0);
+    const edited = clone(review);
+    change(edited);
+    await assert.rejects(importArtifact(node, edited, artifact));
+  }
+  node.state.network = 124;
+  const other = createNode({ network: 124 });
+  await assert.rejects(importArtifact(other, review, artifact), /profile mismatch|network/);
+});
+
+test("import refuses fees above the caps, below the reviewed admission and an unreachable window", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  for (const caps of [
+    { ...CAPS, maxSystemFee: "199" },
+    { ...CAPS, maxNetworkFee: "49" },
+    { ...CAPS, maxTotalFee: "249" },
+    {},
+    { ...CAPS, maxSystemFee: 9007199254740992 },
+  ]) {
+    await assert.rejects(importArtifact(node, review, artifact, caps));
+  }
+  const admission = clone(review);
+  admission.simulation.minimumRequiredFee = "201";
+  await assert.rejects(importArtifact(node, admission, artifact), /admission/);
+  for (const height of [0, -1, 200, 50, 1.5, "100"]) {
+    const expired = createNode();
+    const flow = await registrationReview(expired);
+    expired.state.height = height;
+    await assert.rejects(importArtifact(expired, flow.review, flow.artifact), /block|expire/);
   }
 });
 
-test("explicit broadcast performs fresh preflight and sends identical bytes once", async () => {
-  const f = setup(), imported = await f.load();
-  await f.tools.preflight(f.client, imported);
-  const [a, b] = await Promise.all([f.tools.broadcast(f.client, imported), f.tools.broadcast(f.client, imported)]);
-  assert.deepEqual(a, { txid: imported.txid, submitted: true, confirmed: false }); assert.equal(a, b);
-  assert.equal(f.calls.filter((call) => call.method === "invoketransaction").length, 2);
-  const sends = f.calls.filter((call) => call.method === "sendrawtransaction"); assert.equal(sends.length, 1);
-  assert.equal(Buffer.from(sends[0].params[0], "base64").toString("hex"), imported.rawTransaction);
+test("preflight checks every declared block, execution boundary and fee", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  node.state.preflight = preflightOf(artifact);
+  assert.equal((await tools.preflight(node.client, imported)).verification, "Succeed");
+  const changes = [
+    { hash: "0x" + "00".repeat(32) },
+    { network: 124 },
+    { verification: "Failed" },
+    { state: "FAULT" },
+    { relayed: true },
+    { mempoolChecked: true },
+    { minimumrequiredfee: "201" },
+    { minimumrequiredfee: undefined },
+  ];
+  for (const change of changes) {
+    const faulted = preflightOf(artifact, change);
+    node.state.preflight = faulted;
+    await assert.rejects(tools.preflight(node.client, imported));
+  }
+  for (const simulation of [
+    { mode: "application-only" },
+    { height: 99 },
+    { height: 100.5 },
+    { onPersist: "FAULT" },
+    { view: 1 },
+    { transactionCount: 2 },
+    { primaryIndex: -1 },
+    { timestamp: "18446744073709551616" },
+    { nextConsensus: "0x" + "AA".repeat(20) },
+  ]) {
+    node.state.preflight = preflightOf(artifact, {
+      simulation: { ...preflightOf(artifact).simulation, ...simulation },
+    });
+    await assert.rejects(tools.preflight(node.client, imported));
+  }
+  node.state.preflight = preflightOf(artifact, { snapshot: { height: "99", hash: "0x" + "aa".repeat(32) } });
+  await assert.rejects(tools.preflight(node.client, imported));
 });
 
-test("unavailable signed preflight preserves structured RPC errors and never submits", async () => {
-  const f = setup(), imported = await f.load();
-  f.state.preflight = () => { const error = Error("method unavailable"); error.code = -32601; error.data = { method: "invoketransaction" }; throw error; };
-  await assert.rejects(f.tools.broadcast(f.client, imported), (error) => {
-    assert.equal(error.code, -32601); assert.deepEqual(error.data, { method: "invoketransaction" });
-    assert.equal(error.submissionAttempted, false); assert.equal(error.txid, imported.txid);
+test("preflight keeps the node's structured error and never submits", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  node.state.preflight = () => {
+    const error = new Error("method unavailable");
+    error.code = -32601;
+    error.data = { method: "invoketransaction" };
+    throw error;
+  };
+  await assert.rejects(tools.broadcast(node.client, imported), (error) => {
+    assert.equal(error.code, -32601);
+    assert.deepEqual(error.data, { method: "invoketransaction" });
+    assert.equal(error.submissionAttempted, false);
+    assert.equal(error.txid, imported.txid);
     return /preflight unavailable/.test(error.message);
   });
-  assert.equal(f.calls.filter((call) => call.method === "sendrawtransaction").length, 0);
+  assert.equal(node.calls.some((call) => call.method === "sendrawtransaction"), false);
 });
 
-test("review invalidation during fresh preflight blocks broadcast at the final send boundary", async () => {
-  const f = setup(), imported = await f.load(); let current = true;
-  const preflight = f.state.preflight;
-  f.state.preflight = async () => { current = false; return preflight; };
-  await assert.rejects(f.tools.broadcast(f.client, imported, { assertCurrent() { if (!current) throw Error("review changed"); } }), (error) => {
-    assert.equal(error.submissionAttempted, false); assert.equal(error.txid, imported.txid); return /review changed/.test(error.message);
-  });
-  assert.equal(f.calls.filter((call) => call.method === "sendrawtransaction").length, 0);
+test("broadcast preflights freshly, sends the identical bytes once and dedupes concurrent calls", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  node.state.preflight = preflightOf(artifact);
+  node.calls.length = 0;
+  const [a, b] = await Promise.all([
+    tools.broadcast(node.client, imported),
+    tools.broadcast(node.client, imported),
+  ]);
+  assert.deepEqual(a, { txid: imported.txid, submitted: true, confirmed: false });
+  assert.equal(a, b);
+  const sends = node.calls.filter((call) => call.method === "sendrawtransaction");
+  assert.equal(sends.length, 1);
+  assert.equal(Buffer.from(sends[0].params[0], "base64").toString("hex"), imported.rawTransaction);
+  assert.equal(node.calls.filter((call) => call.method === "invoketransaction").length, 1);
 });
 
-test("submission uncertainty retains the original txid and never retries even after reimport", async () => {
-  const f = setup(), imported = await f.load(); f.state.send = Error("timeout");
-  const check = (error) => error.message === "timeout" && error.submissionAttempted === true && error.txid === imported.txid;
-  await assert.rejects(f.tools.broadcast(f.client, imported), check);
-  await assert.rejects(f.tools.broadcast(f.client, await f.load()), check);
-  assert.equal(f.calls.filter((call) => call.method === "sendrawtransaction").length, 1);
+test("a review invalidated during preflight blocks the send", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  let current = true;
+  node.state.preflight = async () => {
+    current = false;
+    return preflightOf(artifact);
+  };
+  await assert.rejects(
+    tools.broadcast(node.client, imported, {
+      assertCurrent() {
+        if (!current) throw Error("review changed");
+      },
+    }),
+    (error) => {
+      assert.equal(error.submissionAttempted, false);
+      assert.equal(error.txid, imported.txid);
+      return /review changed/.test(error.message);
+    },
+  );
+  assert.equal(node.calls.some((call) => call.method === "sendrawtransaction"), false);
 });
 
-test("receipt verifies exact persisted bytes and txid without requiring old account state", async () => {
-  const f = setup(), imported = await f.load();
-  f.client.revalidatePlan = async () => { throw Error("account already changed after execution"); };
-  const receipt = await f.tools.receipt(f.client, imported);
-  assert.equal(receipt.confirmed, true); assert.equal(receipt.succeeded, true); assert.equal(receipt.txid, imported.txid);
-  f.state.wire = Buffer.from("00", "hex").toString("base64");
-  await assert.rejects(f.tools.receipt(f.client, imported), /persisted transaction bytes/);
-  f.state.wire = Buffer.from(imported.rawTransaction, "hex").toString("base64"); f.state.log.txid = "0x" + "00".repeat(32);
-  await assert.rejects(f.tools.receipt(f.client, imported), /log transaction identity/);
+test("an uncertain submission is never retried, even after reimport", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  node.state.preflight = preflightOf(artifact);
+  node.state.send = new Error("timeout");
+  const check = (error) =>
+    /timeout/.test(error.message) &&
+    error.submissionAttempted === true &&
+    error.txid === imported.txid;
+  await assert.rejects(tools.broadcast(node.client, imported), check);
+  await assert.rejects(tools.broadcast(node.client, await importArtifact(node, review, artifact)), check);
+  assert.equal(node.calls.filter((call) => call.method === "sendrawtransaction").length, 1);
+  // A node that answers with somebody else's hash is not this transaction.
+  const other = createNode();
+  const flow = await registrationReview(other);
+  const fresh = await importArtifact(other, flow.review, flow.artifact);
+  other.state.preflight = preflightOf(flow.artifact);
+  other.state.send = { hash: "0x" + "00".repeat(32) };
+  await assert.rejects(tools.broadcast(other.client, fresh), /different transaction id/);
 });
 
-test("confirmed FAULT and unsuccessful transfers are never reported as successful", async () => {
-  for (const mode of ["FAULT", "false-transfer", "malformed-stack"]) {
-    const f = setup(executionFixture), imported = await f.load();
-    const execution = f.state.log.executions[0];
-    if (mode === "FAULT") execution.vmstate = "FAULT";
-    if (mode === "false-transfer") execution.stack[0].value = false;
-    if (mode === "malformed-stack") execution.stack = [];
-    const receipt = await f.tools.receipt(f.client, imported);
-    assert.equal(receipt.confirmed, true); assert.equal(receipt.succeeded, false); assert.ok(receipt.failures.length);
+test("a receipt compares the persisted bytes and refuses identity drift", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  confirmed(node, artifact);
+  node.client.revalidatePlan = async () => {
+    throw Error("account already registered after execution");
+  };
+  const receipt = await tools.receipt(node.client, imported);
+  assert.equal(receipt.confirmed, true);
+  assert.equal(receipt.succeeded, true);
+  assert.equal(receipt.txid, imported.txid);
+  assert.equal(receipt.systemFee, "200");
+  node.state.wire = Buffer.from("00", "hex").toString("base64");
+  await assert.rejects(tools.receipt(node.client, imported), /persisted transaction bytes/);
+  node.state.wire = Buffer.from(artifact.rawTransaction, "hex").toString("base64");
+  node.state.log.txid = "0x" + "00".repeat(32);
+  await assert.rejects(tools.receipt(node.client, imported), /log transaction identity/);
+  node.state.log.txid = artifact.txid;
+  node.state.tx.hash = "0x" + "00".repeat(32);
+  await assert.rejects(tools.receipt(node.client, imported), /identity mismatch/);
+});
+
+test("a FAULT or a refused transfer is never reported as success", async () => {
+  const node = createNode();
+  node.setAccount({ custody: wallet().account });
+  const { artifact, review } = await executionReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  for (const execution of [
+    { vmstate: "FAULT" },
+    { stack: [{ type: "Boolean", value: false }] },
+    { stack: [] },
+    { stack: [{ type: "Boolean", value: "true" }] },
+  ]) {
+    confirmed(node, artifact, execution);
+    const receipt = await tools.receipt(node.client, imported);
+    assert.equal(receipt.confirmed, true);
+    assert.equal(receipt.succeeded, false);
+    assert.ok(receipt.failures.length);
   }
+  confirmed(node, artifact, {});
+  assert.equal((await tools.receipt(node.client, imported)).succeeded, true);
 });
 
-test("receipt cannot claim confirmation from a zero block hash or invalid confirmation count", async () => {
+test("a receipt cannot claim confirmation from a zero block hash or invalid confirmations", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  confirmed(node, artifact);
   for (const confirmations of [0, -1, 0.5, "1", null, 9007199254740992]) {
-    const f = setup(), imported = await f.load(); f.state.transaction.confirmations = confirmations;
-    await assert.rejects(f.tools.receipt(f.client, imported), /invalid confirmations/);
+    node.state.tx.confirmations = confirmations;
+    await assert.rejects(tools.receipt(node.client, imported), /invalid confirmations/);
   }
-  const zero = setup(), imported = await zero.load(); zero.state.transaction.blockhash = "0x" + "00".repeat(32);
-  await assert.rejects(zero.tools.receipt(zero.client, imported), /zero block hash/);
-  const valid = setup(), signed = await valid.load(); valid.state.transaction.confirmations = 1;
-  assert.equal((await valid.tools.receipt(valid.client, signed)).confirmed, true);
+  delete node.state.tx.confirmations;
+  node.state.tx.blockhash = "0x" + "00".repeat(32);
+  await assert.rejects(tools.receipt(node.client, imported), /zero block hash/);
+  node.state.tx.blockhash = "0x" + "cc".repeat(32);
+  assert.equal((await tools.receipt(node.client, imported)).confirmed, true);
+  node.state.tx = { hash: artifact.txid };
+  assert.deepEqual(await tools.receipt(node.client, imported), {
+    txid: imported.txid,
+    confirmed: false,
+  });
 });
 
-test("transport-issued provenance is retained and cannot be restored by object casting", async () => {
-  const f = setup(), imported = await f.load();
-  await assert.rejects(f.tools.preflight(f.client, clone(imported)), /must be imported/);
-  await assert.rejects(f.tools.receipt({ ...f.client }, imported), /must be imported/);
-});
-
-function archivedRegistration(data) {
-  return { format: "neo-native-reviewed-request", version: 1, ...clone(data.review), recipe: { method: "buildRegistration", input: clone(fixture.recipe) } };
-}
-test("historical receipt restoration survives execution and expiry but cannot authorize preflight or broadcast", async () => {
-  const f = setup(); f.state.blockCount = 1000;
-  f.client.revalidatePlan = async () => { throw Error("old state no longer exists"); };
-  const archive = archivedRegistration(f.data);
-  const restored = await f.tools.restoreForReceipt(f.client, archive, JSON.stringify(f.data.artifact));
+test("a receipt-only restoration survives execution and expiry but cannot preflight or broadcast", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  confirmed(node, artifact);
+  node.state.height = 1000;
+  node.client.revalidatePlan = async () => {
+    throw Error("old account state no longer exists");
+  };
+  const restored = await tools.restoreForReceipt(
+    node.client,
+    JSON.stringify(review),
+    JSON.stringify(artifact),
+  );
   assert.equal(restored.receiptOnly, true);
-  assert.equal((await f.tools.receipt(f.client, restored)).succeeded, true);
-  await assert.rejects(f.tools.preflight(f.client, restored), /receipt-only/);
-  await assert.rejects(f.tools.broadcast(f.client, restored), /receipt-only/);
-  assert.equal(f.calls.filter((call) => ["getblockcount", "invoketransaction", "sendrawtransaction"].includes(call.method)).length, 0);
+  assert.equal((await tools.receipt(node.client, restored)).succeeded, true);
+  await assert.rejects(tools.preflight(node.client, restored), /receipt-only/);
+  await assert.rejects(tools.broadcast(node.client, restored), /receipt-only/);
+  assert.equal(
+    node.calls.some((call) => ["invoketransaction", "sendrawtransaction"].includes(call.method)),
+    false,
+  );
+  // A receipt-only object is transport-issued provenance, not a flag.
+  await assert.rejects(tools.broadcast(node.client, { ...restored, receiptOnly: false }), /must be imported/);
 });
 
-test("receipt-only provenance is checked before a prior normal-import broadcast cache", async () => {
-  const f = setup(), normal = await f.load();
-  await f.tools.broadcast(f.client, normal);
-  const restored = await f.tools.restoreForReceipt(f.client, archivedRegistration(f.data), JSON.stringify(f.data.artifact));
-  await assert.rejects(f.tools.broadcast(f.client, restored), /receipt-only/);
-  await assert.rejects(f.tools.preflight(f.client, restored), /receipt-only/);
-  await assert.rejects(f.tools.broadcast(f.client, { ...restored, receiptOnly: false }), /must be imported/);
-  assert.equal(f.calls.filter((call) => call.method === "sendrawtransaction").length, 1);
-});
-
-test("historical restore binds version, recipe, plan, signers and live profile without trusting archived labels", async () => {
+test("an archived review must replay its own recipe byte for byte", async () => {
+  const node = createNode();
+  const { artifact, review, custody } = await registrationReview(node);
+  confirmed(node, artifact);
+  node.client.revalidatePlan = async () => {
+    throw Error("old account state no longer exists");
+  };
   const changes = [
-    (a) => { a.version = 2; }, (a) => { a.format = "other"; },
-    (a) => { a.recipe.input.recoveryAddress = "44".repeat(20); },
-    (a) => { a.recipe.method = "buildAction"; },
-    (a) => { a.plan.accountId = "44".repeat(20); },
-    (a) => { a.plan.method = "unfreeze"; },
-    (a) => { a.plan.script += "40"; },
-    (a) => { a.signers[0].allowedcontracts = ["0x" + "44".repeat(20)]; },
-    (a) => { a.feePayer = "44".repeat(20); },
+    (r) => {
+      r.recipe.input.custodyAddress = "44".repeat(20);
+    },
+    (r) => {
+      r.recipe.input.salt = "55".repeat(32);
+    },
+    (r) => {
+      r.recipe.method = "buildExecutionScript";
+    },
+    (r) => {
+      r.plan.script += "40";
+    },
+    (r) => {
+      r.plan.method = "freezeAccount";
+    },
+    (r) => {
+      r.signers[1].allowedcontracts = ["0x" + "44".repeat(20)];
+    },
+    (r) => {
+      r.feePayer = "44".repeat(20);
+    },
+    (r) => {
+      r.profile.implementationId = "org.r3e.neo.smart-account.v4";
+    },
   ];
   for (const change of changes) {
-    const f = setup(), archive = archivedRegistration(f.data); change(archive);
-    await assert.rejects(f.tools.restoreForReceipt(f.client, archive, JSON.stringify(f.data.artifact)));
-    assert.equal(f.calls.length, 0);
+    const archive = clone(review);
+    change(archive);
+    await assert.rejects(
+      tools.restoreForReceipt(node.client, JSON.stringify(archive), JSON.stringify(artifact)),
+    );
   }
-  const f = setup(), archive = archivedRegistration(f.data);
+  // Unsigned labels in an archive are not authenticated, so they are dropped.
+  const archive = clone(review);
   archive.description = "Invented successful result";
-  archive.plan.accountState = { custodyAddress: "44".repeat(20), status: "Active" };
-  archive.plan.pending = { address: "55".repeat(20) };
-  const restored = await f.tools.restoreForReceipt(f.client, JSON.stringify(archive), JSON.stringify(f.data.artifact));
+  archive.plan.accountState = { custodyAddress: custody.account, status: "Active" };
+  const restored = await tools.restoreForReceipt(
+    node.client,
+    JSON.stringify(archive),
+    JSON.stringify(artifact),
+  );
   assert.equal(restored.review.description, undefined);
   assert.equal(restored.review.plan.accountState, undefined);
-  assert.equal(restored.review.plan.pending, undefined);
-  f.client.discover = async () => { f.client.profile = { ...f.client.profile, profileParameterDigest: "44".repeat(32) }; };
-  await assert.rejects(f.tools.restoreForReceipt(f.client, archive, JSON.stringify(f.data.artifact)), /profile changed/);
+  // A live profile that moved cannot inherit an old receipt.
+  const moved = clone(artifact);
+  moved.profile.implementationId = "NativeSmartAccount/v5";
+  await assert.rejects(tools.restoreForReceipt(node.client, JSON.stringify(review), JSON.stringify(reseal(moved))));
 });
 
-function archivedExecution(data) {
-  const archive = { format: "neo-native-reviewed-request", version: 1, ...clone(data.review) }, operation = archive.plan.preparedOperations[0].operation;
-  archive.plan.preparedOperations[0].context = { networkMagic: 123, accountId: archive.plan.accountId, authorityEpoch: "0", configurationNonce: "0" };
-  archive.recipe = { method: "prepareOperation", input: { accountId: archive.plan.accountId, targetContract: operation.targetContract, method: operation.method,
-    args: operation.args, channel: "0", deadline: operation.deadline }, signature: operation.signature };
-  return archive;
-}
-test("historical execution rebuilds signed operation semantics and cannot hide a failed transfer", async () => {
-  const f = setup(executionFixture), archive = archivedExecution(f.data);
-  f.client.revalidatePlan = async () => { throw Error("execution already consumed nonce"); };
-  const restored = await f.tools.restoreForReceipt(f.client, archive, JSON.stringify(f.data.artifact));
-  f.state.log.executions[0].stack = [{ type: "Boolean", value: false }];
-  const receipt = await f.tools.receipt(f.client, restored);
-  assert.equal(receipt.confirmed, true); assert.equal(receipt.succeeded, false);
-  const changes = [
-    (a) => { a.plan.preparedOperations[0].operation.method = "ping"; a.recipe.input.method = "ping"; },
-    (a) => { a.plan.preparedOperations[0].context.authorityEpoch = "1"; },
-    (a) => { a.plan.preparedOperations[0].context.networkMagic = 124; },
-    (a) => { a.recipe.input.channel = "1"; },
-    (a) => { a.recipe.signature = "ff"; },
-    (a) => { a.plan.batch = true; },
-    (a) => { a.plan.kind = "lifecycle"; },
-  ];
-  for (const change of changes) {
-    const bad = clone(archive); change(bad);
-    await assert.rejects(f.tools.restoreForReceipt(f.client, bad, JSON.stringify(f.data.artifact)));
-  }
-});
-
-test("archived lifecycle, guarded cancellation and module recipes reproduce independently issued SDK scripts", async () => {
-  const accountId = "11".repeat(20), binding = { contract: "55".repeat(20), codeHash: "66".repeat(32) };
-  const A = (value) => ({ type: "Array", value });
-  const H = (value) => Uint8Array.from(Buffer.from(value, "hex").reverse());
-  const client = new NativeSmartAccountClient({ networkMagic: 123, rpcClient: { async send(method) {
-    assert.equal(method, "getcontractstate");
-    return { manifest: { name: "FixtureModule", extra: { smartAccount: { abiVersion: 2, profileDigest: fixture.review.profile.profileParameterDigest,
-      compositeVerifier: false, configurationMethods: ["configure"] } }, abi: { methods: [{ name: "configure", safe: false,
-        parameters: [{ name: "accountId", type: "Hash160" }, { name: "value", type: "Integer" }] }] } } };
-  } } });
-  client.profile = fixture.review.profile; client.discover = async () => client.profile;
-  client.getAccount = async () => ({ accountId, accountAddress: c.accountAddress(accountId), custodyAddress: fixture.review.feePayer,
-    recoveryAddress: "22".repeat(20), status: "Active", configurationNonce: "0", verifier: binding, hook: binding, pendingRecovery: null });
-  client._read = async (method, args) => {
-    if (method === "supportsComposition") return false;
-    assert.equal(method, "getPendingModuleCall");
-    const role = Buffer.from(args[1].value, "hex").toString("utf8");
-    return A([1n, H(accountId), role === "verifier" ? 0n : 1n, A([H(binding.contract), H(binding.codeHash)]), A([H(binding.contract), H(binding.codeHash)]),
-      Uint8Array.from(Buffer.from("configure")), A([H(accountId), 1n]), 1n, 86400001n, 0n]);
-  };
-  const recipes = [];
-  for (const action of ["proposeVerifier", "activateVerifier", "cancelVerifier", "proposeHook", "activateHook", "cancelHook", "proposeRecoveryAddress", "activateRecoveryAddress", "cancelRecoveryAddress", "proposeRecovery", "executeRecovery", "cancelRecovery", "freeze", "unfreeze"])
-    recipes.push({ method: "buildAction", input: { accountId, action, ...(action.startsWith("propose") ? { address: "77".repeat(20) } : {}) } });
-  for (const role of ["verifier", "hook"]) {
-    recipes.push({ method: "buildAction", input: { accountId, action: "cancelModuleCall", role } });
-    for (const child of [undefined, "77".repeat(20)]) recipes.push({ method: "buildModuleCall", input: { accountId, role,
-      ...(child ? { child } : {}), method: "configure", args: [{ type: "Integer", value: "1" }] } });
-  }
-  for (const recipe of recipes) {
-    const f = setup(), archive = archivedRegistration(f.data);
-    archive.recipe = recipe; archive.plan = await client[recipe.method](recipe.input);
-    // The independently generated SDK script passes archive reconstruction. The
-    // unrelated registration signature must then fail the exact artifact binding.
-    await assert.rejects(f.tools.restoreForReceipt(f.client, archive, JSON.stringify(f.data.artifact)), /artifact script does not match current review/);
-    assert.equal(f.calls.length, 0);
-  }
-});
-
-test("SDK exports only signed objects, with public artifact fields and no callbacks", async () => {
-  const sdkPreflight = setup().state.preflight;
-  const client = new NativeSmartAccountClient({ networkMagic: 123, rpcClient: { async send(method) {
-    if (method === "getblockcount") return 10;
-    if (method === "calculatenetworkfee") return { networkfee: "50000" };
-    if (method === "invoketransaction") return clone(sdkPreflight);
-    throw Error("Unexpected fixture method: " + method);
-  } } });
-  client.profile = fixture.review.profile;
-  client.revalidatePlan = async () => true;
-  client.simulate = async () => fixture.review.simulation;
-  const plan = client.buildRegistration(fixture.recipe);
-  const prepared = await client.prepareTransaction(plan, {
-    feePayer: { account: fixture.review.feePayer, verificationScript: fixture.artifact.witnesses[0].verification,
-      sign(signData) { assert.equal(signData, fixture.artifact.signData); return fixture.artifact.witnesses[0].invocation.slice(4); } },
-    authoritySigners: [{ account: fixture.recipe.recoveryAddress, verificationScript: fixture.artifact.witnesses[1].verification,
-      sign(signData) { assert.equal(signData, fixture.artifact.signData); return fixture.artifact.witnesses[1].invocation.slice(4); } }],
-    ...caps, nonce: 42, validUntilBlock: 50, systemFee: "200000",
-  });
-  const signed = await client.signTransaction(prepared);
-  assert.deepEqual(client.exportSignedTransaction(signed), fixture.artifact);
-  assert.throws(() => client.exportSignedTransaction({ ...signed }), /produced by this SDK instance/);
-  assert.throws(() => client.exportSignedTransaction(JSON.parse(JSON.stringify(signed))), /produced by this SDK instance/);
-  assert.equal(JSON.stringify(client.exportSignedTransaction(signed)).includes("wallets"), false);
-  assert.equal((await client.preflightTransaction(signed)).hash, signed.txid);
-  sdkPreflight.simulation.onPersist = "FAULT";
-  await assert.rejects(client.preflightTransaction(signed), /single-transaction next-block/);
-});
-
-test("signed preflight rejects malformed or inconsistent RPC fees before broadcast", async () => {
-  const invalid = [
-    {gasconsumed:"100001",minimumrequiredfee:"100000"},
-    ...[undefined,null,10,"", "01", "-1", "1.5", "0x10", "9223372036854775808"].flatMap(value => [
-      {gasconsumed:value}, {minimumrequiredfee:value},
-    ]),
-  ];
-  for (const override of invalid) {
-    const f = setup(), imported = await f.load();
-    Object.assign(f.state.preflight,override);
-    await assert.rejects(f.tools.broadcast(f.client,imported),/fee|gasconsumed/);
-    assert.equal(f.calls.some(call => call.method === "sendrawtransaction"),false);
-  }
-});
-test("artifact import rejects malformed review fees and an explicit budget below consumption", async () => {
-  for (const override of [{gasConsumed:10},{minimumRequiredFee:100000},{minimumRequiredFee:"9"},{minimumRequiredFee:null,gasConsumed:"200001"}]) {
-    const f = setup(); Object.assign(f.data.review.simulation,override);
-    await assert.rejects(f.load(),/fee|gasconsumed|admission/);
-    assert.equal(f.calls.some(call => call.method === "sendrawtransaction"),false);
-  }
+test("provenance cannot be rebuilt by object casting", async () => {
+  const node = createNode();
+  const { artifact, review } = await registrationReview(node);
+  const imported = await importArtifact(node, review, artifact);
+  node.state.preflight = preflightOf(artifact);
+  await assert.rejects(tools.preflight(node.client, clone(imported)), /must be imported/);
+  await assert.rejects(tools.receipt({ ...node.client }, imported));
+  // The same bytes imported by another client instance are not this client's.
+  const other = createNode();
+  await assert.rejects(tools.preflight(other.client, imported), /must be imported/);
 });

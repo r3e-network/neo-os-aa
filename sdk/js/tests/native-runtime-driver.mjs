@@ -1,4 +1,15 @@
-/** Private integration bridge. Ephemeral fixture keys enter only on stdin; never print them. */
+// RETIRED v3 integration bridge: kept as dated evidence, never runs.
+//
+// Protocol v4 removed the client calls this bridge uses (`buildRegistration`,
+// `buildModuleCall`, `buildAction`, `getConfig`, `verifierContext`), so it can
+// no longer prepare an operation. The v4 runbook harness is
+// `sdk/js/tests/testnet-v4-harness.js`; the receipts under `docs/reports/`
+// record what this bridge proved at their date and are not a v4 claim.
+throw new Error(
+  "Retired: this v3 native runtime driver no longer matches the SDK. " +
+    "Use sdk/js/tests/testnet-v4-harness.js for v4 module-install, " +
+    "configuration-intent, threshold and recovery flows.",
+);
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { createRequire } from "node:module";

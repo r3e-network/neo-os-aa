@@ -295,16 +295,27 @@ function resolvePaymasterConfig(network) {
 }
 
 function paramValue(param) {
+  // A v4 operation carries its method as a ByteString (hex of the UTF-8 bytes), so the paymaster
+  // request must see the decoded text, not the hex the relay DTO transports.
+  if (['ByteArray', 'ByteString'].includes(param?.type) && typeof param.value === 'string') {
+    const hex = sanitizeHex(param.value);
+    if (hex && hex.length % 2 === 0) {
+      return new TextDecoder().decode(Uint8Array.from(hex.match(/../g), (byte) => parseInt(byte, 16))).trim();
+    }
+  }
   return trimString(param?.value || '');
 }
 
 function deriveUserOpFields(userOpParam) {
-  const fields = userOpParam?.type === 'Struct' && Array.isArray(userOpParam?.value)
+  // Protocol v4 operation: [version, target, method, args, ...] (13 fields).
+  // `Struct` stays accepted because the relay DTO normalizes a struct to an
+  // Array, and callers may still name the operation tuple that way.
+  const fields = ['Struct', 'Array'].includes(userOpParam?.type) && Array.isArray(userOpParam?.value)
     ? userOpParam.value
     : [];
   return {
-    downstreamTarget: fields[0]?.value ? normalizeHash(fields[0].value) : '',
-    downstreamMethod: paramValue(fields[1]),
+    downstreamTarget: fields[1]?.value ? normalizeHash(fields[1].value) : '',
+    downstreamMethod: paramValue(fields[2]),
   };
 }
 
@@ -339,13 +350,6 @@ function derivePaymasterInvocationFields(metaInvocation) {
       downstreamTarget: isHomogeneous ? first.downstreamTarget : '',
       downstreamMethod: isHomogeneous ? first.downstreamMethod : '',
       batchSize: userOps.length,
-    };
-  }
-  if (operation === 'executeUnified' || operation === 'executeUnifiedByAddress') {
-    return {
-      accountId: args[0]?.value ? normalizeHash(args[0].value) : '',
-      downstreamTarget: args[1]?.value ? normalizeHash(args[1].value) : '',
-      downstreamMethod: paramValue(args[2]),
     };
   }
   return {
@@ -457,19 +461,18 @@ function decodeHash160Stack(item) {
 }
 
 function decodeValidationPreviewStack(item) {
+  // v4 `validateUserOp` answers [accepted, operationDigest].
   const values = item?.type === 'Array' && Array.isArray(item.value) ? item.value : [];
   return {
-    deadlineValid: values?.[0]?.value === true || values?.[0]?.value === 1 || values?.[0]?.value === '1',
-    nonceAcceptable: values?.[1]?.value === true || values?.[1]?.value === 1 || values?.[1]?.value === '1',
-    hasVerifier: values?.[2]?.value === true || values?.[2]?.value === 1 || values?.[2]?.value === '1',
-    verifier: decodeHash160Stack(values?.[3]),
-    hook: decodeHash160Stack(values?.[4]),
+    accepted: values?.[0]?.value === true || values?.[0]?.value === 1 || values?.[0]?.value === '1',
+    operationDigest: decodeHash160Stack(values?.[1]),
   };
 }
 
 async function fetchValidationPreview({ rpcUrl, invocation }) {
+  // The preview is per operation; a batch's operations are validated by the core itself.
   if (invocation?.operation !== 'executeUserOp') return null;
-  if (!Array.isArray(invocation?.args) || invocation.args.length < 2) return null;
+  if (!Array.isArray(invocation?.args) || invocation.args.length !== 2) return null;
 
   const response = await apiFetch(rpcUrl, {
     method: 'POST',
@@ -480,7 +483,7 @@ async function fetchValidationPreview({ rpcUrl, invocation }) {
       method: 'invokefunction',
       params: [
         invocation.scriptHash,
-        'previewUserOpValidation',
+        'validateUserOp',
         [invocation.args[0], invocation.args[1]],
       ],
     }),

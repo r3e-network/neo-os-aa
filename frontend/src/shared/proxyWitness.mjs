@@ -1,183 +1,115 @@
-import { createHash } from 'node:crypto';
+/**
+ * Proxy-witness transactions for the Neo N3 Smart Account v4 stack.
+ *
+ * The proxy verification script (`PUSHDATA1 accountId; PUSH1 PACK PUSH<flags>;
+ * CALL core.verify`) carries no secret: the witness has an empty invocation
+ * script and nothing to sign. The chain accepts it only because the script
+ * calls `core.verify(accountId)`, which in the Verification trigger requires
+ * the whole transaction to be a single `executeUserOp` / `executeUserOps` call
+ * on that core for that account (contracts/custom/SmartAccount.VerifyContext.cs,
+ * F-1). The proxy witness therefore has exactly one safe construction and it
+ * lives here, so the SDK, the relay route and the wallet frontend cannot each
+ * grow their own:
+ *
+ * - the transaction script is one shaped v4 call — nothing else;
+ * - every operation inside it is a 13-field envelope;
+ * - the proxy signer's rule is exactly one Allow/CalledByContract(core);
+ * - the proxy is never the fee payer.
+ *
+ * The v3 verify-scope target and the Or(core, target) witness rule are gone:
+ * the operation's own 13-field target is the only authorized target, and it is
+ * covered by the validator/built-in signature inside executeUserOp.
+ *
+ * The proxy address itself is never hashed here. It is derived by the caller —
+ * from the core (`getProxyScriptHash`) or from the SDK codec — and passed in,
+ * so this module has no crypto dependency and cannot disagree with the chain.
+ *
+ * Nothing on this path takes a signer, witness or rule from request metadata.
+ */
+
+import { encodeDynamicCall, hashValue } from './nativeSmartAccount.mjs';
+
+const OPERATION_FIELDS = 13;
+const ACCOUNT_ENTRYPOINTS = ['executeUserOp', 'executeUserOps'];
+const FEE_PAYER_SCOPES = ['None', 'CalledByEntry', 'CustomContracts', 'Global'];
+const MAX_CUSTOM_CONTRACTS = 16;
+/** Custom kernel pushes CallFlags.All; the native kernel's address needs 5. */
+const DEFAULT_CALL_FLAGS = 15;
 
 function hash160(value, name) {
   const hex = String(value || '').replace(/^0x/i, '').toLowerCase();
-  if (!/^[0-9a-f]{40}$/.test(hex) || /^0+$/.test(hex)) throw new Error(`${name} must be a nonzero Hash160`);
+  if (!/^[0-9a-f]{40}$/.test(hex) || /^0+$/.test(hex)) {
+    throw new Error(`${name} must be a nonzero Hash160`);
+  }
   return hex;
 }
 
-function reverse(hex) { return Buffer.from(hex, 'hex').reverse().toString('hex'); }
-
-/** Exact SmartAccount.GetProxyScriptHash preimage. Inputs use display byte order. */
-function createProxyVerificationScript({ coreHash, accountId }) {
-  return `0c14${reverse(hash160(accountId, 'accountId'))}11c01f0c067665726966790c14${reverse(hash160(coreHash, 'coreHash'))}41627d5b52`;
+function reverse(hex) {
+  const pairs = hex.match(/../g) || [];
+  return pairs.reverse().join('');
 }
 
 /**
- * Prepare the second signer/witness of a single account-bound execute transaction.
- * The caller must read scopeTarget (and preferably expectedProxyHash) from the same
- * core/RPC being used to submit. This helper does not prove the UserOperation's
- * signature: the core validates it atomically before any target call. The separate
- * fee payer must sign the complete transaction after all signers have been added.
+ * The fixed proxy verification script, byte-identical to the kernel's
+ * GetProxyScriptHash preimage. Inputs use display byte order; `callFlags`
+ * defaults to 15 (CallFlags.All, custom kernel) and the native kernel passes 5
+ * (CallFlags.ReadOnly).
  */
-function createProxyWitness({ coreHash, accountId, targetContract, scopeTarget, feePayer, expectedProxyHash }) {
+function createProxyVerificationScript({ coreHash, accountId, callFlags = DEFAULT_CALL_FLAGS }) {
+  if (!Number.isInteger(callFlags) || callFlags < -1 || callFlags > 16) {
+    throw new Error('proxy call flags must be -1..16');
+  }
+  const flags = (callFlags + 16).toString(16).padStart(2, '0');
+  return `0c14${reverse(hash160(accountId, 'accountId'))}11c0${flags}0c067665726966790c14${reverse(hash160(coreHash, 'coreHash'))}41627d5b52`;
+}
+
+/**
+ * Prepare the second signer/witness of a single account-bound execution
+ * transaction. `proxyHash` is the account address derived by the core or the
+ * SDK codec (`accountAddress(accountId)`); it is required, never guessed.
+ */
+function createProxyWitness({
+  coreHash,
+  accountId,
+  proxyHash,
+  feePayer,
+  expectedProxyHash,
+  callFlags = DEFAULT_CALL_FLAGS,
+}) {
   const core = hash160(coreHash, 'coreHash');
-  const target = hash160(targetContract, 'targetContract');
   const payer = hash160(feePayer, 'feePayer');
-  const scope = requireScopeTarget(scopeTarget);
-  if (scope !== target || scope === core) throw new Error('Proxy scope target does not match the transfer target');
-  const verificationScript = createProxyVerificationScript({ coreHash: core, accountId });
-  const proxyHash = createHash('ripemd160').update(createHash('sha256').update(Buffer.from(verificationScript, 'hex')).digest()).digest().reverse().toString('hex');
-  if (expectedProxyHash !== undefined && hash160(expectedProxyHash, 'expectedProxyHash') !== proxyHash) throw new Error('Proxy script hash differs from the core');
-  if (payer === proxyHash) throw new Error('Proxy cannot be the fee payer');
+  const proxy = hash160(proxyHash, 'proxyHash');
+  if (expectedProxyHash !== undefined && hash160(expectedProxyHash, 'expectedProxyHash') !== proxy) {
+    throw new Error('Proxy script hash differs from the core');
+  }
+  if (payer === proxy) throw new Error('Proxy cannot be the fee payer');
+  const verificationScript = createProxyVerificationScript({ coreHash: core, accountId, callFlags });
   return {
-    signer: { account: proxyHash, scopes: 'WitnessRules', rules: [{ action: 'Allow', condition: { type: 'Or', expressions: [
-      { type: 'CalledByContract', hash: core }, { type: 'CalledByContract', hash: target },
-    ] } }] },
+    signer: {
+      account: proxy,
+      scopes: 'WitnessRules',
+      rules: [{ action: 'Allow', condition: { type: 'CalledByContract', hash: core } }],
+    },
     witness: { invocationScript: '', verificationScript },
   };
 }
 
-// ---------------------------------------------------------------------------------------
-// CU-39: the proxy-witness transaction builder.
-//
-// The proxy verification witness is not a signature: anyone who knows the account id and the
-// core can assemble it, and the node accepts it because the script calls core.verify(accountId).
-// It therefore has exactly one safe construction, and it lives here so the SDK, the relay route
-// and the wallet frontend cannot each grow their own. Nothing on this path takes a signer, a
-// witness, a rule or a scope target from request metadata.
-// ---------------------------------------------------------------------------------------
-
-/** Thrown when the account has no verify-scope target: no proxy-witness transaction exists. */
-const PROXY_SCOPE_TARGET_REQUIRED = 'Proxy scope target is not configured for this account';
-const ACCOUNT_ENTRYPOINTS = ['executeUserOp', 'executeUserOps'];
-const FEE_PAYER_SCOPES = ['None', 'CalledByEntry', 'CustomContracts', 'Global'];
-const MAX_CUSTOM_CONTRACTS = 16;
-
-function requireScopeTarget(scopeTarget) {
-  const value = String(scopeTarget ?? '').replace(/^0x/i, '').toLowerCase();
-  if (!value || !/^[0-9a-f]{40}$/.test(value) || /^0+$/.test(value)) {
-    const error = new Error(PROXY_SCOPE_TARGET_REQUIRED);
-    error.code = 'proxy_scope_target_required';
-    throw error;
-  }
-  return value;
-}
-
-function le(value, size) {
-  let n = BigInt(value);
-  const bits = BigInt(size * 8);
-  if (n >= 1n << bits || n < -(1n << (bits - 1n))) throw new Error('proxy script integer overflow');
-  if (n < 0n) n += 1n << bits;
-  const out = Buffer.alloc(size);
-  for (let i = 0; i < size; i++) {
-    out[i] = Number(n & 255n);
-    n >>= 8n;
-  }
-  return out.toString('hex');
-}
-
-function signedInteger(value, name) {
-  if (!['bigint', 'number', 'string'].includes(typeof value)) throw new Error(`${name} requires an exact integer`);
-  if (typeof value === 'number' && !Number.isSafeInteger(value)) throw new Error(`${name} requires an exact integer`);
-  if (typeof value === 'string' && !/^-?(?:0|[1-9][0-9]*)$/.test(value)) throw new Error(`${name} requires an exact integer`);
-  const n = BigInt(value);
-  if (n < -(1n << 255n) || n >= 1n << 255n) throw new Error(`${name} outside the signed VM 256-bit range`);
-  return n;
-}
-
-const PUSHINT_SIZES = [1, 2, 4, 8, 16, 32];
-
-function signedBytes(value, name) {
-  const n = signedInteger(value, name);
-  if (n === 0n) return '';
-  for (const size of PUSHINT_SIZES) {
-    const limit = 1n << BigInt(size * 8 - 1);
-    if (n >= -limit && n < limit) return le(n, size);
-  }
-  throw new Error(`${name} is not encodable as a VM integer`);
-}
-
-// PUSHM1/PUSH0..PUSH16 cover -1..16 in one byte; every other value is PUSHINT8/16/32/64/128/256,
-// whose opcode is the index of its width in PUSHINT_SIZES.
-function pushInt(value, name) {
-  const n = signedInteger(value, name);
-  if (n >= -1n && n <= 16n) return le(n + 16n, 1);
-  const body = signedBytes(n, name);
-  return le(PUSHINT_SIZES.indexOf(body.length / 2), 1) + body;
-}
-
-function pushBytes(hex, name) {
-  const bytes = String(hex ?? '').replace(/^0x/i, '').toLowerCase();
-  if (!/^(?:[0-9a-f]{2})*$/.test(bytes)) throw new Error(`${name} must be hex bytes`);
-  const n = bytes.length / 2;
-  if (n < 256) return `0c${le(n, 1)}${bytes}`;
-  if (n < 65536) return `0d${le(n, 2)}${bytes}`;
-  return `0e${le(n, 4)}${bytes}`;
-}
-
-function utf8Hex(text, name) {
-  if (typeof text !== 'string') throw new Error(`${name} requires text`);
-  return Buffer.from(text, 'utf8').toString('hex');
-}
-
-// Neo VM push encoding of one contract parameter. `Struct` and `Array` are the same wire value
-// (both emit NEWARRAY), which is why the payload layer calls a struct an array.
-function pushParameter(parameter, name = 'parameter') {
-  if (!parameter || typeof parameter !== 'object' || Array.isArray(parameter)) {
-    throw new Error(`${name} must be a typed contract parameter`);
-  }
-  const { type, value } = parameter;
-  switch (type) {
-    case 'Null':
-      return '0b';
-    case 'Any':
-      if (value !== null && value !== undefined) throw new Error(`${name} of type Any must be null`);
-      return '0b';
-    case 'Boolean':
-      if (typeof value !== 'boolean') throw new Error(`${name} of type Boolean requires a boolean`);
-      return value ? '08' : '09';
-    case 'Integer':
-      return pushInt(value, name);
-    case 'String':
-      return pushBytes(utf8Hex(value, name), name);
-    case 'ByteArray':
-      return pushBytes(value, name);
-    case 'Hash160':
-      return pushBytes(reverse(hash160(value, name)), name);
-    case 'Array':
-    case 'Struct': {
-      if (!Array.isArray(value)) throw new Error(`${name} of type ${type} requires an array`);
-      return [...value].reverse().map((item, index) => pushParameter(item, `${name}[${index}]`)).join('')
-        + pushInt(value.length, `${name} length`) + 'c0';
-    }
-    default:
-      throw new Error(`${name} type ${String(type)} is not expressible in a shape-bound executeUserOp script`);
-  }
-}
-
-// System.Contract.Call with CallFlags.All (15): args, flags, method, contract, SYSCALL.
-function dynamicCall(contract, method, args, flags = 15) {
-  return pushParameter({ type: 'Array', value: args }, 'arguments')
-    + pushInt(flags, 'call flags')
-    + pushBytes(utf8Hex(method, 'method'), 'method')
-    + pushBytes(reverse(hash160(contract, 'contract')), 'contract')
-    + '41627d5b52';
-}
-
 function operationFields(op, name) {
   const fields = ['Struct', 'Array'].includes(op?.type) ? op.value : null;
-  if (!Array.isArray(fields) || fields.length !== 6) throw new Error(`${name} must be a six-field user operation`);
+  if (!Array.isArray(fields) || fields.length !== OPERATION_FIELDS) {
+    throw new Error(`${name} must be a ${OPERATION_FIELDS}-field user operation`);
+  }
   return fields;
 }
 
 /**
- * The one application call the proxy witness may authorize: core.executeUserOp(accountId, op) or
- * core.executeUserOps(accountId, ops), exactly two arguments, nothing else in the script.
- * Any other entrypoint, a second call, another core or another account is refused here rather than
+ * The one application call the proxy witness may authorize:
+ * core.executeUserOp(accountId, op) or core.executeUserOps(accountId, ops),
+ * exactly two arguments, nothing else in the script. Any other entrypoint, a
+ * second call, another core or another account is refused here rather than
  * left for the node's verifier to reject.
  */
-function buildExecuteUserOpScript({ coreHash, accountId, invocation }) {
+function buildExecuteUserOpScript({ coreHash, accountId, invocation, callFlags = DEFAULT_CALL_FLAGS }) {
   const core = hash160(coreHash, 'coreHash');
   const account = hash160(accountId, 'accountId');
   if (!invocation || typeof invocation !== 'object') throw new Error('invocation required');
@@ -185,26 +117,51 @@ function buildExecuteUserOpScript({ coreHash, accountId, invocation }) {
   if (!ACCOUNT_ENTRYPOINTS.includes(operation)) {
     throw new Error(`proxy witness requires an executeUserOp or executeUserOps invocation, not ${operation || 'nothing'}`);
   }
-  if (hash160(invocation.scriptHash, 'invocation.scriptHash') !== core) throw new Error('invocation names a different core');
+  if (hash160(invocation.scriptHash, 'invocation.scriptHash') !== core) {
+    throw new Error('invocation names a different core');
+  }
   const args = invocation.args;
-  if (!Array.isArray(args) || args.length !== 2) throw new Error('executeUserOp takes exactly two arguments');
-  if (args[0]?.type !== 'Hash160' || hash160(args[0].value, 'accountId argument') !== account) {
-    throw new Error('executeUserOp does not name this account');
+  if (!Array.isArray(args) || args.length !== 2) throw new Error(`${operation} takes exactly two arguments`);
+  // The v4 codec carries a hash as a ByteString of the stored byte order; the
+  // display-hex Hash160 spelling of v3 is accepted for comparison only, and the
+  // script is always emitted from the canonical value, so a witness can never
+  // authorize a script that differs from the one the client sends.
+  const accountArgument = hashValue(account);
+  if (!namesAccount(args[0], accountArgument)) {
+    throw new Error(`${operation} does not name this account`);
   }
   const batch = operation === 'executeUserOps';
   const ops = batch ? (args[1]?.type === 'Array' ? args[1].value : null) : [args[1]];
-  if (!Array.isArray(ops) || ops.length === 0) throw new Error('executeUserOp requires at least one user operation');
+  if (!Array.isArray(ops) || ops.length === 0) throw new Error(`${operation} requires at least one user operation`);
   ops.forEach((op, index) => operationFields(op, `user operation ${index}`));
-  return dynamicCall(core, operation, [
-    { type: 'Hash160', value: account },
-    batch ? { type: 'Array', value: ops } : ops[0],
-  ]);
+  return encodeDynamicCall(
+    core,
+    operation,
+    [accountArgument, batch ? { type: 'Array', value: ops } : ops[0]],
+    callFlags,
+  );
+}
+
+/** True when an invocation argument is this account, in either spelling. */
+function namesAccount(argument, canonical) {
+  if (!argument || typeof argument !== 'object') return false;
+  try {
+    // A ByteString argument already carries the stored byte order; the v3
+    // display-hex Hash160 spelling is reversed into it for comparison only.
+    if (argument.type === 'ByteString') return String(argument.value).toLowerCase() === canonical.value;
+    if (argument.type === 'Hash160') return hashValue(hash160(argument.value, 'accountId argument')).value === canonical.value;
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function feePayerSigner({ feePayer, feePayerScope, feePayerAllowedContracts }) {
   const payer = hash160(feePayer, 'feePayer');
   const scope = String(feePayerScope ?? 'CalledByEntry');
-  if (!FEE_PAYER_SCOPES.includes(scope)) throw new Error(`fee payer scope ${scope} is not expressible for a proxy-witness transaction`);
+  if (!FEE_PAYER_SCOPES.includes(scope)) {
+    throw new Error(`fee payer scope ${scope} is not expressible for a proxy-witness transaction`);
+  }
   if (scope !== 'CustomContracts') {
     if (feePayerAllowedContracts !== undefined && feePayerAllowedContracts.length) {
       throw new Error('fee payer allowlist is only meaningful with the CustomContracts scope');
@@ -213,46 +170,46 @@ function feePayerSigner({ feePayer, feePayerScope, feePayerAllowedContracts }) {
   }
   const allowed = Array.isArray(feePayerAllowedContracts) ? feePayerAllowedContracts : [];
   if (!allowed.length) throw new Error('CustomContracts scope requires a nonempty allowlist');
-  if (allowed.length > MAX_CUSTOM_CONTRACTS) throw new Error('CustomContracts allowlist exceeds the protocol limit');
-  return { account: payer, scopes: scope, allowedContracts: allowed.map((h) => hash160(h, 'allowed contract')) };
+  if (allowed.length > MAX_CUSTOM_CONTRACTS) {
+    throw new Error('CustomContracts allowlist exceeds the protocol limit');
+  }
+  return {
+    account: payer,
+    scopes: scope,
+    allowedContracts: allowed.map((h) => hash160(h, 'allowed contract')),
+  };
 }
 
 /**
- * The complete proxy-witness account transaction: the shape-bound executeUserOp(s) script, the
- * fee-paying signer, the restricted WitnessRules proxy signer and the proxy verification witness.
+ * The complete proxy-witness account transaction: the shape-bound
+ * executeUserOp(s) script, the fee-paying signer, the restricted WitnessRules
+ * proxy signer and the proxy verification witness.
  *
- * `scopeTarget` must be freshly read from the same core/RPC that will submit the transaction; this
- * builder refuses to proceed when the account has none. `expectedProxyHash`, also read from the
- * core, pins the derived proxy address to the core's own derivation.
+ * `proxyHash` must be the address the submitting core derives for `accountId`.
+ * `expectedProxyHash`, when supplied, is that same value read from the core and
+ * pins the witness to it.
  */
 function buildProxyWitnessTransaction({
   coreHash,
   accountId,
   invocation,
-  scopeTarget,
+  proxyHash,
   expectedProxyHash,
   feePayer,
   feePayerScope = 'CalledByEntry',
   feePayerAllowedContracts,
+  callFlags = DEFAULT_CALL_FLAGS,
 } = {}) {
   const core = hash160(coreHash, 'coreHash');
   const account = hash160(accountId, 'accountId');
-  const scope = requireScopeTarget(scopeTarget);
-  if (scope === core) throw new Error('Proxy scope target cannot be the core contract');
-  const script = buildExecuteUserOpScript({ coreHash: core, accountId: account, invocation });
-  const batch = String(invocation.operation) === 'executeUserOps';
-  const ops = batch ? invocation.args[1].value : [invocation.args[1]];
-  const targets = new Set(ops.map((op, index) => {
-    const fields = operationFields(op, `user operation ${index}`);
-    if (fields[0]?.type !== 'Hash160') throw new Error(`user operation ${index} does not name a Hash160 target contract`);
-    return hash160(fields[0].value, `user operation ${index} target`);
-  }));
-  if (targets.size !== 1) throw new Error('Proxy transfers in a batch must share the configured scope target');
-  const [target] = targets;
-  if (target !== scope) throw new Error('Proxy scope target does not match the transfer target');
+  const script = buildExecuteUserOpScript({ coreHash: core, accountId: account, invocation, callFlags });
   const proxy = createProxyWitness({
-    coreHash: core, accountId: account, targetContract: target, scopeTarget: scope,
-    feePayer, expectedProxyHash,
+    coreHash: core,
+    accountId: account,
+    proxyHash,
+    feePayer,
+    expectedProxyHash,
+    callFlags,
   });
   const payerSigner = feePayerSigner({ feePayer, feePayerScope, feePayerAllowedContracts });
   return Object.freeze({
@@ -260,8 +217,6 @@ function buildProxyWitnessTransaction({
     operation: String(invocation.operation),
     coreHash: core,
     accountId: account,
-    scopeTarget: scope,
-    targetContract: target,
     proxyHash: proxy.signer.account,
     proxySigner: proxy.signer,
     proxyWitness: proxy.witness,
@@ -272,14 +227,21 @@ function buildProxyWitnessTransaction({
 }
 
 /**
- * The browser-wallet signing path. The wallet signs the complete transaction (script, both
- * signers, fees) as the fee payer; the proxy witness is attached afterwards by the dApp, because a
- * wallet invoke API cannot supply a verification script it did not create. Wallets that will only
- * accept a custom scope are served here: the fee payer becomes CustomContracts with an explicit
- * allowlist, or Global, while the proxy keeps its restricted WitnessRules.
+ * The browser-wallet signing path. The wallet signs the complete transaction
+ * (script, both signers, fees) as the fee payer; the proxy witness is attached
+ * afterwards by the dApp, because a wallet invoke API cannot supply a
+ * verification script it did not create. Wallets that will only accept a
+ * custom scope are served here: the fee payer becomes CustomContracts with an
+ * explicit allowlist, or Global, while the proxy keeps its restricted
+ * WitnessRules.
  */
 function buildProxyWalletSignRequest({ transaction, scope = 'CustomContracts', allowedContracts } = {}) {
-  if (!transaction || typeof transaction !== 'object' || !Array.isArray(transaction.signers) || transaction.signers.length !== 2) {
+  if (
+    !transaction ||
+    typeof transaction !== 'object' ||
+    !Array.isArray(transaction.signers) ||
+    transaction.signers.length !== 2
+  ) {
     throw new Error('a built proxy-witness transaction is required');
   }
   const payerSigner = feePayerSigner({
@@ -292,8 +254,6 @@ function buildProxyWalletSignRequest({ transaction, scope = 'CustomContracts', a
     operation: transaction.operation,
     coreHash: transaction.coreHash,
     accountId: transaction.accountId,
-    scopeTarget: transaction.scopeTarget,
-    targetContract: transaction.targetContract,
     proxyHash: transaction.proxyHash,
     proxySigner: transaction.proxySigner,
     proxyWitness: transaction.proxyWitness,
@@ -304,38 +264,44 @@ function buildProxyWalletSignRequest({ transaction, scope = 'CustomContracts', a
 }
 
 /**
- * Build the transaction from the account's on-chain scope state. `readState` is the only source of
- * `scopeTarget` and `expectedProxyHash` and must read the same core/RPC that submits: neither value
- * may come from request metadata. It is injected so the relay, the wallet frontend and the local
- * chain fixture all resolve this authority through one entry point.
+ * Build the transaction with the proxy address read from the core. `readState`
+ * is the only source of the proxy address and must read the same core/RPC that
+ * submits; it is injected so the relay, the wallet frontend and the local chain
+ * fixture all resolve this authority through one entry point. A `proxyHash` may
+ * be supplied by a caller that already derived it, in which case it must match
+ * what the core answers or the transaction is refused.
  */
 async function resolveProxyWitnessTransaction({
   coreHash,
   accountId,
   invocation,
+  proxyHash,
   feePayer,
   readState,
   feePayerScope = 'CalledByEntry',
   feePayerAllowedContracts,
+  callFlags = DEFAULT_CALL_FLAGS,
 } = {}) {
   const core = hash160(coreHash, 'coreHash');
   const account = hash160(accountId, 'accountId');
-  if (typeof readState !== 'function') throw new Error('a scope-state reader is required');
+  if (typeof readState !== 'function') throw new Error('a proxy-state reader is required');
   const state = await readState({ coreHash: core, accountId: account });
+  const readProxyHash = state && state.proxyHash;
   return buildProxyWitnessTransaction({
     coreHash: core,
     accountId: account,
     invocation,
-    scopeTarget: state && state.scopeTarget,
-    expectedProxyHash: state && state.expectedProxyHash,
+    proxyHash: proxyHash || readProxyHash,
+    expectedProxyHash: readProxyHash,
     feePayer,
     feePayerScope,
     feePayerAllowedContracts,
+    callFlags,
   });
 }
 
 export {
-  PROXY_SCOPE_TARGET_REQUIRED,
+  DEFAULT_CALL_FLAGS,
   buildExecuteUserOpScript,
   buildProxyWalletSignRequest,
   buildProxyWitnessTransaction,

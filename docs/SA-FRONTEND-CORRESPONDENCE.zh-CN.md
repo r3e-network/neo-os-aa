@@ -457,10 +457,10 @@ require(not frontend_receipt['knownGaps']['slicedGaps'], ...)
 就是闭合它的地方，门禁在两个面的*并集*覆盖每个声明类型之前拒绝通过。
 
 null 返回是 manifest 无法表达的唯一情况。Neo 的 ABI 没有可空性，因此
-`object[]? GetPendingVerifierUpdate(...)` 仍声明 `Array`，而没有待处理更新的调用回答 null。在那里
+v3 的 `object[]? GetPendingVerifierUpdate(...)`（v4 已移除）仍声明 `Array`，而没有待处理更新的调用回答 null。在那里
 要求一个值会让正确的合约失败；把 null 计为匹配会让未测试的映射看起来已测试。因此规则是三值的：
 声明类型的值是匹配，声明引用类型处的 null 被允许并计入 `nullReturns` 而不标记该类型已演练，声明
-*值*类型处的 null 是不匹配。这是被度量的，不是被规定的——已注册账户上的 `getPendingVerifierUpdate`
+*值*类型处的 null 是不匹配。这是被度量的，不是被 规定的——已注册账户上 v3 的 `getPendingVerifierUpdate`（v4 已移除）
 正是形状规则第一次遇到 null 的地方。
 
 每次调用都会对 dump 运行十个变异——声明偏移被移动、派发落到别处、某个入口从未运行、缺失方法、

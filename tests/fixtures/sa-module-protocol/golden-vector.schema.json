@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "sa-module-protocol/golden-vector.schema.json",
   "title": "SA module-protocol v4 golden vector",
-  "description": "Skeleton schema for golden vectors consumed by both kernels (custom #39, native #40). 'TODO(kernel39|40)' values are placeholders filled by the kernel batches.",
+  "description": "Shape shared by the vectors in golden-vectors/. Every vector is produced by generate-vectors.py from docs/SA-MODULE-PROTOCOL.md alone and is consumed by BOTH kernels: SmartAccount.Contracts.Tests/ProtocolFixtureTests.cs (custom) and tests/SmartAccount.Native.Tests/UT_SmartAccountFixtures.cs (native).",
   "type": "object",
   "required": [
     "vectorId",
@@ -27,22 +27,40 @@
       ]
     },
     "constantsRevision": {
-      "type": "string",
-      "description": "Git blob sha (or commit) of contracts/custom/SmartAccount.ModuleProtocol.cs the vector was generated against."
+      "type": "object",
+      "description": "Git blob sha of each shared constants file the vector was generated against.",
+      "required": [
+        "custom",
+        "native"
+      ],
+      "properties": {
+        "custom": {
+          "type": "string",
+          "description": "Blob sha of contracts/custom/SmartAccount.ModuleProtocol.cs."
+        },
+        "native": {
+          "type": "string",
+          "description": "Blob sha of contracts/native/SmartAccount/SmartAccountModuleProtocol.cs."
+        }
+      }
     },
     "input": {
       "type": "object",
-      "description": "Exact byte-level inputs: network, coreHash (hex), accountId (hex), keys, subkeys, operation fields."
+      "description": "Exact byte-level inputs: network, coreHash (hex), accountId (hex display form), keys, subkeys, operation fields."
     },
     "expected": {
       "type": "object",
-      "description": "Expected byte-level outputs: hex serializations, digests, key bytes, and per-kernel results."
-    },
-    "expected.custom": {
-      "type": "object"
-    },
-    "expected.native": {
-      "type": "object"
+      "description": "Expected byte-level outputs. Kernel-independent values (identity, canonical operation bytes, key table) sit at the top level; digests that mix in a kernel's core hash or chain magic are pinned per kernel.",
+      "properties": {
+        "custom": {
+          "type": "object",
+          "description": "Values for kernel #39, including its own coreHash and network magic."
+        },
+        "native": {
+          "type": "object",
+          "description": "Values for kernel #40, including its own coreHash and network magic."
+        }
+      }
     },
     "notes": {
       "type": "string"

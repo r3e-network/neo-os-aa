@@ -2,7 +2,7 @@
 
 > 中文版本与 `docs/NATIVE_SYSTEM_ARCHITECTURE.md` 同构。若两者冲突，以英文版本为准。
 
-本文描述并行的[智能账户策略](SA-IMPLEMENTATION-STRATEGY.md) 中的原生实现。已部署合约实现是 NeoOS 近期的交付优先级。原生路径是 `SmartAccount`：一项具有小而明确的授权边界的协议服务。[ABI 2 配置](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) 定义了线上的合约约定。[SDK](NATIVE_SDK.md) 与[工作台](NATIVE_ACCOUNT_WORKSPACE.md) 消费该约定；两者都无法授予原生合约会拒绝的权限。在 Neo 提案与激活流程完成之前，该配置仍是草案。公开的 `SmartAccountV3` 与私有的 `PLATFORM` 是相互独立的运行时配置，拥有各自的账户身份与工件。原生实现的进展不会废止或暂停已部署合约的开发。
+本文描述并行的[智能账户策略](SA-IMPLEMENTATION-STRATEGY.md) 中的原生实现。已部署合约实现是 NeoOS 近期的交付优先级。原生路径是 `SmartAccount`：一项具有小而明确的授权边界的协议服务。[ABI 2 配置](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) 定义了线上的合约约定。[SDK](NATIVE_SDK.md) 与[工作台](NATIVE_ACCOUNT_WORKSPACE.md) 消费该约定；两者都无法授予原生合约会拒绝的权限。在 Neo 提案与激活流程完成之前，该配置仍是草案。公开的 custom `SmartAccount` 构建与私有的 `PLATFORM` 构建是相互独立的运行时配置，拥有各自的账户身份与工件。原生实现的进展不会废止或暂停已部署合约的开发。
 
 [账户用户指南](NATIVE_ACCOUNT_USER_GUIDE.md) 涵盖初始化、备份、权限与时序矩阵以及恢复决策。
 
@@ -44,9 +44,9 @@
 
 | 原生模块 | 预期用途 |
 | --- | --- |
-| NeoNativeVerifier | 具有确切验证器作用域的显式 Neo 见证授权 |
-| SessionKeyVerifier | 会过期的委托密钥与受限操作 |
-| MultiSigVerifier | 跨已准入子验证器模块的阈值授权 |
+| NeoWitnessValidator | 具有确切 validator 作用域的显式 Neo 见证授权 |
+| SessionKeyValidator | 会过期的委托密钥与受限操作 |
+| MultiSigValidator | 一个已配置的子签名者；阈值策略由核心持有 |
 | WhitelistHook | 允许的目标与方法 |
 | DailyLimitHook | 以实测代币余额变化计量有界支出 |
 | TokenRestrictedHook | 受限的代币流动与策略检查 |
@@ -55,7 +55,7 @@
 
 组合模块会在选定子项的执行后检查前后比对阈值、有序名单与签名域。这些子项会重新检查适用的当前策略，并为目标结果记账，而不重复 SessionKey 的密码学校验。回执的构造、复制以及所有后代调用都保持在固定的验证器预算之内。
 
-原生 MultiSig 配置最多准入三个子模块、两个必需批准与三个聚合签名域。独立的 NeoNativeVerifier 有自己的十签名方上限；组合上限不会削减那项独立能力。诸如三-of-五的普通见证法定人数应放在该独立验证器中；MultiSigVerifier 组合的是不同的验证器策略。受支持的组合仍需针对当前费用策略与实际模块字节码通过执行。
+原生 MultiSig 配置最多准入三个子模块、两个必需批准与三个聚合签名域。独立的 NeoWitnessValidator 有自己的十签名方上限；组合上限不会削减那项独立能力。诸如三-of-五的普通见证法定人数应放在该独立验证器中；MultiSigValidator 只校验一个已配置的子签名者。受支持的组合仍需针对当前费用策略与实际模块字节码通过执行。
 
 受支持的原生 P-256 密钥以其标准 Neo 签名账户身份作为规范签名域。配置会在存储压缩公钥之前，使用 `canonicalP256PublicKey` 严格校验压缩与非压缩编码；非法曲线点会在任何策略写入之前被拒绝。因此，把同一把密钥同时用作 SessionKey 与 NeoNative 签名方，不会产生两票独立投票。这并不证明不同密钥属于彼此独立的人，也无法揭示谁控制任意的验证脚本。代币策略同样依赖所选代币的行为与余额查询。确切的配置元数据只是准入兼容性检查，不是对任意第三方字节码遵循受支持模块实现的证明。
 

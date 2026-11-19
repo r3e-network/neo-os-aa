@@ -16,7 +16,7 @@ namespace SmartAccount.Contracts.Tests;
 /// The core <c>update(nef, manifest)</c> used to gate only on the admin witness and instantly
 /// call <c>ContractManagement.Update</c>, letting one admin key replace the authorization logic
 /// of every bound account with no delay or escape window. The fix mirrors the project's
-/// existing <c>VerifierAuthority.ProposeUpdate/Update</c> pattern: the admin pins
+/// existing <c>ValidatorAuthority.ProposeUpdate/Update</c> pattern: the admin pins
 /// <c>sha256(nef)</c> + <c>sha256(manifest)</c> via <c>proposeUpdate</c>, and <c>update</c> /
 /// <c>confirmUpdate</c> only applies that exact artifact pair after a 7-day window.
 /// </summary>
@@ -192,10 +192,11 @@ public class Fix_AdminTimelock_Tests
         Assert.AreEqual(fx.Now() + 7L * 24 * 60 * 60 * 1000, proposed[2].GetInteger(),
             "availableAt must be Runtime.Time + the 7-day upgrade window");
 
-        // update emits the pair that was actually applied.
+        // update emits the pair that was actually applied (plan item #13 pins the
+        // ContractUpdate* event stem).
         fx.AdvanceTime(Window);
         fx.CallVoid(wallet, "update", nef, manifest);
-        Neo.VM.Types.Array confirmed = fx.SingleNotificationState(wallet, "UpdateConfirmed");
+        Neo.VM.Types.Array confirmed = fx.SingleNotificationState(wallet, "ContractUpdateConfirmed");
         CollectionAssert.AreEqual(nefHash, confirmed[0].GetSpan().ToArray());
         CollectionAssert.AreEqual(manifestHash, confirmed[1].GetSpan().ToArray());
         Assert.AreEqual(BigInteger.One, UpdateCounter(fx, wallet), "update applied after the window");
@@ -210,14 +211,14 @@ public class Fix_AdminTimelock_Tests
 
         fx.CallVoid(wallet, "proposeUpdate", Sha256(nef), Sha256(manifest));
         fx.CallVoid(wallet, "cancelUpdate");
-        Neo.VM.Types.Array cancelled = fx.SingleNotificationState(wallet, "UpdateCancelled");
+        Neo.VM.Types.Array cancelled = fx.SingleNotificationState(wallet, "ContractUpdateCancelled");
         CollectionAssert.AreEqual(Sha256(nef), cancelled[0].GetSpan().ToArray());
         CollectionAssert.AreEqual(Sha256(manifest), cancelled[1].GetSpan().ToArray());
 
         // Cancelling with no pending proposal still emits the event, with zero hashes —
         // indexers can converge on the canonical ordering of the command.
         fx.CallVoid(wallet, "cancelUpdate");
-        Neo.VM.Types.Array empty = fx.SingleNotificationState(wallet, "UpdateCancelled");
+        Neo.VM.Types.Array empty = fx.SingleNotificationState(wallet, "ContractUpdateCancelled");
         CollectionAssert.AreEqual(new byte[32], empty[0].GetSpan().ToArray());
         CollectionAssert.AreEqual(new byte[32], empty[1].GetSpan().ToArray());
     }

@@ -14,7 +14,7 @@ Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
 
 ## 权限边界
 
-- 本仓库**拥有**：SA 用户操作、verifier 与 hook 插件绑定、
+- 本仓库**拥有**：SA 用户操作、验证器与钩子模块绑定、
   恢复策略、paymaster 策略、SA 合约行为，以及 SA 专属的
   前端与 SDK 集成。
 - 本仓库**从不拥有**：DID 资格或身份签发、网络身份
@@ -31,12 +31,12 @@ Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
       native/                native ABI 2 实现
         SmartAccount/        共识 SmartAccount 服务的真源
         Runtime/             与其一同编译的运行时叠加
-      plugins/               两个实现共用的插件合约
-        verifiers/           verifier 插件
-        hooks/               hook 插件
-        recovery/            社交恢复 verifier
-        templates/           第三方插件起点
-        native-profile/      共用插件的 native 配置构建
+      plugins/               两个实现共用的模块合约
+        validators/          验证器模块
+        hooks/               钩子模块
+        recovery/            社交恢复服务与 action-session 验证器
+        templates/           第三方模块起点
+        native-profile/      共用模块的 native 配置构建
       build/                 公开部署的固定工件
       compile.sh             把全部合约构建到 contracts/bin/（已忽略）
     tests/                   测试套件
@@ -53,7 +53,7 @@ Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
     README.md                公开项目与边界文档
 
 `contracts/custom/` 与 `contracts/native/` 存放同一分支上的两个实现；
-`contracts/plugins/` 存放两者都会绑定的 verifier 与 hook 合约。每个实现目录带有一份
+`contracts/plugins/` 存放两者都会安装的验证器与钩子模块。每个实现目录带有一份
 `profile.json`，记录其源码根、工件与验证命令；源码文件不重复。custom 配置
 （`contracts/custom/`）是当前 user-contract 的交付路径。native 配置
 （`contracts/native/`）存放为标准提交准备的共识 `SmartAccount` 服务真源；对应的
@@ -62,13 +62,13 @@ Neo core 仓库携带由它生成的副本，并拥有 native VM 的强制执行
 ## 文件组织规则
 
 - 合约源码与合约专属检查保留在 contracts/ 下，且只属于 custom/、native/ 或
-  plugins/ 其中之一。只有一个实现使用的合约归该实现；两个实现都能绑定的插件归
+  plugins/ 其中之一。只有一个实现使用的合约归该实现；两个实现都能安装的模块归
   plugins/。
 - mock 与探针合约保留在 tests/mocks/ 下；它们是测试夹具，不属于任何一个实现。
-- 第三方插件起点保留在 contracts/plugins/templates/ 下；模板针对
-  共享插件层（contracts/plugins/verifiers/Verifier*.cs、
+- 第三方模块起点保留在 contracts/plugins/templates/ 下；模板针对
+  共享模块层（contracts/plugins/validators/ValidatorAuthority.cs、
   contracts/plugins/hooks/HookAuthority.cs）编译，scripts/check_plugin_templates.mjs 使
-  其 manifest 与核心的绑定期 ABI 门禁保持一致。
+  其 manifest 与核心的安装期 ABI 门禁保持一致。
 - 使用 `contracts/custom/profile.json` 与
   `contracts/native/profile.json` 选择实现配置；
   不要从部署标签或共享的工件目录推断配置身份。

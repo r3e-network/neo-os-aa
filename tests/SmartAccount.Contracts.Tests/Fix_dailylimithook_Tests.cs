@@ -24,6 +24,10 @@ namespace SmartAccount.Contracts.Tests;
 // pre-fix, direct-target-only implementation. A companion check confirms the fixed
 // source still compiles to valid NeoVM bytecode by being exercised through the
 // runtime suites that load contracts/bin/public/hooks/DailyLimitHook.nef.
+//
+// Protocol v4 scopes every key and every callback to one (accountId, moduleId)
+// instance, so the helpers below now carry the resolved moduleId; the metering
+// invariants themselves are unchanged.
 // ---------------------------------------------------------------------------
 
 [TestClass]
@@ -45,25 +49,28 @@ public class Fix_DailyLimitHook_Tests
     {
         string source = ReadHook("DailyLimitHook.cs");
 
-        // PreExecute drives the snapshot over the whole configured-limit set.
-        StringAssert.Contains(source, "SnapshotAllLimitedBalances(accountId);",
+        // PreExecute drives the snapshot over the whole configured-limit set of the
+        // resolved instance.
+        StringAssert.Contains(source, "SnapshotAllLimitedBalances(accountId, moduleId);",
             "PreExecute must snapshot every configured-limit token before execution");
 
-        // The snapshot iterates the account's configured limits (Prefix_DailyLimit) with
+        // The snapshot iterates the instance's configured limits (Prefix_DailyLimit) with
         // RemovePrefix to recover each token hash — the configured set, not the op target.
-        StringAssert.Contains(source, "private static void SnapshotAllLimitedBalances(UInt160 accountId)",
+        StringAssert.Contains(source, "private static void SnapshotAllLimitedBalances(UInt160 accountId, BigInteger moduleId)",
             "an all-token snapshot helper must exist");
-        StringAssert.Contains(source,
-            "Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);",
-            "snapshot must iterate the configured-limit set");
-        StringAssert.Contains(source, "BigInteger before = TokenBalanceOf(token, AssetAddressOf(accountId));",
+        StringAssert.Contains(source, "HookAuthority.InstanceKey(Prefix_DailyLimit, accountId, moduleId),",
+            "snapshot must iterate the instance-scoped configured-limit set");
+        StringAssert.Contains(source, "FindOptions.KeysOnly | FindOptions.RemovePrefix);",
+            "snapshot must recover each configured token hash");
+        StringAssert.Contains(source, "BigInteger before = TokenBalanceOf(token, assetAddress);",
             "snapshot records each configured token's pre-execution balance at the address that holds it");
         // The accountId never holds a balance: a virtual SA account keeps its assets at
         // the core's proxy script hash, so metering the id charged nothing against the limit.
-        StringAssert.Contains(source, "HookAuthority.AuthorizedCore()",
-            "the holding address must be derived from the authorized core, not assumed");
-        StringAssert.Contains(source, "Contract.Call(core, \"getProxyScriptHash\", CallFlags.ReadOnly, accountId)",
-            "the hook asks the core for the canonical holding address");
+        StringAssert.Contains(source, "UInt160 assetAddress = HookAuthority.AssetAddress(accountId);",
+            "each callback resolves the canonical holding address once");
+        StringAssert.Contains(ReadHook("HookAuthority.cs"),
+            "Contract.Call(Core(), \"getProxyScriptHash\", CallFlags.ReadOnly, new object[] { accountId })",
+            "the holding address must be derived from the authorized core, never assumed");
         Assert.IsFalse(source.Contains("TokenBalanceOf(token, accountId)", StringComparison.Ordinal),
             "metering must never read the accountId's own balance");
 
@@ -84,9 +91,9 @@ public class Fix_DailyLimitHook_Tests
     {
         string source = ReadHook("DailyLimitHook.cs");
 
-        StringAssert.Contains(source, "MeterAllLimitedOutflows(accountId, directToken, declaredAmount);",
-            "PostExecute must meter the realized outflow of every configured-limit token");
-        StringAssert.Contains(source, "private static void MeterAllLimitedOutflows(UInt160 accountId, UInt160 directToken, BigInteger declaredAmount)",
+        StringAssert.Contains(source, "MeterAllLimitedOutflows(accountId, moduleId, directToken, declaredAmount);",
+            "PostCheck must meter the realized outflow of every configured-limit token");
+        StringAssert.Contains(source, "private static void MeterAllLimitedOutflows(UInt160 accountId, BigInteger moduleId, UInt160 directToken, BigInteger declaredAmount)",
             "an all-token delta-metering helper must exist");
 
         // Metering is driven by the configured-limit set and computed from the real balance delta.
@@ -94,6 +101,12 @@ public class Fix_DailyLimitHook_Tests
             "outflow is the realized pre/post balance delta, so indirect/native moves are counted");
         StringAssert.Contains(source, "ExecutionEngine.Assert(newTotal <= config.MaxAmount, \"Daily limit exceeded\");",
             "exceeding the configured limit must revert the whole transaction (fail closed)");
+        // Snapshots and spend counters are instance-scoped: two limit instances on one
+        // account never share a meter (spec §12).
+        StringAssert.Contains(source, "TokenKey(Prefix_BalanceSnapshot, accountId, moduleId, token)",
+            "snapshots must be keyed by instance");
+        StringAssert.Contains(source, "TokenKey(Prefix_SpentToday, accountId, moduleId, token)",
+            "spend counters must be keyed by instance");
 
         // A direct transfer is charged once at the greater of declared value and net outflow.
         StringAssert.Contains(source, "if (token == directToken && declaredAmount > outflow) outflow = declaredAmount;",
@@ -113,7 +126,7 @@ public class Fix_DailyLimitHook_Tests
         string source = ReadHook("DailyLimitHook.cs");
 
         StringAssert.Contains(source,
-            "return (BigInteger)Contract.Call(token, \"balanceOf\", CallFlags.ReadOnly, new object[] { account });",
+            "object balance = Contract.Call(token, \"balanceOf\", CallFlags.ReadOnly, new object[] { account });",
             "balances are read via the generic NEP-17 balanceOf (NEO/GAS expose this too)");
 
         // A dedicated transient snapshot prefix keeps the pre-balances separate from the limit

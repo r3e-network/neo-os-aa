@@ -66,69 +66,70 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  Entry[executeUserOp / executeSponsoredUserOp] --> Load[Load V3 account state]
+  Entry[executeUserOp / executeSponsoredUserOp] --> Load[Load v4 account record]
   Load --> PM{Paymaster?}
   PM -- Yes --> PMValidate[Optional relay preflight via ValidatePaymasterOp]
   PM -- No --> Auth
-  PMValidate --> Auth[Validate verifier or backup owner]
-  Auth --> Pre[preExecute hook]
+  PMValidate --> Auth[Validate validator instance or backup owner]
+  Auth --> Pre[PreCheck on each hook instance]
   Pre --> Call[Contract.Call target, method, args]
-  Call --> Post[postExecute hook]
+  Call --> Post[PostCheck on each hook instance]
   Post --> Settle{Paymaster?}
   Settle -- Yes --> PMSettle[Paymaster settles reimbursement → GAS to relay]
   Settle -- No --> Done[Return result]
   PMSettle --> Done
 ```
 
-The V3 core is intentionally small: authorization is delegated to verifier plugins, policy is delegated to hook plugins, and the core enforces nonce consumption, recovery state, and execution context.
+The v4 core is intentionally small: authorization is delegated to validator module instances, policy to hook instances, and the core owns the nonce channels, configuration intents, threshold policies, `hookOrder`, recovery state and execution context.
 
 ## 5. Authorization Modes
 
 - Backup-owner native witness
-- Web3Auth / EIP-712 verifier
-- TEE / WebAuthn / SessionKey / MultiSig / ZKEmail verifier plugins
-- Custom hook-mediated policy checks
+- Web3Auth / EIP-712 validator
+- TeeKey / P256 / SessionKey / DelegatedIdentity / MultiSig validator instances
+- Core-owned threshold policies over validator instances
+- Hook instances in `hookOrder`, plus the built-in recovery and message paths
 
 ## 6. Contract File Map
 
 | File | Responsibility |
 | --- | --- |
-| `contracts/custom/SmartAccount.cs` | Core V3 account state, `verify`, `executeUserOp`, nonce handling, backup-owner escape, hook/verifier config |
-| `contracts/plugins/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` verification |
-| `contracts/plugins/verifiers/TEEVerifier.cs` | TEE-signed authorization |
-| `contracts/plugins/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn authorization |
-| `contracts/plugins/verifiers/SessionKeyVerifier.cs` | Short-lived delegated keys |
-| `contracts/plugins/verifiers/MultiSigVerifier.cs` | Plugin multisig |
-| `contracts/plugins/verifiers/ZKEmailVerifier.cs` | Email-based authorization extension |
+| `contracts/custom/SmartAccount.cs` | v4 account control record, `verify`, `executeUserOp`, nonce channels, callback-free recovery, module configuration intents |
+| `contracts/plugins/validators/Web3AuthValidator.cs` | EIP-712 `UserOperation` verification |
+| `contracts/plugins/validators/TeeKeyValidator.cs` | TEE-signed authorization |
+| `contracts/plugins/validators/P256Validator.cs` | Passkey / P-256 authorization |
+| `contracts/plugins/validators/SessionKeyValidator.cs` | Short-lived delegated keys, one credential set per instance |
+| `contracts/plugins/validators/MultiSigValidator.cs` | Threshold member validation; the core owns the policy |
+| `contracts/plugins/validators/ZKEmailVerifier.cs` | Disabled email-authorization template; `onInstall` refuses |
+| `contracts/plugins/validators/DelegatedIdentityValidator.cs` | Delegated (zkLogin) identity authorization |
+| `contracts/plugins/validators/SubscriptionValidator.cs` | Bounded recurring charges; the core nonce is the only sequence |
 | `contracts/plugins/hooks/*.cs` | Optional policies such as daily limits, token restrictions, and credential gating |
 | `contracts/custom/paymaster/Paymaster.cs` | On-chain Paymaster for sponsored/gasless transactions (GAS deposits, policies, settlement) |
 | `contracts/custom/paymaster/PaymasterAuthority.cs` | Paymaster admin + authorized core validation |
 
 ## 7. Module Lifecycle
 
-V3 now has two layers of lifecycle signaling:
+Every module change travels the configuration-intent path and emits the generic module events:
 
-- legacy compatibility events that remain verifier-specific or hook-specific,
-- and a generic module lifecycle that treats verifiers and hooks as first-class modules.
+- **install**: `proposeConfiguration` -> 24 h -> `confirmConfiguration` installs a validator or hook instance and emits `ModuleInstanceInstalled`
+- **configure**: re-configuring an installed instance emits `ModuleInstanceConfigured` through the same intent path
+- **remove**: an intent action, market settlement or a recovery sweep removes the instance and emits `ModuleInstanceRemoved`
+- **cancel / expire**: `cancelConfiguration` emits `ConfigurationIntentCancelled`; an intent whose window closes emits `ConfigurationIntentExpired`
+- **policy**: `HookOrderSet` and `ThresholdPolicySet` record the ordered hook chain and the core threshold policy
 
-The generic lifecycle is:
-
-- **install**: first binding of a verifier or hook emits `ModuleInstalled`
-- **replace**: timelocked replacement emits `ModuleUpdateInitiated` and later `ModuleUpdateConfirmed`
-- **remove**: replacement to `UInt160.Zero`, market settlement cleanup, or escape-driven clearing emits `ModuleRemoved`
-- **cancel**: aborting a pending verifier or hook rotation emits `ModuleUpdateCancelled`
-
-This keeps older indexers working while giving new tooling one consistent lifecycle model to consume.
+The reused `ModuleInstalled` / `ModuleUpdateInitiated` / `ModuleUpdateConfirmed` / `ModuleRemoved` /
+`ModuleUpdateCancelled` feed keeps older indexers working.
 
 ## 8. Recovery Model
 
-V3 recovery is explicit:
+v4 recovery is explicit and callback-free:
 
-1. `initiateEscape(accountId)` starts the backup-owner timelock.
-2. `finalizeEscape(accountId, newVerifier)` rotates the verifier after the delay.
-3. Any successful normal execution clears an in-progress escape flow.
+1. `beginRecovery(accountId, newCustody)` records a pending custody rotation that matures after the account's `recoveryTimelockMs` (7-90 days, fixed at creation).
+2. `cancelRecovery(accountId)` deletes the pending record; only one can exist and its timer never restarts.
+3. `executeRecovery(accountId)` is permissionless after maturity: it sweeps every module row and advances the authority epoch without calling any validator, hook, Market or Oracle.
+4. `getRecoveryStatus(accountId)` reads the pending record back as `[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]`.
 
-This keeps recovery auditable without reintroducing large role graphs into the core wallet.
+This keeps recovery auditable and removes the old-plugin liveness dependency.
 
 ## 9. Paymaster (Sponsored Transactions)
 

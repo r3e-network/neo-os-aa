@@ -167,7 +167,7 @@ Pass that same `cancellationAuthority` to `prepareTransaction`, supply the payer
 wallet as `feePayer`, and supply the selected authority in `authoritySigners` when
 it differs from the payer. Editing either selection invalidates the previous
 review and any imported signed transaction. Receipt checks require the same signer order and exact
-scopes; no broader superset is accepted. Additional NeoNativeVerifier or MultiSig
+scopes; no broader superset is accepted. Additional NeoWitnessValidator or MultiSig
 transaction witness signers are not collected by this UI. Such integrations need
 a separate SDK review that includes their discovered module scopes; this page
 will not call an unreviewed larger signer roster a confirmed success. Do not call arbitrary

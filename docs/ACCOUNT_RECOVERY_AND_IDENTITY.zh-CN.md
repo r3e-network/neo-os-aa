@@ -2,7 +2,7 @@
 
 > 中文版本与 `docs/ACCOUNT_RECOVERY_AND_IDENTITY.md` 同构。若两者冲突，以英文版本为准。
 
-`finalizeEscape` 是带时间锁的备份所有者操作。在调用旧插件或改变状态之前，每个非零的替换验证器都必须通过与 `confirmVerifierUpdate` 相同的 V3 清单与能力校验。零验证器则是显式回到备份所有者授权的路径。
+`proposeConfiguration` / `confirmConfiguration` 是带时间锁的所有者路径，用于变更账户的模块集合。核心在派发生命周期回调之前，会从自己记录的模块集合解析目标实例，并重新校验已安装模块的 profile 与生命周期 ABI；绝不信任调用方提供的替换地址。空的 validator 集合则是显式回到仅托管授权的 路径。
 
 恢复是原子的，但其完成取决于已安装的验证器与钩子能否成功执行 `clearAccount`。被销毁、不兼容或出错的插件，即使在时间锁到期后也仍然可以阻断终结。这不是无条件的恢复保证。忽略清理故障会留下持久的插件权限；要移除这一依赖，需要另行设计权限 epoch / 撤销边界，并迁移所有插件状态的消费方。
 
@@ -10,7 +10,7 @@
 
 - `getAccountIdByProxy(proxy)` 解析平台注册的账户。反向索引并非对所有旧账户都已填充。结果为零时，必须要求显式账户 ID；界面不得用代理地址代替账户 ID。
 - `getProxyScriptHash(accountId)` 在同时具备两者时，用请求的代理校验提供或解析出的 ID。
-- `getVerifier(accountId)` 确认账户存在并取得其绑定的验证器。Neo RPC 以 20 字节小端栈值返回 UInt160；界面在使用 Hash160 参数之前会将其转换为显示顺序的十六进制。
+- `getModules(accountId)` 确认账户存在并按模块 id 与角色列出其已安装的 validator 与 hook 实例；`getAccount(accountId)` 返回账户记录。Neo RPC 以 20 字节小端栈值返回 UInt160；界面在使用 Hash160 参数之前会将其转换为显示顺序的十六进制。
 
 RPC URL 与核心哈希必须配置；畸形输入、身份不匹配、FAULT 响应与畸形栈值都必须失败关闭。`getAccountIdByAddress` 与 `getVerifierContractByAddress` 已从所有已部署清单中移除：本核心不暴露这类 ABI。切换账户、核心或账户 ID 预填值时，界面会作废尚未完成的读取，因此迟到的响应无法恢复先前账户的恢复上下文。
 
@@ -22,7 +22,7 @@ RPC URL 与核心哈希必须配置；畸形输入、身份不匹配、FAULT 响
 
 ## 一种可能的权限 epoch 恢复设计（仅为提案）
 
-当前实现已经为核心推导代理上的资产提供了有用的边界：`executeUserOp` 从核心状态中选择验证器与钩子，而 `verify` 只在活跃的目标上下文中接受 Application 阶段的见证请求。`canConfigureVerifier` / `canConfigureHook` 要求临时上下文；`canExecuteVerifier` / `canExecuteHook` 要求活跃的根与直接调用方。这些检查实现在 `SmartAccount.Execution.cs` 与 `SmartAccount.VerifyContext.cs` 中；模块侧对应的检查位于 `VerifierAuthority.cs` 与 `HookAuthority.cs`。
+当前实现已经为核心推导代理上的资产提供了有用的边界：`executeUserOp` 从核心状态中选择验证器与钩子，而 `verify` 只在活跃的目标上下文中接受 Application 阶段的见证请求。配置回调（`configure`）要求临时上下文；执行回调（`validateUserOp` / `preCheck`）要求活跃的根与直接调用方。这些检查实现在 `SmartAccount.Execution.cs` 与 `SmartAccount.VerifyContext.cs` 中；模块侧对应的检查位于 `ValidatorAuthority.cs` 与 `HookAuthority.cs`。
 
 这些检查并不能证明摘除模块就抹除了它的全部权限：
 

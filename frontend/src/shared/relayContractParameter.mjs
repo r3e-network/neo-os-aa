@@ -66,7 +66,10 @@ export function normalizeRelayContractParameter(parameter, { depth = 0, byteEnco
     case 'String':
       if (typeof value !== 'string') fail('String requires text');
       break;
-    case 'ByteArray': {
+    case 'ByteArray':
+    // A v4 operation argument is a §4.1 ByteString of hex bytes. The relay DTO has one byte-array
+    // shape, so the alias is normalized to it here instead of teaching every consumer a second name.
+    case 'ByteString': {
       if (typeof value !== 'string') fail('ByteArray requires encoded bytes');
       let hex;
       if (encoding === 'base64') hex = base64Hex(value);
@@ -77,8 +80,7 @@ export function normalizeRelayContractParameter(parameter, { depth = 0, byteEnco
         if (isHex(value)) fail('ambiguous ByteArray: prefix hex with 0x or pass a ContractParam instance');
         hex = base64Hex(value);
       }
-      value = `0x${hex}`;
-      break;
+      return { type: 'ByteArray', value: `0x${hex}` };
     }
     case 'Hash160':
     case 'Hash256':

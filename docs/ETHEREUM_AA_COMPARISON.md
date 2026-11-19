@@ -24,10 +24,10 @@ This document maps Ethereum ERC-4337 (Account Abstraction) and ERC-7579 (Modular
 | **WalletContract** | N/A | Neo uses native `CheckWitness` with `VerifyContext` instead of separate wallet contract. |
 | **Paymaster** | `SAPaymaster` Contract + Off-chain Morpheus | On-chain Paymaster contract for trustless sponsorship with deposit/policy/settlement, plus optional off-chain Morpheus integration. |
 | **Bundler** | Relay Server | Packages `UserOperation`s into Neo transactions. |
-| **Aggregator** | MultiHook | Combines multiple validation/policy modules (hooks) into one. |
+| **Aggregator** | Core threshold policy + `hookOrder` | v4 replaced `MultiHook` with the core threshold policy and an ordered hook chain; `MultiHook` remains only as a migration artefact whose `onInstall` rejects new installations. |
 | **Validator** | Verifier Plugin | Signature verification logic (ECDSA, WebAuthn, TEE, etc.). |
 | **Executor** | N/A | Core contract directly executes; no separate executor needed. |
-| **Fallback Handler** | `BackupOwner` Native Witness | L1 escape hatch for when verifiers fail. |
+| **Fallback Handler** | Custody / recovery-authority witness | Callback-free `beginRecovery` → `executeRecovery` rotates custody and sweeps every module without calling a plugin. |
 | **UserOperation** | `UserOperation` struct | Nearly identical: target, method, args, nonce, deadline, signature. |
 
 ---
@@ -100,11 +100,11 @@ flowchart TD
 flowchart TD
     Relay[Relay / Client] --> Core[SmartAccount]
     Core --> Execute[executeUserOp]
-    Execute --> Auth{Verifier or BackupOwner?}
+    Execute --> Auth{Validator agrees or custody witness?}
     Auth -- Yes --> Nonce[Consume Nonce]
-    Nonce --> Pre[preExecute Hook]
+    Nonce --> Pre[preCheck Hook]
     Pre --> Call[Contract.Call Target]
-    Call --> Post[postExecute Hook]
+    Call --> Post[postCheck Hook]
     Post --> Return[Return Result]
     Auth -- No --> Reject[Reject]
 ```
@@ -207,22 +207,22 @@ interface IFallback {
 ```csharp
 // Verifier (Validator equivalent)
 interface IVerifier {
-    bool validateSignature(UInt160 accountId, UserOperation op);
-    ByteString getPayload(...);
+    bool validateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation);
+    void onUserOpComplete(UInt160 accountId, object[] operation, object result);
 }
 
 // Hook (Policy module equivalent)
 interface IHook {
-    void preExecute(UInt160 accountId, object[] opParams);
-    void postExecute(UInt160 accountId, object[] opParams, object result);
+    ByteString preCheck(UInt160 accountId, object[] operation);
+    void postCheck(UInt160 accountId, object[] operation, object result, ByteString hookData);
 }
 ```
 
 **Mapping:**
-- `IVerifier.validateSignature` ≈ `IValidator.validateUserOp`
-- `IHook.preExecute` ≈ Pre-execution validation hook
-- `IHook.postExecute` ≈ Post-execution cleanup
-- `MultiHook` ≈ ERC-7579 Aggregator
+- `IValidator.validateUserOp` ≈ ERC-7579 module `onInstall/validateUserOp` authorization
+- `IHook.preCheck` ≈ Pre-execution validation hook
+- `IHook.postCheck` ≈ Post-execution cleanup with the instance's `hookData`
+- Core-owned `thresholdPolicy` ≈ ERC-7579 Aggregator (modules never call each other)
 
 ---
 
@@ -294,23 +294,22 @@ object result = executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbu
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Configured: BackupOwner set
-    Configured --> EscapeInitiated: initiateEscape(accountId) called
-    EscapeInitiated --> [*]: Normal op cancels escape
-    EscapeInitiated --> EscapeFinalized: Timelock expires + finalizeEscape(accountId, newVerifier)
-    EscapeFinalized --> [*]: Verifier reset to BackupOwner
+    [*] --> Configured: recoveryTimelockMs fixed at createAccount
+    Configured --> RecoveryInitiated: beginRecovery(accountId, newCustody)
+    RecoveryInitiated --> Configured: cancelRecovery(accountId)
+    RecoveryInitiated --> RecoveryExecuted: Timelock matures + executeRecovery(accountId)
+    RecoveryExecuted --> [*]: Custody rotated, every module swept
 ```
 
-The two deployed entrypoints take the account id, and `finalizeEscape` also takes the verifier the
-account falls back to (`contracts/build/SmartAccount.manifest.json`; implemented in
-`contracts/custom/SmartAccount.Escape.cs`, where the C# methods are spelled with a leading capital —
-that form names no exported method, which is why it is not code-formatted here).
+The entrypoints take the account id; `beginRecovery` also takes the custody it rotates
+to, and `getRecoveryStatus` reads the pending record back
+(`contracts/custom/SmartAccount.Escape.cs`).
 
 **Features:**
-- **Timelock:** Configurable 7-90 days
-- **Cancel-on-use:** Any normal operation cancels in-progress escape
-- **No oracle dependency:** Pure on-chain state machine
-- **No per-account deployment:** Works with virtual accounts
+- **Timelock:** 7-90 days, fixed per account at creation
+- **Explicit cancellation:** `cancelRecovery` by custody or recovery authority
+- **Callback-free execution:** `executeRecovery` calls no validator, hook, Market or Oracle
+- **No per-account deployment:** works with virtual accounts
 
 **Comparison:** More robust than typical Ethereum AA recovery (which often depends on wallet-specific off-chain mechanisms or complex social recovery smart contracts).
 
@@ -338,13 +337,13 @@ that form names no exported method, which is why it is not code-formatted here).
 
 | Concept | How to Adapt |
 | --- | --- |
-| **Deploying new account** | Use `registerAccount()` instead of deploying a proxy. Account address is deterministic. |
+| **Deploying new account** | Use `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` instead of deploying a proxy. Identity is custody+salt and the account address is deterministic. |
 | **Sending UserOperation** | Call `executeUserOp(accountId, op)` instead of `handleUserOps()`. |
 | **Paymaster integration** | Use `SAPaymaster` contract (on-chain deposit/policy/settlement) or off-chain Morpheus endpoint. Call `executeSponsoredUserOp()` for on-chain, or implement off-chain auth for Morpheus. |
-| **Aggregator pattern** | Use `MultiHook` to combine policy modules. |
+| **Aggregator pattern** | Use the core threshold policy plus `hookOrder` to combine policy hooks; `MultiHook` rejects new installations and survives only for migration. |
 | **Bundler integration** | Implement relay server that calls `simulateMetaInvocation()` then `relayMetaInvocation()`. |
-| **Signature schemes** | Use `Web3AuthVerifier` for EVM sigs, `WebAuthnVerifier` for passkeys. |
-| **Recovery** | Use `initiateEscape()` / `finalizeEscape()` for L1 backup. |
+| **Signature schemes** | Use `Web3AuthValidator` for EVM sigs, `P256Validator` for passkeys. |
+| **Recovery** | Use `beginRecovery()` / `executeRecovery()` for L1 backup. |
 
 ### Code Pattern: Ethereum AA → Neo SA
 
@@ -371,7 +370,7 @@ relayMetaInvocation({ scriptHash: aaContract, operation: "executeUserOps", args:
    `CallWithGasLimit`; see `docs/reports/sa-platform-gas-cap-20260921.json`.
 2. **Simpler Fee Model:** No per-op gas estimation hooks (Neo has fixed transaction fees).
 3. **No Staking Mechanism:** On-chain Paymaster uses direct GAS deposits, not staking.
-4. **Limited Aggregation:** `MultiHook` doesn't aggregate signatures like Ethereum aggregators.
+4. **Limited Aggregation:** the core threshold policy and ordered hooks don't aggregate signatures like Ethereum aggregators.
 
 ---
 
@@ -394,10 +393,10 @@ upgrade-required boundary until the governed upgrade lands:
   wallets and indexers stop fanning out across per-field getters.
 - **ERC-7715 session permissions ≈ `buildSessionKeyPermission`:** the SDK
   emits a 7715-shaped grant (signer + contract-call permission + unix-second
-  expiry) next to the canonical on-chain artifacts; the registration-time
-  version-0x01 blob installs the first session key immediately
-  (`SessionKeyVerifier.setPublicKey`), closing the day-one usability gap
-  without weakening the 24h rotation cooldown for later changes.
+  expiry) next to the canonical on-chain artifacts; the initial installation
+  carries the first session credential in its `onInstall` data
+  (`SessionKeyValidator`), closing the day-one usability gap without
+  weakening the 24h intent timelock for later changes.
 - **4337 tooling shape ≈ `toErc4337UserOperation`:** sender = account id,
   `callData` = the Neo VM invocation script, gas fields zeroed (Neo prices
   execution in the VM), deadline carried as an extension field.

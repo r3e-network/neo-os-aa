@@ -85,7 +85,7 @@ namespace SmartAccount.Mocks
             BigInteger credentialGeneration, bool instanceIsolation, bool messageCapability,
             bool thresholdMemberEligible)
         {
-            ExecutionEngine.Assert(moduleId > 0 && moduleType >= 1 && moduleType <= 2, "Invalid module");
+            ExecutionEngine.Assert(moduleId > 0 && moduleType >= 1 && moduleType <= 4, "Invalid module");
             Storage.Put(Storage.CurrentContext, InstanceKey(Prefix_Module, accountId, moduleId),
                 StdLib.Serialize(new object[]
                 {

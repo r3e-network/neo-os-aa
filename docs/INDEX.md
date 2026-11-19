@@ -136,7 +136,7 @@ is the archived pre-V3 status.
 
 Same-transaction SA creation plus `.matrix` registration is supported for compatible
 Neo wallets. `.matrix` resolves a human-readable name to a controlling address; the
-frontend then reads the core's per-account state (`getAccountState`, the derived
-proxy and the bound verifier) to confirm the account behind that address. The
+frontend then reads the core's per-account state (`getAccount`, the derived
+proxy and the account control record) to confirm the account behind that address. The
 contract exposes no reverse index from an owner address to its accounts, so a
 `.matrix` name is a starting point for a lookup, not proof of account ownership.

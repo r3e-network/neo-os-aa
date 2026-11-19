@@ -23,8 +23,8 @@ public class ImplementationRefinementPublicRuntimeTests
     private const long HostGas = 100 * Gas;
     private static readonly UInt160 Sponsor = UInt160.Parse("0x7777777777777777777777777777777777777777");
     private static readonly UInt160 Relay = UInt160.Parse("0x8888888888888888888888888888888888888888");
-    private static readonly UInt160 Owner = UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
     private static readonly UInt160 Recipient = UInt160.Parse("0x4444444444444444444444444444444444444444");
+    private const uint RecoveryTimelockMs = 2_592_000_000;
     private sealed record Observation(string Method, BigInteger Reserved, byte[] Hash, long GasConsumed);
     private sealed record RunResult(bool Fault, string? Error, byte[] Hash, byte[]? Committed, byte[]? Pending,
         IReadOnlyList<Observation> Observations, IReadOnlyList<NotifyEventArgs> Notifications);
@@ -129,7 +129,7 @@ public class ImplementationRefinementPublicRuntimeTests
         UInt160 callback = h.Callback(h.Account, h.Transfer(1), 3 * Gas);
         RunResult r = h.Run([(false, h.Account, h.CallbackOp(callback), 3 * Gas)]);
         Assert.IsTrue(r.Fault);
-        StringAssert.Contains(r.Error!, "Reentrant call rejected");
+        StringAssert.Contains(r.Error!, "SA_REENTRANCY_FORBIDDEN");
         AssertDiscovery(r, 3 * Gas, 5 * Gas);
         h.CheckUnchanged(r);
         Assert.IsNull(r.Pending, "Faulted first contract frame must not commit to its parent");
@@ -152,7 +152,7 @@ public class ImplementationRefinementPublicRuntimeTests
         StringAssert.Contains(r.Error!, fault switch
         {
             "cap" => "Reimbursement exceeds actual gas cost",
-            "nonce" => "Invalid sequence for channel",
+            "nonce" => "SA_NONCE_INVALID",
             "settlement" => "Total budget exceeded",
             _ => "public refinement outer abort"
         });
@@ -328,6 +328,7 @@ public class ImplementationRefinementPublicRuntimeTests
     private sealed class Harness
     {
         private readonly RuntimeFixture fx = new();
+        private readonly P256SessionKey key = new();
         private readonly UInt160 core, target, paymaster;
         private readonly StorageKey budget;
         private readonly BigInteger deadline;
@@ -336,18 +337,18 @@ public class ImplementationRefinementPublicRuntimeTests
         public UInt160 Account { get; }
         public Harness()
         {
-            VerifyArtifact("SmartAccount", "9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76",
-                "a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31");
-            VerifyArtifact("SAPaymaster", "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1",
-                "a066faf3ee31e9c1e716bf26f0ccfab74f1c9639adacb1adab0502b20918ca54");
+            VerifyArtifact("SmartAccount", "2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb",
+                "f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f");
+            VerifyArtifact("SAPaymaster", "4cb6706137667d22f446d5cb127d115bede5b86e21d31e08eee4477ebb37898e",
+                "d7d40ee1855f086958e0f0883c6d5fec7783a9bc236bc74d12f69fdb69406e53");
             VerifyArtifact("MockTransferTarget", "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",
-                "3760aefced22c045b98414368e4c3eac5a6d9dc866a1b6f017c49c01518d401c");
+                "abf70a1b7c3ba7c07212aae78570131fcd381bf0bc8b594b07932c5e7ba03e95");
             core = fx.Deploy("SmartAccount");
             target = fx.Deploy("MockTransferTarget");
             paymaster = fx.Deploy("SAPaymaster", core.ToArray());
             ContractState state = NativeContract.ContractManagement.GetContract(fx.Engine.Storage.Snapshot, core)!;
             budget = new StorageKey { Id = state.Id, Key = new byte[] { 0x21 } };
-            Account = Register(2_592_000);
+            Account = Register("refinement-public-primary");
             fx.FundGasFromValidators(Sponsor, 100 * Gas);
             fx.SetSigners(Sponsor);
             fx.TransferGas(Sponsor, paymaster, 50 * Gas, null);
@@ -363,13 +364,18 @@ public class ImplementationRefinementPublicRuntimeTests
             Assert.AreEqual(nef, Hex(SHA256.HashData(File.ReadAllBytes(Path.Combine(root, name + ".nef")))));
             Assert.AreEqual(manifest, Hex(SHA256.HashData(File.ReadAllBytes(Path.Combine(root, name + ".manifest.json")))));
         }
-        private UInt160 Register(uint delay)
+        private UInt160 Register(string salt)
         {
-            UInt160 account = fx.CallUInt160(core, "computeRegistrationAccountId", UInt160.Zero,
-                System.Array.Empty<byte>(), UInt160.Zero, Owner, delay);
-            fx.SetSigners(Owner);
-            fx.CallVoid(core, "registerAccount", account, UInt160.Zero, System.Array.Empty<byte>(), UInt160.Zero, Owner, delay);
-            return account;
+            // v4 identity is custody‖salt (spec §16.1); the recovery timelock is
+            // carried in milliseconds and must sit inside the protocol window.
+            return fx.CreateAccount(core, Custody, RuntimeFixture.Salt(salt), RecoveryTimelockMs);
+        }
+        /// <summary>Custody address of the canonical P-256 script that signs every op.</summary>
+        private UInt160 Custody => RuntimeFixture.CustodyOf(key);
+        private object[] Sign(object[] op, UInt160 account)
+        {
+            op[11] = fx.SignBuiltIn(core, account, op, key);
+            return op;
         }
         private void Policy(UInt160 account, long total)
         {
@@ -380,13 +386,26 @@ public class ImplementationRefinementPublicRuntimeTests
         public void RestrictPolicy(long total) => Policy(Account, total);
         public UInt160 SecondAccount()
         {
-            UInt160 second = Register(2_592_001);
+            UInt160 second = Register("refinement-public-secondary");
             Policy(second, 50 * Gas);
             return second;
         }
-        public object[] Transfer(BigInteger nonce, UInt160? account = null) => RuntimeFixture.UserOp(target, "transfer",
-            new object?[] { account ?? Account, Recipient, (BigInteger)1000, null }, nonce, deadline, System.Array.Empty<byte>());
-        public object[] CallbackOp(UInt160 callback) => RuntimeFixture.UserOp(callback, "run", [], 0, deadline, System.Array.Empty<byte>());
+        public object[] Transfer(BigInteger sequence, UInt160? account = null) => Sign(
+            RuntimeFixture.UserOp(target, "transfer",
+                new object?[] { account ?? Account, Recipient, (BigInteger)1000, null },
+                Packed(account ?? Account, sequence), deadline, null),
+            account ?? Account);
+        public object[] CallbackOp(UInt160 callback) => Sign(
+            RuntimeFixture.UserOp(callback, "run", [], Packed(Account, BigInteger.Zero), deadline, null), Account);
+        /// <summary>
+        /// v4 packs a 191-bit channel (a digest of the routing subject) above a
+        /// 64-bit sequence; only the sequence is a caller choice.
+        /// </summary>
+        private BigInteger Packed(UInt160 account, BigInteger sequence)
+        {
+            BigInteger current = fx.PackedNonce(core, account, BigInteger.Zero);
+            return (current & ~((BigInteger.One << 64) - 1)) | sequence;
+        }
         public UInt160 Callback(UInt160 account, object[] op, long request)
         {
             // This test-only adversary calls the unchanged public entry. There is
@@ -421,7 +440,8 @@ public class ImplementationRefinementPublicRuntimeTests
             entries[hash] = methods.ToDictionary(m => state.Manifest.Abi.GetMethod(m, -1)!.Offset, m => m);
         }
         private BigInteger Deposit() => fx.CallInteger(paymaster, "getSponsorDeposit", Sponsor);
-        public BigInteger Nonce(UInt160 account) => fx.CallInteger(core, "getNonce", account, BigInteger.Zero);
+        public BigInteger Nonce(UInt160 account) => RuntimeFixture.NonceSequence(
+            fx.CallInteger(core, "getNonce", account, BigInteger.Zero, RuntimeFixture.DefaultNonceSubkey()));
         public void CheckCommitted(RunResult r, long reserved, int nonce)
         {
             CheckLedger(r.Committed, r.Hash, reserved);
@@ -446,7 +466,7 @@ public class ImplementationRefinementPublicRuntimeTests
                 call.Account, call.Op, paymaster, Sponsor, (BigInteger)call.Request);
             if (outerAbort) { script.EmitPush("public refinement outer abort"); script.Emit(OpCode.ABORTMSG); }
             else script.Emit(OpCode.RET);
-            fx.SetSigners(Relay, Owner);
+            fx.SetSigners(Relay, Custody);
             fx.Engine.Transaction.SystemFee = systemFee;
             fx.Engine.Transaction.NetworkFee = networkFee;
             fx.Engine.Transaction.Script = script.ToArray();

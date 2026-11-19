@@ -6,7 +6,7 @@
 
 custom 已部署 `SmartAccount` 仍来自已测试主分支的 `public` 实现；其独立的 `PLATFORM` 构建保留 10 GAS 的有界验证器回调。两者都不是原生 SmartAccount 合约。原生 ABI 2 使用 1 GAS 验证器预算（位于 1.5 GAS 验证信封之内）、2.5 GAS 钩子 / 维护预算，以及显式的能识别 epoch 的模块打包。
 
-原生恢复现在要求经过检查的权限 epoch 与配置 nonce 推进，在不调用旧模块的情况下摘除旧根 / 依赖，并保持身份、资产地址、执行 nonce 与冻结状态不变。所有模块存储使用 `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`。原生四参数执行信封在未签名交易脚本中承诺这两个计数器，覆盖托管回退与原生交易见证；操作签名原像同样绑定它们。上一代密钥或签名无法通过重新安装模块而恢复。这与普通 `finalizeEscape` 不同，后者的旧模块清理仍可能失败关闭。当前源码还提供无需回调的 `finalizeEscapeToOwner`，它会为该账户永久禁用所有插件安装；它不提供原生 epoch 模块的重新安装。规范规则见 `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`。
+原生恢复现在要求经过检查的权限 epoch 与配置 nonce 推进，在不调用旧模块的情况下摘除旧根 / 依赖，并保持身份、资产地址、执行 nonce 与冻结状态不变。所有模块存储使用 `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`。原生四参数执行信封在未签名交易脚本中承诺这两个计数器，覆盖托管回退与原生交易见证；操作签名原像同样绑定它们。上一代密钥或签名无法通过重新安装模块而恢复。这与 `contracts/build/` 下固定版本工件携带的上一代逃生通道不同，后者的旧模块清理仍可能失败关闭。当前源码还提供无需回调的恢复通道 `beginRecovery` / `cancelRecovery` / `executeRecovery`（通过 `getRecoveryStatus` 读回）：到期后轮换托管权、在完全不调用插件的情况下清扫全部模块行，并推进 authority epoch；它不提供原生 epoch 模块的重新安装。规范规则见 `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`。
 
 修订后的原生组合路径使用核心持有的、单操作回执：只有达到阈值的前若干个有效子项获得执行后权限。校验与执行后阶段仍会检查当前策略与所有活跃绑定固定值；Application 回执会重新创建，绝不复用 Verification 或另一个操作的回执。模块要求确切的当前配置指纹与显式的 Boolean 验证器组合标记。已发布的原生 P-256 配置把会话密钥与其标准账户见证映射到同一签名域，防止这两种表示提供彼此独立的投票。该规则并不建立对任意脚本账户的独立控制。
 
@@ -181,7 +181,7 @@ flowchart TD
 ### 第 3 层：插件系统
 - **验证器隔离：** 无状态，不直接访问状态
 - **钩子门控：** 执行前 / 后策略
-- **权限校验：** `canConfigureVerifier` / `canExecuteHook` 检查
+- **权限校验：** `getAuthorizedModuleId` 阶段解析加上模块侧的 `ValidatorAuthority` / `HookAuthority` 检查
 - **模块生命周期：** 带事件的时间锁更新
 
 核心在两个阶段都向钩子回调传入单一规范操作元组：`[TargetContract, Method, Args, Nonce, Deadline, Signature]`；账户 id 仍是独立的回调参数。这防止钩子校验一种操作表示却计量另一种。执行后回调会收到已认证操作与目标结果的分离副本，因此验证器或钩子无法改写后续用于执行事件或赞助结算的操作。`MultiHook` 还会为每个子钩子重新序列化目标结果，防止某个策略叶子改变下一个叶子观察到的结果。一条真实的 NeoVM 回归向量确认 `WhitelistHook` 接受已签名目标、在派发之前拒绝未列出目标、并在拒绝时回滚 nonce。回调结果必须跨过 Neo StdLib 序列化边界：Null、Boolean、Integer、ByteString、Buffer、Array、Struct 与 Map 等普通 VM 值会被复制，而 InteropInterface 值（包括迭代器与存储上下文）、Pointer 值、环状图与重复容器引用会在执行后回调之前失败关闭。该错误会使外层调用回滚目标写入与 nonce 状态；交易费用仍可被收取。
@@ -208,10 +208,10 @@ flowchart TD
 ### 5.2 应当成立的不变量
 
 1. **验证器的 Gas 限制：** *（依赖配置）* 私有 `PLATFORM` 核心在匹配的运行时上为每个验证器回调使用 10 GAS 子预算。`public` 使用标准 `System.Contract.Call`，没有子预算；生命周期准入、模拟与交易费用上限都不能建立这一预算。历史私有运行时证据在源码 / 运行时变化之后需要重新验证。
-2. **插件状态清理：** *（部分）* 当前结算会清除已知插件标记，并拒绝清单缺少 V3 生命周期 ABI 的模块；对任意未来插件的语义清理 / 精化覆盖仍待完成。每个验证器与钩子都必须实现 `clearAccount`：核心从 `confirmVerifierUpdate`、`confirmHookUpdate`、`finalizeEscape` 与 `settleMarketEscrow` 无回退地调用它，而对缺失方法的嵌套调用会以不可捕获的方式使外层交易出错。`SocialRecoveryVerifier` 源码现已实现它（核心门控，oracle 额度退还给恢复所有者，已消耗的动作 nullifier 保留作为重放保护）。记录为 TestNet 与 MainNet 已部署的恢复验证器工件早于该方法，因此绑定到已部署实例的账户在该实例通过其时间锁 `proposeUpdate`/`update` 路径升级之前，无法轮换离开它、完成逃生或被出售。在较新的核心候选上，无需回调的永久仅所有者恢复提供了重新获得账户执行权的替代方案；它不会退还旧插件保留的额度。
+2. **插件状态清理：** *（部分）* 当前结算会清除已知插件标记，并拒绝清单缺少 v4 生命周期 ABI 的模块；对任意未来插件的语义清理 / 精化覆盖仍待完成。每个 validator 与 hook 都必须实现 `onUninstall`：核心从 `confirmConfiguration`、逃生通道与 `settleMarketEscrow` 无回退地调用它，而对缺失方法的嵌套调用会以不可捕获的方式使外层交易出错。`SocialRecoveryService` 源码现已实现它（核心门控，oracle 额度退还给恢复所有者，已消耗的动作 nullifier 保留作为重放保护）。记录为 TestNet 与 MainNet 已部署的恢复验证器工件早于该方法，因此绑定到已部署实例的账户在该实例通过其时间锁 `proposeConfiguration`/`confirmConfiguration` 路径升级之前，无法轮换离开它、完成逃生或被出售。在较新的核心候选上，无需回调的永久仅所有者恢复提供了重新获得账户执行权的替代方案；它不会退还旧插件保留的额度。
 3. **会话密钥撤销：** *（已定义）* 撤销在规范的交易执行顺序上生效；后续校验不会再看到活跃密钥，并发出 `SessionKeyRevoked`。没有任何协议组件承诺内存池取消，或对链上更早执行过的操作进行追溯作废。
-4. **转账来源计量：** 虚拟账户的资产位于核心推导的代理脚本哈希（`getProxyScriptHash(accountId)`），而不是 `accountId`。固定或计量转账来源的验证器或钩子必须与该代理地址比对；`SubscriptionVerifier` 与 `DailyLimitHook` 正是如此，且来源等于 `accountId` 会被直接拒绝。
-5. **插件级见证检查需要可达作用域：** 验证器或钩子作为核心的嵌套调用运行，因此其内部的 `Runtime.CheckWitness`（例如 `SubscriptionVerifier` 中的商户检查）只能看到作用域可达该插件的签名方。`CalledByEntry` 止步于核心并会被拒绝；私有链验证记录了这一错误，以及使用可达作用域成功的拉取。商户应以 `CustomContracts` 把其签名方限定到验证器，而不是签署 `Global`。
+4. **转账来源计量：** 虚拟账户的资产位于核心推导的代理脚本哈希（`getProxyScriptHash(accountId)`），而不是 `accountId`。固定或计量转账来源的验证器或钩子必须与该代理地址比对；`SubscriptionValidator` 与 `DailyLimitHook` 正是如此，且来源等于 `accountId` 会被直接拒绝。
+5. **插件级见证检查需要可达作用域：** 验证器或钩子作为核心的嵌套调用运行，因此其内部的 `Runtime.CheckWitness`（例如 `SubscriptionValidator` 中的商户检查）只能看到作用域可达该插件的签名方。`CalledByEntry` 止步于核心并会被拒绝；私有链验证记录了这一错误，以及使用可达作用域成功的拉取。商户应以 `CustomContracts` 把其签名方限定到验证器，而不是签署 `Global`。
 
 ---
 
@@ -271,7 +271,7 @@ flowchart TD
 ### 7.2 哈希函数
 
 - **SHA256：** 大多数验证器用于载荷哈希
-- **Keccak256：** 用于 `Web3AuthVerifier` 的 EIP-712 兼容
+- **Keccak256：** 用于 `Web3AuthValidator` 的 EIP-712 兼容
 - **Web3Auth ERC-1271：** 直接 32 字节摘要恢复需要 `HF_Huyao` 或更高版本。Huyao 之前的兼容实现不强制规范的 `r`/`s` 边界，位于经审阅的部署配置之外。
 - **Nonce 存储：** 可执行 nonce 使用 191 位通道与 64 位序列。原生配置的键为通道保留 24 字节且最高位清零；游标 `2^64` 是显式的耗尽哨兵。当前custom 源码把有符号 VM 边界应用于通道读取；已固定的公开基础工件在重新发布之前可能保留更宽的旧读取边界。
 
@@ -344,32 +344,36 @@ flowchart TD
 
 ## 9. 恢复与紧急访问
 
-### 9.1 逃生通道流程
+### 9.1 恢复流程
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Normal: 账户已配置
-    Normal --> EscapeInitiated: 备份所有者调用 initiateEscape(accountId)
-    EscapeInitiated --> ActiveEscape: 时间锁开始（7–90 天）
-    ActiveEscape --> Cancelled: 执行了正常操作
-    ActiveEscape --> Escaped: 时间锁到期 + finalizeEscape(accountId, newVerifier)
-    Cancelled --> Normal: 逃生被清除，账户恢复正常
-    Escaped --> Reset: 验证器 = 备份所有者
-    Reset --> Normal: 通过备份所有者进行新配置
+    [*] --> Normal: 账户以 recoveryTimelockMs 配置完成
+    Normal --> Pending: beginRecovery(accountId, newCustody)
+    Pending --> Normal: cancelRecovery(accountId)
+    Pending --> Matured: 时间锁到期（7-90 天）
+    Matured --> Normal: executeRecovery(accountId) - 轮换托管权并清扫模块
 ```
 
-两个入口都接收账户 id；`finalizeEscape` 还接收账户回退到的验证器（`contracts/build` 下的核心清单，实现在 `contracts/custom/SmartAccount.Escape.cs`）。
+入口都接收账户 id；`beginRecovery` 还接收将要轮换到的托管权，`getRecoveryStatus` 以
+`[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]` 回读待处理记录
+（`contracts/custom/SmartAccount.Escape.cs`；`contracts/build/` 下固定版本的工件是较早的双入口形态）。
 
 ### 9.2 安全属性
 
 | 属性 | 保证 |
 | --- | --- |
-| **延迟接管** | 7–90 天的最短时间锁 |
-| **使用即取消** | 带当前备份所有者见证的成功操作会取消逃生 |
-| **审计轨迹** | 所有逃生事件都会被发出 |
-| **不可绕过** | *（部分）* 市场托管可以清除逃生 |
+| **延迟接管** | 账户创建时固定的 7-90 天最短时间锁 |
+| **显式取消** | `cancelRecovery`（托管权或恢复授权方）删除记录；同时只能有一条待处理记录，计时永不重置 |
+| **审计轨迹** | `RecoveryInitiated` / `RecoveryCancelled` / `RecoveryExecuted`，以及复用的 `EscapeInitiated` / `EscapeCancelled` / `EscapeFinalized` 镜像 |
+| **不可绕过** | *（部分）* 市场结算会删除待处理恢复记录，并保留自己的结算权限 |
 
-终结会在清理或写入状态之前，按与常规验证器轮换相同的 V3 生命周期 ABI 校验非零的替换验证器。它仍会调用旧验证器与钩子的 `clearAccount`，并在任一模块出错或中止时原子失败。因此时间锁授权了恢复，但并不保证在旧插件不可用或恶意时的恢复活性。当前源码中独立的 `finalizeEscapeToOwner` 移除了这一旧插件依赖：它检查成熟度、所有者见证、托管与所有活跃上下文，然后在不调用回调的情况下摘除根、清除待生效权限并闩锁为永久的仅所有者模式。所有插件安装 / 配置 / 执行权限检查都会遵循该闩锁，它在市场与平台所有权变更之后依然保留。账户身份与 nonce 历史被保留。恢复不是退还插件持有资金、撤销外部授权、绕过市场托管或移除独立核心升级管理员的承诺。
+执行阶段不调用任何回调：`executeRecovery` 拒绝过期的 `authorityEpochAtInit`，
+在不调用任何 validator、hook、Market 或 Oracle 的情况下清扫全部模块实例、阈值策略、hook 顺序、
+消息主体、待处理意图、nonce 通道与待处理迁移状态，然后轮换托管权、清空恢复授权方、
+重新启用内置授权并推进 authority epoch、configuration nonce 与控制修订号。
+因此其活性不依赖任何插件配合。恢复不是退还插件持有资金、撤销外部授权、结算市场托管
+或移除独立核心升级管理员的承诺。
 
 ---
 

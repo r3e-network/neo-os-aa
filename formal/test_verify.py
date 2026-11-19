@@ -560,8 +560,8 @@ class VerificationGateTests(unittest.TestCase):
                         "application_clock_uses_persisting_block"):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertEqual(19,len(verify.COQ_MODULES["NativeSessionPolicy.v"]))
-        self.assertIn("contracts/plugins/verifiers/SessionKeyVerifier.cs",verify.SOURCE_FILES)
-        self.assertIn("contracts/plugins/verifiers/VerifierClock.cs",verify.SOURCE_FILES)
+        self.assertIn("contracts/plugins/validators/SessionKeyValidator.cs",verify.SOURCE_FILES)
+        self.assertIn("contracts/plugins/validators/ValidatorClock.cs",verify.SOURCE_FILES)
 
     def test_native_session_lifecycle_and_zero_cap_are_registered(self):
         model=(verify.ROOT / "coq/NativeSessionPolicy.v").read_text()
@@ -667,8 +667,9 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_multisig_bounded_model_and_source_mutations(self):
         result = verify.check_multisig_bounded()
-        self.assertEqual(6, result["sourceGuards"])
-        self.assertEqual(6, len(result["sourceMutationsRejected"]))
+        self.assertEqual(len(verify.THRESHOLD_POLICY_GUARDS), result["sourceGuards"])
+        self.assertEqual(len(verify.THRESHOLD_POLICY_MUTATIONS), len(result["sourceMutationsRejected"]))
+        self.assertEqual({"minThreshold": 1, "maxThreshold": 10, "maxMembers": 10}, result["bounds"])
         self.assertGreater(result["configCases"], 100)
         self.assertGreater(result["acceptanceCases"], 10_000)
 
@@ -696,7 +697,7 @@ class VerificationGateTests(unittest.TestCase):
                 shutil.copyfile(verify.ROOT.parent / name, repo / name)
             lock = {"schema": "sa-formal-source-lock/v2", "runtimeProfiles": verify.RUNTIME_PROFILES,
                     "modelProfiles": verify.MODEL_PROFILES,
-                    "sources": {name: hashlib.sha256((repo / name).read_bytes()).hexdigest() for name in verify.SOURCE_FILES}}
+                    "sources": {name: verify.content_digest(repo / name) for name in verify.SOURCE_FILES}}
             (formal / "source-lock.json").write_text(json.dumps(lock))
             verify.check_inventory(formal)
             (repo / "contracts/custom/SmartAccount.Execution.cs").write_text("// drift\n")

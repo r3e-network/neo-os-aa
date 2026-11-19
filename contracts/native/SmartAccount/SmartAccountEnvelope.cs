@@ -27,61 +27,55 @@ using Boolean = Neo.VM.Types.Boolean;
 
 namespace Neo.SmartContract.Native
 {
-    /// <summary>Canonical, inert transaction-envelope decoding for native SmartAccount ABI 2.</summary>
+    /// <summary>
+    /// Canonical, inert transaction-envelope decoding for the native
+    /// SmartAccount v4 entrypoints (spec §4.1): the initializer pushes exactly
+    /// <c>[accountId, payload]</c> and calls <c>executeUserOp</c> (one
+    /// operation Array) or <c>executeUserOps</c> (a batch Array) on the core.
+    /// Anything else — additional values, foreign tails, noncanonical encodings
+    /// — is rejected, so an envelope can never hide authority the operation
+    /// bytes do not carry.
+    /// </summary>
     internal sealed class SmartAccountEnvelope
     {
-        internal const int BatchMax = 32;
-        private const int ContainerDepthMax = SmartAccountProtocol.ArgumentDepthMax + 4;
+        internal const int BatchMax = SmartAccountModuleProtocol.MaxOperationsPerEnvelope;
+        private const int ContainerDepthMax = SmartAccountModuleProtocol.ArgsDepthMax + 4;
+
         private readonly byte[][] _operations;
         private readonly byte[] _accountId;
 
         internal UInt160 AccountId => new(_accountId);
         internal bool IsBatch { get; }
-        internal ulong ExpectedAuthorityEpoch { get; }
-        internal ulong ExpectedConfigurationNonce { get; }
         internal int Count => _operations.Length;
 
-        private SmartAccountEnvelope(UInt160 accountId, bool isBatch, IReadOnlyList<Array> operations, ulong expectedAuthorityEpoch, ulong expectedConfigurationNonce)
+        private SmartAccountEnvelope(UInt160 accountId, bool isBatch, IReadOnlyList<Array> operations)
         {
             _accountId = accountId.ToArray();
             IsBatch = isBatch;
-            ExpectedAuthorityEpoch = expectedAuthorityEpoch;
-            ExpectedConfigurationNonce = expectedConfigurationNonce;
             _operations = new byte[operations.Count][];
             for (int i = 0; i < operations.Count; i++)
-                _operations[i] = BinarySerializer.Serialize(operations[i], Transaction.MaxTransactionSize, Transaction.MaxTransactionSize);
+                _operations[i] = BinarySerializer.Serialize(operations[i],
+                    SmartAccountModuleProtocol.OperationEncodedSizeMax,
+                    SmartAccountModuleProtocol.OperationEncodedSizeMax);
         }
 
+        /// <summary>A fresh, independent copy of one operation of the envelope.</summary>
         internal Array GetOperation(int index)
         {
             if ((uint)index >= _operations.Length)
                 throw new ArgumentOutOfRangeException(nameof(index));
-            byte[] encoded = _operations[index].AsSpan().ToArray();
-            MemoryReader reader = new(encoded);
-            return (Array)BinarySerializer.Deserialize(ref reader, (uint)encoded.Length, (uint)encoded.Length);
+            MemoryReader reader = new(_operations[index]);
+            return (Array)BinarySerializer.Deserialize(ref reader,
+                SmartAccountModuleProtocol.OperationEncodedSizeMax,
+                SmartAccountModuleProtocol.OperationEncodedSizeMax);
         }
 
-        internal void ValidateNonces(Func<BigInteger, BigInteger> readCursor)
-        {
-            ArgumentNullException.ThrowIfNull(readCursor);
-            Dictionary<BigInteger, BigInteger> cursors = new();
-            for (int i = 0; i < Count; i++)
-            {
-                BigInteger nonce = GetOperation(i)[3].GetInteger();
-                var (channel, _) = SmartAccountProtocol.GetNonceParts(nonce);
-                if (!cursors.TryGetValue(channel, out BigInteger cursor))
-                    cursor = readCursor(channel);
-                cursors[channel] = SmartAccountProtocol.ConsumeNonce(nonce, cursor);
-            }
-        }
-
-        internal static byte[] CreateApplicationScript(UInt160 accountId, Array payload, bool isBatch,
-            ulong expectedAuthorityEpoch, ulong expectedConfigurationNonce)
+        internal static byte[] CreateApplicationScript(UInt160 accountId, Array payload, bool isBatch)
         {
             RequireAccount(accountId);
             _ = ValidateOperations(payload, isBatch);
             using ScriptBuilder builder = new();
-            EmitValue(builder, new Array([accountId.ToArray(), payload, new Integer(expectedAuthorityEpoch), new Integer(expectedConfigurationNonce)]));
+            EmitValue(builder, new Array([accountId.ToArray(), payload]));
             EmitTail(builder, isBatch);
             byte[] script = builder.ToArray();
             if (script.Length > Transaction.MaxTransactionSize)
@@ -111,29 +105,20 @@ namespace Neo.SmartContract.Native
             }
             else
             {
-                throw new FormatException("The script must call the exact native SmartAccount entrypoint for this account.");
+                throw new FormatException(
+                    "The script must call the exact native SmartAccount entrypoint for this account.");
             }
 
             Array arguments = DecodeInitializer(script[..prefixLength]);
-            if (arguments.Type != StackItemType.Array || arguments.Count != 4 ||
-                arguments[0] is not ByteString id || !id.GetSpan().SequenceEqual(accountId.ToArray()) ||
-                arguments[1] is not Array payload || arguments[2] is not Integer epoch || arguments[3] is not Integer configuration)
-                throw new FormatException("The SmartAccount entrypoint requires exactly accountId, payload, authority epoch and configuration nonce.");
-            ulong expectedAuthorityEpoch = ReadCounter(epoch);
-            ulong expectedConfigurationNonce = ReadCounter(configuration);
+            if (arguments.Type != StackItemType.Array || arguments.Count != 2
+                || arguments[0] is not ByteString id || !id.GetSpan().SequenceEqual(accountId.ToArray())
+                || arguments[1] is not Array payload)
+                throw new FormatException("The SmartAccount entrypoint requires exactly accountId and payload.");
             IReadOnlyList<Array> operations = ValidateOperations(payload, isBatch);
-            byte[] canonical = CreateApplicationScript(accountId, payload, isBatch, expectedAuthorityEpoch, expectedConfigurationNonce);
+            byte[] canonical = CreateApplicationScript(accountId, payload, isBatch);
             if (!script.SequenceEqual(canonical))
                 throw new FormatException("The SmartAccount envelope uses a noncanonical initializer.");
-            return new SmartAccountEnvelope(accountId, isBatch, operations, expectedAuthorityEpoch, expectedConfigurationNonce);
-        }
-
-        internal static ulong ReadCounter(Integer counter)
-        {
-            BigInteger value = counter.GetInteger();
-            if (value < 0 || value > ulong.MaxValue)
-                throw new FormatException("SmartAccount execution counters must be UInt64 Integers.");
-            return (ulong)value;
+            return new SmartAccountEnvelope(accountId, isBatch, operations);
         }
 
         private static IReadOnlyList<Array> ValidateOperations(Array payload, bool isBatch)
@@ -142,18 +127,13 @@ namespace Neo.SmartContract.Native
             if (payload.Type != StackItemType.Array)
                 throw new FormatException("The operation or batch must use the Array type.");
             if (!isBatch)
-            {
-                _ = SmartAccountProtocol.SerializeUnsignedOperation(payload);
-                return [payload];
-            }
+                return [SmartAccountProtocol.ValidateUserOperation(payload)];
+
             if (payload.Count is 0 or > BatchMax)
                 throw new FormatException("A SmartAccount batch must contain 1 through 32 operations.");
             List<Array> operations = new(payload.Count);
             foreach (StackItem item in payload)
-            {
-                _ = SmartAccountProtocol.SerializeUnsignedOperation(item);
-                operations.Add((Array)item);
-            }
+                operations.Add(SmartAccountProtocol.ValidateUserOperation(item));
             return operations;
         }
 
@@ -173,8 +153,8 @@ namespace Neo.SmartContract.Native
 
         private static void EmitTail(ScriptBuilder builder, bool isBatch)
         {
-            builder.EmitPush(CallFlags.All).EmitPush(isBatch ? "executeUserOps" : "executeUserOp");
-            builder.EmitPush(SmartAccountProtocol.ServiceHash).EmitSysCall(ApplicationEngine.System_Contract_Call);
+            builder.EmitPush((int)CallFlags.All).EmitPush(isBatch ? "executeUserOps" : "executeUserOp");
+            builder.EmitPush(SmartAccountProtocol.ServiceHash.ToArray()).EmitSysCall(ApplicationEngine.System_Contract_Call);
         }
 
         private static void EmitValue(ScriptBuilder builder, StackItem item)
@@ -238,8 +218,9 @@ namespace Neo.SmartContract.Native
                         int length = opcode == OpCode.PUSHDATA1
                             ? ReadOperand(script, ref offset, 1)[0]
                             : BinaryPrimitives.ReadUInt16LittleEndian(ReadOperand(script, ref offset, 2));
-                        if (length > SmartAccountProtocol.ArgumentSizeMax)
-                            throw new FormatException("A SmartAccount initializer ByteString exceeds the profile bounds.");
+                        if (length > SmartAccountModuleProtocol.ArgsSerializedSizeMax)
+                            throw new FormatException(
+                                "A SmartAccount initializer ByteString exceeds the profile bounds.");
                         values.Push(new(new ByteString(ReadOperand(script, ref offset, length).ToArray()), 0));
                         break;
                     case OpCode.NEWARRAY0:
@@ -252,7 +233,8 @@ namespace Neo.SmartContract.Native
                             throw new FormatException("The initializer container count must be an Integer.");
                         BigInteger number = integer.GetInteger();
                         if (number <= 0 || number > values.Count)
-                            throw new FormatException("The initializer container count is outside the available stack.");
+                            throw new FormatException(
+                                "The initializer container count is outside the available stack.");
                         Array array = opcode == OpCode.PACK ? new Array() : new Struct();
                         int depth = 0;
                         for (int i = 0; i < (int)number; i++)
@@ -266,11 +248,12 @@ namespace Neo.SmartContract.Native
                         values.Push(new(array, depth));
                         break;
                     default:
-                        throw new FormatException("The initializer contains an unsupported or executable opcode.");
+                        throw new FormatException(
+                            "The initializer contains an unsupported or executable opcode.");
                 }
             }
             if (values.Count != 1 || values.Pop().Item is not Array payload)
-                throw new FormatException("The initializer must produce exactly one operation or batch Array.");
+                throw new FormatException("The initializer must produce exactly one argument Array.");
             return payload;
         }
 

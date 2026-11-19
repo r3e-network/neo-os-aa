@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Security.Cryptography;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
@@ -35,6 +36,10 @@ public class DeployedMainnetProxyWitnessTests
     private static string ContractsBuildDir => Path.Combine(
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../")),
         "contracts", "build");
+
+    private static string CandidateContractsDir => Path.Combine(
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../")),
+        "contracts", "bin", "public");
 
     private static byte[] FixtureNef()
     {
@@ -168,16 +173,23 @@ public class DeployedMainnetProxyWitnessTests
     }
 
     [TestMethod]
-    public void CandidateBuild_EmitsVerifyScopeTargetEvent()
+    public void CandidateBuild_RetiresTheAdminConfiguredVerifyScopeTarget()
     {
-        RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccount");
-        UInt160 target = fx.Deploy("MockTransferTarget");
-        UInt160 accountId = UInt160.Parse("0x1111111111111111111111111111111111111111");
-        fx.CallVoid(wallet, "setVerifyScopeTarget", accountId, target);
-        var state = fx.SingleNotificationState(wallet, "VerifyScopeTargetSet");
-        Assert.AreEqual(accountId, (UInt160)TestExtensions.ConvertTo(((Neo.VM.Types.Array)state)[0], typeof(UInt160))!);
-        Assert.AreEqual(target, (UInt160)TestExtensions.ConvertTo(((Neo.VM.Types.Array)state)[1], typeof(UInt160))!);
+        // The deployed mainnet anchor still carries the v3 admin surface
+        // (setVerifyScopeTarget / getVerifyScopeTarget); the frozen tests below use
+        // it to reproduce the historical vulnerability. The v4 candidate retires it
+        // entirely: F-1 binds the verify context to the dispatched target (or the
+        // native asset the operation itself targets) and nothing else, so no admin
+        // call can widen a proxy witness onto an unrelated contract.
+        ContractManifest manifest = ContractManifest.Parse(
+            File.ReadAllText(Path.Combine(CandidateContractsDir, "SmartAccount.manifest.json")));
+        string[] methods = manifest.Abi.Methods.Select(method => method.Name).ToArray();
+        Assert.IsFalse(methods.Contains("setVerifyScopeTarget"),
+            "The v4 candidate must not expose an admin-configured verify scope target");
+        Assert.IsFalse(methods.Contains("getVerifyScopeTarget"),
+            "The v4 candidate must not expose an admin-configured verify scope target");
+        Assert.IsTrue(methods.Contains("verify"),
+            "The candidate keeps the proxy-signer witness entry point");
     }
 
     [TestMethod]

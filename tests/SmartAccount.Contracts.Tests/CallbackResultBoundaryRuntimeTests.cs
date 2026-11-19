@@ -11,9 +11,10 @@ using Neo.VM;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// The callback isolation boundary serializes target results before invoking a hook/verifier.
-/// NeoVM InteropInterface values (including iterators) are deliberately unsupported and must
-/// fault before post callbacks, with the enclosing nonce/target writes rolled back.
+/// The callback isolation boundary clones target results before invoking a hook callback
+/// (v4 retired the verifier post-execute callback). NeoVM InteropInterface values (including
+/// iterators) are deliberately unsupported and must fault before <c>postCheck</c>, with the
+/// enclosing nonce/target writes rolled back.
 /// </summary>
 [TestClass]
 public class CallbackResultBoundaryRuntimeTests
@@ -21,43 +22,35 @@ public class CallbackResultBoundaryRuntimeTests
     private static readonly UInt160 Owner =
         UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
 
-    private const uint EscapeTimelock = 2_592_000;
-
     [TestMethod]
-    public void InteropIteratorTargetResultFailsClosedBeforeVerifierPostExecute()
+    public void InteropIteratorTargetResultFailsClosedBeforeHookPostCheck()
     {
+        using P256SessionKey custodyKey = new();
+        UInt160 custody = RuntimeFixture.CustodyOf(custodyKey);
         RuntimeFixture fixture = new();
         UInt160 wallet = fixture.Deploy("SmartAccount");
-        UInt160 verifier = fixture.Deploy("MockVerifierCore");
+        UInt160 hook = fixture.Deploy("hooks/WhitelistHook", wallet.ToArray());
         UInt160 target = DeployIteratorTarget(fixture);
-        byte[] emptyParams = Array.Empty<byte>();
-        UInt160 accountId = fixture.CallUInt160(
+        // The hook is installed and allowed to see this target atomically, so its preCheck
+        // passes and only the result-cloning boundary can fault the operation.
+        UInt160 accountId = fixture.CreateAccount(
             wallet,
-            "computeRegistrationAccountId",
-            verifier,
-            emptyParams,
-            UInt160.Zero,
-            Owner,
-            EscapeTimelock);
-
-        fixture.SetSigners(Owner);
-        fixture.CallVoid(
-            wallet,
-            "registerAccount",
-            accountId,
-            verifier,
-            emptyParams,
-            UInt160.Zero,
-            Owner,
-            EscapeTimelock);
+            custody,
+            RuntimeFixture.Salt("callback-boundary"),
+            RuntimeFixture.MinRecoveryTimelockMs,
+            (object)fixture.InstallHook(hook, "allowTarget", target));
 
         object[] op = RuntimeFixture.UserOp(
             target,
             "returnIterator",
             Array.Empty<object?>(),
-            0,
+            fixture.PackedNonce(wallet, accountId, 0),
             fixture.Now() + 3_600_000,
-            Array.Empty<byte>());
+            new byte[] { 0x00 },
+            authorityEpoch: fixture.AccountAuthorityEpoch(wallet, accountId),
+            configurationNonce: fixture.AccountConfigurationNonce(wallet, accountId));
+        op[11] = fixture.SignBuiltIn(wallet, accountId, op, custodyKey);
+        fixture.SetSigners(custody);
 
         TestException exception = Assert.ThrowsExactly<TestException>(() => fixture.CallVoid(
             wallet,
@@ -72,7 +65,7 @@ public class CallbackResultBoundaryRuntimeTests
             $"Interop result must fail at serialization boundary: {diagnostic}");
         Assert.AreEqual(
             BigInteger.Zero,
-            fixture.CallInteger(wallet, "getNonce", accountId, 0),
+            fixture.CurrentNonceSequence(wallet, accountId, 0),
             "A rejected unsupported result must roll back nonce consumption");
     }
 

@@ -88,7 +88,7 @@ sequenceDiagram
   Relay->>Chain: Submit wrapped invocation
 ```
 
-The key design choice is that the downstream target contract is **not** called directly by a raw proxy-signed transaction. Instead, execution routes through `executeUserOp(accountId, op)` (or `executeUserOps(accountId, ops)` for a batch), where the policy engine can enforce verifier, hook and target checks. The V1/V2 wrapper entrypoints were removed and exist in no deployed manifest and no contract source.
+The key design choice is that the downstream target contract is **not** called directly by a raw proxy-signed transaction. Instead, execution routes through `executeUserOp(accountId, op)` (or `executeUserOps(accountId, ops)` for a batch), where the core enforces the validator route, the hook sequence and the target call. The V1/V2 wrapper entrypoints were removed and exist in no deployed manifest and no contract source.
 
 ## 6. Draft Collaboration Model
 
@@ -144,7 +144,7 @@ That means:
 
 The draft body and collaboration state live off-chain, while authority and execution rules live on-chain.
 
-- **On-chain:** admins, managers, thresholds, verifier configuration, whitelist / blacklist rules, dome settings, and transfer limits
+- **On-chain:** the account control record (status, custody, recovery authority, epoch, configuration nonce, recovery timelock), module instances and their code bindings, the hook order, threshold policies, and nonce cursors
 - **Browser / Supabase:** immutable draft body, collected signatures, activity timeline, relay preflight snapshots, and bounded submission receipt history
 - **Relay server:** simulation, raw transaction forwarding if explicitly enabled, and meta invocation submission when a relay signer is configured
 
@@ -154,13 +154,13 @@ Shared draft metadata is intentionally bounded: the frontend retains only the la
 
 Every execution path still flows through the same protection layer:
 
-- account existence checks
-- role / threshold verification
-- optional custom verifier hook
-- dome timeout + oracle unlock path
-- method allowlist
-- blacklist / whitelist
-- max transfer restrictions
+- account existence and status checks
+- authority epoch, nonce channel and deadline checks
+- the routed validator instance, or the built-in custody route gated by the default authorizations
+- an optional threshold policy over validator instances
+- the ordered hook sequence (`preCheck` forward, `postCheck` reverse)
+- each module's own policy, for example target allowlists, token restrictions and daily limits
+- market escrow lock when the account is listed
 
 The practical security result is:
 
@@ -193,4 +193,4 @@ If you are learning the system for the first time, read these pages in order:
 
 ## Matrix Domain Access
 
-Users do not have to memorize raw `accountId` values. The frontend can register a `.matrix` domain during SA creation and later resolve that domain to the controller wallet address. V3 has no admin or manager role query, so a domain does not by itself discover linked accounts: read them one at a time with `getAccountState(accountIdHash)`. The V2 account-discovery helper that named the removed `getAccountAddressesByAdmin` / `getAccountAddressesByManager` reads has been deleted, so no frontend path targets those reads any more.
+Users do not have to memorize raw `accountId` values. The frontend can register a `.matrix` domain during SA creation and later resolve that domain to the controller wallet address. The v4 kernel has no admin or manager role query, so a domain does not by itself discover linked accounts: read them one at a time with `getAccountState(accountIdHash)`. The V2 account-discovery helper that named the removed `getAccountAddressesByAdmin` / `getAccountAddressesByManager` reads has been deleted, so no frontend path targets those reads any more.

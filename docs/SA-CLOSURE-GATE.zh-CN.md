@@ -327,7 +327,7 @@ NEF／manifest 保持为当前仓库输入；新建的导出器记录与严格�
 | interop 描述符计费 | `interop-descriptor-charge-order` | 固定的 neo `OnSysCall`/`AddFee` 方法体与 `InteropDescriptor` 声明、推导出的计费记录与全新证书；止于参数窗口效应，在任何参数被弹出之前 |
 | 异常身份 | `exception-identity-and-catchability` | 六个固定的 neo／neo-vm 声明（指令循环、抛出遍历、两个故障钩子、可捕获类与上限记录）、推导出的暴露记录与全新证书；止于故障状态效应，在指令语义或交易层之前 |
 | 加载准入 | `load-time-manifest-and-token-admission` | 五个固定的核心声明（nef、方法 token、manifest、ABI、方法描述符）、推导出的 24 槽声明记录与全新证书；止于加载器返回的值，在部署、gas 或权限判定之前 |
-| 私有 hook 元组 | `private-hook-params-reference-refinement` | 完整的私有方法区间／字节、类型化记录投影与参考证书；不闭合任何公开入口 |
+| 私有 hook 视图 | 无（已退役） | v3 的 `private-hook-params-reference-refinement` 泳道为已退役的 `BuildHookOperationParams` 构造器出具证书，而 v4 删除了该构造器。`hook_params_source` 现在只做源码级投影，绑定 v4 的 `BuildCanonicalOperationView`（13 个协议字段按顺序，参数与 hook 证明两处深拷贝）；没有任何 Coq 产物对 `CallHookPreCheck`／`CallHookPostCheck` 建模，也不闭合任何公开入口 |
 | 运行时源码桥 | `runtime-instruction-source-bridge` | 固定的 VM 源码提交与源码推导证书 |
 | 运行时集合桥 | `runtime-collection-source-bridge` | 固定的 VM 处理器与证书；RET/SIZE/ISTYPE/CONVERT 仍为显式的部分投影 |
 | Codec | `ledger-codec` | 捕获的模型与固定的原生源码身份 |
@@ -458,7 +458,8 @@ helper gas 回执在精确独立枚举的 helper CFG 上证明一个参数化上
 会以 `Runtime artifact mismatch` 拒绝 `nefSha256` 或 `manifestSha256` 与固定工件不同的回执。正是
 这项检查让该泳道在合约改名使 2026-10-13 的捕获失效之后继续失败关闭，也在 2026-11-16 设计阶段
 遗留兼容性清理改变custom 核心工件之后再次如此；每一次该泳道都保持红色，直到生产测试针对全新工件
-重跑（当前为 NEF `9f714866…`）。经复核的五形状捕获以
+重跑（归档捕获仍固定 NEF `9f714866…`；当前工件为 `2887bad3…`，因此在新捕获产生之前该泳道为红）。
+经复核的五形状捕获以
 `formal/refinement/fixtures/helper-gas-runtime-live-receipts.json.gz` 归档在仓库内（SHA256
 `6d141d14…`）；被取代的改名之前捕获保存在它旁边，其拒绝由 `ArchivedReceiptStalenessTests` 断言。
 因此，把该泳道重新指向新工件需要新的捕获，绝不能靠编辑哈希。

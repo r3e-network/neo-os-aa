@@ -282,7 +282,7 @@ namespace SmartAccount
             {
                 ExecutionEngine.Assert(module.ModuleType == ModuleTypeCodeValidator, ErrorModuleNotRoutable);
                 // Threshold-policy members are never independently routable.
-                ExecutionEngine.Assert(!IsMemberOfActivePolicy(accountId, validatorId), ErrorModuleNotRoutable);
+                ExecutionEngine.Assert(!IsMemberOfActivePolicy(module!), ErrorModuleNotRoutable);
                 ExecutionEngine.Assert(credentialGeneration == module.CredentialGeneration, ErrorCredentialStale);
                 return module;
             }
@@ -435,7 +435,7 @@ namespace SmartAccount
                     ModuleInstance? module = GetModuleInstance(accountId, validatorId);
                     if (module != null
                         && module.ModuleType == ModuleTypeCodeValidator
-                        && !IsMemberOfActivePolicy(accountId, validatorId)
+                        && !IsMemberOfActivePolicy(module!)
                         && credentialGeneration == module.CredentialGeneration)
                     {
                         accepted = CallValidatorValidateStandalone(accountId, module, op, operationDigest);
@@ -466,12 +466,15 @@ namespace SmartAccount
             UInt160 accountId, ModuleInstance module, object[] operation, ByteString operationDigest)
         {
             AssertCodeBindingUnchanged(module);
-            long gasBefore = PrepareCallbackBudget(null, GasPoolNone, ValidationAggregateGasLimit);
-            bool accepted = (bool)CallModuleGasCapped(
-                module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationAggregateGasLimit,
+            long gasBefore = PrepareCallbackBudget(null, GasPoolNone, ValidationPerCallGasLimit);
+            object reply = CallModuleGasCapped(
+                module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationPerCallGasLimit,
                 new object[] { accountId, operationDigest, BuildCanonicalOperationView(operation) });
-            ChargeCallbackGas(null, GasPoolNone, gasBefore, ValidationAggregateGasLimit);
-            return accepted;
+            ChargeCallbackGas(null, GasPoolNone, gasBefore, ValidationPerCallGasLimit);
+            // Same strict reply rule as the execution path: only Boolean true
+            // approves, any other reply type is an ABI violation.
+            ExecutionEngine.Assert(reply is bool, ErrorModuleTypeUnsupported);
+            return (bool)reply;
         }
 
         // ========================================================================
@@ -540,7 +543,7 @@ namespace SmartAccount
                 if (validatorModule != null)
                 {
                     ExecutionEngine.Assert(validatorModule.ModuleType == ModuleTypeCodeValidator, ErrorModuleNotRoutable);
-                    ExecutionEngine.Assert(!IsMemberOfActivePolicy(accountId, validatorId), ErrorModuleNotRoutable);
+                    ExecutionEngine.Assert(!IsMemberOfActivePolicy(validatorModule!), ErrorModuleNotRoutable);
                     ExecutionEngine.Assert(credentialGeneration == validatorModule.CredentialGeneration,
                         ErrorCredentialStale);
                 }

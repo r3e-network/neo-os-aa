@@ -1,309 +1,156 @@
 <template>
   <section class="card">
     <h2 class="text-lg font-bold text-sa-text mb-2">
-      {{ t("studioPanels.permissionsTitle", "Permissions & Limits") }}
+      {{ t("studioPanels.permissionsTitle", "Module Reads") }}
     </h2>
     <p class="text-sm text-sa-muted mb-8">
       {{
         t(
-          "studioPanels.permissionsSubtitle",
-          "V3 policy lives in hook and verifier plugins. Use the active account plus raw method/args calls below to configure the currently bound plugin contracts.",
+          "studioPanels.permissionsSubtitleV4",
+          "v4 configuration is callback-bound: install, configure and remove modules from Manage Configuration. Here you read an installed module's own safe methods; the core passes the account id and module id, so only the extra arguments are yours to supply.",
         )
       }}
     </p>
 
-    <p v-if="isOwnerOnlyPermissionsTarget" role="status" class="mb-5 text-sm text-sa-warning">{{ t('custom.ownerOnlyState', 'This account permanently uses the backup owner witness. Verifier and hook configuration cannot be restored.') }}</p>
+    <p v-if="!manageSnapshot.loadedAt" class="mb-6 rounded-lg border border-sa-border/60 bg-sa-panel/60 p-4 text-sm text-sa-muted">
+      {{ t("studioPanels.loadAccountForPermissions", "Load the account in Manage Configuration first: a module read is bound to one installed instance.") }}
+    </p>
+
     <div class="space-y-8">
       <div class="rounded-lg border border-sa-border/60 bg-sa-panel/60 p-5">
-        <div
-          class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
-        >
-          <div>
-            <h3 class="text-sm font-bold text-sa-text mb-2">
-              {{ t("studioPanels.presetCatalog", "Preset Catalog") }}
-            </h3>
-            <p class="text-sm text-sa-muted">
-              {{
-                t(
-                  "studioPanels.presetCatalogSubtitle",
-                  "Pick a common verifier or hook preset first, then adjust the typed args only where your account needs a different target, token, or expiry.",
-                )
-              }}
-            </p>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div class="space-y-2">
+            <label class="block text-sm font-semibold text-sa-text" for="read-account">
+              {{ t("studioPanels.readAccountLabel", "Account ID") }}
+            </label>
+            <input
+              id="read-account"
+              v-model="permissionsForm.accountAddress"
+              type="text"
+              class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
+              :placeholder="t('studioPanels.targetAccountPlaceholder', '20-byte hash160')"
+            />
           </div>
-          <router-link
-            :to="{ path: '/docs', query: { doc: 'pluginGuide' } }"
-            class="btn-secondary whitespace-nowrap"
-          >
-            {{ t("studioPanels.openPluginGuide", "Open Hook & Plugin Guide") }}
-          </router-link>
+          <div class="space-y-2">
+            <label class="block text-sm font-semibold text-sa-text" for="read-module">
+              {{ t("studioPanels.readModuleLabel", "Installed module") }}
+            </label>
+            <select
+              id="read-module"
+              v-model="permissionsForm.moduleId"
+              class="input-field text-sm py-2 px-3 bg-sa-dark"
+            >
+              <option value="">{{ t("custom.none", "none") }}</option>
+              <option
+                v-for="module in manageSnapshot.modules"
+                :key="module.moduleId"
+                :value="String(module.moduleId)"
+              >
+                #{{ module.moduleId }} · {{ module.moduleType }} · {{ module.contractHash.slice(0, 10) }}…
+              </option>
+            </select>
+          </div>
         </div>
+
+        <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div class="space-y-2">
+            <label class="block text-sm font-semibold text-sa-text" for="read-method">
+              {{ t("studioPanels.readMethodLabel", "Read method") }}
+            </label>
+            <input
+              id="read-method"
+              v-model="permissionsForm.method"
+              type="text"
+              class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
+              :placeholder="t('studioPanels.readMethodPlaceholder', 'getConfig / getSessionKey / getDailyLimit …')"
+            />
+          </div>
+          <div class="space-y-2">
+            <label class="block text-sm font-semibold text-sa-text" for="read-args">
+              {{ t("studioPanels.readArgsLabel", "Extra args JSON (after accountId, moduleId)") }}
+            </label>
+            <textarea
+              id="read-args"
+              v-model="permissionsForm.argsJson"
+              rows="3"
+              class="input-field font-mono text-xs"
+              :placeholder="t('studioPanels.readArgsPlaceholder', '[]')"
+            />
+          </div>
+        </div>
+        <p v-if="argsError" role="alert" class="mt-2 text-xs text-sa-error-light">{{ argsError }}</p>
+
+        <button
+          type="button"
+          class="btn-primary mt-4"
+          :class="{ 'btn-loading': permissionsBusy.call }"
+          :disabled="!canReadModule || permissionsBusy.call"
+          @click="submitRead"
+        >
+          {{
+            permissionsBusy.call
+              ? t("studioPanels.calling", "Calling...")
+              : t("studioPanels.readAction", "Read module")
+          }}
+        </button>
+        <p class="mt-2 text-xs text-sa-muted">
+          {{ t("studioPanels.readHintV4", "Reads run against the module contract with the loaded account; they never change on-chain state.") }}
+        </p>
+      </div>
+
+      <div v-if="moduleReadOutcome" class="rounded-lg border border-sa-border/60 bg-sa-dark/40 p-5">
+        <p class="mb-2 text-xs font-semibold uppercase text-sa-muted">
+          {{ t("studioPanels.readResult", "Result") }}
+        </p>
+        <pre class="whitespace-pre-wrap break-all font-mono text-xs text-sa-text">{{ moduleReadOutcome }}</pre>
+      </div>
+
+      <div class="rounded-lg border border-sa-border/60 bg-sa-panel/60 p-5">
+        <h3 class="text-sm font-bold text-sa-text mb-2">
+          {{ t("studioPanels.readPresets", "Read Templates") }}
+        </h3>
+        <p class="text-sm text-sa-muted">
+          {{
+            t(
+              "studioPanels.readPresetsHint",
+              "Pick a template for an installed module, then replace the typed placeholders it carries.",
+            )
+          }}
+        </p>
         <div class="mt-5 grid gap-4 lg:grid-cols-2">
           <div>
             <p class="mb-2 text-xs font-semibold uppercase text-sa-muted">
-              {{ t("studioPanels.verifierPresets", "Verifier Presets") }}
+              {{ t("studioPanels.validatorReads", "Validator Reads") }}
             </p>
             <div class="grid gap-2">
               <button
-                v-for="preset in verifierPresets"
-                :key="preset.label"
+                v-for="preset in validatorReads"
+                :key="preset.label + preset.method"
                 type="button"
-                :aria-label="
-                  preset.label + ' ' + t('studioPanels.presetSuffix', 'preset')
-                "
                 class="rounded-lg border border-sa-border bg-sa-dark/70 px-4 py-3 text-left transition-colors duration-200 hover:border-sa-orange/50 hover:bg-sa-dark"
-                @click="applyVerifierPreset(preset)"
+                @click="applyPreset(preset)"
               >
-                <p class="text-sm font-semibold text-sa-text">
-                  {{ t("studio.presets." + preset.label, preset.label) }}
-                </p>
-                <p class="mt-1 text-xs text-sa-muted">
-                  {{ preset.description }}
-                </p>
+                <p class="text-sm font-semibold text-sa-text">{{ preset.label }}</p>
+                <p class="mt-1 text-xs text-sa-muted">{{ preset.description }}</p>
               </button>
             </div>
           </div>
           <div>
             <p class="mb-2 text-xs font-semibold uppercase text-sa-muted">
-              {{ t("studioPanels.hookPresets", "Hook Presets") }}
+              {{ t("studioPanels.hookReads", "Hook Reads") }}
             </p>
             <div class="grid gap-2">
               <button
-                v-for="preset in hookPresets"
-                :key="preset.label"
+                v-for="preset in hookReads"
+                :key="preset.label + preset.method"
                 type="button"
-                :aria-label="
-                  preset.label + ' ' + t('studioPanels.presetSuffix', 'preset')
-                "
                 class="rounded-lg border border-sa-border bg-sa-dark/70 px-4 py-3 text-left transition-colors duration-200 hover:border-sa-orange/50 hover:bg-sa-dark"
-                @click="applyHookPreset(preset)"
+                @click="applyPreset(preset)"
               >
-                <p class="text-sm font-semibold text-sa-text">
-                  {{ t("studio.presets." + preset.label, preset.label) }}
-                </p>
-                <p class="mt-1 text-xs text-sa-muted">
-                  {{ preset.description }}
-                </p>
+                <p class="text-sm font-semibold text-sa-text">{{ preset.label }}</p>
+                <p class="mt-1 text-xs text-sa-muted">{{ preset.description }}</p>
               </button>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="bg-sa-panel p-5 rounded-lg border border-sa-border/60">
-        <label
-          for="permissions-target-account"
-          class="block text-sm font-semibold text-sa-text mb-3"
-          >{{
-            t("studioPanels.targetAccountLabel", "Target AccountId Hash")
-          }}</label
-        >
-        <div class="flex flex-col sm:flex-row gap-4">
-          <input
-            id="permissions-target-account"
-            v-model="permissionsForm.accountAddress"
-            type="text"
-            list="loaded-permissions-accounts"
-            class="input-field flex-1 font-mono text-sm py-2.5 px-4 bg-sa-dark"
-            :placeholder="
-              t('studioPanels.targetAccountPlaceholder', '20-byte hash160')
-            "
-          />
-          <datalist id="loaded-permissions-accounts">
-            <option
-              v-for="addr in autoLoadedAccounts"
-              :key="addr"
-              :value="addr"
-            />
-          </datalist>
-        </div>
-        <p class="mt-2 text-xs text-sa-muted">
-          {{
-            t(
-              "studioPanels.permissionsHint",
-              "The account must already have an active verifier and/or hook bound. V3 plugin calls are keyed by accountId hash160.",
-            )
-          }}
-        </p>
-      </div>
-
-      <!-- Empty state when no account is loaded -->
-      <div v-if="!permissionsForm.accountAddress" class="empty-state">
-        <div
-          class="mx-auto w-12 h-12 rounded-full bg-sa-panel/30 flex items-center justify-center mb-3"
-        >
-          <svg
-            aria-hidden="true"
-            class="w-6 h-6 text-sa-muted"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="1.5"
-              d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-            ></path>
-          </svg>
-        </div>
-        <p class="text-sm text-sa-text font-medium mb-1">
-          {{ t("studioPanels.noAccountForPermissions", "No account loaded") }}
-        </p>
-        <p class="text-xs text-sa-muted">
-          {{
-            t(
-              "studioPanels.loadAccountForPermissions",
-              "Enter a target account above to configure permissions and limits.",
-            )
-          }}
-        </p>
-      </div>
-
-      <div
-        v-if="permissionsForm.accountAddress"
-        class="grid grid-cols-1 md:grid-cols-2 gap-8"
-      >
-        <div
-          class="card hover:border-sa-muted transition-colors duration-200 flex flex-col p-5 rounded-lg"
-        >
-          <h3 class="text-sm font-bold text-sa-text mb-5">
-            {{
-              t(
-                "studioPanels.callActiveVerifier",
-                "Call Active Verifier Plugin",
-              )
-            }}
-          </h3>
-          <div class="space-y-4">
-            <div>
-              <label
-                for="verifier-method-input"
-                class="block text-xs font-semibold text-sa-muted mb-1"
-                >{{ t("studioPanels.methodLabel", "Method") }}</label
-              >
-              <input
-                id="verifier-method-input"
-                v-model="permissionsForm.verifierMethod"
-                type="text"
-                class="input-field text-sm font-mono py-2 px-3 bg-sa-dark"
-                :placeholder="
-                  t(
-                    'studioPanels.verifierMethodPlaceholder',
-                    'setSessionKey / setConfig / createSubscription ...',
-                  )
-                "
-              />
-            </div>
-            <div>
-              <label
-                for="verifier-args-input"
-                class="block text-xs font-semibold text-sa-muted mb-1"
-                >{{ t("studioPanels.argsJsonLabel", "Args JSON") }}</label
-              >
-              <textarea
-                id="verifier-args-input"
-                v-model="permissionsForm.verifierArgsJson"
-                class="input-field text-xs font-mono py-2 px-3 bg-sa-dark min-h-32"
-                :placeholder="verifierArgsPlaceholder"
-                @blur="validateVerifierArgsJson"
-              ></textarea>
-              <p
-                v-if="verifierArgsError"
-                role="alert"
-                class="text-xs text-sa-error mt-1"
-              >
-                {{ verifierArgsError }}
-              </p>
-            </div>
-            <div
-              v-if="sessionKeyValueWarning"
-              role="alert"
-              class="flex items-start gap-2 rounded-lg border border-sa-warning/40 bg-sa-warning/10 px-3 py-2"
-            >
-              <span class="text-sa-warning text-sm leading-none mt-0.5" aria-hidden="true">⚠</span>
-              <p class="text-xs text-sa-warning-light leading-relaxed">
-                {{ sessionKeyValueWarning }}
-              </p>
-            </div>
-            <button
-              type="button"
-              :aria-label="t('studioPanels.ariaCallVerifier', 'Call verifier')"
-              class="btn-primary w-full"
-              :class="{ 'btn-loading': permissionsBusy.verifierCall }"
-              :disabled="permissionsBusy.verifierCall || !canManagePermissions"
-              @click="callVerifier"
-            >
-              {{
-                permissionsBusy.verifierCall
-                  ? t("studioPanels.calling", "Calling...")
-                  : t("studioPanels.callVerifier", "Call Verifier")
-              }}
-            </button>
-          </div>
-        </div>
-
-        <div
-          class="card hover:border-sa-muted transition-colors duration-200 flex flex-col p-5 rounded-lg"
-        >
-          <h3 class="text-sm font-bold text-sa-text mb-5">
-            {{ t("studioPanels.callActiveHook", "Call Active Hook Plugin") }}
-          </h3>
-          <div class="space-y-4">
-            <div>
-              <label
-                for="hook-method-input"
-                class="block text-xs font-semibold text-sa-muted mb-1"
-                >{{ t("studioPanels.methodLabel", "Method") }}</label
-              >
-              <input
-                id="hook-method-input"
-                v-model="permissionsForm.hookMethod"
-                type="text"
-                class="input-field text-sm font-mono py-2 px-3 bg-sa-dark"
-                :placeholder="
-                  t(
-                    'studioPanels.hookMethodPlaceholder',
-                    'setWhitelist / setDailyLimit / requireCredentialCommitmentForContract ...',
-                  )
-                "
-              />
-            </div>
-            <div>
-              <label
-                for="hook-args-input"
-                class="block text-xs font-semibold text-sa-muted mb-1"
-                >{{ t("studioPanels.argsJsonLabel", "Args JSON") }}</label
-              >
-              <textarea
-                id="hook-args-input"
-                v-model="permissionsForm.hookArgsJson"
-                class="input-field text-xs font-mono py-2 px-3 bg-sa-dark min-h-32"
-                :placeholder="hookArgsPlaceholder"
-                @blur="validateHookArgsJson"
-              ></textarea>
-              <p
-                v-if="hookArgsError"
-                role="alert"
-                class="text-xs text-sa-error mt-1"
-              >
-                {{ hookArgsError }}
-              </p>
-            </div>
-            <button
-              type="button"
-              :aria-label="t('studioPanels.ariaCallHook', 'Call hook')"
-              class="btn-secondary w-full"
-              :class="{ 'btn-loading': permissionsBusy.hookCall }"
-              :disabled="permissionsBusy.hookCall || !canManagePermissions"
-              @click="callHook"
-            >
-              {{
-                permissionsBusy.hookCall
-                  ? t("studioPanels.calling", "Calling...")
-                  : t("studioPanels.callHook", "Call Hook")
-              }}
-            </button>
           </div>
         </div>
       </div>
@@ -313,54 +160,23 @@
         class="rounded-lg border border-sa-border/60 bg-sa-panel/60 p-5"
       >
         <summary
-          class="cursor-pointer text-sm font-semibold text-sa-muted hover:text-sa-text transition-colors duration-200 flex items-center gap-2"
+          class="cursor-pointer text-sm font-semibold text-sa-muted hover:text-sa-text transition-colors duration-200"
         >
-          <svg
-            aria-hidden="true"
-            class="w-4 h-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
-            ></path>
-          </svg>
           {{ t("studioPanels.commonExamples", "Common Examples") }}
         </summary>
-        <div
-          class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs text-sa-muted font-mono"
-        >
+        <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-xs text-sa-muted font-mono">
           <div
             v-for="example in commonExamples"
-            :key="example.label"
+            :key="example.label + example.method"
             class="rounded-lg border border-sa-border/40 bg-sa-dark/30 p-4"
           >
             <div class="flex items-center justify-between mb-2">
-              <p class="text-sa-orange font-semibold">
-                {{ t("studio.presets." + example.label, example.label) }}
-              </p>
+              <p class="text-sa-orange font-semibold">{{ example.label }}</p>
               <button
-                @click="applyExample(example)"
-                class="text-xs text-sa-muted hover:text-sa-text transition-colors duration-200 flex items-center gap-1"
+                type="button"
+                class="text-xs text-sa-muted hover:text-sa-text transition-colors duration-200"
+                @click="applyPreset(example)"
               >
-                <svg
-                  aria-hidden="true"
-                  class="w-3 h-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                  ></path>
-                </svg>
                 {{ t("studioPanels.useTemplate", "Use Template") }}
               </button>
             </div>
@@ -373,10 +189,9 @@
 </template>
 
 <script setup>
-import { computed, inject, ref } from "vue";
+import { inject, ref } from "vue";
 import { useI18n } from "@/i18n";
-import { analyzeSessionKeyScope } from "@/features/studio/sessionKeyScope";
-import { createModuleConfigurationPresets, applyModuleConfigurationPreset } from "@/features/studio/modulePresets";
+import { createModuleReadPresets, applyModuleReadPreset } from "@/features/studio/modulePresets";
 
 const { t } = useI18n();
 
@@ -384,99 +199,40 @@ const studio = inject("studio");
 const {
   permissionsForm,
   permissionsBusy,
-  canManagePermissions,
-  isOwnerOnlyPermissionsTarget,
-  autoLoadedAccounts,
-  callVerifier,
-  callHook,
+  canReadModule,
+  manageSnapshot,
+  moduleReadOutcome,
+  callModuleRead,
 } = studio;
 
-const verifierArgsPlaceholder = t(
-  "studioPanels.verifierArgsPlaceholder",
-  '[{"type":"Hash160","value":"0x..."},{"type":"ByteArray","value":"0x..."}]',
-);
-const hookArgsPlaceholder = t(
-  "studioPanels.hookArgsPlaceholder",
-  '[{"type":"Hash160","value":"0x..."},{"type":"Boolean","value":true}]',
-);
+const argsError = ref("");
 
-const verifierArgsError = ref("");
-const hookArgsError = ref("");
+const { validatorReads, hookReads, commonExamples } = createModuleReadPresets(t);
 
-function validateVerifierArgsJson() {
-  const text = (permissionsForm.value.verifierArgsJson || "").trim();
+function validateArgsJson() {
+  const text = (permissionsForm.value.argsJson || "").trim();
   if (!text) {
-    verifierArgsError.value = "";
-    return;
+    argsError.value = "";
+    return true;
   }
   try {
-    JSON.parse(text);
-    verifierArgsError.value = "";
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) throw new TypeError("args must be a JSON array");
+    argsError.value = "";
+    return true;
   } catch {
-    verifierArgsError.value = t(
-      "studioPanels.invalidJson",
-      "Invalid JSON format",
-    );
+    argsError.value = t("studioPanels.invalidJson", "Invalid JSON format");
+    return false;
   }
 }
 
-function validateHookArgsJson() {
-  const text = (permissionsForm.value.hookArgsJson || "").trim();
-  if (!text) {
-    hookArgsError.value = "";
-    return;
-  }
-  try {
-    JSON.parse(text);
-    hookArgsError.value = "";
-  } catch {
-    hookArgsError.value = t("studioPanels.invalidJson", "Invalid JSON format");
-  }
+function applyPreset(preset) {
+  applyModuleReadPreset(permissionsForm.value, preset);
+  validateArgsJson();
 }
 
-// setSessionKey is value-uncapped unless it is a "transfer" method with a positive spending limit
-// (the only path SessionKeyVerifier enforces). Surface that distinctly so the one-target/one-method
-// preset is not mistaken for a bounded grant. Detection lives in sessionKeyScope.js (unit-tested).
-const sessionKeyValueWarning = computed(() => {
-  if (permissionsForm.value.verifierMethod !== "setSessionKey") return "";
-
-  let args;
-  try {
-    args = JSON.parse(permissionsForm.value.verifierArgsJson || "");
-  } catch {
-    return "";
-  }
-
-  const scope = analyzeSessionKeyScope(args);
-  if (!scope.applies || !scope.uncapped) return "";
-
-  if (scope.nativeAsset) {
-    return t(
-      "studioPanels.sessionKeyUncappedNativeWarning",
-      'This session key is VALUE-UNCAPPED on a native asset ({asset}): a wildcard ("*") method or a zero spending limit lets the delegated signer drain your entire {asset} balance — it is not limited to one method. Set method to "transfer" and add a positive spending limit (6th arg) to enforce a cap.',
-    ).replace(/{asset}/g, scope.nativeAsset);
-  }
-  return t(
-    "studioPanels.sessionKeyUncappedWarning",
-    'This session key is VALUE-UNCAPPED: a wildcard ("*") method or a zero spending limit lets the delegated signer move the whole balance on the target contract — it is not limited to one method. Set method to "transfer" and add a positive spending limit (6th arg) to enforce a cap.',
-  );
-});
-
-const { verifierPresets, hookPresets, commonExamples } = createModuleConfigurationPresets(t);
-
-function applyVerifierPreset(preset) {
-  applyModuleConfigurationPreset(permissionsForm.value, preset);
-  validateVerifierArgsJson();
-}
-
-function applyHookPreset(preset) {
-  applyModuleConfigurationPreset(permissionsForm.value, preset);
-  validateHookArgsJson();
-}
-
-function applyExample(example) {
-  applyModuleConfigurationPreset(permissionsForm.value, example);
-  if (example.role === "verifier") validateVerifierArgsJson();
-  else validateHookArgsJson();
+function submitRead() {
+  if (!validateArgsJson()) return;
+  void callModuleRead();
 }
 </script>

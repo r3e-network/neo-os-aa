@@ -98,7 +98,7 @@ function emitSmallInteger(value) {
   return (0x10 + value).toString(16).padStart(2, '0');
 }
 
-function createVerifyScript(contractHash, accountIdHex) {
+function createProxyScript(contractHash, accountIdHex) {
   const accountId = deriveAccountIdHash(accountIdHex);
   const contract = sanitizeHex(contractHash);
   const operationHex = bytesToHex(new TextEncoder().encode('verify'));
@@ -115,7 +115,7 @@ function createVerifyScript(contractHash, accountIdHex) {
 
 function deriveAddress(contractHash, seedHex) {
   const accountIdHash = deriveAccountIdHash(seedHex);
-  const script = createVerifyScript(contractHash, accountIdHash);
+  const script = createProxyScript(contractHash, accountIdHash);
   const scriptHash = reverseHex(hash160Hex(script));
   return getAddressFromScriptHash(scriptHash);
 }

@@ -57,8 +57,8 @@ class GasTraceTests(unittest.TestCase):
     def test_valid_loop_opcode_mutation_rejected_by_cfg(self):
         bound = gas_trace.bind_artifact()
         modified = [dict(i) for i in bound['instructions']]
-        last_jump = next(i for i in modified if i['offset'] == 19178)
-        last_jump['edges'] = [{'kind': 'branch', 'target': 19178}]
+        last_jump = next(i for i in modified if i['offset'] == 36326)
+        last_jump['edges'] = [{'kind': 'branch', 'target': 36326}]
         with self.assertRaises(ValueError):
             gas_trace.enumerate_paths(modified)
 
@@ -66,7 +66,7 @@ class GasTraceTests(unittest.TestCase):
         fees = gas_trace.extract_fees(gas_trace.pinned_sources())
         model = gas_trace.derive(gas_trace.bind_artifact(), fees)
         self.assertEqual(12, len(model['paths']))
-        self.assertEqual(182, len(model['initializer']))
+        self.assertEqual(236, len(model['initializer']))
         self.assertTrue(all(p['executionCoefficient'] > 0 for p in model['paths']))
         self.assertGreater(model['maxExecutionCoefficient'], 32768)
         self.assertEqual(71, model['maxStorageBytes'])

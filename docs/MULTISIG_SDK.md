@@ -1,46 +1,85 @@
-# MultiSig SDK and frontend session
+# Threshold SDK and frontend session
 
-`createMultiSigClient` in the JS SDK and `createMultiSigDraftSession` in the frontend use the same `shared/multiSigCore.mjs`. They construct the `StdLib.Serialize(object[])` proof expected by `MultiSigVerifier`. This is an explicit session API; generic collaborator records and roster counts are never inferred to be verifier children.
+v4 has no MultiSig root and no verifier children. A threshold is a policy over installed validator
+modules: members are module ids of one account, each member owns its credential generation, and the
+operation carries one assembled signature field. `shared/multiSigCore.mjs` is the single
+implementation; the JS SDK (`createThresholdClient`) and the frontend (`createThresholdSession`)
+only bind it to a client and an RPC.
 
-1. `fetchContext({ coreContractHash, accountIdHash })` reads the RPC network magic, account's bound root verifier, its authorized core and ordered `getConfig` result. It pins account, core, network, root, child order and threshold into `configDigest`.
-2. `prepareOperation({ context, operation })` fixes the channel nonce, deadline and core-computed argument hash. Share this exact operation context with each child signer. The deadline is milliseconds and is explicitly chosen by the caller.
-3. `buildChildTypedData({ context, operation, childVerifierHash })` creates an EVM signature domain for that child, **not the MultiSig root**. `fetchChildPayload({ context, operation, childVerifierHash })` reads the individual child's `getPayload` for SessionKey/WebAuthn-style adapters and returns those exact bytes plus their child/operation context; adapters that bind their cryptographic payload to the child identity reject reuse in another child domain. This is not a universal property of opaque proof bytes or native-witness children, which may use empty proof bytes and derive authorization from transaction witnesses.
-4. Collect explicit `{ childVerifierHash, kind, operation, signatureHex }` proofs. EVM proofs additionally carry `typedData`, `signatureFullHex` and optional `signerAddress`. Opaque proofs use an adapter for that child's real signing format; operation metadata alone is not proof of validity.
-5. `validateBundle` rereads the network, root/config, nonce and argument hash, rejects drift, constructs exact ordered slots and simulates `validateSignature` against the bound root. It rereads the config after simulation. A rejected or faulting verifier fails closed.
+1. Members come from the core. `prepareMembers` reads every member's module descriptor — installed,
+   `thresholdMemberEligible`, and its current `credentialGeneration` — and returns the §5 member
+   digest each member must sign. A generation the caller supplies is never trusted: a stale one
+   yields a digest the core rejects as `SA_CREDENTIAL_STALE`.
+2. Assembly is explicit. `assembleSignature({ members })` serializes `[moduleId, 64-byte signature]`
+   pairs, and `assembleOperationSignature({ operationDigest, members })` returns
+   `{ signatureHex, members }`, where `signatureHex` is field 11 of the 13-field operation.
+3. The policy itself is configuration. Membership and the threshold are set by a
+   `setThresholdPolicy` action — `[7, policyId, threshold, memberIds[], active]` — inside a
+   configuration intent, so they mature for 24 hours before they apply. `policyId = 0` allocates a
+   fresh id from the same monotonic allocator as module instances, so a policy id never aliases a
+   module id. Deactivating a policy carries no members and frees those members for uninstall.
 
 ```js
-const { createMultiSigClient } = require('smart-account');
-const multisig = createMultiSigClient({ rpcUrl });
-const context = await multisig.fetchContext({ coreContractHash, accountIdHash });
-const operation = await multisig.prepareOperation({
-  context,
-  operation: { targetContract, method: 'symbol', args: [], deadline: String(Date.now() + 600_000) },
+const { createThresholdClient } = require('smart-account');
+
+const threshold = createThresholdClient({ client });
+const prepared = await threshold.prepareMembers({
+  accountId,
+  operationDigest,
+  memberIds: [1, 2, 3],
 });
-// Build one proof per child from the explicit `{ childVerifierHash, kind, operation, signatureHex }`
-// record of step 4. The SDK has no collector for these: only the caller knows which children sign
-// and in what real signing format, so the array is assembled here, not fetched.
-const childProofs = [
-  { childVerifierHash, kind: 'evm', operation, signatureHex, typedData, signatureFullHex },
-];
-const bundle = await multisig.validateBundle({ context, operation, childProofs });
-// bundle.invocation is the complete executeUserOp payload for the normal transaction path.
-// Review/simulate that full transaction, including its fee payer and any required proxy witness.
+// Each member signs prepared[i].digest with its own validator key.
+const signatureHex = threshold.assembleSignature({
+  members: [{ moduleId: 1, signature }, { moduleId: 2, signature }],
+});
 ```
 
-`buildBundle` is the offline structural builder; its result has `chainValidated: false`. `validateBundle` sets that field to true only for a successful signature simulation at the read state. Neither value is transaction finality or a reservation of nonce/configuration. Full execution preview and normal chain authorization remain required. Signer witnesses can be passed to `createMultiSigClient`/`createMultiSigDraftSession` for children that require transaction witnesses; the final transaction must carry the same required authorization.
+The frontend session (`frontend/src/features/operations/multiSig.js`) reads through one core of the
+caller's choice, so a session cannot mix values from two networks:
 
-The serializer is bounded to 10 slots and 65,535 total bytes. Missing children use null slots at their original indices, only after enough explicit proofs are supplied to meet the threshold. Empty hex is a ByteString and is different from null. Repeated/unknown children, changed operation fields, insufficient proofs, parent-domain EVM signatures and altered configuration pins are rejected.
+```js
+import { createThresholdSession } from './features/operations/multiSig.js';
 
-Public V3 thresholds count verifier modules, not independent keys or people. Different modules can share credentials or controllers; a successful quorum simulation does not establish signer independence. The native composition profile defines its own signer-domain rules and must be discovered separately.
+const session = createThresholdSession({ rpcUrl });
+const prepared = await session.prepareMembers({
+  networkMagic,
+  coreContractHash,
+  accountId,
+  operation,
+  memberModuleIds: [1, 2],
+});
+// `preview` re-reads the core's validation result; `readProxyHash` reads the
+// account proxy. Every read goes through the core hash the session was given.
+```
 
-## Configuring child credentials
+Threshold membership counts validator instances, not independent keys or people. Different modules
+can share credentials or controllers, so a successful quorum does not establish signer
+independence.
 
-For cores exposing the `callVerifierChild` API — absent from the pinned deployed artifact (`contracts/build/SmartAccount.manifest.json`), so source-only for now (DS-CU-202 finding F1) — `buildChildConfiguration` creates an invocation for the owner-controlled, timelocked child configuration path. It accepts only `setPublicKey(accountId, publicKey)` or `setConfig(accountId, signers, threshold)` and only direct configured children. The first call stages the exact intent and returns false; submit identical calldata after the 24-hour delay to apply it. Successful Void child configuration may return null. Changed root, child, child order, threshold or arguments restarts the delay.
+## Configuring members
 
-`readPendingConfiguration({ context })` reads the shared verifier pending slot (`moduleHash`, `callHash`, `initiatedAt`). The slot is shared with root verifier configuration; a pending record alone does not prove it corresponds to a particular child request. Compare against the exact intended invocation and authoritative core state before owner confirmation. See [child configuration](MULTISIG_CHILD_CONFIGURATION.md) for the contract boundary. Older deployed cores do not gain this API from an SDK update.
+Member configuration is ordinary module configuration: `configure` on the validator instance
+takes a `configureModule` action inside a configuration intent, so it matures on the same 24-hour
+timer as every other intent and a module cannot configure itself. Rotating credentials is
+immediate instead: `revokeCredentials(accountId, moduleId)` is a custody-authorised core action
+that bumps the instance generation on the spot, which is why signatures bound to the old
+generation stop validating the moment it executes.
+
+The core exposes no policy getter. A policy is observable through the `ThresholdPolicySet`
+notification (`accountId`, `policyId`, `threshold`, `memberIds`), and each member instance is
+observable through `getModule` — the descriptor carries `credentialGeneration` and
+`thresholdMemberEligible`, which are exactly the two values a member digest binds. Read
+`getPendingConfiguration` for the outstanding intent with its maturity and action digest, and
+compare that digest against the exact intent you proposed before confirming; a pending record
+alone does not prove it carries the change you expect.
 
 ## Evidence and boundary
 
-`MultiSigSdkVectorTests.cs` runs the actual JS serializer, compares its bytes with VM `StdLib.Serialize`, rejects shifted and duplicated child proofs, exercises threshold-preserving null slots and executes a real core UserOperation with two independently configured SessionKey children. Child payloads are domain-separated. This proves the serialization/aggregation path for that runtime and child combination; it does not establish public deployment or every possible verifier adapter.
+`MultiSigSdkVectorTests.cs` runs the actual JS serializer, compares its bytes with VM
+`StdLib.Serialize`, rejects shifted and duplicated member entries, and exercises the threshold
+routing against a real core operation. The serializer is bounded to 10 members and 65,535 total
+bytes; empty hex is a ByteString and is different from null.
 
-SDK unit tests cover chain config/order/threshold/network/nonce/argument drift, typed-data child domains, bad pins, duplicate children and configuration payload scope. Frontend tests verify RPC Array and base64 ByteArray wire encoding. No new generic “multisig complete” UI badge is introduced.
+SDK unit tests cover member digests, generation binding, malformed signatures and assembly order.
+Frontend tests verify RPC Array and base64 ByteArray wire encoding. No generic "multisig complete"
+badge is introduced.

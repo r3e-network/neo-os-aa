@@ -15,10 +15,12 @@ storage uses `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suf
 transaction script, covering custody fallback and native transaction witnesses;
 operation-signature preimages also bind them. Prior-generation
 keys or signatures cannot be restored by reinstalling a module. This is distinct
-from ordinary `finalizeEscape`, whose old-module cleanup can still fail closed.
-The current source additionally offers callback-free `finalizeEscapeToOwner`,
-which permanently disables all plugin installation for that account; it does
-not provide native epoch-module reinstallation.
+from the legacy escape lane carried by the pinned `contracts/build/` artifact, whose
+old-module cleanup can still fail closed. The current source additionally offers the
+callback-free recovery lane `beginRecovery` / `cancelRecovery` / `executeRecovery`
+(read back through `getRecoveryStatus`): maturity rotates custody, sweeps every module
+row without calling a plugin, and advances the authority epoch; it does not provide
+native epoch-module reinstallation.
 The normative rules are in `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`.
 The amended native composite path uses a core-owned, single-operation receipt:
 only the first threshold of valid children obtains post-execution authority.
@@ -287,7 +289,7 @@ flowchart TD
 ### Layer 3: Plugin System
 - **Verifier Isolation:** Stateless, no direct state access
 - **Hook Gating:** Pre/post execution policies
-- **Authority Validation:** `canConfigureVerifier` / `canExecuteHook` checks
+- **Authority Validation:** `getAuthorizedModuleId` phase resolution plus the module-side `ValidatorAuthority` / `HookAuthority` checks
 - **Module Lifecycle:** Timelocked updates with events
 
 The core passes hook callbacks a single canonical operation tuple in both phases:
@@ -327,25 +329,25 @@ back target writes and nonce state on that fault; transaction fees remain charge
 ### 5.2 Should-Hold Invariants
 
 1. **Gas Limits on Verifiers:** *(PROFILE DEPENDENT)* The private `PLATFORM` core uses a 10 GAS child budget for each verifier callback on the matching runtime. `public` uses standard `System.Contract.Call` and has no child budget; lifecycle admission, simulation and transaction fee ceilings do not establish one. Historical private runtime evidence requires revalidation after source/runtime changes.
-2. **Plugin State Cleanup:** *(PARTIAL)* Current settlement clears known plugin markers and rejects modules whose manifest omits the V3 lifecycle ABI; semantic cleanup/refinement coverage for arbitrary future plugins is pending.
-   Every verifier and hook must implement `clearAccount`: the core calls it without a fallback from
-   `confirmVerifierUpdate`, `confirmHookUpdate`, `finalizeEscape` and `settleMarketEscrow`, and a
+2. **Plugin State Cleanup:** *(PARTIAL)* Current settlement clears known plugin markers and rejects modules whose manifest omits the v4 lifecycle ABI; semantic cleanup/refinement coverage for arbitrary future plugins is pending.
+   Every validator and hook must implement `onUninstall` and delete every instance-scoped key it owns: the core calls it without a fallback from
+   `confirmConfiguration`, the escape lane and `settleMarketEscrow`, and a
    nested call to a missing method faults the enclosing transaction uncatchably. The
-   `SocialRecoveryVerifier` source now implements it (core-gated, oracle credit refunded to the
-   recovery owner, consumed action nullifiers retained as replay protection). The recovery verifier
-   artifacts recorded as deployed on TestNet and MainNet predate this method, so an account bound to
+   `SocialRecoveryService` source now implements it (core-gated, oracle credit refunded to the
+   recovery owner, consumed action nullifiers retained as replay protection). The recovery module
+   artifacts recorded as deployed on TestNet and MainNet predate v4, so an account bound to
    a deployed instance cannot rotate away from it, finalize an escape or be sold until that instance
-   is upgraded through its timelocked `proposeUpdate`/`update` path. On the newer
-   core candidate, callback-free permanent owner-only recovery provides an alternative
+   is upgraded through the timelocked `proposeConfiguration`/`confirmConfiguration` path. On the newer
+   core candidate, the callback-free permanent owner-only escape lane provides an alternative
    for regaining account execution; it does not refund credits retained by the old plugin.
 3. **Session Key Revocation:** *(DEFINED)* Revocation is effective at canonical transaction execution order; a later validation sees no active key, and `SessionKeyRevoked` is emitted. No protocol component promises mempool cancellation or retroactive invalidation of an operation already executed earlier in the chain.
 4. **Transfer-Source Metering:** A virtual account's assets live at the core-derived proxy script
    hash (`getProxyScriptHash(accountId)`), never at the `accountId`. A verifier or hook that pins or
-   meters a transfer source must compare against that proxy address; `SubscriptionVerifier` and
+   meters a transfer source must compare against that proxy address; `SubscriptionValidator` and
    `DailyLimitHook` do so, and a source equal to the `accountId` is rejected outright.
 5. **Plugin-Level Witness Checks Need a Reaching Scope:** A verifier or hook runs as a nested call
    from the core, so a `Runtime.CheckWitness` inside it (the merchant check in
-   `SubscriptionVerifier`, for example) only sees signers whose scope reaches the plugin.
+   `SubscriptionValidator`, for example) only sees signers whose scope reaches the plugin.
    `CalledByEntry` stops at the core and is rejected; the private-chain validation records that
    fault and the successful pull with a reaching scope. A merchant scopes its signer to the
    verifier with `CustomContracts` rather than signing `Global`.
@@ -485,7 +487,7 @@ allowlists the core it trusts, and the same allowlisting discipline applies in t
 ### 7.2 Hash Functions
 
 - **SHA256:** Used for payload hashing in most verifiers
-- **Keccak256:** Used for `Web3AuthVerifier` EIP-712 compatibility
+- **Keccak256:** Used for `Web3AuthValidator` EIP-712 compatibility
 - **Web3Auth ERC-1271:** Direct 32-byte digest recovery requires `HF_Huyao` or later. The pre-Huyao compatibility implementation does not enforce canonical `r`/`s` bounds and is outside the reviewed deployment profile.
 - **Nonce Storage:** Executable nonces have a 191-bit channel and 64-bit sequence. Native-profile keys reserve 24 bytes for the channel with the high bit clear; cursor `2^64` is an explicit exhaustion sentinel. The current custom source applies the signed-VM bound to channel reads; the pinned public foundation artifact may retain the wider legacy read boundary until republished.
 
@@ -572,45 +574,40 @@ the old single-operation receipt nor a VM fixture proves exact production pricin
 
 ## 9. Recovery & Emergency Access
 
-### 9.1 Escape Hatch Flow
+### 9.1 Recovery Flow
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Normal: Account configured
-    Normal --> EscapeInitiated: BackupOwner calls initiateEscape(accountId)
-    EscapeInitiated --> ActiveEscape: Timelock starts (7-90 days)
-    ActiveEscape --> Cancelled: Normal operation executed
-    ActiveEscape --> Escaped: Timelock expires + finalizeEscape(accountId, newVerifier)
-    Cancelled --> Normal: Escape cleared, account normal
-    Escaped --> Reset: Verifier = BackupOwner
-    Reset --> Normal: New config via BackupOwner
+    [*] --> Normal: Account configured with recoveryTimelockMs
+    Normal --> Pending: beginRecovery(accountId, newCustody)
+    Pending --> Normal: cancelRecovery(accountId)
+    Pending --> Matured: Timelock matures (7-90 days)
+    Matured --> Normal: executeRecovery(accountId) - custody rotated, modules swept
 ```
 
-Both entrypoints take the account id; `finalizeEscape` also takes the verifier the account falls
-back to (`contracts/build/SmartAccount.manifest.json`, implemented in
-`contracts/custom/SmartAccount.Escape.cs`).
+The entrypoints take the account id; `beginRecovery` also takes the custody it rotates
+to, and `getRecoveryStatus` reads the pending record back as
+`[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]`
+(`contracts/custom/SmartAccount.Escape.cs`; the pinned `contracts/build/` artifact is the
+older two-entrypoint shape).
 
 ### 9.2 Security Properties
 
 | Property | Guarantee |
 | --- | --- |
-| **Delayed Takeover** | 7-90 day minimum timelock |
-| **Cancel-on-Use** | A successful operation with the current BackupOwner witness cancels escape |
-| **Audit Trail** | All escape events emitted |
-| **No Bypass** | *(PARTIAL)* Market escrow can clear escape |
+| **Delayed Takeover** | 7-90 day minimum timelock fixed at account creation |
+| **Explicit Cancellation** | `cancelRecovery` by custody or recovery authority deletes the record; only one record can be pending and its timer never restarts |
+| **Audit Trail** | `RecoveryInitiated` / `RecoveryCancelled` / `RecoveryExecuted`, plus the reused `EscapeInitiated` / `EscapeCancelled` / `EscapeFinalized` mirrors |
+| **No Bypass** | *(PARTIAL)* Market settlement deletes a pending recovery record and keeps its own settle authority |
 
-Finalization validates a nonzero replacement verifier against the same V3 lifecycle ABI
-as normal verifier rotation before cleanup or state writes. It still calls the old
-verifier and hook's `clearAccount` and fails atomically if either module faults or aborts.
-The timelock therefore authorizes recovery but does not guarantee recovery liveness
-against an unavailable or malicious old plugin. The current source's separate `finalizeEscapeToOwner` removes that old-plugin
-dependency: it checks maturity, owner witness, escrow and all active contexts,
-then detaches roots, clears pending authority and latches permanent owner-only
-mode without callbacks. All plugin installation/configuration/execution authority
-checks honor the latch, which persists through market and platform ownership
-changes. The account identity and nonce history are retained. Recovery is not
-a promise to refund plugin-held funds, revoke external allowances, bypass a
-market escrow or remove the independent core upgrade administrator.
+Execution is callback-free: `executeRecovery` rejects a stale `authorityEpochAtInit`,
+sweeps every module instance, threshold policy, hook order, message subject, pending
+intent, nonce channel and pending migration state without calling any validator, hook,
+Market or Oracle, then rotates custody, clears the recovery authority, re-enables
+built-in authorization and advances the authority epoch, configuration nonce and control
+revision. Liveness therefore needs no plugin cooperation. Recovery is not a promise to
+refund plugin-held funds, revoke external allowances, settle a market escrow or remove
+the independent core upgrade administrator.
 
 ---
 

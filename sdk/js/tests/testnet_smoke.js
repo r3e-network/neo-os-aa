@@ -1,508 +1,428 @@
 #!/usr/bin/env node
+/**
+ * v4 testnet smoke runbook.
+ *
+ * The v3 smoke exercised one registration call that installed a verifier and a
+ * hook in place and then mutated both through timelocked requests. Protocol v4
+ * has no registration fields: an account is created from custody plus salt, and
+ * modules enter through the action grammar — atomically at creation or through
+ * the 24-hour configuration intent. This runbook therefore proves the same
+ * ground on the v4 surface:
+ *
+ * 1. built-in route: a custody-only account signs the §4.3 operation digest
+ *    with its custody key (§8 envelope), the target executes, and the nonce
+ *    channel advances; replaying the same signed operation is refused;
+ * 2. hook gating: a WhitelistHook installed at creation allows the configured
+ *    target and refuses every other target before dispatch;
+ * 3. validator routing: a Web3AuthValidator installed at creation turns the
+ *    built-in route off (there is no custody fallback any more) and only its
+ *    own secp256k1 signature over the EIP-712 payload authorizes an operation;
+ * 4. recovery: beginRecovery records maturity, an early executeRecovery is
+ *    refused, and cancelRecovery clears the record.
+ *
+ * Runbooks are not gates. They are not executed by `npm test`, and the v4 core
+ * is not deployed to a public testnet yet, so this script is exercised only
+ * against a local chain that already carries the v4 artifacts built by
+ * `bash contracts/compile.sh`.
+ */
 
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { rpc, sc, wallet, experimental, tx, u, CONST } = require('@cityofzion/neon-js');
-const { ethers } = require('ethers');
+const crypto = require("crypto");
+const { CONST, wallet } = require("@cityofzion/neon-js");
+const { ethers } = require("ethers");
 
-const { extractDeployedContractHash } = require('../src/deployLog');
-const { SmartAccountClient } = require('../src/index');
-const { buildV3UserOperationTypedData, sanitizeHex } = require('../src/metaTx');
-const { resolveTestnetRpcUrl } = require('./testnet-rpc');
-
-let RPC_URL = process.env.TESTNET_RPC_URL || '';
-const TEST_WIF = process.env.TEST_WIF || '';
-
-if (!TEST_WIF) {
-  console.error('TEST_WIF is required.');
-  process.exit(1);
-}
+const h = require("./testnet-v4-harness");
 
 const GAS_HASH = CONST.NATIVE_CONTRACT_HASH.GasToken;
-const REGISTRATION_ESCAPE_TIMELOCK = 604800;
+const NEO_HASH = CONST.NATIVE_CONTRACT_HASH.NeoToken;
+const ZERO_HASH160 = "0".repeat(40);
+const SALT_BYTES = 20;
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
 }
 
-function isRetryableRpcError(error) {
-  const message = error instanceof Error ? error.message : String(error || '');
-  return /socket hang up|ECONNRESET|ETIMEDOUT|fetch failed|network error|EAI_AGAIN|ECONNREFUSED|EADDRNOTAVAIL|socket disconnected before secure TLS connection was established|TLS connection was established|premature close|invalid response body/i.test(message);
+function saltHex() {
+  return crypto.randomBytes(SALT_BYTES).toString("hex");
 }
 
-async function withRpcRetry(label, fn, attempts = 5) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await fn();
-    } catch (error) {
-      lastError = error;
-      if (!isRetryableRpcError(error) || attempt >= attempts) throw error;
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[rpc-retry] ${label} attempt ${attempt}/${attempts} failed: ${message}`);
-      await sleep(1500 * attempt);
-    }
-  }
-  throw lastError;
-}
-
-function repoRoot() {
-  return path.resolve(__dirname, '..', '..', '..');
-}
-
-function artifactPaths(baseName) {
+function nonceRouting(descriptor, validatorId = "0") {
   return {
-    nef: path.join(repoRoot(), 'contracts', 'bin', 'public', `${baseName}.nef`),
-    manifest: path.join(repoRoot(), 'contracts', 'bin', 'public', `${baseName}.manifest.json`),
+    validatorId,
+    credentialGeneration: "1",
+    authorityEpoch: descriptor.authorityEpoch,
+    nonceSubkey: "00".repeat(32),
   };
 }
 
-function loadArtifact(baseName, uniqueSuffix) {
-  const paths = artifactPaths(baseName);
-  const nef = sc.NEF.fromBuffer(fs.readFileSync(paths.nef));
-  const manifestJson = JSON.parse(fs.readFileSync(paths.manifest, 'utf8'));
-  manifestJson.name = `${manifestJson.name}-${uniqueSuffix}`;
-  const manifest = sc.ContractManifest.fromJson(manifestJson);
-  return { nef, manifest };
-}
-
-function normalizeHash(value) {
-  const hex = sanitizeHex(value || '');
-  if (!hex) return '';
-  return `0x${hex}`;
-}
-
-function buildConfig(account, networkMagic) {
-  return {
-    account,
-    networkMagic,
-    rpcAddress: RPC_URL,
-    blocksTillExpiry: 200,
-  };
-}
-
-function stackItemToText(item) {
-  if (!item) return '';
-  if (item.type === 'Integer') return String(item.value || '0');
-  if (item.type === 'Boolean') return String(item.value);
-  if (item.type === 'Hash160') return normalizeHash(item.value);
-  if (item.type === 'ByteString') {
-    const hex = Buffer.from(item.value || '', 'base64').toString('hex');
-    if (!hex) return '';
-    const utf8 = Buffer.from(hex, 'hex').toString('utf8');
-    return /^[\x20-\x7E]+$/.test(utf8) ? utf8 : `0x${hex}`;
-  }
-  return JSON.stringify(item);
-}
-
-async function waitForAppLog(client, txid, label, timeoutMs = 120000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    try {
-      const appLog = await client.getApplicationLog(txid);
-      if (appLog?.executions?.length) return appLog;
-    } catch (_) {
-      // still waiting for confirmation
-    }
-    await sleep(3000);
-  }
-  throw new Error(`${label}: timed out waiting for application log for ${txid}`);
-}
-
-function assertHalt(appLog, label) {
-  const execution = appLog?.executions?.[0];
-  if (!execution) throw new Error(`${label}: missing execution log`);
-  const vmState = String(execution.vmstate || execution.state || '');
-  if (!vmState.includes('HALT')) {
-    throw new Error(`${label}: VM did not HALT (${vmState}) ${execution.exception || ''}`.trim());
-  }
-  return execution;
-}
-
-function makeSigner(scriptHash) {
-  return {
-    account: scriptHash,
-    scopes: tx.WitnessScope.CalledByEntry,
-  };
-}
-
-function hash160Param(value) {
-  return sc.ContractParam.hash160(sanitizeHex(value));
-}
-
-function byteArrayParam(hexValue) {
-  return sc.ContractParam.byteArray(u.HexString.fromHex(sanitizeHex(hexValue), true));
-}
-
-function integerParam(value) {
-  if (typeof value === 'bigint') {
-    return sc.ContractParam.integer(value.toString());
-  }
-  return sc.ContractParam.integer(value);
-}
-
-function boolParam(value) {
-  return sc.ContractParam.boolean(Boolean(value));
-}
-
-function stringParam(value) {
-  return sc.ContractParam.string(String(value));
-}
-
-function arrayParam(values = []) {
-  return sc.ContractParam.array(...values);
-}
-
-function emptyByteArrayParam() {
-  return sc.ContractParam.byteArray(u.HexString.fromHex('', true));
-}
-
-function userOpParam({ targetContract, method, args = [], nonce = 0n, deadline = 0n, signatureHex = '' }) {
-  return arrayParam([
-    hash160Param(targetContract),
-    stringParam(method),
-    arrayParam(args),
-    integerParam(nonce),
-    integerParam(deadline),
-    byteArrayParam(signatureHex),
-  ]);
-}
-
-async function deployContract(client, account, networkMagic, baseName, uniqueSuffix) {
-  const { nef, manifest } = loadArtifact(baseName, uniqueSuffix);
-  const predictedHash = normalizeHash(
-    experimental.getContractHash(u.HexString.fromHex(account.scriptHash), nef.checksum, manifest.name)
-  );
-  const txid = await withRpcRetry(`deploy ${baseName}`, () => experimental.deployContract(nef, manifest, buildConfig(account, networkMagic)));
-  const appLog = await waitForAppLog(client, txid, `deploy ${baseName}`);
-  assertHalt(appLog, `deploy ${baseName}`);
-  const deployedHash = extractDeployedContractHash(appLog) || predictedHash;
-  return { txid, hash: normalizeHash(deployedHash), manifestName: manifest.name };
-}
-
-async function authorizeHook(client, coreHash, hookHash, account, networkMagic) {
-  return invokePersisted(client, hookHash, account, networkMagic, 'setAuthorizedCore', [
-    hash160Param(coreHash),
-  ]);
-}
-
-async function authorizeVerifier(client, coreHash, verifierHash, account, networkMagic) {
-  return invokePersisted(client, verifierHash, account, networkMagic, 'setAuthorizedCore', [
-    hash160Param(coreHash),
-  ]);
-}
-
-async function invokeRead(client, contractHash, operation, params = [], signers = undefined) {
-  return withRpcRetry(`${sanitizeHex(contractHash)}.${operation}`, () => client.invokeFunction(sanitizeHex(contractHash), operation, params, signers));
-}
-
-async function readAndDecode(client, contractHash, operation, params = [], signers = undefined) {
-  const result = await invokeRead(client, contractHash, operation, params, signers);
-  const state = String(result?.state || '');
-  if (state.includes('FAULT')) {
-    throw new Error(`${operation} fault: ${result.exception || 'VM fault'}`);
-  }
-  return result?.stack?.[0];
-}
-
-async function invokePersisted(client, contractHash, account, networkMagic, operation, params = [], signers = undefined) {
-  const contract = new experimental.SmartContract(sanitizeHex(contractHash), buildConfig(account, networkMagic));
-  const txid = await withRpcRetry(`${sanitizeHex(contractHash)}.${operation}.invoke`, () => contract.invoke(operation, params, signers));
-  const appLog = await waitForAppLog(client, txid, `${operation}`);
-  const execution = assertHalt(appLog, `${operation}`);
-  return { txid, appLog, execution };
-}
-
-async function testInvoke(client, contractHash, account, networkMagic, operation, params = [], signers = undefined) {
-  const contract = new experimental.SmartContract(sanitizeHex(contractHash), buildConfig(account, networkMagic));
-  return withRpcRetry(`${sanitizeHex(contractHash)}.${operation}.testInvoke`, () => contract.testInvoke(operation, params, signers));
-}
-
-function compactSignature(signature) {
-  const parsed = ethers.Signature.from(signature);
-  return `${sanitizeHex(parsed.r)}${sanitizeHex(parsed.s)}`;
-}
-
-function randomAccountId() {
-  return Buffer.from(ethers.randomBytes(20)).toString('hex');
-}
-
-function validationRunId() {
-  return (process.env.SA_VALIDATION_RUN_ID || `${Date.now().toString(36)}-${process.pid.toString(36)}-${crypto.randomBytes(3).toString('hex')}`).toLowerCase();
-}
-
-function logSection(title) {
-  console.log(`\n== ${title} ==`);
+/**
+ * Reads a native token's symbol through the account. The operation is the v4
+ * shape: 13 fields, a packed channel nonce and a validator-addressed
+ * signature, so a HALT here proves the whole envelope, not just dispatch.
+ */
+async function tokenSymbol(chain, sdk, accountId, { validatorId = "0" } = {}) {
+  const descriptor = await sdk.getAccount(accountId);
+  const routing = nonceRouting(descriptor, validatorId);
+  const nonce = await h.nextNonce(sdk, accountId, routing);
+  return h.operation({
+    targetContract: GAS_HASH,
+    method: "symbol",
+    nonce,
+    validatorId,
+    credentialGeneration: routing.credentialGeneration,
+    authorityEpoch: routing.authorityEpoch,
+    nonceSubkey: routing.nonceSubkey,
+  });
 }
 
 async function main() {
-  RPC_URL = await resolveTestnetRpcUrl({ env: process.env });
-  const account = new wallet.Account(TEST_WIF);
-  const rpcClient = new rpc.RPCClient(RPC_URL);
-  const version = await withRpcRetry('rpc.getVersion', () => rpcClient.getVersion());
-  const networkMagic = Number(version.protocol.network);
-  const deploymentTag = process.env.SA_VALIDATION_DEPLOY_TAG || `validation-smoke-${validationRunId()}`;
+  const chain = await h.connect();
+  const address = chain.account.address;
+  const custody = h.normalizeHash(chain.account.scriptHash);
 
   console.log(JSON.stringify({
-    rpc: RPC_URL,
-    networkMagic,
-    address: account.address,
-    scriptHash: normalizeHash(account.scriptHash),
+    rpc: chain.rpcUrl,
+    networkMagic: chain.networkMagic,
+    runId: chain.runId,
+    address,
+    scriptHash: custody,
   }, null, 2));
 
-  logSection('Deploy Contracts');
-  const core = await deployContract(rpcClient, account, networkMagic, 'SmartAccount', `${deploymentTag}-core`);
-  const web3Auth = await deployContract(rpcClient, account, networkMagic, 'Web3AuthVerifier', `${deploymentTag}-web3auth`);
-  const whitelist = await deployContract(rpcClient, account, networkMagic, 'WhitelistHook', `${deploymentTag}-whitelist`);
-  await authorizeVerifier(rpcClient, core.hash, web3Auth.hash, account, networkMagic);
-  await authorizeHook(rpcClient, core.hash, whitelist.hash, account, networkMagic);
+  // -------------------------------------------------------------------------
+  // Deployment: the core plus the two modules this runbook installs.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Deploy Contracts");
+  const core = await h.deployCore(chain);
+  const web3Auth = await h.deployModule(chain, core.hash, "validators/Web3AuthValidator");
+  const whitelist = await h.deployModule(chain, core.hash, "hooks/WhitelistHook");
+  // v4 modules still bind to exactly one core; the difference from v3 is that
+  // `deployModule` authorizes that binding and the core then learns the module
+  // through an install action, not a registration field.
   console.log(JSON.stringify({ core, web3Auth, whitelist }, null, 2));
 
-  const saClient = new SmartAccountClient(RPC_URL, core.hash);
-  const accountId = saClient.deriveRegistrationAccountIdHash({
-    backupOwnerAddress: account.scriptHash,
-    escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
+  const sdk = h.clientFor(chain, core.hash);
+  const protocol = await sdk.getProtocolInfo();
+  assert(protocol.protocolVersion === "4", `core reports protocol ${protocol.protocolVersion}, expected 4`);
+  console.log(JSON.stringify({ protocol }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // Scenario 1: custody-only account on the built-in route.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Register Custody Account");
+  const custodyAccount = await h.createAccount(chain, sdk, { custody: chain.account, salt: saltHex() });
+  const custodyId = custodyAccount.accountId;
+  const custodyState = await sdk.getAccount(custodyId);
+  assert(String(custodyState.custodyAddress).toLowerCase().endsWith(h.sanitizeHex(custody)), "custody address did not bind to the registering wallet");
+  assert(custodyState.defaultOperationAuthorization === true, "a fresh account must start with the built-in route enabled");
+  assert(custodyState.recoveryPending === false, "a fresh account must not carry a pending recovery");
+  console.log(JSON.stringify({
+    txid: custodyAccount.txid,
+    accountId: h.normalizeHash(custodyId),
+    virtualAddress: custodyAccount.accountAddress,
+    custody: custodyState.custodyAddress,
+    recoveryTimelockMs: custodyState.recoveryTimelockMs,
+    defaultOperationAuthorization: custodyState.defaultOperationAuthorization,
+  }, null, 2));
+
+  h.logSection("Built-In Route Operation");
+  const builtInOp = await tokenSymbol(chain, sdk, custodyId);
+  const signedBuiltInOp = h.signOperationWithCustody(chain, core.hash, {
+    accountId: custodyId,
+    operation: builtInOp,
   });
-  const virtual = saClient.deriveVirtualAccount(accountId);
-
-  logSection('Register Native-Fallback Account');
-  const registerNative = await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'registerAccount',
-    [
-      hash160Param(accountId),
-      hash160Param('0'.repeat(40)),
-      emptyByteArrayParam(),
-      hash160Param('0'.repeat(40)),
-      hash160Param(account.scriptHash),
-      integerParam(REGISTRATION_ESCAPE_TIMELOCK),
-    ],
+  // The preview and the execution must agree on the digest the custody key signed.
+  const preview = await h.validateOperation(chain, sdk, custodyId, signedBuiltInOp);
+  assert(preview.accepted === true, "the core rejected the custody-built signature");
+  assert(
+    preview.operationDigest === h.operationDigest(chain, core.hash, custodyId, signedBuiltInOp),
+    "the core digest disagrees with the local v4 codec",
   );
-  console.log(JSON.stringify({ registerNative: registerNative.txid, accountId: normalizeHash(accountId), virtualAddress: virtual.address }, null, 2));
+  // Whatever the operation returns must be the GAS symbol, read as UTF-8.
+  const builtInExec = await h.executeOperation(chain, sdk, { accountId: custodyId, operation: signedBuiltInOp });
+  const builtInResult = h.stackText(builtInExec.appLog.executions[0].stack[0]);
+  assert(builtInResult === "GAS", `built-in route returned ${builtInResult}, expected GAS`);
+  const afterBuiltIn = await sdk.getNonce(custodyId, nonceRouting(custodyState));
+  assert(BigInt(afterBuiltIn.sequence) === 1n, `nonce sequence should be 1 after one operation, got ${afterBuiltIn.sequence}`);
+  console.log(JSON.stringify({
+    txid: builtInExec.txid,
+    result: builtInResult,
+    operationDigest: preview.operationDigest,
+    nonceChannel: afterBuiltIn.channel,
+    nonceSequence: afterBuiltIn.sequence,
+  }, null, 2));
 
-  const nativeState = await saClient.getAccountState(accountId);
-  console.log(JSON.stringify({ nativeState }, null, 2));
+  h.logSection("Nonce Replay Refused");
+  const replayRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    h.executionPlan(sdk, { accountId: custodyId, operations: [signedBuiltInOp] }),
+    /SA_NONCE_INVALID|nonce/i,
+    "replay of the consumed operation",
+  );
+  console.log(JSON.stringify({ replayRefusal }, null, 2));
 
-  logSection('Native ExecuteUserOp');
-  const nativeOp = userOpParam({
+  // -------------------------------------------------------------------------
+  // Scenario 2: WhitelistHook installed at creation.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Register Hook-Gated Account");
+  const hookInstall = await h.installActionFor(chain, {
+    moduleType: h.HOOK_MODULE_TYPE,
+    moduleHash: whitelist.hash,
+    // onInstall takes the same ["allowTarget", target] command the v3 hook
+    // applied through a timelocked maintenance request.
+    initData: [h.codec.stringValue("allowTarget"), h.codec.hashValue(GAS_HASH)],
+  });
+  const hookAccount = await h.createAccount(chain, sdk, {
+    custody: chain.account,
+    salt: saltHex(),
+    actions: [hookInstall],
+  });
+  const hookId = hookAccount.accountId;
+  const hookState = await sdk.getAccount(hookId);
+  const hookModules = await h.moduleIds(sdk, hookId, h.HOOK_MODULE_TYPE);
+  assert(hookModules.moduleIds.length === 1, `expected one installed hook, got ${hookModules.moduleIds.length}`);
+  assert(hookState.defaultOperationAuthorization === true, "a hook alone must not disable the built-in route");
+  const hookModuleId = hookModules.moduleIds[0];
+  const hookRecord = await h.moduleState(sdk, hookId, hookModuleId);
+  console.log(JSON.stringify({
+    txid: hookAccount.txid,
+    accountId: h.normalizeHash(hookId),
+    hookModuleId,
+    hookContract: hookRecord.contractHash,
+    credentialGeneration: hookRecord.credentialGeneration,
+    configurationNonce: hookModules.configurationNonce,
+  }, null, 2));
+
+  h.logSection("Hook Gate Allows The Configured Target");
+  const allowedOp = await tokenSymbol(chain, sdk, hookId);
+  const signedAllowedOp = h.signOperationWithCustody(chain, core.hash, { accountId: hookId, operation: allowedOp });
+  const allowedExec = await h.executeOperation(chain, sdk, { accountId: hookId, operation: signedAllowedOp });
+  const allowedResult = h.stackText(allowedExec.appLog.executions[0].stack[0]);
+  assert(allowedResult === "GAS", `allowlisted target returned ${allowedResult}, expected GAS`);
+  console.log(JSON.stringify({ txid: allowedExec.txid, result: allowedResult }, null, 2));
+
+  h.logSection("Hook Gate Refuses Another Target");
+  const hookStateAfter = await sdk.getAccount(hookId);
+  const deniedNonce = await h.nextNonce(sdk, hookId, nonceRouting(hookStateAfter));
+  const deniedOp = h.operation({
+    targetContract: NEO_HASH,
+    method: "symbol",
+    nonce: deniedNonce,
+    authorityEpoch: hookStateAfter.authorityEpoch,
+  });
+  const signedDeniedOp = h.signOperationWithCustody(chain, core.hash, { accountId: hookId, operation: deniedOp });
+  const nonceBeforeDenial = await sdk.getNonce(hookId, nonceRouting(hookStateAfter));
+  const hookRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    h.executionPlan(sdk, { accountId: hookId, operations: [signedDeniedOp] }),
+    /not in whitelist|SA_HOOK_REJECTED/i,
+    "operation against a non-allowlisted target",
+  );
+  // The refused operation must not have consumed its nonce: a preflight refusal
+  // is a simulation, so the channel still reports the same sequence.
+  const nonceAfterDenial = await sdk.getNonce(hookId, nonceRouting(hookStateAfter));
+  assert(
+    nonceAfterDenial.sequence === nonceBeforeDenial.sequence,
+    `refused operation moved the nonce ${nonceBeforeDenial.sequence} -> ${nonceAfterDenial.sequence}`,
+  );
+  console.log(JSON.stringify({
+    hookRefusal,
+    nonceSequence: nonceAfterDenial.sequence,
+  }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // Scenario 3: Web3AuthValidator installed at creation.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Register Web3Auth Account");
+  const evmSigner = ethers.Wallet.createRandom();
+  const rogueSigner = ethers.Wallet.createRandom();
+  // The validator stores the 33-byte compressed form; ethers hands both forms.
+  const evmPubKey = h.sanitizeHex(evmSigner.signingKey.compressedPublicKey);
+  const validatorInstall = await h.installActionFor(chain, {
+    moduleType: h.VALIDATOR_MODULE_TYPE,
+    moduleHash: web3Auth.hash,
+    initData: [h.codec.stringValue("setPublicKey"), h.codec.byteStringValue(evmPubKey)],
+  });
+  const web3AuthAccount = await h.createAccount(chain, sdk, {
+    custody: chain.account,
+    salt: saltHex(),
+    actions: [validatorInstall],
+  });
+  const web3AuthId = web3AuthAccount.accountId;
+  const web3AuthState = await sdk.getAccount(web3AuthId);
+  const validatorModules = await h.moduleIds(sdk, web3AuthId, h.VALIDATOR_MODULE_TYPE);
+  assert(validatorModules.moduleIds.length === 1, `expected one installed validator, got ${validatorModules.moduleIds.length}`);
+  // §3.5: the first validator install turns the built-in route off. There is
+  // no implicit custody fallback, so the custody key alone can no longer move
+  // this account — recovery is the only custody-only path left.
+  assert(web3AuthState.defaultOperationAuthorization === false, "installing a validator must disable the built-in route");
+  const validatorId = validatorModules.moduleIds[0];
+  const validatorRecord = await h.moduleState(sdk, web3AuthId, validatorId);
+  const installedKey = await h.readAndDecode(chain, web3Auth.hash, "getPublicKey", [
+    h.hash160Param(web3AuthId),
+    h.integerParam(validatorId),
+  ]);
+  assert(
+    Buffer.from(installedKey.value || "", "base64").toString("hex").toUpperCase() === evmPubKey.toUpperCase(),
+    "the validator did not store the compressed key of the configured signer",
+  );
+  console.log(JSON.stringify({
+    txid: web3AuthAccount.txid,
+    accountId: h.normalizeHash(web3AuthId),
+    validatorId,
+    validatorContract: validatorRecord.contractHash,
+    credentialGeneration: validatorRecord.credentialGeneration,
+    defaultOperationAuthorization: web3AuthState.defaultOperationAuthorization,
+    storedPublicKey: Buffer.from(installedKey.value || "", "base64").toString("hex"),
+  }, null, 2));
+
+  h.logSection("Built-In Route Disabled");
+  const legacyOp = await tokenSymbol(chain, sdk, web3AuthId);
+  const signedLegacyOp = h.signOperationWithCustody(chain, core.hash, { accountId: web3AuthId, operation: legacyOp });
+  const legacyRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    h.executionPlan(sdk, { accountId: web3AuthId, operations: [signedLegacyOp] }),
+    /SA_MODULE_NOT_ROUTABLE/,
+    "custody-signed operation on an account whose built-in route is off",
+  );
+  console.log(JSON.stringify({ legacyRefusal }, null, 2));
+
+  h.logSection("Web3Auth Validator Operation");
+  const web3AuthNonce = await h.nextNonce(sdk, web3AuthId, nonceRouting(web3AuthState, validatorId));
+  const validatorOp = h.operation({
     targetContract: GAS_HASH,
-    method: 'symbol',
-    args: [],
-    nonce: 0n,
-    deadline: BigInt(Date.now() + (60 * 60 * 1000)),
-    signatureHex: '',
+    method: "symbol",
+    nonce: web3AuthNonce,
+    validatorId,
+    credentialGeneration: validatorRecord.credentialGeneration,
+    authorityEpoch: web3AuthState.authorityEpoch,
   });
-  const nativeExec = await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'executeUserOp',
-    [hash160Param(accountId), nativeOp],
-  );
-  console.log(JSON.stringify({
-    nativeExec: nativeExec.txid,
-    result: stackItemToText(nativeExec.execution.stack?.[0]),
-  }, null, 2));
-
-  logSection('Hook Gating');
-  const hookConfigRequest = await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'updateHook',
-    [hash160Param(accountId), hash160Param(sanitizeHex(whitelist.hash))],
-  );
-
-  const deniedSim = await testInvoke(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'executeUserOp',
-    [hash160Param(accountId), userOpParam({
-      targetContract: GAS_HASH,
-      method: 'symbol',
-      args: [],
-      nonce: 1n,
-      deadline: BigInt(Date.now() + (60 * 60 * 1000)),
-      signatureHex: '',
-    })],
-    [makeSigner(account.scriptHash)],
-  );
-  console.log(JSON.stringify({
-    hookDeniedState: deniedSim.state,
-    hookDeniedException: deniedSim.exception || '',
-  }, null, 2));
-
-  await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'callHook',
-    [
-      hash160Param(accountId),
-      stringParam('setWhitelist'),
-      arrayParam([
-        hash160Param(accountId),
-        hash160Param(GAS_HASH),
-        boolParam(true),
-      ]),
-    ],
-  );
-  console.log(JSON.stringify({
-    hookConfigRequest: hookConfigRequest.txid,
-    result: stackItemToText(hookConfigRequest.execution.stack?.[0]),
-    note: 'callHook(setWhitelist) is timelocked on V3 and first emits a pending maintenance request rather than applying immediately.',
-  }, null, 2));
-
-  logSection('Escape Flow');
-  await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'initiateEscape',
-    [hash160Param(accountId)],
-  );
-  const escapeActive = await readAndDecode(rpcClient, core.hash, 'isEscapeActive', [hash160Param(accountId)]);
-  console.log(JSON.stringify({ escapeActive: stackItemToText(escapeActive) }, null, 2));
-  const finalizeEscapePreview = await testInvoke(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'finalizeEscape',
-    [hash160Param(accountId), hash160Param('0'.repeat(40))],
-  );
-  console.log(JSON.stringify({
-    finalizeEscapeState: finalizeEscapePreview.state,
-    finalizeEscapeException: finalizeEscapePreview.exception || '',
-  }, null, 2));
-
-  logSection('Web3Auth Verifier Registration');
-  const evmSigner1 = ethers.Wallet.createRandom();
-  const evmSigner2 = ethers.Wallet.createRandom();
-  const pubKey1 = sanitizeHex(evmSigner1.signingKey.publicKey);
-  const pubKey2 = sanitizeHex(evmSigner2.signingKey.publicKey);
-  const web3AuthAccountId = saClient.deriveRegistrationAccountIdHash({
-    verifierContractHash: web3Auth.hash,
-    verifierParamsHex: pubKey1,
-    backupOwnerAddress: account.scriptHash,
-    escapeTimelock: REGISTRATION_ESCAPE_TIMELOCK,
-  });
-  const web3AuthVirtual = saClient.deriveVirtualAccount(web3AuthAccountId);
-
-  const verifierConfigRequest = await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'registerAccount',
-    [
-      hash160Param(web3AuthAccountId),
-      hash160Param(sanitizeHex(web3Auth.hash)),
-      byteArrayParam(pubKey1),
-      hash160Param('0'.repeat(40)),
-      hash160Param(account.scriptHash),
-      integerParam(REGISTRATION_ESCAPE_TIMELOCK),
-    ],
-  );
-
-  const storedVerifier = await readAndDecode(rpcClient, core.hash, 'getVerifier', [hash160Param(web3AuthAccountId)]);
-  const storedPubKey = await readAndDecode(rpcClient, web3Auth.hash, 'getPublicKey', [hash160Param(web3AuthAccountId)]);
-  const verifierConfigPreview = await testInvoke(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'callVerifier',
-    [
-      hash160Param(web3AuthAccountId),
-      stringParam('setPublicKey'),
-      arrayParam([
-        hash160Param(web3AuthAccountId),
-        byteArrayParam(pubKey2),
-      ]),
-    ],
-  );
-  console.log(JSON.stringify({
-    web3AuthAccountId: normalizeHash(web3AuthAccountId),
-    web3AuthVirtualAddress: web3AuthVirtual.address,
-    storedVerifier: stackItemToText(storedVerifier),
-    storedPubKeyBytes: stackItemToText(storedPubKey).slice(0, 18),
-    verifierConfigRequest: verifierConfigRequest.txid,
-    verifierConfigResult: stackItemToText(verifierConfigRequest.execution.stack?.[0]),
-    verifierConfigState: verifierConfigPreview.state,
-    verifierConfigException: verifierConfigPreview.exception || '',
-  }, null, 2));
-
-  logSection('Web3Auth ExecuteUserOp');
-  const nonceStack = await readAndDecode(rpcClient, core.hash, 'getNonce', [hash160Param(web3AuthAccountId), integerParam(0)]);
-  const nonce = BigInt(nonceStack.value || '0');
-  const argsHashStack = await readAndDecode(rpcClient, core.hash, 'computeArgsHash', [arrayParam([])]);
-  const argsHash = Buffer.from(argsHashStack.value || '', 'base64').toString('hex');
-  const deadline = Date.now() + (60 * 60 * 1000);
-  const typedData = buildV3UserOperationTypedData({
-    chainId: networkMagic,
-    verifyingContract: sanitizeHex(web3Auth.hash),
-    accountIdHash: web3AuthAccountId,
-    coreContractHash: sanitizeHex(core.hash),
-    targetContract: GAS_HASH,
-    method: 'symbol',
+  const argsHash = await h.operationArgsHash(chain, core.hash, validatorOp.args);
+  const signedValidatorOp = await h.signOperationForWeb3Auth(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId: web3AuthId,
+    operation: validatorOp,
     argsHashHex: argsHash,
-    nonce,
-    deadline,
+    signer: evmSigner,
   });
-  const signature = await evmSigner1.signTypedData(typedData.domain, typedData.types, typedData.message);
-  const compact = compactSignature(signature);
-
-  const evmExec = await invokePersisted(
-    rpcClient,
-    core.hash,
-    account,
-    networkMagic,
-    'executeUserOp',
-    [hash160Param(web3AuthAccountId), userOpParam({
-      targetContract: GAS_HASH,
-      method: 'symbol',
-      args: [],
-      nonce,
-      deadline: BigInt(deadline),
-      signatureHex: compact,
-    })],
-  );
-
-  const finalNonceStack = await readAndDecode(rpcClient, core.hash, 'getNonce', [hash160Param(web3AuthAccountId), integerParam(0)]);
+  const validatorPreview = await h.validateOperation(chain, sdk, web3AuthId, signedValidatorOp);
+  assert(validatorPreview.accepted === true, "the validator rejected a valid EIP-712 signature");
+  const validatorExec = await h.executeOperation(chain, sdk, { accountId: web3AuthId, operation: signedValidatorOp });
+  const validatorResult = h.stackText(validatorExec.appLog.executions[0].stack[0]);
+  assert(validatorResult === "GAS", `validator route returned ${validatorResult}, expected GAS`);
   console.log(JSON.stringify({
-    evmExec: evmExec.txid,
-    result: stackItemToText(evmExec.execution.stack?.[0]),
-    nonceBefore: nonce.toString(),
-    nonceAfter: stackItemToText(finalNonceStack),
+    txid: validatorExec.txid,
+    result: validatorResult,
+    operationDigest: validatorPreview.operationDigest,
+    signatureBytes: signedValidatorOp.signature.length / 2,
   }, null, 2));
 
-  logSection('Summary');
+  h.logSection("Foreign Key Refused");
+  const rogueNonce = await h.nextNonce(sdk, web3AuthId, nonceRouting(web3AuthState, validatorId));
+  const rogueOp = h.operation({
+    targetContract: GAS_HASH,
+    method: "symbol",
+    nonce: rogueNonce,
+    validatorId,
+    credentialGeneration: validatorRecord.credentialGeneration,
+    authorityEpoch: web3AuthState.authorityEpoch,
+  });
+  const rogueArgsHash = await h.operationArgsHash(chain, core.hash, rogueOp.args);
+  const signedRogueOp = await h.signOperationForWeb3Auth(chain, core.hash, {
+    validatorHash: web3Auth.hash,
+    accountId: web3AuthId,
+    operation: rogueOp,
+    argsHashHex: rogueArgsHash,
+    signer: rogueSigner,
+  });
+  const rogueRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    h.executionPlan(sdk, { accountId: web3AuthId, operations: [signedRogueOp] }),
+    /SA_VALIDATION_REJECTED|validator rejected/i,
+    "operation signed by a key the validator does not hold",
+  );
+  console.log(JSON.stringify({ rogueRefusal }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // Scenario 4: core recovery.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Recovery Flow");
+  const recoveryAccount = await h.createAccount(chain, sdk, { custody: chain.account, salt: saltHex() });
+  const recoveryId = recoveryAccount.accountId;
+  const newCustody = new wallet.Account();
+  const beginRecovery = await h.accountAction(chain, sdk, {
+    accountId: recoveryId,
+    method: "beginRecovery",
+    args: [h.hash160Param(newCustody.scriptHash)],
+    // A non-zero new custody is itself a signer of the request (§7).
+    authorizers: [chain.account, newCustody],
+  });
+  const recoveryState = await sdk.getAccount(recoveryId);
+  const recoveryStatus = await sdk.getRecoveryStatus(recoveryId);
+  assert(recoveryState.recoveryPending === true, "beginRecovery did not mark the account");
+  assert(recoveryStatus && recoveryStatus.pending === true, "getRecoveryStatus did not report the pending recovery");
+  assert(
+    BigInt(recoveryStatus.matureAt) > BigInt(Date.now()),
+    `recovery should be immature, matureAt=${recoveryStatus.matureAt}`,
+  );
+  const earlyRefusal = await h.expectRefusal(
+    chain,
+    sdk,
+    h.accountActionPlan(sdk, { method: "executeRecovery", accountId: recoveryId, args: [] }),
+    /SA_RECOVERY_LOCKED|SA_RECOVERY_PENDING|locked/i,
+    "recovery executed before its maturity",
+  );
+  const cancelRecovery = await h.accountAction(chain, sdk, {
+    accountId: recoveryId,
+    method: "cancelRecovery",
+    args: [],
+    authorizers: [chain.account],
+  });
+  const afterCancel = await sdk.getRecoveryStatus(recoveryId);
+  assert(!afterCancel || afterCancel.pending === false, "cancelRecovery left the record pending");
   console.log(JSON.stringify({
-    address: account.address,
-    coreHash: core.hash,
-    web3AuthHash: web3Auth.hash,
-    whitelistHash: whitelist.hash,
-    nativeAccountId: normalizeHash(accountId),
-    nativeVirtualAddress: virtual.address,
-    web3AuthAccountId: normalizeHash(web3AuthAccountId),
-    web3AuthVirtualAddress: web3AuthVirtual.address,
+    accountId: h.normalizeHash(recoveryId),
+    beginTxid: beginRecovery.txid,
+    newCustody: newCustody.address,
+    matureAt: recoveryStatus.matureAt,
+    initiatedAt: recoveryStatus.initiatedAt,
+    earlyRefusal,
+    cancelTxid: cancelRecovery.txid,
+    afterCancel,
+  }, null, 2));
+
+  // -------------------------------------------------------------------------
+  // Summary — the last JSON object is what the validation suite reads.
+  // -------------------------------------------------------------------------
+
+  h.logSection("Summary");
+  console.log(JSON.stringify({
+    address,
+    coreHash: h.normalizeHash(core.hash),
+    web3AuthHash: h.normalizeHash(web3Auth.hash),
+    whitelistHash: h.normalizeHash(whitelist.hash),
+    accountId: h.normalizeHash(custodyId),
+    virtualAddress: custodyAccount.accountAddress,
+    custodyAccountId: h.normalizeHash(custodyId),
+    hookAccountId: h.normalizeHash(hookId),
+    web3AuthAccountId: h.normalizeHash(web3AuthId),
+    recoveryAccountId: h.normalizeHash(recoveryId),
     txids: {
-      registerAccount: registerNative.txid,
-      nativeExecute: nativeExec.txid,
-      hookConfigRequest: hookConfigRequest.txid,
-      verifierConfigRequest: verifierConfigRequest.txid,
-      evmExecute: evmExec.txid,
+      createAccount: custodyAccount.txid,
+      builtInExecute: builtInExec.txid,
+      hookAccountCreate: hookAccount.txid,
+      hookAllowedExecute: allowedExec.txid,
+      web3AuthAccountCreate: web3AuthAccount.txid,
+      validatorExecute: validatorExec.txid,
+      beginRecovery: beginRecovery.txid,
+      cancelRecovery: cancelRecovery.txid,
     },
   }, null, 2));
 }

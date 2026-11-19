@@ -317,7 +317,7 @@ class GateAgreementTests(unittest.TestCase):
     def test_gate_pins_agree_with_this_lane(self):
         gate = self.gate()
         self.assertEqual(gate.SCOPES['exception-identity'],source.SCOPE)
-        self.assertEqual(len(gate.SCOPES),22)
+        self.assertEqual(len(gate.SCOPES),21)
         self.assertEqual(gate.CERTIFICATES['exception-identity'],
                          ('certificateSha256','ExceptionIdentityArtifact.v'))
         self.assertEqual(tuple(gate.EXCEPTION_IDENTITY_CONTROLS),source.EXPECTED_CONTROLS)

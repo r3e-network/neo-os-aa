@@ -5,17 +5,18 @@ This is the NeoOS SA (Smart Account) repository - Neo N3 account abstraction (ER
 Primary responsibilities:
 - C03 account: sole authority for account abstraction - user operations, proxy verification, and recovery (protocol-sa-core)
 - SA decides whether an actor authorized an operation and nothing more
-- SmartAccount: deterministic accounts keyed by 20-byte accountId
-- Verifier plugin authorization: Web3Auth, TEE, WebAuthn, session keys, multisig
-- Hook plugin policy enforcement: daily limits, token restrictions, credential gates
-- Backup-owner escape hatch with timelocked verifier rotation
+- SmartAccount: protocol v4, deterministic accounts keyed by a 20-byte accountId derived from a custody key and salt
+- Validator module authorization: Web3Auth, TeeKey, P-256, session keys, subscription, delegated identity, witness, multisig
+- Hook module policy enforcement: daily limits, token restrictions, credential gates, in a core-owned hook order
+- Configuration intents: every module install, uninstall, re-bind or re-configure matures after 24 hours and expires seven days later
+- Backup-owner escape hatch with an installed recovery service
 - On-chain paymaster for trustless gasless execution
 
 This repo should NOT:
 - Grant DID eligibility, hold network identity, or select signers
 - Have dependency on the DID registry - operation-policy layer composes SAAuthorization with independently verified EligibilityProof
 - Replace wallet confirmation - relay can package and pay, but cannot authorize on behalf of account
-- Make paymaster sponsorship replace the configured verifier or backup-owner witness
+- Make paymaster sponsorship replace the installed validator or backup-owner witness
 
 # Global Claude Code Rules
 

@@ -7,24 +7,17 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Regression coverage for the zombie-listing finding: when the wallet clears a market escrow on
-/// its own side — via the backup owner's timelocked <c>forceCancelMarketEscrow</c> escape, or via
-/// the market-driven <c>cancelMarketEscrow</c> — it must notify the market so the listing leaves
-/// the Active state. Otherwise the account is reclaimed but the market keeps an Active listing
-/// that can never settle (its <c>settleMarketEscrow</c> call back into the wallet faults) and that
-/// cannot be cleaned while a buyer's payment is outstanding. After the wallet's notification the
-/// listing is Cancelled, <c>settleListing</c> is refused, and any in-flight buyer deposit stays
-/// recoverable through <c>refundPendingPayment</c>.
+/// Regression coverage for the zombie-listing finding in v4 terms. The retired owner-side
+/// <c>forceCancelMarketEscrow</c> is replaced by callback-free recovery: executing it bumps
+/// the control revision, so the stale 0x5D binding can never settle the account again
+/// (<c>SA_MARKET_LOCKED</c>) and the physical markers are retired by the market's own
+/// <c>cancelListing</c> cleanup claim. A listing therefore never becomes a settleable zombie,
+/// a buyer's in-flight deposit stays refundable throughout, and only the contract recorded
+/// on the listing may drive <c>abandonListing</c>.
 /// </summary>
 [TestClass]
 public class Fix_MarketZombie_Tests
 {
-    private static readonly UInt160 Seller =
-        UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
-
-    private static readonly UInt160 Buyer =
-        UInt160.Parse("0x6666666666666666666666666666666666666666");
-
     // A griefer who owns their own account and tries to weaponise the escrow/abandon path
     // against a victim's listing.
     private static readonly UInt160 Attacker =
@@ -32,15 +25,13 @@ public class Fix_MarketZombie_Tests
 
     private static readonly BigInteger Price = 100_000_000; // 1 GAS
 
-    private const byte StatusActive = 1;
-    private const byte StatusCancelled = 3;
+    private static readonly byte StatusActive = 1;
+
+    private static readonly byte StatusCancelled = 3;
 
     // Index of Status within the GetListing tuple:
     // [Id, SAContract, AccountId, Seller, Price, Title, MetadataUri, Status, Buyer, CreatedAt, UpdatedAt]
     private const int StatusIndex = 7;
-
-    // Must exceed the contract's 7-day MarketEscrowOwnerCancelTimelockMs.
-    private static readonly TimeSpan OwnerCancelTimelock = TimeSpan.FromDays(7);
 
     private sealed class Harness
     {
@@ -50,26 +41,28 @@ public class Fix_MarketZombie_Tests
 
         public UInt160 Market { get; }
 
+        public P256SessionKey SellerKey { get; } = new();
+
+        public P256SessionKey BuyerKey { get; } = new();
+
+        public UInt160 Seller => RuntimeFixture.CustodyOf(SellerKey);
+
+        public UInt160 Buyer => RuntimeFixture.CustodyOf(BuyerKey);
+
         public Harness()
         {
             Wallet = Fx.Deploy("SmartAccount");
             Market = Fx.Deploy("SAAddressMarket");
             Fx.CallVoid(Market, "setAllowedSA", Wallet, true);
-            // Phase 1b: the core admin registers the market as an approved escrow service.
+            // The core admin registers the market as an approved escrow service.
             Fx.CallVoid(Wallet, "setMarketService", Market, true);
         }
 
-        public UInt160 RegisterAccount(UInt160 backupOwner, uint escapeTimelock)
+        public UInt160 RegisterAccount(UInt160 owner)
         {
-            UInt160 accountId = Fx.CallUInt160(
-                Wallet, "computeRegistrationAccountId",
-                UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, backupOwner, escapeTimelock);
-
-            Fx.SetSigners(backupOwner);
-            Fx.CallVoid(
-                Wallet, "registerAccount",
-                accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, backupOwner, escapeTimelock);
-            return accountId;
+            Fx.SetSigners(owner);
+            return Fx.CreateAccount(
+                Wallet, owner, RuntimeFixture.Salt("zombie-" + owner), RuntimeFixture.MinRecoveryTimelockMs);
         }
 
         public BigInteger CreateListing(UInt160 accountId)
@@ -84,70 +77,98 @@ public class Fix_MarketZombie_Tests
             Neo.VM.Types.Array tuple = (Neo.VM.Types.Array)Fx.Call(Market, "getListing", listingId);
             return tuple[StatusIndex].GetInteger();
         }
+
+        public void Deposit(BigInteger listingId)
+        {
+            Fx.FundGasFromValidators(Buyer, Price * 2);
+            Fx.SetSigners(Buyer);
+            Fx.TransferGas(Buyer, Market, Price, listingId);
+        }
+
+        /// <summary>Walks the owner escape through the v4 recovery flow.</summary>
+        public void EscapeViaRecovery(UInt160 accountId, UInt160 owner)
+        {
+            Fx.SetSigners(owner);
+            Fx.CallVoid(Wallet, "beginRecovery", accountId, UInt160.Zero);
+            Fx.AdvanceTime(TimeSpan.FromMilliseconds((long)RuntimeFixture.MinRecoveryTimelockMs) + TimeSpan.FromSeconds(1));
+            Fx.CallVoid(Wallet, "executeRecovery", accountId);
+        }
+
+        public UInt160 Custody(UInt160 accountId)
+        {
+            var record = (Neo.VM.Types.Array)Fx.Call(Wallet, "getAccount", accountId);
+            return new UInt160(record[2].GetSpan());
+        }
+
+        public bool EscrowActive(UInt160 accountId) =>
+            Fx.CallBoolean(Wallet, "isMarketEscrowActive", accountId);
     }
 
     [TestMethod]
-    public void OwnerForceCancel_FlipsListingOutOfActive_NoSettleableZombie()
+    public void OwnerRecovery_FlipsListingOutOfActive_NoSettleableZombie()
     {
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(h.Seller);
         BigInteger listingId = h.CreateListing(accountId);
         Assert.AreEqual((BigInteger)StatusActive, h.ListingStatus(listingId), "Listing starts Active");
 
-        // The backup owner escapes a stuck escrow via the timelocked path.
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "initiateMarketEscrowCancel", accountId);
-        h.Fx.AdvanceTime(OwnerCancelTimelock);
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "forceCancelMarketEscrow", accountId);
+        // A buyer locks a deposit, then the owner escapes the stuck escrow through recovery.
+        h.Deposit(listingId);
+        h.EscapeViaRecovery(accountId, h.Seller);
 
-        // The account is reclaimed AND the market listing is no longer a zombie.
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", accountId));
+        // The old-epoch lock is dead: the deposit cannot be converted into a sale.
+        h.Fx.SetSigners(h.Buyer);
+        TestException notSettleable = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Market, "settleListing", listingId, h.Buyer, h.Buyer));
+        StringAssert.Contains(notSettleable.Message, "SA_MARKET_LOCKED");
+
+        // The buyer refunds, then the market's cleanup claim retires the listing.
+        h.Fx.CallVoid(h.Market, "refundPendingPayment", listingId, h.Buyer);
+        h.Fx.SetSigners(h.Seller);
+        h.Fx.CallVoid(h.Market, "cancelListing", listingId);
+
+        Assert.IsFalse(h.EscrowActive(accountId));
         Assert.AreEqual((BigInteger)StatusCancelled, h.ListingStatus(listingId),
-            "Force-cancel must flip the market listing out of Active");
+            "The cleanup claim must flip the market listing out of Active");
+        Assert.AreEqual(h.Seller, h.Custody(accountId), "The owner keeps control of the account");
 
-        // The settle path is now refused: no zombie listing can be settled.
-        h.Fx.FundGasFromValidators(Buyer, Price * 2);
-        h.Fx.SetSigners(Buyer);
+        h.Fx.FundGasFromValidators(h.Buyer, Price * 2);
+        h.Fx.SetSigners(h.Buyer);
         TestException notActive = Assert.ThrowsExactly<TestException>(
-            () => h.Fx.CallVoid(h.Market, "settleListing", listingId, Buyer, Buyer));
+            () => h.Fx.CallVoid(h.Market, "settleListing", listingId, h.Buyer, h.Buyer));
         StringAssert.Contains(notActive.Message, "Listing not active");
     }
 
     [TestMethod]
-    public void OwnerForceCancel_WithBuyerDepositOutstanding_BuyerCanStillRefund()
+    public void OwnerRecovery_WithBuyerDepositOutstanding_BuyerCanStillRefund()
     {
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(h.Seller);
         BigInteger listingId = h.CreateListing(accountId);
 
         // A buyer locks a deposit against the (later abandoned) listing.
-        h.Fx.FundGasFromValidators(Buyer, Price * 2);
-        h.Fx.SetSigners(Buyer);
-        h.Fx.TransferGas(Buyer, h.Market, Price, listingId);
-        Assert.AreEqual(Price, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listingId, Buyer));
-        BigInteger buyerAfterDeposit = h.Fx.GasBalanceOf(Buyer);
+        h.Deposit(listingId);
+        Assert.AreEqual(Price, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listingId, h.Buyer));
+        BigInteger buyerAfterDeposit = h.Fx.GasBalanceOf(h.Buyer);
 
-        // While the deposit is in flight the owner cannot escape (the timelock arming itself is
-        // allowed, but the listing's pending-payment guard keeps the seller-side cancel blocked).
-        // The owner still has the unilateral force-cancel escape available after the timelock.
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "initiateMarketEscrowCancel", accountId);
-        h.Fx.AdvanceTime(OwnerCancelTimelock);
-        h.Fx.SetSigners(Seller);
-        h.Fx.CallVoid(h.Wallet, "forceCancelMarketEscrow", accountId);
+        h.EscapeViaRecovery(accountId, h.Seller);
 
-        // The listing is retired but the buyer's capital is untouched and still escrowed.
-        Assert.AreEqual((BigInteger)StatusCancelled, h.ListingStatus(listingId));
-        Assert.AreEqual(Price, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listingId, Buyer),
-            "Buyer deposit is left intact when the listing is abandoned");
+        // The listing is still Active (only the market can retire it) but unsellable, and the
+        // pending-payment guard keeps the seller-side cancel blocked until the deposit clears.
+        Assert.AreEqual((BigInteger)StatusActive, h.ListingStatus(listingId));
+        h.Fx.SetSigners(h.Seller);
+        TestException blocked = Assert.ThrowsExactly<TestException>(
+            () => h.Fx.CallVoid(h.Market, "cancelListing", listingId));
+        StringAssert.Contains(blocked.Message, "Pending payment in flight");
+        Assert.AreEqual(Price, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listingId, h.Buyer),
+            "Buyer deposit is left intact by the owner escape");
         Assert.AreEqual(Price, h.Fx.GasBalanceOf(h.Market), "Market still escrows the buyer deposit");
 
-        // The buyer can always pull the deposit back, even after the listing is Cancelled.
-        h.Fx.SetSigners(Buyer);
-        h.Fx.CallVoid(h.Market, "refundPendingPayment", listingId, Buyer);
-        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listingId, Buyer));
-        Assert.AreEqual(buyerAfterDeposit + Price, h.Fx.GasBalanceOf(Buyer), "Buyer fully recovers the deposit");
+        // The buyer can always pull the deposit back, even while the listing is stuck.
+        h.Fx.SetSigners(h.Buyer);
+        h.Fx.CallVoid(h.Market, "refundPendingPayment", listingId, h.Buyer);
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Market, "getPendingPaymentOf", listingId, h.Buyer));
+        Assert.AreEqual(buyerAfterDeposit + Price, h.Fx.GasBalanceOf(h.Buyer), "Buyer fully recovers the deposit");
         Assert.AreEqual(BigInteger.Zero, h.Fx.GasBalanceOf(h.Market), "Market retains no GAS after the refund");
     }
 
@@ -155,15 +176,15 @@ public class Fix_MarketZombie_Tests
     public void MarketDrivenCancel_LeavesListingCancelled()
     {
         // The normal seller-driven cancelListing path still ends with a Cancelled listing; the
-        // wallet's extra abandon notification is idempotent and does not disturb it.
+        // wallet's escrow unwind is idempotent and does not disturb it.
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(h.Seller);
         BigInteger listingId = h.CreateListing(accountId);
 
-        h.Fx.SetSigners(Seller);
+        h.Fx.SetSigners(h.Seller);
         h.Fx.CallVoid(h.Market, "cancelListing", listingId);
 
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", accountId));
+        Assert.IsFalse(h.EscrowActive(accountId));
         Assert.AreEqual((BigInteger)StatusCancelled, h.ListingStatus(listingId),
             "Market-driven cancel ends with a Cancelled listing");
     }
@@ -174,10 +195,10 @@ public class Fix_MarketZombie_Tests
         // A third party (here the seller) cannot retire an Active listing directly: only the SA
         // contract recorded on the listing may, which is exactly the contract that holds the escrow.
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(h.Seller);
         BigInteger listingId = h.CreateListing(accountId);
 
-        h.Fx.SetSigners(Seller);
+        h.Fx.SetSigners(h.Seller);
         TestException blocked = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(h.Market, "abandonListing", accountId, listingId));
         StringAssert.Contains(blocked.Message, "Only listed SA contract");
@@ -191,7 +212,7 @@ public class Fix_MarketZombie_Tests
         // owner calling enterMarketEscrow directly (no market in the call chain) is refused, which
         // is the root-cause guard for the abandon griefing vector.
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount(Attacker, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(Attacker);
 
         h.Fx.SetSigners(Attacker);
         // CallingScriptHash here is the test entry script, not the market, so the binding is rejected
@@ -199,7 +220,7 @@ public class Fix_MarketZombie_Tests
         TestException blocked = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(h.Wallet, "enterMarketEscrow", accountId, h.Market, (BigInteger)1));
         StringAssert.Contains(blocked.Message, "Caller is not the market");
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", accountId),
+        Assert.IsFalse(h.EscrowActive(accountId),
             "No escrow may be armed by a non-market caller");
     }
 
@@ -207,40 +228,39 @@ public class Fix_MarketZombie_Tests
     public void Attacker_CannotAbandonVictimListing_ViaOwnEscrow()
     {
         // The documented attack: the griefer owns account A, points an escrow at the VICTIM's
-        // listing, then drives the owner force-cancel escape so the wallet calls
-        // abandonListing(victimListing) with CallingScriptHash == the canonical core. After the
-        // fix the attacker cannot even arm that escrow (enterMarketEscrow requires the market to be
-        // the caller), so the victim's Active listing is never disturbed.
+        // listing, then drives the owner escape so the wallet retires the victim's listing.
+        // In v4 the attacker cannot even arm that escrow (enterMarketEscrow requires the market
+        // to be the caller) and recovery is strictly per-account, so the victim is untouched.
         Harness h = new();
 
         // The victim has a genuine, market-armed Active listing.
-        UInt160 victimAccount = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 victimAccount = h.RegisterAccount(h.Seller);
         BigInteger victimListing = h.CreateListing(victimAccount);
         Assert.AreEqual((BigInteger)StatusActive, h.ListingStatus(victimListing), "Victim listing starts Active");
 
         // The attacker owns a separate account and tries to bind its escrow to the victim's listing.
-        UInt160 attackerAccount = h.RegisterAccount(Attacker, 2_592_000);
+        UInt160 attackerAccount = h.RegisterAccount(Attacker);
         h.Fx.SetSigners(Attacker);
         TestException blocked = Assert.ThrowsExactly<TestException>(
             () => h.Fx.CallVoid(h.Wallet, "enterMarketEscrow", attackerAccount, h.Market, victimListing));
         StringAssert.Contains(blocked.Message, "Caller is not the market");
 
-        // The attacker's account never entered escrow, so the timelocked escape path is unavailable
-        // and there is nothing to force-cancel.
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", attackerAccount));
-        h.Fx.SetSigners(Attacker);
+        // The attacker's account never entered escrow: it can recover (its own account only),
+        // but there is no market claim to make on the victim's listing.
+        Assert.IsFalse(h.EscrowActive(attackerAccount));
+        h.EscapeViaRecovery(attackerAccount, Attacker);
         TestException noEscrow = Assert.ThrowsExactly<TestException>(
-            () => h.Fx.CallVoid(h.Wallet, "initiateMarketEscrowCancel", attackerAccount));
+            () => h.Fx.CallVoid(h.Wallet, "cancelMarketEscrow", attackerAccount, victimListing));
         StringAssert.Contains(noEscrow.Message, "Market escrow not active");
 
         // The victim's listing is untouched and still settleable by a real buyer.
         Assert.AreEqual((BigInteger)StatusActive, h.ListingStatus(victimListing),
             "Victim listing must remain Active");
-        h.Fx.FundGasFromValidators(Buyer, Price * 2);
-        h.Fx.SetSigners(Buyer);
-        h.Fx.TransferGas(Buyer, h.Market, Price, victimListing);
-        h.Fx.CallVoid(h.Market, "settleListing", victimListing, Buyer, Buyer);
-        Assert.AreEqual(Buyer, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", victimAccount),
+        h.Fx.FundGasFromValidators(h.Buyer, Price * 2);
+        h.Fx.SetSigners(h.Buyer);
+        h.Fx.TransferGas(h.Buyer, h.Market, Price, victimListing);
+        h.Fx.CallVoid(h.Market, "settleListing", victimListing, h.Buyer, h.Buyer);
+        Assert.AreEqual(h.Buyer, h.Custody(victimAccount),
             "Victim's legitimate sale still settles");
     }
 
@@ -251,18 +271,17 @@ public class Fix_MarketZombie_Tests
         // tightened enterMarketEscrow caller check, since createListing calls enterMarketEscrow with
         // CallingScriptHash == the market == the marketContract argument.
         Harness h = new();
-        UInt160 accountId = h.RegisterAccount(Seller, 2_592_000);
+        UInt160 accountId = h.RegisterAccount(h.Seller);
         BigInteger listingId = h.CreateListing(accountId);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", accountId),
-            "Legit createListing arms the escrow");
+        Assert.IsTrue(h.EscrowActive(accountId), "Legit createListing arms the escrow");
 
-        h.Fx.FundGasFromValidators(Buyer, Price * 2);
-        h.Fx.SetSigners(Buyer);
-        h.Fx.TransferGas(Buyer, h.Market, Price, listingId);
-        h.Fx.CallVoid(h.Market, "settleListing", listingId, Buyer, Buyer);
+        h.Fx.FundGasFromValidators(h.Buyer, Price * 2);
+        h.Fx.SetSigners(h.Buyer);
+        h.Fx.TransferGas(h.Buyer, h.Market, Price, listingId);
+        h.Fx.CallVoid(h.Market, "settleListing", listingId, h.Buyer, h.Buyer);
 
-        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isMarketEscrowActive", accountId));
-        Assert.AreEqual(Buyer, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", accountId),
+        Assert.IsFalse(h.EscrowActive(accountId));
+        Assert.AreEqual(h.Buyer, h.Custody(accountId),
             "Buyer receives the account on a legitimate settle");
     }
 }

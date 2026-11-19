@@ -14,13 +14,13 @@ namespace SmartAccount.Contracts.Tests;
 /// contracts had INSTANT admin operations while the rest of the repo enforces the
 /// SA-D-01/SA-D-02 7-day timelock standard.
 ///
-///   H5  — <c>SocialRecoveryVerifier.Update</c> was instant although the contract custodies
+///   H5  — <c>SocialRecoveryService.Update</c> was instant although the contract custodies
 ///         user GAS (the per-account oracle-credit pool funded via <c>onNEP17Payment</c>).
-///   SA-04 — <c>SocialRecoveryVerifier.TransferAdmin</c> was an instant role hand-off.
+///   SA-04 — <c>SocialRecoveryService.TransferAdmin</c> was an instant role hand-off.
 ///   H6  — <c>SAAddressMarket.Update</c> and <c>SAAddressMarket.SetAdmin</c> were instant
 ///         although the contract holds in-flight buyer escrow.
 ///
-/// The fix mirrors the shared <c>VerifierAuthority</c> idiom inline (neither contract routes
+/// The fix mirrors the shared <c>ValidatorAuthority</c> idiom inline (neither contract routes
 /// through an authority helper): <c>proposeUpdate(sha256(nef), sha256(manifest))</c> pins the
 /// artifact pair and <c>update</c>/<c>confirmUpdate</c> applies exactly that pair after the
 /// 7-day window; <c>rotateAdmin</c>/<c>confirmAdminRotation</c>/<c>cancelAdminRotation</c>
@@ -46,7 +46,7 @@ public class Fix_CustodyTimelock_Tests
 
     private static readonly TimeSpan Window = TimeSpan.FromDays(7);
 
-    private const string RecoveryArtifact = "SocialRecoveryVerifier";
+    private const string RecoveryArtifact = "SocialRecoveryService";
     private const string MarketArtifact = "SAAddressMarket";
 
     private static (byte[] Nef, string Manifest) ReadArtifact(string baseName)
@@ -227,7 +227,7 @@ public class Fix_CustodyTimelock_Tests
     }
 
     // ========================================================================
-    // H5 — SocialRecoveryVerifier: timelocked upgrade
+    // H5 — SocialRecoveryService: timelocked upgrade
     // ========================================================================
 
     [TestMethod]
@@ -298,7 +298,7 @@ public class Fix_CustodyTimelock_Tests
     }
 
     // ========================================================================
-    // SA-04 — SocialRecoveryVerifier: timelocked admin rotation
+    // SA-04 — SocialRecoveryService: timelocked admin rotation
     // ========================================================================
 
     [TestMethod]

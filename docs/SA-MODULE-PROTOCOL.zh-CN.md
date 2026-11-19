@@ -9,8 +9,13 @@
 任何一版 kernel 不得偏离或自行重新设计。凡两版运行时确有差异之处（如 caller/阶段
 门实现机制），必须作为披露的能力差异显式列出，绝不允许表现为 DTO 分叉。
 
-状态：**已交付规范 + 共享常量 + fixture 骨架；kernel 尚未实施。** 本文不声称任何
-当前合约源码的链上部署或协议符合性。
+状态：**已交付规范 + 共享常量 + fixture + 两个 kernel。**
+`contracts/custom` 与 `contracts/native/SmartAccount` 已实现本文描述的表面；
+`tests/SmartAccount.Contracts.Tests` 与 `tests/SmartAccount.Native.Tests` 覆盖二者，
+且两者都对 `tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json`
+中的共享向量做断言；custom 一侧的断言见
+`tests/SmartAccount.Contracts.Tests/CrossCoreVectorTests.cs`。本文不声称该源码已在
+链上部署；形式化模型的状态单独记录在 `docs/SA-FORMAL-VERIFICATION.zh-CN.md`。
 
 配套文档：
 
@@ -150,7 +155,7 @@ stack-item 序列化，其中 `[11] signature` 替换为**空 ByteString**。cus
 domain := UTF8("NeoSmartAccount/UserOperation")        // 29 字节
          || U1 (version = 4)
          || U32LE (network magic)
-         || coreHash (20 原始字节，*实际*执行核心哈希；
+         || coreHash, 20 原始字节（*实际*执行核心哈希；
                        custom kernel 不得替换为原生 ServiceHash 常量，反之亦然)
          || accountId (20 原始 UInt160 字节)
          || U64BE (validatorId)
@@ -193,7 +198,10 @@ validator 签名格式**必须**在其自身 DTO 内、或通过哈希上述核�
 阈值路由：`validatorId` 指向阈值政策时，核心在**共享父验证预算**下逐个直接调用
 成员 validator，批准收据保存在核心调用局部状态；`postCheck` 阶段仅对验证阶段
 获准成员执行 completion。成员必须是标量 validator；同一成员不得加入两个活动政策；
-被政策引用的成员在被引用期间不可卸载。
+被政策引用的成员在被引用期间不可卸载。成员侧在自己的 0x52 记录里携带指向活动政策
+的反查指针（`activePolicyId`，§7.1），由政策执行器在每次激活、重写和解激活时维护；
+因此路由与卸载检查只读一条实例记录，无需扫描账户下全部政策；解激活政策会清掉指针，
+成员随之释放，不需第二轮扫描。
 
 ## 6. nonce channel 与命名空间派生
 
@@ -225,7 +233,7 @@ unfreeze、恢复与 custody 变更都单调推进；操作消费与额度计数
 | --- | --- | --- |
 | 0x50 | bare | 协议版本、布局版本、激活状态、profile 摘要 |
 | 0x51 | +acctId | 账户控制元数据（§7.2） |
-| 0x52 | +acctId+moduleId[8 BE] | 模块实例记录（type[1]、contractHash、contractId、updateCounter、nefSha256、profileSha256、moduleRevision、credentialGeneration、能力标志） |
+| 0x52 | +acctId+moduleId[8 BE] | 模块实例记录（type[1]、contractHash、contractId、updateCounter、nefSha256、profileSha256、moduleRevision、credentialGeneration、能力标志、activePolicyId） |
 | 0x53 | +acctId+type[1]+moduleId[8 BE] | 安装实例枚举索引（marker 行；按类型升序 moduleId 扫描） |
 | 0x54 | +acctId | 核心持有 hookOrder 列表 + hookOrderRevision |
 | 0x55 | +acctId+intentId[8 BE] | 配置意图记录 |
@@ -254,7 +262,9 @@ nextIntentId；默认操作授权开关与默认消息授权开关；recoveryTim
 contractHash、ContractId、UpdateCounter、SHA256(NEF bytes)、SHA256(canonical 模块
 profile JSON)。ContractId 阻断销毁重部署；UpdateCounter 捕捉 manifest-only 更新；
 NEF 哈希钉扎代码；profile 哈希钉扎接口能力。每次模块回调前后及提交前检查绑定；
-同地址重部署不继承授权。
+同地址重部署不继承授权。逐回调检查只比较 `(ContractId, UpdateCounter)`：这对值唯一
+对应一个（部署槽位、版本），与记录里安装时钉过的 NEF 哈希等价，但不必在每个回调里
+重算 NEF 哈希。
 
 ### 7.4 旧区域
 
@@ -270,7 +280,7 @@ NEF 哈希钉扎代码；profile 哈希钉扎接口能力。每次模块回调�
 ### 7.5 Market 最小锁（0x5D / 0x59）
 
 - 0x06 / 0x07 / 0x1D 仍为 **Market 独占的物理标记写入**（Market 入口写入或删除；
-  其他一律不可 —— 现有 owner 侧 `InitiateMarketEscrowCancel` 直写 0x1D 与
+  其他一律不可 —— 现有 owner 侧 `initiateMarketEscrowCancel` 直写 0x1D 与
   ForceCancel/FinalizeEscapeToOwner 删除标记属于 kernel 批次需修复的缺陷，见 §16）。
 - 0x5D 为每账户绑定：escrow 锁、其 custody/控制代际与 listing id。
 - owner 发起与完成的逃生只写 **0x59 核心恢复记录** —— 绝不写旧 Market 前缀。
@@ -308,9 +318,9 @@ API：`isValidSignature(accountId, hash, signatureEnvelope)`。
 domain := UTF8("NeoSmartAccount/Message")
          || U1 (4)
          || U32LE (network)
-         || coreHash (20 原始字节)
+         || coreHash, 20 原始字节
          || accountId (20 原始字节)
-         || originalSender (20 原始字节)
+         || originalSender, 20 原始字节
          || U64BE (validatorId)
          || U64BE (credentialGeneration)
          || U64BE (authorityEpoch)
@@ -387,6 +397,13 @@ manifest 方法名是 C# 方法名首字母小写（`OnInstall` → `onInstall`�
 上述完整回调面。缺方法在写入实例前就失败；`getModuleProfile` 与验证/消息回调必须
 声明为 `safe`，因此调用方即使传入写标志也无法从其中写入。hook pre/post 按设计可写
 （它们要计量余额），但只使用自身实例键。
+
+回复按类型严格判定，不做强制转换（§11）。`validateUserOp` 只有恰好返回 `Boolean true`
+才表示批准；其他任何回复类型都是 ABI 违约，以 `SA_MODULE_TYPE_UNSUPPORTED` 失败，
+执行路径与只读预览一致。`isValidSignature` 绝不失败——ERC-1271 必须 fail-closed——
+因此非 `Boolean` 的回复与 `Boolean false` 等价。`preCheck` 回复必须是 `ByteArray`
+（否则同样视为 ABI 违约），`getModuleProfile` 回复必须是 `String`，否则安装以
+`SA_MODULE_CODE_BINDING_MISMATCH` 失败；所有返回 `Void` 的回调必须把求值栈清空。
 
 ### 9.2 实例鉴权（模块侧）
 
@@ -467,28 +484,46 @@ hook 继续运行；没有自动 owner fallback；仅紧急恢复可 callback-fr
 单位：**datoshi**，1 GAS = 100 000 000 datoshi（与既有
 `System.Contract.CallWithGasLimit` 用法同单位）。两 kernel 数值一致：
 
-| 回调 | 每次调用硬预算 |
+| 回调 | 硬预算 |
 | --- | --- |
-| 验证 aggregate（每账户每交易；被路由 validator 与全部阈值成员共享） | 100 000 000（1 GAS） |
+| 每次 `validateUserOp` 调用（被路由 validator 或单个阈值成员） | 100 000 000（1 GAS） |
+| 验证 aggregate（每账户每交易；被路由 validator 与全部阈值成员共享） | 100 000 000 × (1 + 10) = 1 100 000 000（11 GAS） |
+| 每次 `onUserOpComplete` 调用（被路由 validator 或单个获准成员） | 100 000 000（1 GAS） |
+| completion aggregate（被路由 validator + 获准阈值成员） | 100 000 000 × (1 + 10) = 1 100 000 000（11 GAS） |
 | 每个 hook `preCheck` / `postCheck` | 250 000 000（2.5 GAS） |
-| validator completion aggregate（被路由 validator + 获准阈值成员） | 100 000 000（1 GAS） |
+| hook aggregate（每账户每交易） | 250 000 000 × 8 = 2 000 000 000（20 GAS） |
 | 每个生命周期/配置回调（`onInstall`、`onUninstall`、`configure`） | 250 000 000（2.5 GAS） |
 
 语义：预算包含**全部后代调用**（whitelist 不可绕过）；经
 `System.Contract.CallWithGasLimit` 强制；阈值验证共享父预算（成员预算绝不相加放大）；
 核心调度与序列化 GAS 与回调预算分开核算。预算是上限不是保证 —— 合法最坏组合
-必须在发布前测量（fixture 矩阵，§15）。1 GAS 验证 aggregate 为 1.5 GAS 总验证
-上限之下的核心调度刻意留白。任何超限使整笔交易 fail-closed 失败；没有
-try-and-continue。
+必须在发布前测量（fixture 矩阵，§15）。
+
+**为什么 aggregate 是「单次上限 × 重数」。** aggregate 必须至少容纳一整轮
+*最大* 合法验证，否则核心宣称的重数根本不可达。把验证 aggregate 固定为 1 GAS
+会让任何含两个 P-256 成员的策略不可用：实测单个成员回调已花掉它的一半以上，
+而两个成员的轮次直接以 `SA_GAS_BUDGET_EXCEEDED` 失败，尽管核心允许
+`MaxThresholdPolicyMembers = 10` 个共签者。因此两个 validator aggregate 都按
+`单次上限 × (1 + MaxThresholdPolicyMembers)` 取值，与 hook 池原本就采用的规则
+（`HookCallbackGasLimit × MaxHookModuleInstances`）一致。由于单次回调的计费
+永不超过自己的上限，一整轮最多计入 `(1 + 10) × 1 GAS` —— 合法配置永远不会
+耗尽池，个体模块的边界仍由单次上限而非池承担。参考构建上实测一整笔
+`executeUserOp`（含核心调度）的端到端成本：1 成员 3.0 GAS、2 成员 4.4 GAS、
+3 成员 5.8 GAS、10 成员 15.4 GAS。
+
+任何超限使整笔交易 fail-closed 失败；没有 try-and-continue。
 
 ### 11.1 数值位置与覆盖范围
 
-两 kernel 都把四个值钉在各自的协议常量文件里
+两 kernel 都把单次上限钉在各自的协议常量文件里
 （`contracts/custom/SmartAccount.ModuleProtocol.cs` 与
 `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`）：
-`ValidationAggregateGasLimit = 100_000_000`、`HookCallbackGasLimit =
-250_000_000`、`ValidatorCompletionGasLimit = 100_000_000`、
-`LifecycleCallbackGasLimit = 250_000_000`。
+`ValidationPerCallGasLimit = 100_000_000`、`CompletionPerCallGasLimit =
+100_000_000`、`HookCallbackGasLimit = 250_000_000`、
+`LifecycleCallbackGasLimit = 250_000_000`。两个 validator aggregate 由这些上限与
+`MaxThresholdPolicyMembers` 计算得出（custom kernel 模块分区的
+`ValidationAggregateGasLimit()` / `CompletionAggregateGasLimit()`；hook aggregate
+是 `HookAggregateGasBudget()`）。
 
 决定最坏情况的边界也在同一批文件：`HookDataBytesMax = 512`、
 `ModuleProfileBytesMax = 2048`、`ArgsCountMax = 64`、`HookProofsEntriesMax = 8`、
@@ -653,7 +688,7 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 | 常量 | 消费 `SmartAccountModuleProtocol.cs`（本批产出；随后运行 `scripts/sync_native_smartaccount.py` 物化 neo-native-core 副本） |
 | §4/§5 envelope/摘要 | `SmartAccountProtocol.cs`（v4 域、13 字段序列化）、`SmartAccountEnvelope.cs`（13 字段操作） |
 | §6 nonce | `SmartAccountProtocol.cs` + nonce 存储 partial（0x56/0x5C；与旧 0x20 合并） |
-| §7 状态 | `SmartAccountState.cs`（新 0x51 记录；旧 14-slot decoder 仅保留用于迁移） |
+| §7 状态 | `SmartAccountRecords.cs`（新 0x51 记录与其 codec；旧 14-slot decoder 仅保留用于 迁移） |
 | §2/§3 集合 | `SmartAccount.Modules.cs`（实例记录、枚举、hookOrder、阈值政策）、`SmartAccountModulePolicy.cs`（新上限） |
 | §9/§10 生命周期与意图 | `SmartAccount.Modules.cs`、新 intents partial（0x55/0x5E） |
 | §8 消息 | `SmartAccount.Keys.cs`（P-256 主体）、`SmartAccount.cs`（`isValidSignature` ABI） |

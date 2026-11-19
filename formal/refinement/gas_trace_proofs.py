@@ -32,7 +32,8 @@ def certificate(model, mutation=None):
     for path in model['paths']:
         for e in path['events']: nodes[e['pc']] = e
     original_nodes = {k: dict(v) for k,v in nodes.items()}
-    cfg_inputs = trace.bind_artifact()['instructions']
+    bound = trace.bind_artifact()
+    cfg_inputs = bound['instructions']
     cfg = {i['offset']: [edge['target'] for edge in i['edges']] for i in cfg_inputs}
     maximum = model['maxExecutionCoefficient']
     storage = 71
@@ -40,17 +41,22 @@ def certificate(model, mutation=None):
     # helper edit can silently move: the native-codec calls are the CALLT sites whose
     # token selects serialize/deserialize, and the storage write is the one event the
     # price projection marks as a put.
-    def native_site(index):
+    def native_site(method):
+        # Token indices are a compiler decision: the v3 build numbered
+        # serialize(3)/deserialize(4), the v4 build deserialize(2)/serialize(3).
+        # Resolve the codec token by name so a renumbering cannot turn this
+        # control into a no-op.
+        token = next(t for t, name in bound['codecTokens'].items() if name == method)
         return next(i['offset'] for i in cfg_inputs if i['name'] == 'CALLT'
-                    and int.from_bytes(bytes.fromhex(i['operandHex']), 'little') == index)
+                    and int.from_bytes(bytes.fromhex(i['operandHex']), 'little') == token)
     def storage_site():
         return next(e['pc'] for e in nodes.values() if e['storage'])
     if mutation == 'lower-execution-bound': maximum -= 1
     if mutation == 'omit-native-cpu':
-        pc = native_site(3)
+        pc = native_site('serialize')
         nodes[pc] = dict(nodes[pc], execution=nodes[pc]['execution']-model['fees']['nativeCpu']['serialize'])
     if mutation == 'omit-native-wrapper-opcode':
-        pc = native_site(4)
+        pc = native_site('deserialize')
         nodes[pc] = dict(nodes[pc], execution=nodes[pc]['execution']-1)
     if mutation == 'omit-storage-price':
         pc = storage_site()
@@ -62,9 +68,9 @@ def certificate(model, mutation=None):
         # must make CFG enumeration incomplete. The artifact is hash-pinned in
         # bind_artifact, so the site cannot move silently — and this guard keeps
         # the control from degrading into a no-op if the CFG shape ever changes.
-        site = 18978
-        trace.require(sorted(cfg.get(site, [])) == [18980, 18994], 'Hash-equal branch site changed')
-        cfg[site] = [18980]
+        site = 36126
+        trace.require(sorted(cfg.get(site, [])) == [36128, 36142], 'Hash-equal branch site changed')
+        cfg[site] = [36128]
     if mutation == 'lower-storage-bound': storage = 70
     actual_cfg = '[' + ';'.join('(gas_node %s [%s])' % (event(nodes[pc]), ';'.join(map(str,cfg[pc]))) for pc in sorted(nodes)) + ']'
     paths = '[' + ';'.join(events(p['events']) for p in model['paths']) + ']'
@@ -93,7 +99,7 @@ Theorem actual_cfg_prices_agree_with_extracted_source :
  map node_event actual_cfg = actual_source_prices.
 Proof. vm_compute. reflexivity. Qed.
 Theorem actual_cfg_enumeration_complete :
- enumerate_cfg %d actual_cfg 18900 = Some actual_paths.
+ enumerate_cfg %d actual_cfg 36048 = Some actual_paths.
 Proof. vm_compute. reflexivity. Qed.
 Theorem actual_path_price_checks : forallb (safe_path actual_maximum) actual_paths = true.
 Proof. vm_compute. reflexivity. Qed.

@@ -45,11 +45,16 @@ For downstream consumers:
 
 ```js
 const { SmartAccountClient } = require('@r3e-network/neo-smart-account');
-const client = new SmartAccountClient('http://127.0.0.1:10332', '11'.repeat(20));
-const accountId = client.deriveRegistrationAccountIdHash({
-  backupOwnerAddress: '22'.repeat(20),
+const client = new SmartAccountClient({
+  rpcUrl: 'http://127.0.0.1:10332',
+  contractHash: '11'.repeat(20),
+  networkMagic: 894710606,
 });
-// accountId is 40 lowercase hexadecimal characters; no RPC call is made.
+const identity = client.deriveIdentity({
+  custodyAddress: '22'.repeat(20),
+  salt: 'aa'.repeat(16),
+});
+// identity.accountId is 40 lowercase hexadecimal characters; no RPC call is made.
 ```
 
 Imports of the previous bare package name `smart-account` need to migrate to the
@@ -58,27 +63,27 @@ already blocked by the export map and remain unsupported. Build and tarball
 artifacts are disposable; edit canonical source and rebuild. These checks establish
 local package usability, not npm publication or deployed-contract compatibility.
 
-## Custom owner-only recovery
+## Recovery policy and the owner-only latch
 
-`SmartAccountClient.getOwnerOnlyRecoveryStatus(accountId)` checks the deployed
-core's exact recovery ABI before reading permanent mode. It returns
-`{ supported: false, ownerOnlyRecovery: null }` for an old or incompatible ABI;
-with matching support it returns a strict Boolean mode. RPC faults and malformed
-responses throw. This check is current deployment capability, not a release or
-protocol-activation proof.
+A v4 account has no escape-hatch payload and no plugin roots to remove. Its recovery authority is set
+by a `setRecoveryPolicy` action — `[8, recoveryAuthority, timelockMs, ownerOnly]` — inside a
+configuration intent, so it matures for 24 hours like every other intent. A new nonzero authority
+must also witness the proposal. `getAccount(accountId)` returns the resulting control record,
+including `recoveryAuthority`, `recoveryTimelockMs` and `ownerOnlyRecovery`.
 
-After initiating escape and waiting for its timelock, build a direct core call:
+`ownerOnlyRecovery` is a legacy migration latch, monotonic and permanent: once set it never clears,
+and the core refuses every configuration action that touches the module model, so such an account can
+never install, configure or uninstall a module. Read it before planning any module work.
 
 ```js
-const status = await client.getOwnerOnlyRecoveryStatus(accountId);
-if (!status.supported) throw new Error('This deployment does not support owner-only recovery');
-const payload = client.createFinalizeEscapeToOwnerPayload({ accountScriptHash: accountId });
-// Send payload through the backup owner's wallet as a direct core invocation.
+const state = await client.getAccount(accountId);
+if (state.ownerOnlyRecovery) throw new Error('This account cannot change its modules');
+const pending = await client.getRecoveryStatus(accountId);
+// pending carries initiatedAt, matureAt and the custody the recovery would install.
 ```
 
-Use the account ID, never its asset proxy address. Payload construction does not
-sign, submit or verify deployment support. Successful recovery permanently
-removes both plugin roots and forbids plugin reinstallation, including after an
-owner transfer. It preserves account identity, asset address and nonce channels;
-it does not refund plugin-held balances or revoke external allowances. It is a
-custom contract capability and does not use native recovery or a UserOperation.
+The SDK's ABI gate also pins the custom-only `isOwnerOnlyRecovery(Hash160) -> Boolean` member, so a
+deployment that answers the v4 core ABI but lacks it is refused at discovery rather than mid-flight.
+Recovery itself is the shared v4 procedure: `beginRecovery(accountId, newCustody)`, then the
+permissionless `executeRecovery(accountId)` once the timelock matures. It preserves account identity,
+the asset address and the nonce channels, and it deletes every installed module without calling them.

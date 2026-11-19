@@ -70,19 +70,18 @@ public class ProxyWitnessRuntimeTests
         return result;
     }
 
-    private static WitnessRule[] ExactRules(UInt160 wallet, UInt160 target) => new[]
+    /// <summary>
+    /// F-1 (protocol v4): the only witness rule shape a proxy may carry is exactly one
+    /// Allow whose condition is CalledByContract(this core). The retired
+    /// Or(CalledByContract(core), CalledByContract(admin-configured target)) form is
+    /// deleted together with the per-account scope target.
+    /// </summary>
+    private static WitnessRule[] ExactRules(UInt160 wallet) => new[]
     {
         new WitnessRule
         {
             Action = WitnessRuleAction.Allow,
-            Condition = new OrCondition
-            {
-                Expressions = new WitnessCondition[]
-                {
-                    new CalledByContractCondition { Hash = wallet },
-                    new CalledByContractCondition { Hash = target },
-                },
-            },
+            Condition = new CalledByContractCondition { Hash = wallet },
         },
     };
 
@@ -98,9 +97,6 @@ public class ProxyWitnessRuntimeTests
         {
             Wallet = Fx.Deploy("SmartAccount");
             Target = Fx.Deploy("MockTransferTarget");
-            Fx.CallVoid(Wallet, "setVerifyScopeTarget", AccountId, Target);
-            Assert.AreEqual(Target, Fx.CallUInt160(Wallet, "getVerifyScopeTarget", AccountId),
-                "Scope target must be configured for this path to apply");
 
             using ScriptBuilder proxy = new();
             proxy.EmitDynamicCall(Wallet, "verify", AccountId);
@@ -113,7 +109,7 @@ public class ProxyWitnessRuntimeTests
             {
                 Account = ProxyHash,
                 Scopes = globalProxy ? WitnessScope.Global : WitnessScope.WitnessRules,
-                Rules = globalProxy ? Array.Empty<WitnessRule>() : ExactRules(Wallet, Target),
+                Rules = globalProxy ? Array.Empty<WitnessRule>() : ExactRules(Wallet),
             };
             var proxyWitness = new Witness { InvocationScript = Array.Empty<byte>(), VerificationScript = ProxyScript };
             var senderScript = SenderScript();
@@ -136,7 +132,7 @@ public class ProxyWitnessRuntimeTests
                 {
                     senderSigner,
                     proxySigner,
-                    new Signer { Account = decoyScript.ToScriptHash(), Scopes = WitnessScope.WitnessRules, Rules = ExactRules(Wallet, Target) },
+                    new Signer { Account = decoyScript.ToScriptHash(), Scopes = WitnessScope.WitnessRules, Rules = ExactRules(Wallet) },
                 };
                 witnesses = new[]
                 {

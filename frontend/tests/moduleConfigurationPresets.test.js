@@ -1,68 +1,78 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createModuleConfigurationPresets, applyModuleConfigurationPreset } from '../src/features/studio/modulePresets.js';
-import { analyzeSessionKeyScope } from '../src/features/studio/sessionKeyScope.js';
+import { createModuleReadPresets, applyModuleReadPreset } from '../src/features/studio/modulePresets.js';
 
-const now = 1_791_504_000_000;
-const presets = createModuleConfigurationPresets(undefined, now);
+const presets = createModuleReadPresets();
 
-for (const preset of [...presets.verifierPresets, ...presets.hookPresets]) {
-  test(`${preset.module} configuration template matches the shipped contract ABI`, () => {
-    const manifest = JSON.parse(readFileSync(new URL(`../../contracts/build/${preset.module}.manifest.json`, import.meta.url)));
-    const method = manifest.abi.methods.find(value => value.name === preset.method);
-    assert.ok(method, `${preset.method} must exist on ${preset.module}`);
-    assert.deepEqual(preset.args.map(value => value.type), method.parameters.map(value => value.type));
-    assert.equal(method.safe, false);
+function moduleSource(module) {
+  const folder = module.endsWith('Hook') || module === 'MultiHook' ? 'hooks' : 'validators';
+  return readFileSync(new URL(`../../contracts/plugins/${folder}/${module}.cs`, import.meta.url), 'utf8');
+}
+
+test('presets expose validator and hook reads only', () => {
+  assert.deepEqual(presets.validatorReads.map(value => value.method), [
+    'getModuleProfile',
+    'getConfig',
+    'getSessionKey',
+    'getThreshold',
+    'getPublicKey',
+  ]);
+  assert.deepEqual(presets.hookReads.map(value => value.method), [
+    'getDailyLimit',
+    'getRequiredProvider',
+    'getRequiredClaimType',
+  ]);
+  assert.equal(presets.commonExamples.length, 4);
+});
+
+for (const preset of [...presets.validatorReads, ...presets.hookReads]) {
+  test(`${preset.module} exposes ${preset.method} as a public module read`, () => {
+    if (preset.module === 'Any validator') return;
+    const source = moduleSource(preset.module);
+    const declaration = preset.method.charAt(0).toUpperCase() + preset.method.slice(1);
+    const signature = new RegExp(`public static [^\\n]* ${declaration}\\(UInt160 accountId, BigInteger moduleId`);
+    assert.match(source, signature, `${preset.method} must be declared on ${preset.module}`);
   });
 }
 
-test('session template uses a capped transfer and a future millisecond deadline', () => {
-  const session = presets.verifierPresets.find(value => value.module === 'SessionKeyVerifier');
-  assert.equal(analyzeSessionKeyScope(session.args).uncapped, false);
-  assert.equal(BigInt(session.args[4].value), BigInt(now + 7 * 86400000));
-  assert.ok(BigInt(session.args[4].value) > BigInt(now + 86400000));
-  assert.equal(session.args[6].type, 'String');
-});
-
-test('every example fills its explicit module role with the same displayed arguments', () => {
-  for (const example of presets.commonExamples) {
-    const form = { verifierMethod: 'original verifier', hookMethod: 'original hook' };
-    applyModuleConfigurationPreset(form, example, now);
-    assert.equal(form[`${example.role}Method`], example.method);
-    const args = JSON.parse(form[`${example.role}ArgsJson`]);
-    assert.deepEqual(args, JSON.parse(example.code.split('\nargs: ')[1]));
-    const other = example.role === 'verifier' ? 'hook' : 'verifier';
-    assert.equal(form[`${other}Method`], `original ${other}`);
-    assert.equal(form[`${other}ArgsJson`], undefined);
+test('every concrete preset target also exposes getModuleProfile', () => {
+  for (const preset of [...presets.validatorReads, ...presets.hookReads]) {
+    if (preset.module === 'Any validator') continue;
+    assert.match(moduleSource(preset.module), /public static string GetModuleProfile\(\)/);
   }
 });
 
-test('applying a session later refreshes expiry and fills only a valid selected account', () => {
-  const session = presets.verifierPresets[0];
-  const account = `0x${'12'.repeat(20)}`;
-  const form = { accountAddress: account };
-  applyModuleConfigurationPreset(form, session, now + 20 * 86400000);
-  const args = JSON.parse(form.verifierArgsJson);
-  assert.equal(args[0].value, account);
-  assert.equal(BigInt(args[4].value), BigInt(now + 27 * 86400000));
-  assert.equal(session.args[0].value, '0x<accountId>');
-  assert.equal(BigInt(session.args[4].value), BigInt(now + 7 * 86400000));
-  const missing = { accountAddress: 'invalid account' };
-  applyModuleConfigurationPreset(missing, session, now);
-  assert.equal(JSON.parse(missing.verifierArgsJson)[0].value, '0x<accountId>');
+test('hook reads carry only extra arguments after the account and module ids', () => {
+  const dailyLimit = presets.hookReads.find(value => value.method === 'getDailyLimit');
+  assert.deepEqual(dailyLimit.args.map(value => value.type), ['Hash160']);
+  const provider = presets.hookReads.find(value => value.method === 'getRequiredProvider');
+  assert.deepEqual(provider.args.map(value => value.type), ['Hash160']);
+  for (const preset of presets.validatorReads) {
+    assert.deepEqual(preset.args, [], `${preset.method} takes no argument beyond the account and module ids`);
+  }
 });
 
-test('multisig template asks for verifier contract identities, not signer addresses', () => {
-  const multisig = presets.verifierPresets.find(value => value.module === 'MultiSigVerifier');
-  assert.equal(multisig.method, 'setConfig');
-  assert.equal(multisig.args[1].value.length, Number(multisig.args[2].value));
-  assert.ok(multisig.args[1].value.every(child => child.type === 'Hash160' && child.value.includes('childVerifier')));
-  assert.match(multisig.description, /does not prove independent signers/);
+test('applying a preset writes the method and a detached JSON copy of the args', () => {
+  const form = { method: 'original', argsJson: '["original"]' };
+  const dailyLimit = presets.hookReads.find(value => value.method === 'getDailyLimit');
+  applyModuleReadPreset(form, dailyLimit);
+  assert.equal(form.method, 'getDailyLimit');
+  assert.deepEqual(JSON.parse(form.argsJson), dailyLimit.args);
+  form.argsJson = JSON.stringify([{ type: 'Hash160', value: '0x01' }]);
+  assert.equal(dailyLimit.args[0].value, '0x<token>', 'the preset template must not be mutated by the form');
 });
 
-test('an unknown template role cannot select a form destination', () => {
-  const form = { verifierMethod: 'original' };
-  assert.throws(() => applyModuleConfigurationPreset(form, { ...presets.verifierPresets[0], role: 'admin' }, now), /Unknown module role/);
-  assert.deepEqual(form, { verifierMethod: 'original' });
+test('applying a validator preset clears the previous extra arguments', () => {
+  const form = { method: 'getDailyLimit', argsJson: '[{"type":"Hash160","value":"0x01"}]' };
+  applyModuleReadPreset(form, presets.validatorReads[2]);
+  assert.equal(form.method, 'getSessionKey');
+  assert.deepEqual(JSON.parse(form.argsJson), []);
+});
+
+test('an unknown preset cannot select a read destination', () => {
+  const form = { method: 'original', argsJson: '[]' };
+  assert.throws(() => applyModuleReadPreset(form, { method: 42 }), /Unknown module read preset/);
+  assert.throws(() => applyModuleReadPreset(form, null), /Unknown module read preset/);
+  assert.deepEqual(form, { method: 'original', argsJson: '[]' });
 });

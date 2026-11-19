@@ -63,11 +63,14 @@ runtime 文件映射，并只在 NeoExpress 回执中记录构建回执、
 Native 模块由 `scripts/build_native_modules.py` 单独构建。它的
 六个项目遵循同一份根 `Directory.Build.props`、`nuget.config` 与
 经审阅的逐项目锁；锁缺失或改变即为构建失败。
-打包器要求 `native-v2`、精确的 Array 回调、ABI 2 metadata 以及显式的
-`getAuthorityEpoch` 权限。SessionKeyVerifier 还要求固定 native 合约上有显式的
-`canonicalP256PublicKey` 权限。每个模块都声明精确的参数
-指纹以及布尔型的 verifier-composition 标记；复合 verifier 必须
-暴露额外的回执校验与执行后回调。它记录原始/预处理源码以及两种
+打包器要求 `native-v4` 标记、v4 生命周期 ABI
+（`getModuleProfile` 以及 `onInstall`/`configure`/`onUninstall`）、精确的 native
+服务权限白名单与 NEF 校验和。模块的能力来自它自己的
+`getModuleProfile()` 回答，核心在安装时重新哈希该回答，因此打包从不会
+把 `extra.smartAccount` 声明嫁接进编译器 manifest。协议 v4 用核心阈值策略
+取代了复合 verifier，因此描述符保留 `compositeVerifier`/`compositeProfile`
+只为拒绝非空值，而不是静默重新解释旧描述符。
+它记录原始/预处理源码以及两种
 原始/打包工件字节，然后比较两次独立的 scratch 构建。
 在构建前运行 `node scripts/check_neo_platform_packages.mjs --include-native` 覆盖全部
 36 个项目，包括两个仅测试用的 epoch 探针项目与两个源码运行时

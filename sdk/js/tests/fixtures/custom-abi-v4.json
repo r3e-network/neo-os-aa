@@ -1,0 +1,1229 @@
+{
+  "note": "v4 custom kernel ABI snapshot: every compiled signature, overloads kept. Regenerate after contracts/compile.sh whenever the kernel ABI changes.",
+  "source": "contracts/bin/public/SmartAccount.manifest.json",
+  "methods": {
+    "_deploy": [
+      {
+        "parameters": [
+          {
+            "name": "data",
+            "type": "Any"
+          },
+          {
+            "name": "update",
+            "type": "Boolean"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "_initialize": [
+      {
+        "parameters": [],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "applyPlatformAccountOwnerRotation": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "appBinding",
+            "type": "ByteArray"
+          },
+          {
+            "name": "newBackupOwner",
+            "type": "Hash160"
+          },
+          {
+            "name": "previousOwner",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "beginRecovery": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "newCustody",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "cancelAdminTransfer": [
+      {
+        "parameters": [],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "cancelConfiguration": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "intentId",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "cancelMarketEscrow": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "listingId",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "cancelPlatformRegistrar": [
+      {
+        "parameters": [],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "cancelRecovery": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "cancelUpdate": [
+      {
+        "parameters": [],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "computeAccountIdentity": [
+      {
+        "parameters": [
+          {
+            "name": "custody",
+            "type": "Hash160"
+          },
+          {
+            "name": "salt",
+            "type": "ByteArray"
+          }
+        ],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "computeArgsHash": [
+      {
+        "parameters": [
+          {
+            "name": "args",
+            "type": "Array"
+          }
+        ],
+        "returntype": "ByteArray",
+        "safe": true
+      }
+    ],
+    "computePlatformAccountId": [
+      {
+        "parameters": [
+          {
+            "name": "appBinding",
+            "type": "ByteArray"
+          },
+          {
+            "name": "backupOwner",
+            "type": "Hash160"
+          },
+          {
+            "name": "escapeTimelock",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "computeRegistrationAccountId": [
+      {
+        "parameters": [
+          {
+            "name": "verifier",
+            "type": "Hash160"
+          },
+          {
+            "name": "verifierParams",
+            "type": "ByteArray"
+          },
+          {
+            "name": "hookId",
+            "type": "Hash160"
+          },
+          {
+            "name": "backupOwner",
+            "type": "Hash160"
+          },
+          {
+            "name": "escapeTimelock",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "computeStablePlatformAccountId": [
+      {
+        "parameters": [
+          {
+            "name": "appBinding",
+            "type": "ByteArray"
+          },
+          {
+            "name": "escapeTimelock",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "confirmAdminTransfer": [
+      {
+        "parameters": [],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "confirmConfiguration": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "intentId",
+            "type": "Integer"
+          },
+          {
+            "name": "actions",
+            "type": "Array"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "confirmPlatformRegistrar": [
+      {
+        "parameters": [],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "confirmUpdate": [
+      {
+        "parameters": [
+          {
+            "name": "nef",
+            "type": "ByteArray"
+          },
+          {
+            "name": "manifest",
+            "type": "String"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "createAccount": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "custody",
+            "type": "Hash160"
+          },
+          {
+            "name": "salt",
+            "type": "ByteArray"
+          },
+          {
+            "name": "recoveryTimelockMs",
+            "type": "Integer"
+          },
+          {
+            "name": "actions",
+            "type": "Array"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "createAccounts": [
+      {
+        "parameters": [
+          {
+            "name": "accountIds",
+            "type": "Array"
+          },
+          {
+            "name": "custody",
+            "type": "Hash160"
+          },
+          {
+            "name": "salts",
+            "type": "Array"
+          },
+          {
+            "name": "recoveryTimelockMs",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "enterMarketEscrow": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "marketContract",
+            "type": "Hash160"
+          },
+          {
+            "name": "listingId",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "executeRecovery": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "executeSponsoredUserOp": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "operation",
+            "type": "Any"
+          },
+          {
+            "name": "paymaster",
+            "type": "Hash160"
+          },
+          {
+            "name": "sponsor",
+            "type": "Hash160"
+          },
+          {
+            "name": "reimbursementAmount",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Any",
+        "safe": false
+      }
+    ],
+    "executeSponsoredUserOps": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "operations",
+            "type": "Array"
+          },
+          {
+            "name": "paymaster",
+            "type": "Hash160"
+          },
+          {
+            "name": "sponsor",
+            "type": "Hash160"
+          },
+          {
+            "name": "reimbursementAmount",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Array",
+        "safe": false
+      }
+    ],
+    "executeUserOp": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "operation",
+            "type": "Any"
+          }
+        ],
+        "returntype": "Any",
+        "safe": false
+      }
+    ],
+    "executeUserOps": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "operations",
+            "type": "Array"
+          }
+        ],
+        "returntype": "Array",
+        "safe": false
+      }
+    ],
+    "freezeAccount": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "getAccount": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "getAccountIdByProxy": [
+      {
+        "parameters": [
+          {
+            "name": "proxy",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "getAccountImplementationId": [
+      {
+        "parameters": [],
+        "returntype": "String",
+        "safe": true
+      }
+    ],
+    "getAdminTransferAvailableAt": [
+      {
+        "parameters": [],
+        "returntype": "Integer",
+        "safe": true
+      }
+    ],
+    "getAuthorizedModuleId": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "phase",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Integer",
+        "safe": true
+      }
+    ],
+    "getContractAdmin": [
+      {
+        "parameters": [],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "getHookOrder": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "getMarketEscrowContract": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "getMarketEscrowListingId": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Integer",
+        "safe": true
+      }
+    ],
+    "getMetadataUri": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "String",
+        "safe": true
+      }
+    ],
+    "getMigrationState": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "getModule": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "moduleId",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "getModules": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "moduleType",
+            "type": "String"
+          },
+          {
+            "name": "cursor",
+            "type": "Integer"
+          },
+          {
+            "name": "limit",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "getNonce": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "channel",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Integer",
+        "safe": true
+      },
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "validatorId",
+            "type": "Integer"
+          },
+          {
+            "name": "nonceSubkey",
+            "type": "ByteArray"
+          }
+        ],
+        "returntype": "Integer",
+        "safe": true
+      }
+    ],
+    "getNonceSequence": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "channel",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Integer",
+        "safe": true
+      }
+    ],
+    "getOperationDigest": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "operation",
+            "type": "Any"
+          }
+        ],
+        "returntype": "ByteArray",
+        "safe": true
+      }
+    ],
+    "getPendingConfiguration": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "intentId",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "getPendingConfigurationIntentIds": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "getPendingContractAdmin": [
+      {
+        "parameters": [],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "getPendingPlatformRegistrar": [
+      {
+        "parameters": [],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "getPlatformAccountBinding": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "ByteArray",
+        "safe": true
+      }
+    ],
+    "getPlatformRegistrar": [
+      {
+        "parameters": [],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "getPlatformRegistrarAvailableAt": [
+      {
+        "parameters": [],
+        "returntype": "Integer",
+        "safe": true
+      }
+    ],
+    "getProtocolInfo": [
+      {
+        "parameters": [],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "getProxyScriptHash": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Hash160",
+        "safe": true
+      }
+    ],
+    "getRecoveryStatus": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "isAccountFrozen": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "isExecutionActive": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "isMarketEscrowActive": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "isMarketService": [
+      {
+        "parameters": [
+          {
+            "name": "marketContract",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "isMigrationRequired": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "isModuleInstalled": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "moduleType",
+            "type": "String"
+          },
+          {
+            "name": "moduleHash",
+            "type": "Hash160"
+          },
+          {
+            "name": "additionalContext",
+            "type": "ByteArray"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "isOwnerOnlyRecovery": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "isUserOpExecutionActive": [
+      {
+        "parameters": [],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "isValidSignature": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "hash",
+            "type": "ByteArray"
+          },
+          {
+            "name": "signatureEnvelope",
+            "type": "Any"
+          }
+        ],
+        "returntype": "ByteArray",
+        "safe": true
+      }
+    ],
+    "markMigrationRequired": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "proposeAdminTransfer": [
+      {
+        "parameters": [
+          {
+            "name": "newAdmin",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "proposeConfiguration": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "actions",
+            "type": "Array"
+          },
+          {
+            "name": "readSet",
+            "type": "Array"
+          }
+        ],
+        "returntype": "Integer",
+        "safe": false
+      }
+    ],
+    "proposePlatformRegistrar": [
+      {
+        "parameters": [
+          {
+            "name": "registrar",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "proposeUpdate": [
+      {
+        "parameters": [
+          {
+            "name": "nefHash",
+            "type": "Hash256"
+          },
+          {
+            "name": "manifestHash",
+            "type": "Hash256"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "registerPlatformAccount": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "appBinding",
+            "type": "ByteArray"
+          },
+          {
+            "name": "backupOwner",
+            "type": "Hash160"
+          },
+          {
+            "name": "escapeTimelock",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "registerStablePlatformAccount": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "appBinding",
+            "type": "ByteArray"
+          },
+          {
+            "name": "backupOwner",
+            "type": "Hash160"
+          },
+          {
+            "name": "escapeTimelock",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "revokeCredentials": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "moduleId",
+            "type": "Integer"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "setMarketService": [
+      {
+        "parameters": [
+          {
+            "name": "marketContract",
+            "type": "Hash160"
+          },
+          {
+            "name": "allowed",
+            "type": "Boolean"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "setMetadataUri": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "metadataUri",
+            "type": "String"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "settleMarketEscrow": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "listingId",
+            "type": "Integer"
+          },
+          {
+            "name": "newBackupOwner",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "supportsExecutionMode": [
+      {
+        "parameters": [
+          {
+            "name": "mode",
+            "type": "String"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "supportsModuleType": [
+      {
+        "parameters": [
+          {
+            "name": "moduleType",
+            "type": "String"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ],
+    "unfreezeAccount": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "update": [
+      {
+        "parameters": [
+          {
+            "name": "nef",
+            "type": "ByteArray"
+          },
+          {
+            "name": "manifest",
+            "type": "String"
+          }
+        ],
+        "returntype": "Void",
+        "safe": false
+      }
+    ],
+    "validateUserOp": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          },
+          {
+            "name": "operation",
+            "type": "Any"
+          }
+        ],
+        "returntype": "Array",
+        "safe": true
+      }
+    ],
+    "verify": [
+      {
+        "parameters": [
+          {
+            "name": "accountId",
+            "type": "Hash160"
+          }
+        ],
+        "returntype": "Boolean",
+        "safe": true
+      }
+    ]
+  },
+  "events": [
+    "AccountFrozen",
+    "AccountRegistered",
+    "AccountUnfrozen",
+    "AdminTransferCancelled",
+    "AdminTransferConfirmed",
+    "AdminTransferProposed",
+    "ConfigurationIntentCancelled",
+    "ConfigurationIntentConfirmed",
+    "ConfigurationIntentExpired",
+    "ConfigurationIntentProposed",
+    "ContractUpdateCancelled",
+    "ContractUpdateConfirmed",
+    "ContractUpdateProposed",
+    "CoreRecoveryRecorded",
+    "CredentialRevoked",
+    "EscapeCancelled",
+    "EscapeFinalized",
+    "EscapeInitiated",
+    "HookOrderSet",
+    "MarketControlEpochBound",
+    "MarketEscrowCancelled",
+    "MarketEscrowEntered",
+    "MarketEscrowSettled",
+    "MarketLockInvalidated",
+    "MarketServiceChanged",
+    "MessageSubjectUpdated",
+    "MetadataUriUpdated",
+    "MigrationImported",
+    "MigrationRequired",
+    "ModuleCodeRebound",
+    "ModuleInstalled",
+    "ModuleInstanceConfigured",
+    "ModuleInstanceInstalled",
+    "ModuleInstanceRemoved",
+    "ModuleRemoved",
+    "ModuleUpdateCancelled",
+    "ModuleUpdateConfirmed",
+    "ModuleUpdateInitiated",
+    "NonceChannelExhausted",
+    "NonceChannelOpened",
+    "PlatformAccountOwnerRotated",
+    "PlatformRegistrarCancelled",
+    "PlatformRegistrarChanged",
+    "PlatformRegistrarProposed",
+    "RecoveryCancelled",
+    "RecoveryExecuted",
+    "RecoveryInitiated",
+    "SponsoredUserOpExecuted",
+    "ThresholdPolicySet",
+    "UserOpExecuted"
+  ]
+}

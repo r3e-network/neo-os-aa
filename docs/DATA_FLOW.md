@@ -241,4 +241,4 @@ The prefixes above are the source of truth in `contracts/custom/SmartAccount.Int
 
 ## Matrix Domain Boundary
 
-The `.matrix` contract acts as an external naming boundary. It is not the source of SA authorization state; instead, it provides a human-readable identifier that resolves to the controlling wallet address. V3 keeps no reverse index from that address to the accounts it controls, so a name resolves one way only: read each account you know with `getAccountState` rather than expecting the domain to list them.
+The `.matrix` contract acts as an external naming boundary. It is not the source of SA authorization state; instead, it provides a human-readable identifier that resolves to the controlling wallet address. V3 keeps no reverse index from that address to the accounts it controls, so a name resolves one way only: read each account you know with `getAccount` rather than expecting the domain to list them.

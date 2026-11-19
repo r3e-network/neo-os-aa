@@ -8,8 +8,8 @@
         <p class="text-sm text-sa-muted mt-1">
           {{
             t(
-              "studioPanels.createSubtitleLong",
-              "Register a V3 account with one verifier plugin, one hook plugin, and one backup owner escape hatch.",
+              "studioPanels.createSubtitleV4",
+              "Create a v4 account from its custody, a unique salt and its recovery timelock. Modules are installed afterwards through a configuration intent.",
             )
           }}
         </p>
@@ -65,34 +65,11 @@
                   :aria-label="t('studioPanels.check', 'Check')"
                   @click="checkMatrixDomain"
                   class="bg-sa-lightOrange/10 hover:bg-sa-lightOrange/20 text-sa-lightOrange px-4 text-xs font-bold uppercase transition-colors duration-200 border-l border-sa-border"
-                  :class="{ 'btn-loading': matrixCheckResult?.checking }"
                   :disabled="
                     !createForm.matrixDomain || matrixCheckResult?.checking
                   "
                 >
-                  <svg
-                    aria-hidden="true"
-                    v-if="matrixCheckResult?.checking"
-                    class="animate-spin h-4 w-4"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    ></circle>
-                    <path
-                      class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  <span v-else>{{ t("studioPanels.check", "Check") }}</span>
+                  {{ t("studioPanels.check", "Check") }}
                 </button>
               </div>
               <p
@@ -140,35 +117,7 @@
                     "
                     class="ml-1.5 text-sa-muted hover:text-sa-text transition-colors duration-200 flex-shrink-0"
                   >
-                    <svg
-                      aria-hidden="true"
-                      v-if="copiedKey !== 'computedAddress'"
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-3.5 w-3.5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"
-                      />
-                      <path
-                        d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"
-                      />
-                    </svg>
-                    <svg
-                      aria-hidden="true"
-                      v-else
-                      xmlns="http://www.w3.org/2000/svg"
-                      class="h-3.5 w-3.5 text-sa-success"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fill-rule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clip-rule="evenodd"
-                      />
-                    </svg>
+                    {{ copiedKey === "computedAddress" ? "✓" : "⧉" }}
                   </button>
                 </div>
                 <div
@@ -178,26 +127,14 @@
                   {{
                     t(
                       "studioPanels.enterAccountParametersToDerive",
-                      "Enter account parameters below to derive address",
+                      "Enter the custody, salt and timelock to derive the address",
                     )
                   }}
-                </div>
-                <div
-                  v-if="computedAddress"
-                  class="absolute right-3 top-1/2 -translate-y-1/2"
-                >
-                  <span class="relative flex h-3 w-3">
-                    <span
-                      class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sa-success opacity-75"
-                    ></span>
-                    <span
-                      class="relative inline-flex rounded-full h-3 w-3 bg-sa-success"
-                    ></span>
-                  </span>
                 </div>
               </div>
             </div>
           </div>
+
           <div
             v-if="computedAccountIdHash"
             class="mt-5 rounded-lg border border-sa-success/25 bg-sa-success/10 p-4"
@@ -207,7 +144,7 @@
             >
               <div class="min-w-0">
                 <p class="text-xs font-bold uppercase text-sa-success-light">
-                  {{ t("studioPanels.accountIdHash", "AccountId Hash") }}
+                  {{ t("studioPanels.accountId", "Account Id") }}
                 </p>
                 <code
                   class="mt-1 block break-all font-mono text-sm text-sa-text"
@@ -216,8 +153,8 @@
                 <p class="mt-1 text-xs text-sa-muted">
                   {{
                     t(
-                      "studioPanels.accountIdHashHint",
-                      "Use this value to load the account in Operations after registration is confirmed.",
+                      "studioPanels.accountIdHintV4",
+                      "The identity is hash160(0xAA524704 || custody || salt). Use this id to load the account after creation is confirmed.",
                     )
                   }}
                 </p>
@@ -244,12 +181,7 @@
                     query: { accountId: `0x${computedAccountIdHash}` },
                   }"
                 >
-                  {{
-                    t(
-                      "studioPanels.openOperations",
-                      "Open Operations",
-                    )
-                  }}
+                  {{ t("studioPanels.openOperations", "Open Operations") }}
                 </router-link>
               </div>
             </div>
@@ -259,201 +191,106 @@
 
       <div>
         <div class="section-label">
-          {{ t("studioPanels.pluginsSection", "Plugins") }}
+          {{ t("studioPanels.custodySection", "Custody & Recovery") }}
         </div>
         <div class="bg-sa-panel rounded-lg border border-sa-border/60 p-5">
-          <p class="mb-4 text-xs text-sa-muted">{{ t('custom.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div class="space-y-4">
-              <div class="space-y-2">
-                <span class="block text-sm font-semibold text-sa-text">{{
-                  t(
-                    "studioPanels.createVerifierPresets",
-                    "Published verifier presets",
-                  )
-                }}</span>
-                <div class="grid grid-cols-1 gap-2">
-                  <button
-                    v-for="preset in createVerifierPresets"
-                    :key="preset.id"
-                    type="button"
-                    class="rounded-lg border px-3 py-2 text-left transition-colors duration-200"
-                    :class="
-                      selectedVerifierPreset?.id === preset.id
-                        ? 'border-sa-orange bg-sa-orange/10'
-                        : 'border-sa-border bg-sa-dark hover:border-sa-orange/60'
-                    "
-                    :aria-pressed="selectedVerifierPreset?.id === preset.id"
-                    @click="applyCreateVerifierPreset(preset)"
-                  >
-                    <span class="block text-xs font-semibold text-sa-text">{{
-                      preset.label
-                    }}</span>
-                    <span class="block font-mono text-[10px] text-sa-muted">{{
-                      preset.verifierContract
-                    }}</span>
-                  </button>
-                </div>
-                <p class="text-xs text-sa-muted">
-                  {{
-                    selectedVerifierPreset
-                      ? selectedVerifierPreset.description
-                      : t(
-                          "studioPanels.createVerifierPresetsHint",
-                          "Presets come from the published Morpheus registry for this network. Choosing one fills the verifier address; the params rule follows the preset.",
-                        )
-                  }}
-                </p>
-              </div>
-              <div>
-                <label
-                  for="verifier-contract-input"
-                  class="block text-sm font-semibold text-sa-text mb-1"
-                  >{{
-                    t("studioPanels.verifierPlugin", "Verifier Plugin")
-                  }}</label
-                >
-                <input
-                  id="verifier-contract-input"
-                  v-model="createForm.verifierContract"
-                  type="text"
-                  class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
-                  :placeholder="
-                    t(
-                      'studioPanels.verifierContractOptionalPlaceholder',
-                      '0x... (optional)',
-                    )
-                  "
-                />
-                <p class="mt-1 text-xs text-sa-muted">
-                  {{
-                    t(
-                      "studioPanels.verifierPluginExamples",
-                      "Pick a published preset above, or paste any verifier contract hash.",
-                    )
-                  }}
-                </p>
-              </div>
-              <div>
-                <label
-                  for="verifier-params-input"
-                  class="block text-sm font-semibold text-sa-text mb-1"
-                  >{{
-                    t("studioPanels.verifierParamsHex", "Verifier Params (hex)")
-                  }}</label
-                >
-                <textarea
-                  id="verifier-params-input"
-                  v-model="createForm.verifierParams"
-                  class="input-field font-mono text-xs py-2 px-3 bg-sa-dark min-h-24"
-                  :placeholder="
-                    t(
-                      'studioPanels.verifierParamsPlaceholder',
-                      'Uncompressed pubkey or verifier-specific config hex.',
-                    )
-                  "
-                ></textarea>
-              </div>
-            </div>
-
-            <div class="space-y-4">
-              <div>
-                <label
-                  for="hook-contract-input"
-                  class="block text-sm font-semibold text-sa-text mb-1"
-                  >{{ t("studioPanels.hookPlugin", "Hook Plugin") }}</label
-                >
-                <input
-                  id="hook-contract-input"
-                  v-model="createForm.hookContract"
-                  type="text"
-                  class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
-                  :placeholder="
-                    t(
-                      'studioPanels.hookContractOptionalPlaceholder',
-                      '0x... (optional)',
-                    )
-                  "
-                />
-                <p class="mt-1 text-xs text-sa-muted">
-                  {{
-                    t(
-                      "studioPanels.hookPluginExamples",
-                      "Examples: WhitelistHook, DailyLimitHook, NeoDIDCredentialHook, MultiHook.",
-                    )
-                  }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <div class="section-label">
-          {{ t("studioPanels.backupSection", "Backup & Recovery") }}
-        </div>
-        <div class="bg-sa-panel rounded-lg border border-sa-border/60 p-5">
-          <p class="mb-4 text-xs text-sa-muted">{{ t('custom.registrationPayer', 'The connected Neo wallet authorizes registration and pays its transaction fees. Review the final fee in the wallet before signing.') }}</p>
+          <p class="mb-4 text-xs text-sa-muted">{{ t('custom.custodyPayer', 'Custody is the witness-bearing controller: it authorizes configuration intents and recovery. The connected wallet must be this address.') }}</p>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-2">
               <label
-                for="backup-owner-input"
+                for="custody-input"
                 class="block text-sm font-semibold text-sa-text mb-1"
-                >{{ t("studioPanels.backupOwner", "Backup Owner") }}</label
+                >{{ t("studioPanels.custody", "Custody") }}</label
               >
               <input
-                id="backup-owner-input"
-                v-model="createForm.backupOwner"
+                id="custody-input"
+                v-model="createForm.custody"
                 type="text"
                 class="input-field font-mono text-sm py-2 px-3 bg-sa-dark"
-                :class="backupOwnerInputClass"
+                :class="custodyInputClass"
                 :placeholder="
-                  t('studioPanels.backupOwnerPlaceholder', 'N... or 0x...')
+                  t('studioPanels.custodyPlaceholder', 'N... or 0x...')
                 "
               />
               <p
-                v-if="backupOwnerError"
+                v-if="custodyError"
                 role="alert"
                 class="mt-1 text-xs text-sa-error-light"
               >
-                {{ backupOwnerError }}
+                {{ custodyError }}
               </p>
               <p class="mt-1 text-xs text-sa-muted">
                 {{
                   t(
-                    "studioPanels.backupOwnerHint",
-                    "Neo N3 address (N...) or Neo script hash (0x...). The connected wallet must be this backup owner.",
+                    "studioPanels.custodyHint",
+                    "Neo N3 address (N...) or Neo script hash (0x...) of the controlling wallet.",
                   )
                 }}
               </p>
             </div>
             <div class="space-y-2">
               <label
-                for="escape-timelock-days"
+                for="recovery-timelock-days"
                 class="block text-sm font-semibold text-sa-text mb-1"
                 >{{
-                  t("studioPanels.escapeTimelockDays", "Escape Timelock (days)")
+                  t("studioPanels.recoveryTimelockDays", "Recovery Timelock (days)")
                 }}</label
               >
               <input
-                id="escape-timelock-days"
-                v-model.number="createForm.escapeTimelockDays"
+                id="recovery-timelock-days"
+                v-model.number="createForm.recoveryTimelockDays"
                 type="number"
-                min="7"
-                max="90"
+                :min="minRecoveryDays"
+                :max="maxRecoveryDays"
                 class="input-field w-32 text-sm py-2 px-3 bg-sa-dark"
                 placeholder="30"
               />
               <p class="mt-1 text-xs text-sa-muted">
                 {{
                   t(
-                    "studioPanels.escapeTimelockHint",
-                    "Countdown before escape hatch activates (7-90 days)",
+                    "studioPanels.recoveryTimelockHintV4",
+                    "Countdown before a recovery authority can take over (7-90 days).",
                   )
                 }}
               </p>
             </div>
+          </div>
+
+          <div class="mt-5">
+            <label
+              for="salt-input"
+              class="block text-sm font-semibold text-sa-text mb-1"
+              >{{ t("studioPanels.salt", "Salt (hex)") }}</label
+            >
+            <div class="flex gap-2">
+              <input
+                id="salt-input"
+                v-model="createForm.salt"
+                type="text"
+                class="input-field font-mono text-sm py-2 px-3 bg-sa-dark flex-1"
+                :placeholder="
+                  t(
+                    'studioPanels.saltPlaceholder',
+                    '1 through 128 bytes of hex, unique per account',
+                  )
+                "
+              />
+              <button
+                type="button"
+                class="btn-secondary btn-sm"
+                @click="regenerateSalt"
+              >
+                {{ t("studioPanels.generateSalt", "Generate") }}
+              </button>
+            </div>
+            <p class="mt-1 text-xs text-sa-muted">
+              {{
+                t(
+                  "studioPanels.saltHint",
+                  "The salt is public uniqueness input. Keep it with the custody address: together they are the only way to re-derive this account.",
+                )
+              }}
+            </p>
           </div>
         </div>
       </div>
@@ -477,22 +314,8 @@
               v-if="computedScriptHex"
               type="button"
               @click="copyScript"
-              class="text-xs text-sa-orange hover:text-sa-lightOrange transition-colors duration-200 flex items-center gap-1"
+              class="text-xs text-sa-orange hover:text-sa-lightOrange transition-colors duration-200"
             >
-              <svg
-                aria-hidden="true"
-                class="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                ></path>
-              </svg>
               {{
                 copiedKey === "script"
                   ? t("studioPanels.copied", "Copied!")
@@ -509,15 +332,10 @@
               readonly
               class="w-full bg-sa-dark border-0 p-4 font-mono text-xs text-sa-text placeholder:text-sa-muted focus:ring-0 resize-none h-24"
               :placeholder="
-                computedAddress
-                  ? t(
-                      'studioPanels.computingPlaceholder',
-                      'Computing script...',
-                    )
-                  : t(
-                      'studioPanels.enterAccountParametersPlaceholder',
-                      'Enter account parameters above...',
-                    )
+                t(
+                  'studioPanels.enterAccountParametersPlaceholder',
+                  'Enter the custody, salt and timelock above...',
+                )
               "
             ></textarea>
           </div>
@@ -534,43 +352,21 @@
           :disabled="isCreating || !canCreate"
           @click="createAccount"
         >
-          <svg
-            aria-hidden="true"
-            v-if="isCreating"
-            class="animate-spin -ml-1 mr-2 h-4 w-4 text-sa-text"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              class="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              stroke-width="4"
-            ></circle>
-            <path
-              class="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            ></path>
-          </svg>
           {{
             isCreating
               ? t(
                   "studioPanels.submittingTransaction",
                   "Submitting Transaction...",
                 )
-              : t("studioPanels.registerV3Account", "Register V3 Account")
+              : t("studioPanels.createAccountAction", "Create Account")
           }}
         </button>
         <span
           class="text-xs text-sa-muted font-medium text-center sm:text-left"
           >{{
             t(
-              "studioPanels.registerHint",
-              "Creates a V3 account with one verifier, one hook, and one backup-owner escape hatch.",
+              "studioPanels.createHintV4",
+              "Creates the account and its control record. Install validators and hooks next from Manage Configuration.",
             )
           }}</span
         >
@@ -583,6 +379,10 @@
 import { inject, computed } from "vue";
 import { useI18n } from "@/i18n";
 import { useClipboard } from "@/composables/useClipboard";
+import {
+  MAX_RECOVERY_TIMELOCK_DAYS,
+  MIN_RECOVERY_TIMELOCK_DAYS,
+} from "@/utils/neo.js";
 
 const { t } = useI18n();
 const { copiedKey, markCopied, copyText } = useClipboard();
@@ -590,8 +390,7 @@ const { copiedKey, markCopied, copyText } = useClipboard();
 const studio = inject("studio");
 const {
   createForm,
-  createVerifierPresets,
-  applyCreateVerifierPreset,
+  regenerateSalt,
   computedAddress,
   computedAccountIdHash,
   computedScriptHex,
@@ -600,34 +399,21 @@ const {
   createAccount,
   checkMatrixDomain,
   matrixCheckResult,
-  registrationOwnerError,
+  custodyError,
 } = studio;
 
-const selectedVerifierPreset = computed(() => {
-  const address = String(createForm.value.verifierContract || "")
-    .trim()
-    .toLowerCase()
-    .replace(/^0x/, "");
-  if (!address) return null;
-  return (
-    (createVerifierPresets.value || []).find(
-      (preset) =>
-        preset.verifierContract.toLowerCase().replace(/^0x/, "") === address,
-    ) || null
-  );
-});
+const minRecoveryDays = MIN_RECOVERY_TIMELOCK_DAYS;
+const maxRecoveryDays = MAX_RECOVERY_TIMELOCK_DAYS;
 
 async function copyScript() {
   if (!computedScriptHex) return;
   if (await copyText(computedScriptHex)) markCopied("script");
 }
 
-const backupOwnerError = registrationOwnerError;
-
-const backupOwnerInputClass = computed(() => {
-  const val = createForm.value.backupOwner?.trim() || "";
-  if (!val) return "";
-  return backupOwnerError.value
+const custodyInputClass = computed(() => {
+  const value = createForm.value.custody?.trim() || "";
+  if (!value) return "";
+  return custodyError.value
     ? "border-sa-error focus:border-sa-error-light"
     : "border-sa-success/50";
 });

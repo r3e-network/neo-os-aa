@@ -419,8 +419,8 @@ def require_closed_entrypoint(report, key):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--inventory', type=Path, required=True)
-    parser.add_argument('--nef', type=Path, default=HERE.parent.parent / 'contracts/bin/public/SmartAccountV3.nef')
-    parser.add_argument('--manifest', type=Path, default=HERE.parent.parent / 'contracts/bin/public/SmartAccountV3.manifest.json')
+    parser.add_argument('--nef', type=Path, default=HERE.parent.parent / 'contracts/bin/public/SmartAccount.nef')
+    parser.add_argument('--manifest', type=Path, default=HERE.parent.parent / 'contracts/bin/public/SmartAccount.manifest.json')
     parser.add_argument('--source-root', type=Path, default=HERE.parent.parent)
     parser.add_argument('--json-report', type=Path, required=True)
     args = parser.parse_args()

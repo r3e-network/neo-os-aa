@@ -28,9 +28,9 @@ public class ImplementationRefinementMethodRuntimeTests
 
     private sealed class Harness
     {
-        private const int MethodPc = 18900;
-        private const string NefHash = "9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76";
-        private const string ManifestHash = "a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31";
+        private const int MethodPc = 36048;
+        private const string NefHash = "2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb";
+        private const string ManifestHash = "f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f";
         private readonly RuntimeFixture fx = new();
         private readonly ContractState core;
         private readonly StorageKey key;
@@ -48,8 +48,8 @@ public class ImplementationRefinementMethodRuntimeTests
             UInt160 hash = fx.DeployArtifact(nefBytes, System.Text.Encoding.UTF8.GetString(manifestBytes));
             core = NativeContract.ContractManagement.GetContract(fx.Engine.Storage.Snapshot, hash)!;
             CollectionAssert.AreEqual(new byte[] { (byte)OpCode.INITSLOT, 8, 1 }, core.Nef.Script.Span.Slice(MethodPc, 3).ToArray());
+            Assert.AreEqual("deserialize", core.Nef.Tokens[2].Method);
             Assert.AreEqual("serialize", core.Nef.Tokens[3].Method);
-            Assert.AreEqual("deserialize", core.Nef.Tokens[4].Method);
             key = new StorageKey { Id = core.Id, Key = new byte[] { 0x21 } };
             using ScriptBuilder outer = new();
             if (outerFault)
@@ -129,10 +129,10 @@ public class ImplementationRefinementMethodRuntimeTests
             {
                 Assert.AreEqual(VMState.HALT, state);
                 Assert.IsNotNull(methodContext.StaticFields);
-                Assert.AreEqual(StackItemType.Buffer, methodContext.StaticFields![38].Type,
+                Assert.AreEqual(StackItemType.Buffer, methodContext.StaticFields![58].Type,
                     "Actual readonly byte[] initializer uses a Buffer, not an invented integer/byte value");
-                CollectionAssert.AreEqual(new byte[] { 0x21 }, methodContext.StaticFields![38].GetSpan().ToArray(),
-                    "Original initializer must bind static slot 38 to the actual storage key");
+                CollectionAssert.AreEqual(new byte[] { 0x21 }, methodContext.StaticFields![58].GetSpan().ToArray(),
+                    "Original initializer must bind static slot 58 to the actual storage key");
                 value = app.ResultStack.Pop().GetInteger();
                 // Explicit outer persistence policy, matching pinned HALT-only
                 // application snapshot commit. Native block fee burning is absent.

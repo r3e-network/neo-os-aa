@@ -322,51 +322,27 @@ namespace SmartAccount
             Storage.Put(Storage.CurrentContext, key, StdLib.Serialize(policy));
         }
 
-        private static bool PolicyContainsMember(ThresholdPolicyRecord policy, BigInteger moduleId)
-        {
-            for (int i = 0; i < policy.MemberIds.Length; i++)
-            {
-                if (policy.MemberIds[i] == moduleId) return true;
-            }
-            return false;
-        }
-
         /// <summary>
-        /// True while <paramref name="moduleId"/> is a member of any ACTIVE
+        /// True while <paramref name="module"/> is a member of an ACTIVE
         /// threshold policy. Active-policy members are never independently
-        /// routable (spec §3.5) and cannot be uninstalled while referenced.
+        /// routable (spec §5) and cannot be uninstalled while referenced.
+        /// The member side carries the back-pointer (0x52 <c>activePolicyId</c>),
+        /// which the policy executor maintains, so every routing and uninstall
+        /// check is one record read instead of a scan of the account's policies.
         /// </summary>
-        private static bool IsMemberOfActivePolicy(UInt160 accountId, BigInteger moduleId)
-        {
-            byte[] prefix = Helper.Concat(Prefix_ThresholdPolicy, (byte[])accountId);
-            Iterator it = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);
-            while (it.Next())
-            {
-                BigInteger policyId = ModuleIdFromKeyBytes((byte[])(ByteString)it.Value);
-                ThresholdPolicyRecord? policy = GetThresholdPolicy(accountId, policyId);
-                if (policy != null && policy.Active && PolicyContainsMember(policy!, moduleId)) return true;
-            }
-            return false;
-        }
+        private static bool IsMemberOfActivePolicy(ModuleInstance module) =>
+            module.ActivePolicyId != BigInteger.Zero;
 
-        private static void AssertNotMemberOfOtherActivePolicy(UInt160 accountId, BigInteger moduleId, BigInteger policyId)
+        /// <summary>No member of two active policies (spec §5).</summary>
+        private static void AssertNotMemberOfOtherActivePolicy(ModuleInstance member, BigInteger policyId)
         {
-            byte[] prefix = Helper.Concat(Prefix_ThresholdPolicy, (byte[])accountId);
-            Iterator it = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly | FindOptions.RemovePrefix);
-            while (it.Next())
-            {
-                BigInteger otherId = ModuleIdFromKeyBytes((byte[])(ByteString)it.Value);
-                if (otherId == policyId) continue;
-                ThresholdPolicyRecord? other = GetThresholdPolicy(accountId, otherId);
-                if (other != null && other!.Active && PolicyContainsMember(other, moduleId))
-                {
-                    ExecutionEngine.Assert(false, ErrorIntentConflict);
-                }
-            }
+            ExecutionEngine.Assert(
+                member.ActivePolicyId == BigInteger.Zero || member.ActivePolicyId == policyId,
+                ErrorIntentConflict);
         }
 
         /// <summary>
-        /// Routing eligibility (spec §3.5): the explicitly selected validator
+        /// Routing eligibility (spec §5): the explicitly selected validator
         /// must be an installed validator instance and must not be a member of
         /// an active threshold policy (a single-member entry must never bypass
         /// the threshold).
@@ -375,7 +351,7 @@ namespace SmartAccount
         {
             ModuleInstance module = RequireModuleInstance(accountId, validatorId);
             ExecutionEngine.Assert(module.ModuleType == ModuleTypeCodeValidator, ErrorModuleNotRoutable);
-            ExecutionEngine.Assert(!IsMemberOfActivePolicy(accountId, validatorId), ErrorModuleNotRoutable);
+            ExecutionEngine.Assert(!IsMemberOfActivePolicy(module), ErrorModuleNotRoutable);
             return module;
         }
 
@@ -425,12 +401,19 @@ namespace SmartAccount
                 ErrorModuleCodeBindingMismatch);
 
             long gasBefore = PrepareCallbackBudget(null, GasPoolNone, LifecycleCallbackGasLimit);
-            string profileJson = (string)CallModuleGasCapped(
+            object reply = CallModuleGasCapped(
                 moduleHash, "getModuleProfile", CallFlags.ReadStates, LifecycleCallbackGasLimit, new object[] { });
             ChargeCallbackGas(null, GasPoolNone, gasBefore, LifecycleCallbackGasLimit);
+            // The declared ABI is String and the core does not coerce (§11): the
+            // bytes hashed below are the ones the profile call actually returned,
+            // never a re-rendering of some other item type.
+            // A reply outside the declared String ABI falls back to the empty
+            // string, so the length assertion below rejects it like any other
+            // non-canonical profile bytes.
+            string profileJson = reply as string ?? string.Empty;
 
-            ExecutionEngine.Assert(profileJson != null && profileJson.Length > 0
-                && profileJson.Length <= ModuleProfileBytesMax, ErrorModuleCodeBindingMismatch);
+            ExecutionEngine.Assert(profileJson.Length > 0 && profileJson.Length <= ModuleProfileBytesMax,
+                ErrorModuleCodeBindingMismatch);
             ExecutionEngine.Assert(CryptoLib.Sha256((ByteString)profileJson) == profileDigest,
                 ErrorModuleCodeBindingMismatch);
 
@@ -521,15 +504,21 @@ namespace SmartAccount
         /// <summary>
         /// Code-identity continuity: a callback whose module contract was
         /// destroyed, replaced or updated since installation fails the whole
-        /// transaction (spec §3.6 failure rules).
+        /// transaction (spec §3.6 failure rules). The deployment id and the
+        /// update counter are the whole proof: the id is the global deployment
+        /// slot (a destroy-and-redeploy at the same script hash cannot reuse
+        /// it) and every code or manifest update of that slot bumps the
+        /// counter, so an equal pair names exactly the (Nef, manifest) revision
+        /// whose SHA-256 the instance record captured at install. Re-hashing
+        /// the Nef on every callback bought nothing this pair does not already
+        /// prove and charged the account for it (§11).
         /// </summary>
         private static void AssertCodeBindingUnchanged(ModuleInstance module)
         {
             Contract? contract = ContractManagement.GetContract(module.ContractHash);
             ExecutionEngine.Assert(contract != null, ErrorModuleCodeBindingMismatch);
             ExecutionEngine.Assert(contract!.Id == module.ContractId
-                && contract.UpdateCounter == module.UpdateCounter
-                && CryptoLib.Sha256(contract.Nef) == module.NefSha256,
+                && contract.UpdateCounter == module.UpdateCounter,
                 ErrorModuleCodeBindingMismatch);
         }
 
@@ -630,8 +619,8 @@ namespace SmartAccount
             if (module.ModuleType == ModuleTypeCodeValidator)
             {
                 // A member of an active threshold policy cannot be uninstalled
-                // while the policy still references it (spec §3.5).
-                ExecutionEngine.Assert(!IsMemberOfActivePolicy(accountId, moduleId), ErrorIntentConflict);
+                // while the policy still references it (spec §5).
+                ExecutionEngine.Assert(!IsMemberOfActivePolicy(module), ErrorIntentConflict);
                 // Callback first, while the instance is still installed and its
                 // phase authorization (0x58) is meaningful; a callback fault
                 // reverts the whole action.
@@ -710,7 +699,7 @@ namespace SmartAccount
             }
             if (wasThresholdMemberEligible && !module.ThresholdMemberEligible)
             {
-                ExecutionEngine.Assert(!IsMemberOfActivePolicy(accountId, moduleId), ErrorIntentConflict);
+                ExecutionEngine.Assert(!IsMemberOfActivePolicy(module), ErrorIntentConflict);
             }
             module.ModuleRevision += 1;
             PutModuleInstance(accountId, moduleId, module);
@@ -782,8 +771,8 @@ namespace SmartAccount
                     {
                         ExecutionEngine.Assert(memberIds[j] != memberIds[i], ErrorOperationMalformed);
                     }
-                    // No member of two active policies (spec §3.5).
-                    AssertNotMemberOfOtherActivePolicy(accountId, memberIds[i], policyId);
+                    // No member of two active policies (spec §5).
+                    AssertNotMemberOfOtherActivePolicy(member, policyId);
                 }
             }
             else
@@ -792,7 +781,35 @@ namespace SmartAccount
                 ExecutionEngine.Assert(memberIds.Length == 0, ErrorOperationMalformed);
             }
 
+            // Member-side back-pointer maintenance (spec §5): routing, uninstall
+            // and conflict checks read one 0x52 record instead of scanning the
+            // account's policies. Clearing runs first so a reshape that reuses a
+            // member ends with exactly one pointer; any fault rolls the whole
+            // set back with the enclosing transaction.
+            if (existing != null && existing!.Active)
+            {
+                for (int i = 0; i < existing.MemberIds.Length; i++)
+                {
+                    ModuleInstance? previous = GetModuleInstance(accountId, existing.MemberIds[i]);
+                    if (previous != null && previous!.ActivePolicyId == policyId)
+                    {
+                        previous.ActivePolicyId = BigInteger.Zero;
+                        PutModuleInstance(accountId, existing.MemberIds[i], previous!);
+                    }
+                }
+            }
+
             PutThresholdPolicy(accountId, policyId, policy);
+
+            if (active)
+            {
+                for (int i = 0; i < memberIds.Length; i++)
+                {
+                    ModuleInstance member = RequireModuleInstance(accountId, memberIds[i]);
+                    member.ActivePolicyId = policyId;
+                    PutModuleInstance(accountId, memberIds[i], member);
+                }
+            }
             OnThresholdPolicySet(accountId, policyId, policy.Threshold, policy.MemberIds);
         }
 
@@ -974,8 +991,15 @@ namespace SmartAccount
         private static ByteString ModuleIdResource(BigInteger moduleId) =>
             (ByteString)Helper.Concat(ResourceTagModuleId, ModuleIdKeyBytes(moduleId));
 
+        /// <summary>
+        /// <c>policy:&lt;id&gt;</c>. Unlike a module id, the policy id is not
+        /// necessarily allocated when the intent is proposed: <c>policyId 0</c>
+        /// means "allocate a fresh id at confirmation" (§9 table), so that
+        /// proposal claims the shared <c>policy:0</c> allocation resource
+        /// instead of an id the allocator has not issued yet.
+        /// </summary>
         private static ByteString PolicyResource(BigInteger policyId) =>
-            (ByteString)Helper.Concat(ResourceTagPolicy, ModuleIdKeyBytes(policyId));
+            (ByteString)Helper.Concat(ResourceTagPolicy, UInt64ToBigEndian((ulong)policyId));
 
         /// <summary>Bounded resource keys a configuration action reads or writes.</summary>
         private static ByteString[] ResourceKeysForAction(object[] action)
@@ -994,14 +1018,14 @@ namespace SmartAccount
                 case ActionSetDefaultPolicy:
                     return new ByteString[] { (ByteString)ResourceTagDefaultPolicy };
                 case ActionSetThresholdPolicy:
-                {
-                    BigInteger policyId = (BigInteger)action[1];
-                    BigInteger[] members = ToBigIntegerArray(action[3]);
-                    ByteString[] keys = new ByteString[members.Length + 1];
-                    keys[0] = PolicyResource(policyId);
-                    for (int i = 0; i < members.Length; i++) keys[i + 1] = ModuleIdResource(members[i]);
-                    return keys;
-                }
+                    {
+                        BigInteger policyId = (BigInteger)action[1];
+                        BigInteger[] members = ToBigIntegerArray(action[3]);
+                        ByteString[] keys = new ByteString[members.Length + 1];
+                        keys[0] = PolicyResource(policyId);
+                        for (int i = 0; i < members.Length; i++) keys[i + 1] = ModuleIdResource(members[i]);
+                        return keys;
+                    }
                 case ActionSetRecoveryPolicy:
                     return new ByteString[] { (ByteString)ResourceTagRecovery };
                 case ActionSetMessageSubjects:
@@ -1090,8 +1114,8 @@ namespace SmartAccount
             ApplicationContextRecord ctx = new ApplicationContextRecord();
             ctx.Phase = PhaseNone;
             ctx.ActiveModuleId = BigInteger.Zero;
-            ctx.ValidationBudgetRemaining = ValidationAggregateGasLimit;
-            ctx.CompletionBudgetRemaining = ValidatorCompletionGasLimit;
+            ctx.ValidationBudgetRemaining = ValidationAggregateGasLimit();
+            ctx.CompletionBudgetRemaining = CompletionAggregateGasLimit();
             ctx.HookBudgetRemaining = HookAggregateGasBudget();
             EnterConfigurationContext();
             SaveApplicationContext(accountId, ctx);
@@ -1158,6 +1182,23 @@ namespace SmartAccount
         private static BigInteger HookAggregateGasBudget()
         {
             return (BigInteger)HookCallbackGasLimit * MaxHookModuleInstances;
+        }
+
+        // Validation and completion pools follow the SAME multiplicity rule: one
+        // maximal threshold round (the routed validator plus every permitted
+        // member) must always fit. A flat 1 GAS pool made any policy with two
+        // P-256 members unusable — each member callback alone costs more than
+        // half of it — while the core advertises up to MaxThresholdPolicyMembers
+        // co-signers (spec §3.5/§11). The per-call cap, not the pool, is the
+        // bound on an individual module.
+        private static BigInteger ValidationAggregateGasLimit()
+        {
+            return (BigInteger)ValidationPerCallGasLimit * (1 + MaxThresholdPolicyMembers);
+        }
+
+        private static BigInteger CompletionAggregateGasLimit()
+        {
+            return (BigInteger)CompletionPerCallGasLimit * (1 + MaxThresholdPolicyMembers);
         }
 
         // Gas pool selectors. Hooks are deliberately their own pool: a
@@ -1348,13 +1389,18 @@ namespace SmartAccount
             object[] operation, ByteString operationDigest)
         {
             AssertCodeBindingUnchanged(module);
-            long gasBefore = PrepareCallbackBudget(ctx, GasPoolValidation, ValidationAggregateGasLimit);
+            long gasBefore = PrepareCallbackBudget(ctx, GasPoolValidation, ValidationPerCallGasLimit);
             EnterModulePhase(accountId, ctx, PhaseValidation, moduleId);
-            bool accepted = (bool)CallModuleGasCapped(
-                module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationAggregateGasLimit,
+            object reply = CallModuleGasCapped(
+                module.ContractHash, "validateUserOp", CallFlags.ReadOnly, ValidationPerCallGasLimit,
                 new object[] { accountId, operationDigest, BuildCanonicalOperationView(operation) });
-            ChargeCallbackGas(ctx, GasPoolValidation, gasBefore, ValidationAggregateGasLimit);
-            return accepted;
+            ChargeCallbackGas(ctx, GasPoolValidation, gasBefore, ValidationPerCallGasLimit);
+            // Approval is exactly Boolean true (§9 ABI). A reply of any other
+            // type violates the callback surface pinned at install
+            // (AssertModuleCallbackAbi), so it faults instead of being
+            // truthiness-coerced into an approval.
+            ExecutionEngine.Assert(reply is bool, ErrorModuleTypeUnsupported);
+            return (bool)reply;
         }
 
         /// <summary>
@@ -1366,12 +1412,12 @@ namespace SmartAccount
             object[] operation, object result)
         {
             AssertCodeBindingUnchanged(module);
-            long gasBefore = PrepareCallbackBudget(ctx, GasPoolCompletion, ValidatorCompletionGasLimit);
+            long gasBefore = PrepareCallbackBudget(ctx, GasPoolCompletion, CompletionPerCallGasLimit);
             EnterModulePhase(accountId, ctx, PhaseCompletion, moduleId);
             CallModuleGasCapped(
-                module.ContractHash, "onUserOpComplete", CallFlags.All, ValidatorCompletionGasLimit,
+                module.ContractHash, "onUserOpComplete", CallFlags.All, CompletionPerCallGasLimit,
                 new object[] { accountId, BuildCanonicalOperationView(operation), CloneCallbackValue(result)! });
-            ChargeCallbackGas(ctx, GasPoolCompletion, gasBefore, ValidatorCompletionGasLimit);
+            ChargeCallbackGas(ctx, GasPoolCompletion, gasBefore, CompletionPerCallGasLimit);
         }
 
         /// <summary>
@@ -1387,12 +1433,16 @@ namespace SmartAccount
             AssertCodeBindingUnchanged(module);
             long gasBefore = PrepareCallbackBudget(ctx, GasPoolHook, HookCallbackGasLimit);
             EnterModulePhase(accountId, ctx, PhaseHookPre, moduleId);
-            ByteString? hookData = (ByteString?)CallModuleGasCapped(
+            object? reply = CallModuleGasCapped(
                 module.ContractHash, "preCheck", CallFlags.All, HookCallbackGasLimit,
                 new object[] { accountId, BuildCanonicalOperationView(operation) });
             ChargeCallbackGas(ctx, GasPoolHook, gasBefore, HookCallbackGasLimit);
-            if (hookData == null) return (ByteString)new byte[0];
-            ExecutionEngine.Assert(hookData!.Length <= HookDataBytesMax, ErrorHookDataTooLarge);
+            if (reply == null) return (ByteString)new byte[0];
+            // Same strict reply rule as the validator callbacks (§11): hookData is
+            // ByteArray by ABI, so any other reply type is an ABI violation.
+            ExecutionEngine.Assert(reply is ByteString, ErrorModuleTypeUnsupported);
+            ByteString hookData = (ByteString)reply;
+            ExecutionEngine.Assert(hookData.Length <= HookDataBytesMax, ErrorHookDataTooLarge);
             return hookData;
         }
 

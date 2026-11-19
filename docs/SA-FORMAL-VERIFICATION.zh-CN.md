@@ -12,7 +12,10 @@
 蒸馏：RefinementExport 清单重新运行，`cap-method-source.json`、`initializer-source.json` 与
 `current-initializer-source.json` 重新蒸馏，current-method-proof 回执针对新的内核重新生成，
 方法／上下文泳道常量重新固定，五形状 helper-gas 运行时捕获针对新工件（NEF `9f714866…`、
-manifest `a6533d47…`）重新生成。被退役的清理前 getter 形状已不复存在：`storage_getter_source.py`
+manifest `a6533d47…`）重新生成。2026-11-19 的 v4 重建再次移动了工件，
+NEF 变为 `2887bad3…` ／ manifest 变为 `f44cddeb…`；本文档列出的每条泳道常量、fixture 与回执都已
+针对该工件重新固定或重新蒸馏，唯独归档的 helper-gas 运行时捕获仍然固定 `9f714866…`，因此在新捕获
+产生之前保持失败关闭。被退役的清理前 getter 形状已不复存在：`storage_getter_source.py`
 不再携带 `legacy_symbol` / `inline-fallback` 形式，该泳道的源码级语义控制现在改为前缀／默认绑定
 变异体，遗留的读取顺序控制已从泳道、闭合门禁与回归套件中移除。
 
@@ -594,7 +597,7 @@ manifest-group 签名，或整个 NeoVM。
 | `formal/coq/CustomRecovery.v` | **公开 V3/PLATFORM 源码候选：** 无回调恢复与不可逆的仅所有者锁存，并带投影的身份／nonce 保持；没有存储或全入口点精化 |
 | `formal/coq/NativeCompositePhase.v` | **仅原生 ABI 2：** 首阈值选择、单操作回执所有权与丢弃、已批准子项授予、全活跃固定，以及 3/2/2/3 界下的前／后策略相等；没有字节复制、哈希、密码学或 gas 可行性精化 |
 | `formal/coq/ProxyWitnessScript.v` | 代理见证交易脚本解析器的字节级模型（`ScriptIsSingleExecuteCall`、`ScriptPrefixIsDataPushes`、`DataPushInstructionSize`）：被接受的脚本是一段 data-push 行走，恰好落在期望的直接 `executeUserOp`/`executeUserOps` 调用及其双参数 pack 上，该行走中的每个指令起点都是 data-push 操作码（因此核心调用之前没有 SYSCALL/CALL/JMP/TRY），接受会绑定账户 id 与核心哈希，规范形状可达，而前导非 push 操作码、外来账户 id、越界 CallFlags push 与尾随指令都会被拒绝 |
-| `formal/coq/CallbackPluginTopology.v` | 六字段 hook 回调元组、已配置与缺失回调阶段、成功／回调顺序、CalledByEntry/Custom 目标绑定，以及故障即闭合的插件清理／轮换的闭合抽象对应模型；它不是 NeoVM 派发或任意插件存储的证明 |
+| `formal/coq/CallbackPluginTopology.v` | 六字段 hook 回调元组、已配置与缺失回调阶段、成功／回调顺序、CalledByEntry/Custom 目标绑定，以及故障即闭合的插件清理／轮换的闭合抽象对应模型；它不是 NeoVM 派发或任意插件存储的证明。它固定的元组即 `BuildHookOperationParams(UserOperation, object[])` 产出的那一个，而该构造器在 v4 中不存在：v4 的 hook 是经由 `CallHookPreCheck` ／ `CallHookPostCheck` 触达的模块回调，目前没有任何 Coq 产物对其建模 |
 | `formal/coq/VerifierGasBudget.v` | **仅有界 PLATFORM／原生 profile：** 有界回调收费的闭合抽象模型：每次收费在变更之前检查回调与全部祖先预算，耗尽具有原子性，嵌套回调无法逃出祖先上限；不适用于 `public` |
 | `formal/coq/AuthorizationEvidence.v` | 针对密码学、原生见证、证明与证明证据的闭合协议级绑定与重放模型；原始有效性是显式 oracle，因此这不是 ECDSA、见证规则求值、证明或 ZK 健全性的证明 |
 | `formal/coq/AttestationProofBinding.v` | 证明与零知识证据的闭合协议信封模型：账户、目标、nonce、发行方、度量承诺、非零 nullifier 与单次使用绑定；原始密码学与证明有效性仍是显式 oracle 输入 |
@@ -691,7 +694,7 @@ MultiSig 模型另行证明有限策略层：非空、至多十、非零／不�
 
 清理模型证明故障即闭合的状态转移，而不是恢复可用性：`finalizeEscape` 仍依赖旧验证器与 hook 的
 成功清理。2026-10-08 的源码在这些回调之前验证替换验证器，但没有引入紧急脱离，也不保证越过恶意
-旧模块取得进展。`CallVerifierChild` 及其显式的 `getChildVerifierConfig` 能力不在已部署核心
+旧模块取得进展。`CallVerifierChild` 及其显式的 `getChildVerifierConfig` 能力不存在于已部署核心
 manifest（`contracts/build/SmartAccount.manifest.json`）中，尽管它们记录在源码快照中并在 NeoVM
 中测试过；两者都在当前抽象模型之外。那些模型不证明这条新路径的子配置 ABI、核心／拓扑绑定、
 待处理调用序列化或时间锁强制。项目文件与 profile 构建 recipe 也被固定，因此改变源码选择会使快照

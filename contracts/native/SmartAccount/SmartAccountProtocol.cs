@@ -13,6 +13,7 @@
 // contract file. The neo-native-core checkout carries a generated copy —
 // regenerate it via scripts/sync_native_smartaccount.py.
 
+using Neo.Cryptography;
 using Neo.Extensions;
 using Neo.VM;
 using Neo.VM.Types;
@@ -27,44 +28,66 @@ using Boolean = Neo.VM.Types.Boolean;
 
 namespace Neo.SmartContract.Native
 {
-    /// <summary>State-independent identity, signing and nonce encoding for native SmartAccount ABI 2.</summary>
+    /// <summary>
+    /// State-independent identity, signing, envelope and key encoding for the
+    /// native SmartAccount kernel under SA module protocol v4.
+    ///
+    /// Everything in this file is byte-for-byte shared with the custom kernel
+    /// (docs/SA-MODULE-PROTOCOL.md §4.2/§4.3/§6/§7.1): the operation digest,
+    /// the canonical unsigned operation bytes, the derived 191-bit nonce
+    /// channel and the 0x50–0x5E storage keys. The two kernels must produce the
+    /// same bytes for the same inputs; a divergence here is a protocol defect,
+    /// not an implementation choice.
+    /// </summary>
     internal static class SmartAccountProtocol
     {
-        internal const byte Version = 2;
-        internal const byte IdentityVersion = 1;
-        internal const byte AuthorizationVersion = 2;
-        internal const int SaltSize = 32;
-        internal const int MethodBytesMax = 128;
-        internal const int ArgumentCountMax = 64;
-        internal const int ArgumentSizeMax = 4096;
-        internal const int ArgumentDepthMax = 8;
-        internal const int SignatureBytesMax = 1024;
-        private const int ChannelSize = 24;
-        private const byte AccountPrefix = 0x10;
-        private const byte NoncePrefix = 0x20;
-        private const int UnsignedOperationSizeMax = 2 + 2 + UInt160.Length + 2 + MethodBytesMax
-            + ArgumentSizeMax + 2 * (2 + Integer.MaxSize) + 2;
+        internal const byte Version = SmartAccountModuleProtocol.ModuleProtocolVersion;
 
-        private static readonly byte[] ServiceHashBytes = Helper.GetContractHash(UInt160.Zero, 0, "SmartAccount").ToArray();
+        // ------------------------------------------------------------------
+        // 1. Account identity (spec §16.1: custody + salt)
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// v4 account identity domain, identical to the custom kernel's
+        /// AccountIdentityDomainV4 so both kernels derive the same account id
+        /// for the same (custody, salt).
+        /// </summary>
+        internal static readonly byte[] AccountIdentityDomain = { 0xAA, 0x52, 0x47, 0x04 };
+        internal const int SaltMinBytes = 1;
+        internal const int SaltMaxBytes = 128;
+
+        private static readonly byte[] ServiceHashBytes =
+            Helper.GetContractHash(UInt160.Zero, 0, "SmartAccount").ToArray();
         internal static UInt160 ServiceHash => new(ServiceHashBytes);
-        private static readonly BigInteger IntegerLimit = BigInteger.One << 255;
-        private static readonly BigInteger ChannelLimit = BigInteger.One << 191;
-        internal static readonly BigInteger ExhaustedSequence = BigInteger.One << 64;
 
-        internal static UInt160 GetAccountId(uint network, UInt160 custody, ReadOnlySpan<byte> salt)
+        /// <summary>
+        /// Deterministic v4 identity: the raw UInt160 bytes are
+        /// RIPEMD160(SHA256(domain ‖ custody ‖ salt)) reversed — exactly the
+        /// custom kernel's ComputeAccountIdentity.
+        /// </summary>
+        internal static UInt160 GetAccountId(UInt160 custody, ReadOnlySpan<byte> salt)
         {
             RequireIdentity(custody);
-            if (salt.Length != SaltSize)
-                throw new FormatException("The account salt must contain exactly 32 bytes.");
-            byte[] domain = CreateDomain("NeoSmartAccount"u8, IdentityVersion, network, custody);
-            byte[] material = new byte[domain.Length + salt.Length];
-            domain.CopyTo(material, 0);
-            salt.CopyTo(material.AsSpan(domain.Length));
-            UInt160 result = material.ToScriptHash();
+            if (salt.Length < SaltMinBytes || salt.Length > SaltMaxBytes)
+                throw new FormatException("The registration salt must contain 1 through 128 bytes.");
+            byte[] payload = new byte[AccountIdentityDomain.Length + UInt160.Length + salt.Length];
+            AccountIdentityDomain.CopyTo(payload, 0);
+            custody.ToArray().CopyTo(payload, AccountIdentityDomain.Length);
+            salt.CopyTo(payload.AsSpan(AccountIdentityDomain.Length + UInt160.Length));
+            byte[] digest = payload.Sha256().RIPEMD160();
+            byte[] raw = new byte[UInt160.Length];
+            for (int i = 0; i < UInt160.Length; i++) raw[i] = digest[UInt160.Length - 1 - i];
+            UInt160 result = new(raw);
             RequireIdentity(result);
             return result;
         }
 
+        /// <summary>
+        /// The fixed proxy verification script of an account:
+        /// PUSHDATA1 20 accountId, PUSH1 PACK PUSH15, PUSHDATA1 "verify",
+        /// PUSHDATA1 core, SYSCALL System.Contract.Call. Byte-identical to the
+        /// custom kernel's BuildProxyVerificationScript.
+        /// </summary>
         internal static byte[] CreateVerificationScript(UInt160 accountId)
         {
             RequireIdentity(accountId);
@@ -73,49 +96,67 @@ namespace Neo.SmartContract.Native
             return builder.ToArray();
         }
 
-        internal static UInt160 GetAccountAddress(UInt160 accountId) => CreateVerificationScript(accountId).ToScriptHash();
+        internal static UInt160 GetAccountAddress(UInt160 accountId) =>
+            CreateVerificationScript(accountId).ToScriptHash();
 
-        internal static byte[] GetAuthorizationDomain(uint network, UInt160 accountId, ulong authorityEpoch, ulong configurationNonce)
+        // ------------------------------------------------------------------
+        // 2. Canonical operation and digest (spec §4.2/§4.3)
+        // ------------------------------------------------------------------
+
+        internal static readonly byte[] UserOperationDomain =
+            "NeoSmartAccount/UserOperation"u8.ToArray();
+
+        /// <summary>
+        /// §4.3 operation digest: SHA256( domain ‖ canonical unsigned operation )
+        /// with domain = UTF8("NeoSmartAccount/UserOperation") ‖ U1(version) ‖
+        /// U32LE(network) ‖ coreHash ‖ accountId ‖ U64BE(validatorId) ‖
+        /// U64BE(credentialGeneration) ‖ U64BE(authorityEpoch) ‖
+        /// U64BE(configurationNonce). The core hash is the ACTUAL executing core.
+        /// </summary>
+        internal static byte[] ComputeOperationDigest(uint network, UInt160 coreHash, UInt160 accountId,
+            StackItem operation, BigInteger validatorId, BigInteger credentialGeneration,
+            BigInteger authorityEpoch, BigInteger configurationNonce)
         {
-            RequireIdentity(accountId);
-            byte[] domain = CreateDomain("NeoSmartAccount/UserOperation"u8, AuthorizationVersion, network, accountId);
-            byte[] result = new byte[domain.Length + 2 * sizeof(ulong)];
-            domain.CopyTo(result, 0);
-            BinaryPrimitives.WriteUInt64LittleEndian(result.AsSpan(domain.Length), authorityEpoch);
-            BinaryPrimitives.WriteUInt64LittleEndian(result.AsSpan(domain.Length + sizeof(ulong)), configurationNonce);
-            return result;
+            byte[] domain = Concat(
+                UserOperationDomain, new[] { Version }, UInt32Le(network), coreHash.ToArray(),
+                accountId.ToArray(), UInt64Be(validatorId), UInt64Be(credentialGeneration),
+                UInt64Be(authorityEpoch), UInt64Be(configurationNonce));
+            return SHA256.HashData(Concat(domain, SerializeCanonicalOperation(operation)));
         }
 
-        private static byte[] CreateDomain(ReadOnlySpan<byte> prefix, byte version, uint network, UInt160 identity)
+        /// <summary>
+        /// NeoVM binary serialization of the 13-field operation with field 11
+        /// replaced by the empty ByteString (§4.2).
+        /// </summary>
+        internal static byte[] SerializeCanonicalOperation(StackItem operation)
         {
-            byte[] result = new byte[prefix.Length + 1 + sizeof(uint) + 2 * UInt160.Length];
-            prefix.CopyTo(result);
-            int offset = prefix.Length;
-            result[offset++] = version;
-            BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(offset), network);
-            offset += sizeof(uint);
-            ServiceHash.ToArray().CopyTo(result, offset);
-            identity.ToArray().CopyTo(result, offset + UInt160.Length);
-            return result;
+            Array op = ValidateUserOperation(operation);
+            Array canonical = new();
+            for (int i = 0; i < SmartAccountModuleProtocol.UserOperationFieldCount; i++)
+                canonical.Add(i == SmartAccountModuleProtocol.OpSignature ? ByteString.Empty : op[i]);
+            return BinarySerializer.Serialize(canonical,
+                SmartAccountModuleProtocol.OperationEncodedSizeMax,
+                SmartAccountModuleProtocol.OperationEncodedSizeMax);
         }
 
-        internal static byte[] GetOperationDigest(uint network, UInt160 accountId, StackItem operation, ulong authorityEpoch, ulong configurationNonce)
+        /// <summary>
+        /// Strict 13-field v4 envelope validation (§4.1): exact Array shape, no
+        /// Struct, every field inside its declared domain, hook proofs unique
+        /// and strictly ascending. Returns the same Array for chaining.
+        /// </summary>
+        internal static Array ValidateUserOperation(StackItem operation)
         {
-            byte[] domain = GetAuthorizationDomain(network, accountId, authorityEpoch, configurationNonce);
-            byte[] serialized = SerializeUnsignedOperation(operation);
-            byte[] message = new byte[domain.Length + serialized.Length];
-            domain.CopyTo(message, 0);
-            serialized.CopyTo(message, domain.Length);
-            return SHA256.HashData(message);
-        }
-
-        internal static byte[] SerializeUnsignedOperation(StackItem operation)
-        {
-            if (operation.Type != StackItemType.Array || operation is not Array op || op.Count != 6)
-                throw new FormatException("A UserOperation must be an Array with exactly six fields.");
-            if (op[0] is not ByteString target || target.Size != UInt160.Length || new UInt160(target.GetSpan()) == UInt160.Zero)
+            if (operation.Type != StackItemType.Array || operation is not Array op
+                || op.Count != SmartAccountModuleProtocol.UserOperationFieldCount)
+                throw new FormatException("A v4 UserOperation must be an Array with exactly thirteen fields.");
+            if (op[SmartAccountModuleProtocol.OpVersion] is not Integer version
+                || version.GetInteger() != SmartAccountModuleProtocol.ModuleProtocolVersion)
+                throw new FormatException("The operation version must be the integer protocol version 4.");
+            if (op[SmartAccountModuleProtocol.OpTarget] is not ByteString target
+                || target.Size != UInt160.Length || new UInt160(target.GetSpan()) == UInt160.Zero)
                 throw new FormatException("The operation target must be a nonzero 20-byte ByteString.");
-            if (op[1] is not ByteString method || method.Size is 0 or > MethodBytesMax)
+            if (op[SmartAccountModuleProtocol.OpMethod] is not ByteString method
+                || method.Size is 0 or > SmartAccountModuleProtocol.MethodBytesMax)
                 throw new FormatException("The operation method must contain 1 through 128 UTF-8 bytes.");
             try
             {
@@ -125,107 +166,276 @@ namespace Neo.SmartContract.Native
             {
                 throw new FormatException("The operation method must use strict UTF-8.", exception);
             }
-            if (op[2].Type != StackItemType.Array || op[2] is not Array args || args.Count > ArgumentCountMax)
-                throw new FormatException("Operation arguments must be an Array containing at most 64 values.");
-            if (op[3] is not Integer nonce || op[4] is not Integer deadline)
-                throw new FormatException("The nonce and deadline must have the Integer type.");
-            RequireUnsignedInteger(nonce.GetInteger());
-            RequireUnsignedInteger(deadline.GetInteger());
-            if (op[5] is not ByteString signature || signature.Size > SignatureBytesMax)
-                throw new FormatException("The signature must be a ByteString containing at most 1024 bytes.");
-
-            int size = 0;
-            HashSet<Array> seen = new(ReferenceEqualityComparer.Instance);
-            ValidateArgument(args, 0, seen, ref size);
-            Array unsigned = new([op[0], op[1], args, nonce, deadline, ByteString.Empty]);
-            return BinarySerializer.Serialize(unsigned, UnsignedOperationSizeMax, UnsignedOperationSizeMax);
+            if (op[SmartAccountModuleProtocol.OpArgs].Type != StackItemType.Array
+                || op[SmartAccountModuleProtocol.OpArgs] is not Array args
+                || args.Count > SmartAccountModuleProtocol.ArgsCountMax)
+                throw new FormatException("Operation arguments must be an Array of at most 64 values.");
+            _ = ValidateArgument(args, 0, new HashSet<Array>(ReferenceEqualityComparer.Instance), 0);
+            // [4] nonce — 191-bit channel ‖ 64-bit sequence, non-negative < 2^255
+            // (§4.1). The channel is derived, never chosen (§6), so the field is
+            // a packed 255-bit value, not a plain 64-bit sequence.
+            if (op[SmartAccountModuleProtocol.OpNonce] is not Integer packed
+                || packed.GetInteger() < 0 || packed.GetInteger() >= MaxNonce)
+                throw new FormatException("The nonce must be a non-negative 191-bit channel and 64-bit sequence.");
+            if (op[SmartAccountModuleProtocol.OpNonceSubkey] is not ByteString subkey
+                || subkey.Size != SmartAccountModuleProtocol.NonceSubkeySize)
+                throw new FormatException("The nonce subkey must be exactly 32 bytes.");
+            if (op[SmartAccountModuleProtocol.OpDeadline] is not Integer deadline
+                || deadline.GetInteger() < 0 || deadline.GetInteger() >= BigInteger.One << 255)
+                throw new FormatException("The deadline must be a non-negative signed 256-bit Integer.");
+            RequireUnsigned64(op[SmartAccountModuleProtocol.OpValidatorId], "validatorId");
+            RequireUnsigned64(op[SmartAccountModuleProtocol.OpCredentialGeneration], "credentialGeneration");
+            RequireUnsigned64(op[SmartAccountModuleProtocol.OpAuthorityEpoch], "authorityEpoch");
+            RequireUnsigned64(op[SmartAccountModuleProtocol.OpConfigurationNonce], "configurationNonce");
+            if (op[SmartAccountModuleProtocol.OpSignature] is not ByteString signature
+                || signature.Size is 0 or > SmartAccountModuleProtocol.SignatureBytesMax)
+                throw new FormatException("The signature must be a ByteString of 1 through 8192 bytes.");
+            ValidateHookProofs(op[SmartAccountModuleProtocol.OpHookProofs]);
+            return op;
         }
 
-        private static void ValidateArgument(StackItem item, int depth, HashSet<Array> seen, ref int size)
+        private static void ValidateHookProofs(StackItem item)
+        {
+            if (item.Type != StackItemType.Array || item is not Array proofs
+                || proofs.Count > SmartAccountModuleProtocol.HookProofsEntriesMax)
+                throw new FormatException("Hook proofs must be an Array of at most 8 entries.");
+            int aggregate = 0;
+            BigInteger previous = BigInteger.Zero;
+            for (int i = 0; i < proofs.Count; i++)
+            {
+                if (proofs[i].Type != StackItemType.Array || proofs[i] is not Array pair || pair.Count != 2)
+                    throw new FormatException("Each hook proof is an Array pair [hookId, proof].");
+                if (pair[0] is not Integer hookId || hookId.GetInteger() <= 0 || hookId.GetInteger() > ulong.MaxValue)
+                    throw new FormatException("A hook proof id must be a positive 64-bit Integer.");
+                if (i > 0 && hookId.GetInteger() <= previous)
+                    throw new FormatException("Hook proof ids must be unique and strictly ascending.");
+                previous = hookId.GetInteger();
+                if (pair[1] is not ByteString proof)
+                    throw new FormatException("A hook proof must be a ByteString.");
+                aggregate += proof.Size;
+            }
+            if (aggregate > SmartAccountModuleProtocol.HookProofBytesMax)
+                throw new FormatException("Aggregate hook proof bytes exceed 4096.");
+        }
+
+        /// <summary>
+        /// Bounds nested argument arrays (§4.1): Null/Boolean/Integer/ByteString/
+        /// Array only, depth ≤ 8, unique container references, serialized ≤ 4096
+        /// bytes. Containers must be strict Arrays — a Struct anywhere is
+        /// rejected. Returns the accumulated serialized size.
+        /// </summary>
+        private static int ValidateArgument(StackItem item, int depth, HashSet<Array> seen, int size)
         {
             switch (item)
             {
                 case Null:
-                    Charge(1, ref size);
-                    break;
+                    return Charge(size, 1);
                 case Boolean:
-                    Charge(2, ref size);
-                    break;
+                    return Charge(size, 2);
                 case Integer:
                 case ByteString:
                     int length = item.GetSpan().Length;
-                    Charge(1L + VarIntSize(length) + length, ref size);
-                    break;
+                    return Charge(size, 1 + VarIntSize(length) + length);
                 case Array array:
-                    if (depth > ArgumentDepthMax || !seen.Add(array))
-                        throw new FormatException("Argument containers must have bounded depth and unique references.");
-                    Charge(1 + VarIntSize(array.Count), ref size);
-                    if (array.Count > ArgumentSizeMax - size)
-                        throw new FormatException("Serialized arguments exceed 4096 bytes.");
+                    if (item.Type != StackItemType.Array
+                        || depth >= SmartAccountModuleProtocol.ArgsDepthMax || !seen.Add(array))
+                        throw new FormatException("Argument containers must be strictly Arrays of bounded depth with unique references.");
+                    size = Charge(size, 1 + VarIntSize(array.Count));
                     foreach (StackItem child in array)
-                        ValidateArgument(child, depth + 1, seen, ref size);
-                    break;
+                        size = ValidateArgument(child, depth + 1, seen, size);
+                    return size;
                 default:
-                    throw new FormatException("The argument type is not supported by SmartAccount ABI 2.");
+                    throw new FormatException("The operation argument type is not supported by protocol v4.");
             }
         }
 
         private static int VarIntSize(int value) => value < 0xfd ? 1 : value <= ushort.MaxValue ? 3 : 5;
 
-        private static void Charge(long bytes, ref int size)
+        private static int Charge(int size, int bytes)
         {
-            if (bytes > ArgumentSizeMax - size)
+            if (bytes > SmartAccountModuleProtocol.ArgsSerializedSizeMax - size)
                 throw new FormatException("Serialized arguments exceed 4096 bytes.");
-            size += (int)bytes;
+            return size + bytes;
         }
 
-        internal static (BigInteger Channel, ulong Sequence) GetNonceParts(BigInteger nonce)
+        // ------------------------------------------------------------------
+        // 3. Derived nonce namespace and 191-bit channel (spec §6)
+        // ------------------------------------------------------------------
+
+        internal static readonly BigInteger UInt64Mask = (BigInteger.One << 64) - 1;
+        internal static readonly BigInteger ChannelMask = (BigInteger.One << 191) - 1;
+        /// <summary>The exclusive upper bound of a packed nonce and of a deadline.</summary>
+        internal static readonly BigInteger MaxNonce = BigInteger.One << 255;
+
+        /// <summary>
+        /// Full 256-bit nonce-namespace derivation (§6), persisted under 0x5C so
+        /// a channel truncation collision fails closed instead of merging two
+        /// signers' sequences.
+        /// </summary>
+        internal static byte[] ComputeNonceNamespaceDigest(UInt160 accountId, UInt160 coreHash,
+            BigInteger authorityEpoch, BigInteger validatorId, BigInteger credentialGeneration,
+            ReadOnlySpan<byte> nonceSubkey)
         {
-            RequireUnsignedInteger(nonce);
-            return (nonce >> 64, (ulong)(nonce & ulong.MaxValue));
+            return SHA256.HashData(Concat(
+                new[] { Version }, coreHash.ToArray(), accountId.ToArray(),
+                UInt64Be(authorityEpoch), UInt64Be(validatorId), UInt64Be(credentialGeneration),
+                nonceSubkey.ToArray()));
         }
 
-        internal static BigInteger ConsumeNonce(BigInteger nonce, BigInteger nextSequence)
+        /// <summary>
+        /// Derived 191-bit channel bytes (24 bytes, top 7 bits zero): the low
+        /// 191 bits of the namespace digest. Signers never choose a channel.
+        /// </summary>
+        internal static byte[] DeriveChannel(ReadOnlySpan<byte> namespaceDigest)
         {
-            var (_, sequence) = GetNonceParts(nonce);
-            if (nextSequence < 0 || nextSequence > ExhaustedSequence)
-                throw new FormatException("The stored nonce cursor is outside the sequence or exhaustion domain.");
-            if (nextSequence == ExhaustedSequence || sequence != nextSequence)
-                throw new InvalidOperationException("The nonce channel is exhausted or the sequence is not current.");
-            return nextSequence + 1;
+            if (namespaceDigest.Length != 32)
+                throw new FormatException("A namespace digest is exactly 32 bytes.");
+            byte[] channel = new byte[SmartAccountModuleProtocol.NonceChannelSize];
+            channel[0] = (byte)(namespaceDigest[8] & 0x01);
+            for (int i = 1; i < channel.Length; i++)
+                channel[i] = namespaceDigest[8 + i];
+            return channel;
         }
 
-        internal static byte[] GetAccountKey(UInt160 accountId)
+        /// <summary>The 256-bit nonce: channel in the high 191 bits, sequence in the low 64.</summary>
+        internal static BigInteger EncodeNonce(ReadOnlySpan<byte> channel, ulong sequence)
         {
-            RequireIdentity(accountId);
-            byte[] result = new byte[1 + UInt160.Length];
-            result[0] = AccountPrefix;
-            accountId.ToArray().CopyTo(result, 1);
+            BigInteger value = BigInteger.Zero;
+            for (int i = 0; i < channel.Length; i++)
+                value = (value << 8) | channel[i];
+            value &= ChannelMask;
+            return (value << 64) | sequence;
+        }
+
+        internal static byte[] ChannelFromNonce(BigInteger nonce)
+        {
+            RequireNonceValue(nonce, "nonce");
+            BigInteger channel = nonce >> 64;
+            byte[] encoded = new byte[SmartAccountModuleProtocol.NonceChannelSize];
+            for (int i = encoded.Length - 1; i >= 0; i--)
+            {
+                encoded[i] = (byte)(channel & 0xFF);
+                channel >>= 8;
+            }
+            return encoded;
+        }
+
+        internal static ulong SequenceFromNonce(BigInteger nonce)
+        {
+            RequireNonceValue(nonce, "nonce");
+            return (ulong)(nonce & UInt64Mask);
+        }
+
+        /// <summary>A packed nonce is non-negative and below 2^255 (§4.1).</summary>
+        internal static void RequireNonceValue(BigInteger value, string field)
+        {
+            if (value < 0 || value >= MaxNonce)
+                throw new FormatException($"The {field} must be a non-negative 255-bit Integer.");
+        }
+
+        // ------------------------------------------------------------------
+        // 4. Canonical storage keys (spec §7.1)
+        //    The content builders live in SmartAccountModuleProtocol (paired
+        //    with the custom kernel); every full key is one prefix byte plus
+        //    that content.
+        // ------------------------------------------------------------------
+
+        internal static byte[] GetProtocolKey() => new byte[] { SmartAccountModuleProtocol.PrefixProtocolInfo };
+        internal static byte[] GetAccountControlKey(UInt160 accountId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixAccountControl, SmartAccountModuleProtocol.AccountControlKeyContent(accountId));
+        internal static byte[] GetModuleInstanceKey(UInt160 accountId, BigInteger moduleId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixModuleInstance,
+                SmartAccountModuleProtocol.ModuleInstanceKeyContent(accountId, UInt64(moduleId)));
+        internal static byte[] GetModuleIndexKey(UInt160 accountId, byte moduleType, BigInteger moduleId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixModuleIndex,
+                SmartAccountModuleProtocol.ModuleIndexKeyContent(accountId, moduleType, UInt64(moduleId)));
+        internal static byte[] GetHookOrderKey(UInt160 accountId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixHookOrder, SmartAccountModuleProtocol.HookOrderKeyContent(accountId));
+        internal static byte[] GetConfigIntentKey(UInt160 accountId, BigInteger intentId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixConfigIntent,
+                SmartAccountModuleProtocol.ConfigIntentKeyContent(accountId, UInt64(intentId)));
+        internal static byte[] GetConfigIntentIndexKey(UInt160 accountId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixConfigIntentIndex,
+                SmartAccountModuleProtocol.ConfigIntentIndexKeyContent(accountId));
+        internal static byte[] GetNonceCursorKey(UInt160 accountId, ReadOnlySpan<byte> channel) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixNonceCursor,
+                SmartAccountModuleProtocol.NonceCursorKeyContent(accountId, channel));
+        internal static byte[] GetNonceNamespaceKey(UInt160 accountId, ReadOnlySpan<byte> channel) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixNonceNamespace,
+                SmartAccountModuleProtocol.NonceNamespaceKeyContent(accountId, channel));
+        internal static byte[] GetMessageSubjectKey(UInt160 accountId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixMessageSubject,
+                SmartAccountModuleProtocol.MessageSubjectKeyContent(accountId));
+        internal static byte[] GetCoreRecoveryKey(UInt160 accountId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixCoreRecovery,
+                SmartAccountModuleProtocol.CoreRecoveryKeyContent(accountId));
+        internal static byte[] GetMigrationStateKey(UInt160 accountId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixMigrationState,
+                SmartAccountModuleProtocol.MigrationStateKeyContent(accountId));
+        internal static byte[] GetThresholdPolicyKey(UInt160 accountId, BigInteger policyId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixThresholdPolicy,
+                SmartAccountModuleProtocol.ThresholdPolicyKeyContent(accountId, UInt64(policyId)));
+
+        private static byte[] Prefixed(byte prefix, byte[] content)
+        {
+            byte[] result = new byte[content.Length + 1];
+            result[0] = prefix;
+            content.CopyTo(result, 1);
             return result;
         }
 
-        internal static byte[] GetNonceKey(UInt160 accountId, BigInteger channel)
+        // ------------------------------------------------------------------
+        // 5. Encoding helpers shared by the record codecs
+        // ------------------------------------------------------------------
+
+        internal static byte[] UInt64Be(BigInteger value)
         {
-            RequireIdentity(accountId);
-            if (channel < 0 || channel >= ChannelLimit)
-                throw new FormatException("The nonce channel must be a non-negative 191-bit value.");
-            byte[] result = new byte[1 + UInt160.Length + ChannelSize];
-            result[0] = NoncePrefix;
-            accountId.ToArray().CopyTo(result, 1);
-            byte[] encoded = channel.ToByteArray(isUnsigned: true, isBigEndian: true);
-            encoded.CopyTo(result, result.Length - encoded.Length);
+            RequireUnsigned64Value(value, "integer");
+            return SmartAccountModuleProtocol.UInt64ToBigEndian((ulong)value);
+        }
+
+        internal static ulong UInt64(BigInteger value)
+        {
+            RequireUnsigned64Value(value, "integer");
+            return (ulong)value;
+        }
+
+        internal static void RequireUnsigned64Value(BigInteger value, string field)
+        {
+            if (value < 0 || (value >> 64) != BigInteger.Zero)
+                throw new FormatException($"The {field} must be an unsigned 64-bit Integer.");
+        }
+
+        private static void RequireUnsigned64(StackItem item, string field)
+        {
+            if (item is not Integer value) throw new FormatException($"The operation {field} must be an Integer.");
+            RequireUnsigned64Value(value.GetInteger(), $"operation {field}");
+        }
+
+        internal static byte[] UInt32Le(uint value)
+        {
+            byte[] encoded = new byte[4];
+            BinaryPrimitives.WriteUInt32LittleEndian(encoded, value);
+            return encoded;
+        }
+
+        internal static byte[] Concat(params byte[][] parts)
+        {
+            int length = 0;
+            foreach (byte[] part in parts) length += part.Length;
+            byte[] result = new byte[length];
+            int offset = 0;
+            foreach (byte[] part in parts)
+            {
+                part.CopyTo(result, offset);
+                offset += part.Length;
+            }
             return result;
         }
 
-        private static void RequireUnsignedInteger(BigInteger value)
+        internal static void RequireIdentity(UInt160 identity)
         {
-            if (value < 0 || value >= IntegerLimit)
-                throw new FormatException("The value must be a non-negative signed 256-bit Integer.");
-        }
-
-        private static void RequireIdentity(UInt160 identity)
-        {
-            if (identity == UInt160.Zero)
+            if (identity is null || identity == UInt160.Zero)
                 throw new FormatException("A zero account or custody identity is not permitted.");
         }
     }

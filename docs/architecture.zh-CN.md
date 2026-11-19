@@ -95,42 +95,42 @@ V3 核心刻意保持精简：授权委托给验证器插件，策略委托给�
 
 | 文件 | 职责 |
 | --- | --- |
-| `contracts/custom/SmartAccount.cs` | 核心 V3 账户状态、`verify`、`executeUserOp`、nonce 处理、备份所有者逃生、钩子 / 验证器配置 |
-| `contracts/plugins/verifiers/Web3AuthVerifier.cs` | EIP-712 `UserOperation` 验证 |
-| `contracts/plugins/verifiers/TEEVerifier.cs` | TEE 签名授权 |
-| `contracts/plugins/verifiers/WebAuthnVerifier.cs` | Passkey / WebAuthn 授权 |
-| `contracts/plugins/verifiers/SessionKeyVerifier.cs` | 短期委托密钥 |
-| `contracts/plugins/verifiers/MultiSigVerifier.cs` | 插件化多签 |
-| `contracts/plugins/verifiers/ZKEmailVerifier.cs` | 基于邮箱的授权扩展 |
+| `contracts/custom/SmartAccount.cs` | v4 账户控制记录、`verify`、`executeUserOp`、nonce 通道、无回调恢复、模块配置意图 |
+| `contracts/plugins/validators/Web3AuthValidator.cs` | EIP-712 `UserOperation` 验证 |
+| `contracts/plugins/validators/TeeKeyValidator.cs` | TEE 签名授权 |
+| `contracts/plugins/validators/P256Validator.cs` | Passkey / P-256 授权 |
+| `contracts/plugins/validators/SessionKeyValidator.cs` | 短期委托密钥，每个实例一套凭据 |
+| `contracts/plugins/validators/MultiSigValidator.cs` | 阈值成员校验；策略由核心持有 |
+| `contracts/plugins/validators/ZKEmailVerifier.cs` | 被禁用的邮箱授权模板；`onInstall` 拒绝 |
+| `contracts/plugins/validators/DelegatedIdentityValidator.cs` | 委托（zkLogin）身份授权 |
+| `contracts/plugins/validators/SubscriptionValidator.cs` | 有界周期性扣款；核心 nonce 是唯一序号 |
 | `contracts/plugins/hooks/*.cs` | 可选策略，如每日限额、代币限制、凭证门控 |
 | `contracts/custom/paymaster/Paymaster.cs` | 赞助 / 免 Gas 交易的链上 Paymaster（GAS 存款、策略、结算） |
 | `contracts/custom/paymaster/PaymasterAuthority.cs` | Paymaster 管理与核心授权校验 |
 
 ## 7. 模块生命周期
 
-V3 现在有两层生命周期信号：
+每次模块变更都走配置意图路径，并发出通用模块事件：
 
-- 保留的兼容事件，仍按验证器或钩子分别定义；
-- 以及通用的模块生命周期，把验证器与钩子视为一等模块。
+- **安装**：`proposeConfiguration` -> 24 小时 -> `confirmConfiguration` 安装 validator 或 hook 实例并发出 `ModuleInstanceInstalled`
+- **配置**：对已安装实例重新配置，经同一意图路径发出 `ModuleInstanceConfigured`
+- **移除**：意图动作、市场结算或恢复清扫移除实例并发出 `ModuleInstanceRemoved`
+- **取消 / 过期**：`cancelConfiguration` 发出 `ConfigurationIntentCancelled`；窗口关闭的意图发出 `ConfigurationIntentExpired`
+- **策略**：`HookOrderSet` 与 `ThresholdPolicySet` 记录有序 hook 链与核心阈值策略
 
-通用生命周期是：
-
-- **安装**：首次绑定验证器或钩子时发出 `ModuleInstalled`
-- **替换**：经时间锁的替换先发出 `ModuleUpdateInitiated`，随后发出 `ModuleUpdateConfirmed`
-- **移除**：替换为 `UInt160.Zero`（零地址）、市场结算清理，或逃生驱动的清理发出 `ModuleRemoved`
-- **取消**：中止待生效的验证器或钩子轮换发出 `ModuleUpdateCancelled`
-
-这既让旧索引器继续工作，也让新工具只需消费一套一致的生命周期模型。
+复用的 `ModuleInstalled` / `ModuleUpdateInitiated` / `ModuleUpdateConfirmed` / `ModuleRemoved` /
+`ModuleUpdateCancelled` 事件继续为旧索引器供数。
 
 ## 8. 恢复模型
 
-V3 的恢复是显式的：
+v4 恢复显式且不调用回调：
 
-1. `initiateEscape(accountId)` 启动备份所有者时间锁。
-2. `finalizeEscape(accountId, newVerifier)` 在延迟结束后轮换验证器。
-3. 任何一次成功的常规执行都会清除进行中的逃生流程。
+1. `beginRecovery(accountId, newCustody)` 记录一条待生效的托管权轮换，在账户的 `recoveryTimelockMs`（7-90 天，创建时固定）之后到期。
+2. `cancelRecovery(accountId)` 删除待处理记录；同时只能存在一条，计时永不重置。
+3. `executeRecovery(accountId)` 到期后无需许可：清扫全部模块行并推进 authority epoch，过程中不调用任何 validator、hook、Market 或 Oracle。
+4. `getRecoveryStatus(accountId)` 以 `[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]` 回读待处理记录。
 
-这让恢复过程可审计，同时不会把庞大的角色图重新引入核心钱包。
+这让恢复过程可审计，同时去掉了对旧插件活性的依赖。
 
 ## 9. Paymaster（赞助交易）
 

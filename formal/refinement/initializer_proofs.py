@@ -37,8 +37,20 @@ def bind(inventory):
         expected_type = {"byte[]": "ByteArray", "string[]": "Array", initializer_source.source.BIG: "Integer"}
         require(typ == expected_type[lookup[name]["fieldType"]], "Static slot type mismatch")
         slots[name] = int(index)
-    require(set(slots) == set(lookup) and sorted(slots.values()) == list(range(len(lookup))), "Static field/slot mapping is not a bijection")
-    return {"source": projection, "initializer": initializer, "slots": slots}
+    require(set(slots) == set(lookup) and len(set(slots.values())) == len(slots),
+            "Static field/slot mapping is not a bijection")
+    # The frame is declared by the bytes, not inferred from the descriptor count:
+    # the v4 build allocates 79 slots while only 71 are written, because constant
+    # fields and one compiler-private slot never receive a store.
+    instructions = initializer["instructions"]
+    require(instructions and instructions[0]["name"] == "INITSSLOT",
+            "Initializer does not declare its frame")
+    frame = int(instructions[0]["operandHex"], 16)
+    require(max(slots.values()) < frame, "Static slot outside the declared frame")
+    written = {int(item["operandHex"], 16) for item in instructions if item["name"] == "STSFLD"}
+    require(written <= set(slots.values()), "Initializer writes an undescribed static slot")
+    return {"source": projection, "initializer": initializer, "slots": slots, "frame": frame,
+            "unwritten": sorted(set(slots.values()) - written)}
 
 
 def render(bound):
@@ -50,7 +62,7 @@ Import ListNotations. Open Scope Z_scope.
 Definition source_assignments : list (nat * SourceStaticExpression) := [%s].
 Theorem all_static_source_values_refine_initializer : forall hp st,
  exists target source,
- run_init 182 initializer_code (initializer_entry hp st) = InitReturned target /\
+ run_init 236 initializer_code (initializer_entry hp st) = InitReturned target /\
  source_initialize source_assignments (source_entry %d hp) = Some source /\
  init_heap target = source_heap source /\
  init_slots target = Some (source_slots source) /\
@@ -60,7 +72,7 @@ Proof.
 Qed.
 Theorem source_initializer_field_count : length source_assignments = %d%%nat.
 Proof. reflexivity. Qed.
-""" % (";".join(values), len(values), len(values))
+""" % (";".join(values), bound["frame"], len(values))
 
 
 def command(arguments, directory, log, success=True):

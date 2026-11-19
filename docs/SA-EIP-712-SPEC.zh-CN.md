@@ -106,14 +106,14 @@ digest  = keccak256(payload)
 
 ## SDK 构造器
 
-- `buildV3UserOperationTypedData(options)` —— 面向钱包与展示层的类型化数据
+- `buildUserOperationTypedData(options)` —— 面向钱包与展示层的类型化数据
   （domain + types + message），对应上面的布局。
-- `buildContractCompatibleDomainSeparator(network, verifyingContract)` ——
-  字节精确的域分隔符。
-- `buildContractCompatibleStructHash(options)` —— 字节精确的结构体哈希，
-  包含 `bytes20` 右补零与 `StdLib.Serialize` 参数哈希。
-- `buildWeb3AuthSigningPayload(options)` —— 完整的 66 字节
-  `0x1901` 信封 payload，可直接交给原始 secp256k1 签名器。
+- `buildUserOperationSigningPayload(options)` —— 完整的 66 字节
+  `0x1901` 信封 payload，可直接交给原始 secp256k1 签名器。域分隔符与结构体哈希是
+  该 payload 内部的 `ethers.TypedDataEncoder` 输出：v4 SDK 只暴露 payload 与其摘要，
+  不再把两个中间哈希作为独立构造器。
+- `buildUserOperationSigningDigest(options)` —— 该 payload 的 `keccak256`，
+  即原始 secp256k1 签名器实际签名的 32 字节。
 - `SmartAccountClient.computeArgsHash(args)` —— 向核心索取规范
   `argsHash`，而不是在客户端重新实现序列化。
 

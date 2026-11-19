@@ -2,20 +2,29 @@ import { ripemd160, sha256 } from 'ethers';
 import { EC } from '../config/errorCodes.js';
 import { sanitizeHex } from './hex.js';
 import { fetchWithTimeout } from './fetchWithTimeout.js';
-import { createRegistrationAccountIdDeriver } from '../shared/registrationAccountId.mjs';
+import {
+  createRegistrationIdentityDeriver,
+  MAX_RECOVERY_TIMELOCK_MS,
+  MIN_RECOVERY_TIMELOCK_MS,
+  REGISTRATION_SALT_MAX_BYTES,
+  REGISTRATION_SALT_MIN_BYTES,
+} from '../shared/registrationAccountId.mjs';
 
 export const DEFAULT_NEO_ADDRESS_VERSION = 53;
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 const BASE58_INDEX = new Map([...BASE58_ALPHABET].map((char, index) => [char, index]));
 
-// The escape-timelock bounds live in the vendored shared/registrationAccountId.mjs so the
-// frontend, the SDK, and the on-chain registration guard cannot drift apart.
+// Identity, salt and recovery-timelock bounds live in the vendored
+// shared/registrationAccountId.mjs so the frontend, the SDK, the relay route
+// and both kernels cannot drift apart.
 export {
-  MIN_REGISTRATION_ESCAPE_TIMELOCK_SECONDS,
-  MAX_REGISTRATION_ESCAPE_TIMELOCK_SECONDS,
-} from '../shared/registrationAccountId.mjs';
-export const MIN_REGISTRATION_ESCAPE_TIMELOCK_DAYS = 7;
-export const MAX_REGISTRATION_ESCAPE_TIMELOCK_DAYS = 90;
+  MAX_RECOVERY_TIMELOCK_MS,
+  MIN_RECOVERY_TIMELOCK_MS,
+  REGISTRATION_SALT_MAX_BYTES,
+  REGISTRATION_SALT_MIN_BYTES,
+};
+export const MIN_RECOVERY_TIMELOCK_DAYS = MIN_RECOVERY_TIMELOCK_MS / 86_400_000;
+export const MAX_RECOVERY_TIMELOCK_DAYS = MAX_RECOVERY_TIMELOCK_MS / 86_400_000;
 
 function hexToBytes(hexValue) {
   const hex = sanitizeHex(hexValue);
@@ -103,26 +112,6 @@ function decodeBase58(value) {
   return new Uint8Array([...new Array(leadingZeroCount).fill(0), ...bytes]);
 }
 
-function emitPushData(hexValue) {
-  const hex = sanitizeHex(hexValue);
-  const length = hex.length / 2;
-  if (length < 0x100) {
-    return `0c${length.toString(16).padStart(2, '0')}${hex}`;
-  }
-  if (length < 0x10000) {
-    const sizeHex = `${(length & 0xff).toString(16).padStart(2, '0')}${((length >> 8) & 0xff).toString(16).padStart(2, '0')}`;
-    return `0d${sizeHex}${hex}`;
-  }
-  throw new Error(EC.dataTooLargeToPush);
-}
-
-function emitSmallInteger(value) {
-  if (value < 0 || value > 16) {
-    throw new Error(EC.unsupportedSmallInteger);
-  }
-  return (0x10 + value).toString(16).padStart(2, '0');
-}
-
 export function reverseHex(hexValue) {
   const hex = sanitizeHex(hexValue);
   let output = '';
@@ -156,68 +145,67 @@ export function deriveAccountIdHash(accountIdHexOrSeed) {
   return hash160Hex(normalized);
 }
 
-const registrationAccountIdDeriver = createRegistrationAccountIdDeriver({ hash160: hash160Hex });
+const identityDeriver = createRegistrationIdentityDeriver({ hash160: hash160Hex });
 
-// Maps the public address/hash options onto the shared deriver's normalized
-// display-form hash160 inputs, keeping this module's EC-coded validation errors.
-function normalizeRegistrationOptions({
-  verifierContractHash = '',
-  verifierParamsHex = '',
-  hookContractHash = '',
-  backupOwnerAddress = '',
-  escapeTimelock = 30 * 24 * 60 * 60,
-} = {}) {
-  const backupOwner = normalizeHash160Input(backupOwnerAddress);
-  if (!/^[0-9a-f]{40}$/i.test(backupOwner)) {
+function requireHash160(value) {
+  const hash = normalizeHash160Input(value);
+  if (!/^[0-9a-f]{40}$/i.test(hash)) {
     throw new Error(EC.addressValidationFailed);
   }
-
-  const verifierHash = verifierContractHash
-    ? normalizeHash160Input(verifierContractHash)
-    : '';
-  const hookHash = hookContractHash
-    ? normalizeHash160Input(hookContractHash)
-    : '';
-
-  if ((verifierHash && !/^[0-9a-f]{40}$/i.test(verifierHash)) || (hookHash && !/^[0-9a-f]{40}$/i.test(hookHash))) {
-    throw new Error(EC.addressValidationFailed);
-  }
-
-  return {
-    backupOwnerHash160: backupOwner,
-    verifierHash160: verifierHash,
-    hookHash160: hookHash,
-    escapeTimelock,
-    verifierParamsHex,
-  };
+  return hash;
 }
 
 /**
- * Derives the registration-bound account id in big-endian display form.
+ * v4 account identity (§16.1): accountId = hash160('aa524704' || custody || salt).
  *
- * Single-sourced in shared/registrationAccountId.mjs with the SDK and the
- * on-chain ComputeRegistrationAccountId: the returned value equals the
- * contract's UInt160 display string and is exactly what registerAccount
- * expects as its {type:'Hash160'} accountId argument. (An earlier version
- * returned the byte-reversed internal form here, which faults the on-chain
- * account-id assert when passed as a Hash160 RPC param.)
+ * Single-sourced in shared/registrationAccountId.mjs with the SDK, the relay
+ * route and both kernels. `custodyAddress` accepts a Neo N3 address or a
+ * display-form hash160; `salt` is 1..128 hex-encoded bytes. The returned
+ * `accountId` is big-endian display hex — exactly what createAccount expects
+ * as its {type:'Hash160'} argument. No core hash and no network enter the
+ * identity, so one custody+salt pair names the same account on both kernels.
  */
-export function deriveRegistrationAccountIdHash(options = {}) {
-  return registrationAccountIdDeriver.deriveRegistrationAccountIdDisplayHex(
-    normalizeRegistrationOptions(options)
-  );
+export function deriveAccountIdentity({ custodyAddress = '', salt = '' } = {}) {
+  const custody = requireHash160(custodyAddress);
+  try {
+    return identityDeriver.deriveAccountIdentity({ custody, salt });
+  } catch (err) {
+    const message = String(err?.message || '');
+    const code = /salt/i.test(message)
+      ? EC.registrationSaltInvalid
+      : EC.addressValidationFailed;
+    throw new Error(code);
+  }
 }
 
 /**
- * Derives the same account id in the internal little-endian VM byte order
- * (reverseHex of the display form). Only use this when pushing the raw 20
- * bytes into a script (e.g. createVerifyScript), where pushed bytes are read
- * as the UInt160 internal representation — never for RPC Hash160 params.
+ * The same identity in internal (little-endian) VM byte order. Only for pushing
+ * the raw 20 bytes into a script, never for RPC Hash160 parameters.
  */
-export function deriveRegistrationAccountIdChainHex(options = {}) {
-  return registrationAccountIdDeriver.deriveRegistrationAccountIdChainHex(
-    normalizeRegistrationOptions(options)
-  );
+export function deriveAccountIdentityChainHex(options = {}) {
+  return reverseHex(deriveAccountIdentity(options).accountId);
+}
+
+/**
+ * The account-bound proxy verification script (§16.1): the account address is
+ * hash160 of these bytes. `callFlags` defaults to 15 (CallFlags.All, the custom
+ * kernel); the native kernel passes 5.
+ */
+export function createProxyScript(coreContractHash, accountId, callFlags = 15) {
+  try {
+    return identityDeriver.deriveProxyScript({
+      accountId: sanitizeHex(accountId),
+      coreContractHash: sanitizeHex(coreContractHash),
+      callFlags,
+    });
+  } catch (_) {
+    throw new Error(EC.addressValidationFailed);
+  }
+}
+
+/** The account address: the proxy script's hash160 in chain (display) order. */
+export function deriveAccountAddress({ accountId, coreContractHash, callFlags = 15 } = {}) {
+  return reverseHex(hash160Hex(createProxyScript(coreContractHash, accountId, callFlags)));
 }
 
 export function getAddressFromScriptHash(scriptHash, addressVersion = DEFAULT_NEO_ADDRESS_VERSION) {
@@ -241,22 +229,6 @@ export function getScriptHashFromAddress(address) {
     throw new Error(EC.invalidAddressChecksum);
   }
   return reverseHex(bytesToHex(payload.slice(1)));
-}
-
-export function createVerifyScript(contractHash, accountIdHex) {
-  const accountId = reverseHex(deriveAccountIdHash(accountIdHex));
-  const contract = sanitizeHex(contractHash);
-  const operationHex = bytesToHex(new TextEncoder().encode('verify'));
-
-  return [
-    emitPushData(accountId),
-    emitSmallInteger(1),
-    'c0',
-    emitSmallInteger(15),
-    emitPushData(operationHex),
-    emitPushData(reverseHex(contract)),
-    '41627d5b52',
-  ].join('');
 }
 
 export async function invokeReadFunction(rpcUrl, scriptHash, operation, args = [], fetchImpl = undefined) {

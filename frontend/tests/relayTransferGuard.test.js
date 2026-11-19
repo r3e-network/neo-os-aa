@@ -258,8 +258,11 @@ test('CU-06: refusals carry no key material and no stack trace (the L2 switch st
   }
 });
 
-test('CU-06: userOpParam helper builds the Struct the route reads (guards the fixtures themselves)', () => {
+test('CU-06: userOpParam helper builds the 13-field operation the route reads (guards the fixtures themselves)', () => {
   const param = userOpParam({ method: 'transfer' });
-  assert.equal(param.type, 'Struct');
-  assert.equal(param.value[1].value, 'transfer');
+  // §4.1: [0 version, 1 target, 2 method, 3 args, ...]; the method travels as the hex of its UTF-8 bytes.
+  assert.equal(param.type, 'Array');
+  assert.equal(param.value.length, 13);
+  assert.equal(param.value[0].value, '4');
+  assert.equal(Buffer.from(param.value[2].value, 'hex').toString('utf8'), 'transfer');
 });

@@ -170,5 +170,8 @@ Field rules:
 5. Post-migration re-scan equality on both networks.
 
 These become golden fixture entries in
-`tests/fixtures/sa-module-protocol/golden-vectors/migration.template.json`
-(kernel batches 39/40 fill the expected outputs).
+`tests/fixtures/sa-module-protocol/golden-vectors/migration.json`, which pins
+the §14 state machine the core can prove without a chain export (the kernel
+decodes the seeded 0x01 row, marks it, imports through the 24h migration
+intent, and rejects the replay). Steps 1 and 5 additionally need the real
+53/407 account exports that `migration-manifest.template.json` describes.

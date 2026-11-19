@@ -51,7 +51,7 @@ internal sealed class RuntimeFixture
 
     /// <summary>
     /// Deploys a compiled artifact from contracts/bin/public (the directory the deploy
-    /// tooling reads), with logical names such as verifiers/SessionKeyVerifier.
+    /// tooling reads), with logical names such as verifiers/SessionKeyValidator.
     /// </summary>
     public UInt160 Deploy(string baseName, object? data = null)
     {
@@ -184,9 +184,328 @@ internal sealed class RuntimeFixture
         return CallBytes(StdLibHash, "serialize", value);
     }
 
+    // ========================================================================
+    // v4 protocol helpers (spec §4.1 envelope, §6 nonce, §9 actions)
+    // ========================================================================
+
+    public const int ModuleTypeValidator = 1;
+
+    public const int ModuleTypeHook = 4;
+
+    public const int ActionInstallModule = 1;
+
+    public const int ActionUninstallModule = 2;
+
+    public const int ActionConfigureModule = 3;
+
+    public const int ActionSetHookOrder = 4;
+
+    public const int ActionSetThresholdPolicy = 7;
+
+    public const int ActionSetRecoveryPolicy = 8;
+
+    public const int ActionMigrateAccount = 10;
+
+    /// <summary>Protocol version carried in envelope field 0.</summary>
+    public const int ModuleProtocolVersion = 4;
+
+    /// <summary>Shortest registration identity salt the core accepts.</summary>
+    public static readonly BigInteger MinRecoveryTimelockMs = 7L * 24 * 60 * 60 * 1000;
+
+    /// <summary>Deterministic registration salt; distinct labels give distinct accounts.</summary>
+    public static byte[] Salt(string label) => System.Text.Encoding.UTF8.GetBytes(label);
+
+    /// <summary>32-byte zero nonce subkey: the default channel for a routing subject.</summary>
+    public static byte[] DefaultNonceSubkey() => new byte[32];
+
     /// <summary>
-    /// Builds the positional struct layout of <c>SmartAccount.Verifiers.UserOperation</c>:
-    /// [TargetContract, Method, Args, Nonce, Deadline, Signature].
+    /// Registers a v4 account: identity is custody‖salt (spec §16.1) and the
+    /// initial actions install atomically with the registration, so no 24 h
+    /// wait is needed to reach the configured state under test.
+    /// </summary>
+    public UInt160 CreateAccount(UInt160 core, UInt160 custody, string saltLabel, params object[] actions)
+    {
+        return CreateAccount(core, custody, Salt(saltLabel), MinRecoveryTimelockMs, actions);
+    }
+
+    public UInt160 CreateAccount(UInt160 core, UInt160 custody, byte[] salt, BigInteger recoveryTimelockMs, params object[] actions)
+    {
+        UInt160 accountId = CallUInt160(core, "computeAccountIdentity", custody, salt);
+        SetSigners(custody);
+        CallVoid(core, "createAccount", accountId, custody, salt, recoveryTimelockMs, actions);
+        return accountId;
+    }
+
+    /// <summary>The SHA-256 of the deployed module's <c>getModuleProfile()</c> text.</summary>
+    public byte[] ModuleProfileDigest(UInt160 module)
+    {
+        byte[] profile = CallBytes(module, "getModuleProfile");
+        return System.Security.Cryptography.SHA256.HashData(profile);
+    }
+
+    /// <summary>[ActionInstallModule, type, contractHash, profileDigest32, initData[]]</summary>
+    public object[] InstallModule(UInt160 module, int moduleType, params object?[] initData)
+    {
+        return new object[]
+        {
+            ActionInstallModule, moduleType, module, ModuleProfileDigest(module), initData
+        };
+    }
+
+    public object[] InstallValidator(UInt160 module, params object?[] initData) => InstallModule(module, ModuleTypeValidator, initData);
+
+    public object[] InstallHook(UInt160 module, params object?[] initData) => InstallModule(module, ModuleTypeHook, initData);
+
+    /// <summary>[ActionUninstallModule, moduleId, deInitData[]]</summary>
+    public static object[] UninstallModule(BigInteger moduleId, params object?[] deInitData)
+    {
+        return new object[] { ActionUninstallModule, moduleId, deInitData };
+    }
+
+    /// <summary>[ActionConfigureModule, moduleId, configData[]]</summary>
+    public static object[] ConfigureModule(BigInteger moduleId, params object?[] configData)
+    {
+        return new object[] { ActionConfigureModule, moduleId, configData };
+    }
+
+    /// <summary>[ActionSetHookOrder, hookIds[]] in pre-check order.</summary>
+    public static object[] SetHookOrder(params BigInteger[] hookIds)
+    {
+        object?[] ids = new object?[hookIds.Length];
+        for (int i = 0; i < hookIds.Length; i++) ids[i] = hookIds[i];
+        return new object[] { ActionSetHookOrder, ids };
+    }
+
+    /// <summary>[ActionSetThresholdPolicy, policyId, threshold, memberIds[], active]</summary>
+    public static object[] SetThresholdPolicy(BigInteger policyId, BigInteger threshold, BigInteger[] memberIds, bool active)
+    {
+        object?[] members = new object?[memberIds.Length];
+        for (int i = 0; i < memberIds.Length; i++) members[i] = memberIds[i];
+        return new object[] { ActionSetThresholdPolicy, policyId, threshold, members, active };
+    }
+
+    /// <summary>[ActionSetRecoveryPolicy, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery]</summary>
+    public static object[] SetRecoveryPolicy(UInt160 recoveryAuthority, BigInteger recoveryTimelockMs, bool ownerOnlyRecovery = false)
+    {
+        return new object[] { ActionSetRecoveryPolicy, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery };
+    }
+
+    /// <summary>The AccountControl projection returned by <c>getAccount</c>.</summary>
+    public Neo.VM.Types.Array AccountControl(UInt160 core, UInt160 accountId)
+    {
+        return (Neo.VM.Types.Array)Call(core, "getAccount", accountId);
+    }
+
+    public BigInteger AccountAuthorityEpoch(UInt160 core, UInt160 accountId) => AccountControl(core, accountId)[4].GetInteger();
+
+    public BigInteger AccountConfigurationNonce(UInt160 core, UInt160 accountId) => AccountControl(core, accountId)[5].GetInteger();
+
+    public BigInteger AccountStatus(UInt160 core, UInt160 accountId) => AccountControl(core, accountId)[1].GetInteger();
+
+    public BigInteger AccountRecoveryTimelockMs(UInt160 core, UInt160 accountId) => AccountControl(core, accountId)[6].GetInteger();
+
+    public bool AccountDefaultOperationAuthorization(UInt160 core, UInt160 accountId) => AccountControl(core, accountId)[7].GetBoolean();
+
+    public UInt160 AccountCustody(UInt160 core, UInt160 accountId) =>
+        (UInt160)TestExtensions.ConvertTo(AccountControl(core, accountId)[2], typeof(UInt160))!;
+
+    // ------------------------------------------------------------------------
+    // Canonical P-256 signer scripts (spec §8): the 41-byte wallet script
+    // [PUSHDATA1 33 <point> SYSCALL CheckSig]. A custody backed by such a
+    // script can authorize the built-in (validatorId = 0) route.
+    // ------------------------------------------------------------------------
+
+    /// <summary>SYSCALL hash of <c>System.Crypto.CheckSig</c> (0x27B3E756 little-endian).</summary>
+    private static readonly byte[] CheckSigSyscallHash = { 0x56, 0xE7, 0xB3, 0x27 };
+
+    public static byte[] CanonicalP256Script(byte[] compressedPublicKey)
+    {
+        if (compressedPublicKey.Length != 33)
+            throw new ArgumentException("A compressed P-256 point is 33 bytes", nameof(compressedPublicKey));
+        // [PUSHDATA1 33 <point> SYSCALL CheckSig] = 2 + 33 + 1 + 4 = 40 bytes.
+        byte[] script = new byte[40];
+        script[0] = 0x0C;
+        script[1] = 0x21;
+        System.Array.Copy(compressedPublicKey, 0, script, 2, 33);
+        script[35] = 0x41;
+        System.Array.Copy(CheckSigSyscallHash, 0, script, 36, CheckSigSyscallHash.Length);
+        return script;
+    }
+
+    public static UInt160 ScriptHashOf(byte[] script)
+    {
+        // N3 address of the script: RIPEMD160(SHA256(script)) kept in raw
+        // (little-endian) order, the same byte order the core stores in
+        // AccountControl.Custody and compares against in SubjectMatches.
+        return new UInt160(Neo.Cryptography.Crypto.Hash160(script));
+    }
+
+    /// <summary>The custody address that owns the canonical P-256 script of <paramref name="key"/>.</summary>
+    public static UInt160 CustodyOf(P256SessionKey key) => ScriptHashOf(CanonicalP256Script(key.CompressedPublicKey));
+
+    /// <summary>
+    /// Signs a v4 operation for the built-in route: the digest comes from the
+    /// core itself, and the signature is the §8 envelope
+    /// [4, 0, subjectRevision, [[script, 64-byte signature]]] serialized with
+    /// the native serializer.
+    /// </summary>
+    public byte[] SignBuiltIn(UInt160 core, UInt160 accountId, object[] op, P256SessionKey key, BigInteger subjectRevision = default)
+    {
+        object[] probe = (object[])op.Clone();
+        probe[11] = new byte[] { 0x00 };
+        byte[] digest = CallBytes(core, "getOperationDigest", accountId, probe);
+        byte[] signature = key.Sign(digest);
+        object?[] pairs = { new object?[] { CanonicalP256Script(key.CompressedPublicKey), signature } };
+        object?[] envelope =
+        {
+            (BigInteger)ModuleProtocolVersion,
+            (BigInteger)0,
+            subjectRevision == BigInteger.Zero ? BigInteger.One : subjectRevision,
+            pairs
+        };
+        return StdLibSerialize(envelope);
+    }
+
+    /// <summary>Packed channel‖sequence nonce for the current routing subject state.</summary>
+    public BigInteger PackedNonce(UInt160 core, UInt160 accountId, BigInteger validatorId) => PackedNonce(core, accountId, validatorId, DefaultNonceSubkey());
+
+    public BigInteger PackedNonce(UInt160 core, UInt160 accountId, BigInteger validatorId, byte[] nonceSubkey)
+    {
+        return CallInteger(core, "getNonce", accountId, validatorId, nonceSubkey);
+    }
+
+    /// <summary>
+    /// Sequence part of a packed nonce (spec §6: 191-bit channel ‖ 64-bit
+    /// sequence). getNonce returns the packed value; behavioural assertions
+    /// about consumption must mask down to the sequence.
+    /// </summary>
+    public static BigInteger NonceSequence(BigInteger packedNonce) => packedNonce & ((BigInteger.One << 64) - 1);
+
+    public BigInteger CurrentNonceSequence(UInt160 core, UInt160 accountId, BigInteger validatorId)
+    {
+        return NonceSequence(PackedNonce(core, accountId, validatorId));
+    }
+
+    public BigInteger CurrentNonceSequence(UInt160 core, UInt160 accountId, BigInteger validatorId, byte[] nonceSubkey)
+    {
+        return NonceSequence(PackedNonce(core, accountId, validatorId, nonceSubkey));
+    }
+
+    // ------------------------------------------------------------------------
+    // v4 replacements for the retired v3 registration / callVerifier / callHook
+    // surfaces. Suites keep their historical argument shapes where the v4
+    // mechanism still exists, so the behavioural intent survives the move.
+    // ------------------------------------------------------------------------
+
+    public const string ModuleTypeNameValidator = "validator";
+
+    public const string ModuleTypeNameHook = "hook";
+
+    private int _registrationSequence;
+
+    /// <summary>
+    /// Registers an account the way the retired <c>registerAccount</c> did:
+    /// <paramref name="custody"/> authorizes the registration, an optional
+    /// validator and hook module install atomically with the account, and the
+    /// recovery timelock keeps its historical second-based argument.
+    /// </summary>
+    public UInt160 RegisterAccount(UInt160 core, UInt160 verifier, UInt160 hook, UInt160 custody, uint timelockSeconds)
+    {
+        _registrationSequence += 1;
+        byte[] salt = Salt("reg-" + _registrationSequence + "-" + custody);
+        List<object> actions = new();
+        if (verifier != UInt160.Zero) actions.Add(InstallValidator(verifier));
+        if (hook != UInt160.Zero) actions.Add(InstallHook(hook));
+        return CreateAccount(core, custody, salt, new BigInteger(timelockSeconds) * 1000, actions.ToArray());
+    }
+
+    /// <summary>One atomic configuration intent proposal; returns its intentId.</summary>
+    public BigInteger ProposeConfiguration(UInt160 core, UInt160 accountId, UInt160 custody, params object[] actions)
+    {
+        AssertActionList(actions);
+        SetSigners(custody);
+        return CallInteger(core, "proposeConfiguration", accountId, actions, new object[0]);
+    }
+
+    public void ConfirmConfiguration(UInt160 core, UInt160 accountId, UInt160 custody, BigInteger intentId, params object[] actions)
+    {
+        AssertActionList(actions);
+        SetSigners(custody);
+        CallVoid(core, "confirmConfiguration", accountId, intentId, actions);
+    }
+
+    /// <summary>
+    /// Guards the one shape mistake the <c>params object[]</c> signatures make easy:
+    /// passing a single action array directly turns its fields into separate
+    /// "actions" and the core rejects the intent as SA_OPERATION_MALFORMED.
+    /// </summary>
+    private static void AssertActionList(object[] actions)
+    {
+        Assert.IsTrue(actions.Length > 0, "A configuration intent carries at least one action");
+        for (int i = 0; i < actions.Length; i++)
+        {
+            Assert.IsTrue(actions[i] is object[],
+                "Intent element " + i + " must be an action array, not a scalar field");
+        }
+    }
+
+    /// <summary>
+    /// propose → mature → confirm in one step: the v4 form of the retired
+    /// <c>callVerifier</c> / <c>callHook</c> two-phase configuration calls.
+    /// </summary>
+    public void ConfigureAfterTimelock(UInt160 core, UInt160 accountId, UInt160 custody, params object[] actions)
+    {
+        BigInteger intentId = ProposeConfiguration(core, accountId, custody, actions);
+        AdvanceTime(TimeSpan.FromHours(24) + TimeSpan.FromMinutes(1));
+        ConfirmConfiguration(core, accountId, custody, intentId, actions);
+    }
+
+    /// <summary>Module ids of one type, in core allocation order.</summary>
+    public BigInteger[] ModuleIds(UInt160 core, UInt160 accountId, string moduleType)
+    {
+        // Spec §3.3 page size is bounded to 1..32 (MaxEnumerationLimit).
+        Neo.VM.Types.Array page = (Neo.VM.Types.Array)Call(
+            core, "getModules", accountId, moduleType, (BigInteger)0, (BigInteger)32);
+        Neo.VM.Types.Array ids = (Neo.VM.Types.Array)page[0];
+        BigInteger[] result = new BigInteger[ids.Count];
+        for (int i = 0; i < ids.Count; i++) result[i] = ids[i].GetInteger();
+        return result;
+    }
+
+    /// <summary>The contract hash of an installed module instance.</summary>
+    public UInt160 ModuleContractHash(UInt160 core, UInt160 accountId, BigInteger moduleId)
+    {
+        Neo.VM.Types.Array module = (Neo.VM.Types.Array)Call(core, "getModule", accountId, moduleId);
+        Assert.IsTrue(module.Count > 2, "Module instance " + moduleId + " is not installed");
+        return (UInt160)TestExtensions.ConvertTo(module[2], typeof(UInt160))!;
+    }
+
+    /// <summary>First installed module id of the type bound to the contract, or 0.</summary>
+    public BigInteger FindModuleId(UInt160 core, UInt160 accountId, string moduleType, UInt160 contractHash)
+    {
+        BigInteger[] ids = ModuleIds(core, accountId, moduleType);
+        for (int i = 0; i < ids.Length; i++)
+        {
+            if (ModuleContractHash(core, accountId, ids[i]) == contractHash) return ids[i];
+        }
+        return BigInteger.Zero;
+    }
+
+    /// <summary>The core-owned hook order: [hookIds[], revision].</summary>
+    public BigInteger[] HookOrderIds(UInt160 core, UInt160 accountId)
+    {
+        Neo.VM.Types.Array order = (Neo.VM.Types.Array)Call(core, "getHookOrder", accountId);
+        Neo.VM.Types.Array ids = (Neo.VM.Types.Array)order[0];
+        BigInteger[] result = new BigInteger[ids.Count];
+        for (int i = 0; i < ids.Count; i++) result[i] = ids[i].GetInteger();
+        return result;
+    }
+
+    /// <summary>
+    /// Builds the 13-field canonical v4 UserOperation (spec §4.1):
+    /// [version, target, method, args, nonce, nonceSubkey, deadline,
+    ///  validatorId, credentialGeneration, authorityEpoch, configurationNonce,
+    ///  signature, hookProofs].
     /// </summary>
     public static object[] UserOp(
         UInt160 targetContract,
@@ -194,9 +513,30 @@ internal sealed class RuntimeFixture
         object?[] args,
         BigInteger nonce,
         BigInteger deadline,
-        object? signature)
+        object? signature,
+        BigInteger validatorId = default,
+        BigInteger credentialGeneration = default,
+        BigInteger authorityEpoch = default,
+        BigInteger configurationNonce = default,
+        byte[]? nonceSubkey = null,
+        object[]? hookProofs = null)
     {
-        return new object[] { targetContract, method, args, nonce, deadline, signature! };
+        return new object[]
+        {
+            (BigInteger)ModuleProtocolVersion,
+            targetContract,
+            method,
+            args,
+            nonce,
+            nonceSubkey ?? DefaultNonceSubkey(),
+            deadline,
+            validatorId,
+            credentialGeneration == BigInteger.Zero ? BigInteger.One : credentialGeneration,
+            authorityEpoch == BigInteger.Zero ? BigInteger.One : authorityEpoch,
+            configurationNonce,
+            signature ?? new byte[0],
+            hookProofs ?? new object[0]
+        };
     }
 
     /// <summary>
@@ -258,7 +598,7 @@ internal sealed class RuntimeFixture
 }
 
 /// <summary>
-/// Local secp256r1 (P-256) key pair for SessionKeyVerifier vectors. Signatures are produced
+/// Local secp256r1 (P-256) key pair for SessionKeyValidator vectors. Signatures are produced
 /// host-side over the exact payload the verifier exposes via <c>getPayload</c>, in the
 /// IEEE P1363 r||s layout that <c>CryptoLib.VerifyWithECDsa(..., secp256r1SHA256)</c> expects.
 /// </summary>

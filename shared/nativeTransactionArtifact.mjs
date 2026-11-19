@@ -1,8 +1,51 @@
-import { validateNativeInvocationResult, parseNativeRpcFees } from "./nativeSmartAccountClient.mjs";
+/**
+ * Neo N3 Smart Account v4 signed-transaction artifacts.
+ *
+ * This module is the one place that answers three questions the SDK, the
+ * relay and the browser wallet must answer identically:
+ *
+ * 1. What bytes does a transaction sign? `unsigned()` serializes a Neo N3
+ *    transaction with the v4 signer scopes, including the account proxy's
+ *    `WitnessRules` signer (exactly one Allow/CalledByContract(core) rule).
+ *    The v3 serializer only knew None/CustomContracts, so a proxy-witness
+ *    transaction could not be hashed at all.
+ * 2. May a signed artifact authorize this exact reviewed intent? The review
+ *    carries the v4 plan (registration, execution, configuration intent or
+ *    account action) plus the recipe that rebuilt it, so bytes that are not
+ *    the canonical encoding of the reviewed intent are refused.
+ * 3. Can an archived review be restored to read a receipt? Yes — and a
+ *    restored artifact can never be preflighted or broadcast.
+ *
+ * Signer index 0 is always the fee payer. For an execution plan index 1 is the
+ * account proxy, whose witness carries no signature: the chain accepts it only
+ * because the script is one shaped executeUserOp(s) call on the core. The proxy
+ * can never be the fee payer, so the two roles cannot alias.
+ */
+
+import {
+  parseNativeRpcFees,
+  validateNativeInvocationResult,
+} from "./nativeSmartAccountClient.mjs";
+import { PROTOCOL_VERSION } from "./nativeSmartAccount.mjs";
+import { createProxyWitness } from "./proxyWitness.mjs";
 
 export const NATIVE_SIGNED_ARTIFACT_MAX_CHARS = 1048576;
 const MAX_TRANSACTION_BYTES = 102400;
-const fail = (message) => { throw new Error(`Native transaction: ${message}`); };
+const PLAN_KINDS = ["registration", "execution", "configuration", "account"];
+const ACCOUNT_ACTIONS = [
+  "freezeAccount",
+  "unfreezeAccount",
+  "beginRecovery",
+  "cancelRecovery",
+  "executeRecovery",
+  "revokeCredentials",
+];
+const CONFIGURATION_KINDS = ["propose", "confirm", "cancel"];
+const WITNESS_RULE_CONDITIONS = ["CalledByContract"];
+
+const fail = (message) => {
+  throw new Error(`Native transaction: ${message}`);
+};
 const freeze = (value) => {
   if (value && typeof value === "object") {
     Object.values(value).forEach(freeze);
@@ -11,101 +54,331 @@ const freeze = (value) => {
   return value;
 };
 const exactKeys = (value, keys, label) => {
-  if (!value || typeof value !== "object" || Array.isArray(value) ||
-      Object.keys(value).sort().join(",") !== [...keys].sort().join(","))
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(",") !== [...keys].sort().join(",")
+  )
     fail(`${label} has unsupported or missing fields`);
 };
 const hex = (value, bytes, maximum = MAX_TRANSACTION_BYTES) => {
-  if (typeof value !== "string" || value.length > maximum * 2 ||
-      !/^(?:[0-9a-f]{2})*$/.test(value) || (bytes !== undefined && value.length !== bytes * 2))
+  if (
+    typeof value !== "string" ||
+    value.length > maximum * 2 ||
+    !/^(?:[0-9a-f]{2})*$/.test(value) ||
+    (bytes !== undefined && value.length !== bytes * 2)
+  )
     fail("artifact hex must use canonical lowercase bytes within size limits");
   return value;
 };
 const uint32 = (n, label) => {
-  if (!Number.isSafeInteger(n) || n < 0 || n > 0xffffffff) fail(`${label} must be UInt32`);
+  if (!Number.isSafeInteger(n) || n < 0 || n > 0xffffffff)
+    fail(`${label} must be UInt32`);
   return n;
 };
 const fee = (value, label) => {
-  if (typeof value !== "string" || !/^(?:0|[1-9][0-9]{0,18})$/.test(value) || BigInt(value) >= (1n << 63n))
+  if (
+    typeof value !== "string" ||
+    !/^(?:0|[1-9][0-9]{0,18})$/.test(value) ||
+    BigInt(value) >= 1n << 63n
+  )
     fail(`${label} must be a canonical nonnegative Int64 decimal string`);
   return BigInt(value);
 };
 const reverse = (s) => s.match(/../g).reverse().join("");
 const le = (value, size) => {
-  let n = BigInt(value), out = "";
-  for (let i = 0; i < size; i++) { out += Number(n & 255n).toString(16).padStart(2, "0"); n >>= 8n; }
+  let n = BigInt(value),
+    out = "";
+  for (let i = 0; i < size; i++) {
+    out += Number(n & 255n).toString(16).padStart(2, "0");
+    n >>= 8n;
+  }
   if (n) fail("integer overflow");
   return out;
 };
-const vi = (n) => n < 253 ? le(n, 1) : n <= 65535 ? "fd" + le(n, 2) : "fe" + le(n, 4);
+const vi = (n) =>
+  n < 253 ? le(n, 1) : n <= 65535 ? "fd" + le(n, 2) : "fe" + le(n, 4);
 const vb = (s) => vi(s.length / 2) + s;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const toBase64 = (s) => btoa(s.replace(/../g, (h) => String.fromCharCode(parseInt(h, 16))));
+const toBase64 = (s) =>
+  btoa(
+    s.replace(/../g, (h) => String.fromCharCode(parseInt(h, 16))),
+  );
 const fromBase64 = (s) => {
-  if (typeof s !== "string" || s.length > Math.ceil(MAX_TRANSACTION_BYTES / 3) * 4 ||
-      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(s))
+  if (
+    typeof s !== "string" ||
+    s.length > Math.ceil(MAX_TRANSACTION_BYTES / 3) * 4 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
+      s,
+    )
+  )
     fail("persisted transaction must use bounded canonical base64");
   const bytes = atob(s);
   if (btoa(bytes) !== s) fail("persisted transaction has noncanonical base64");
-  return Array.from(bytes, (ch) => ch.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+  return Array.from(
+    bytes,
+    (ch) => ch.charCodeAt(0).toString(16).padStart(2, "0"),
+  ).join("");
 };
+const hash160 = (value, label) => {
+  if (typeof value !== "string") fail(`${label} must be a Hash160`);
+  const h = value.replace(/^0x/, "").toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(h) || /^0+$/.test(h))
+    fail(`${label} must be a nonzero Hash160`);
+  return h;
+};
+const accountHash = (value) => {
+  if (typeof value !== "string" || !/^0x[0-9a-f]{40}$/.test(value))
+    fail("signer account must be canonical UInt160");
+  return value;
+};
+
+/**
+ * The discoverable v4 profile. `implementationId` is whatever the submitting
+ * core answers (`NativeSmartAccount/v4` for the native kernel,
+ * `org.r3e.neo.smart-account.v4` for the custom one), and it is authenticated
+ * by the profile that both the review and the artifact must agree on.
+ *
+ * The contract hash is shape-checked here, not pinned to the native constant:
+ * a custom kernel answers at an arbitrary hash, so the caller that knows the
+ * deployment is the one that compares (`checked`/`bindArtifact` compare a
+ * restored artifact against `profile(client.profile)`). Pinning the constant
+ * here would make every custom-kernel review unexportable.
+ */
 function profile(value) {
-  exactKeys(value, ["contract", "networkMagic", "abiVersion", "identityVersion", "authorizationVersion", "profileParameterDigest"], "profile");
-  if (value.contract !== "398dc3f0227d7efac5533ed5ce9937390c158084" || value.abiVersion !== 2 || value.identityVersion !== 1 || value.authorizationVersion !== 2)
+  exactKeys(
+    value,
+    ["contract", "networkMagic", "protocolVersion", "implementationId"],
+    "profile",
+  );
+  const contract = hex(value.contract, 20);
+  if (/^0+$/.test(contract) || value.protocolVersion !== PROTOCOL_VERSION)
     fail("unsupported native profile");
-  return { contract: hex(value.contract, 20), networkMagic: uint32(value.networkMagic, "network magic"), abiVersion: 2,
-    identityVersion: 1, authorizationVersion: 2, profileParameterDigest: hex(value.profileParameterDigest, 32) };
+  if (
+    typeof value.implementationId !== "string" ||
+    !/^[0-9A-Za-z._:\/-]{1,128}$/.test(value.implementationId)
+  )
+    fail("unsupported native implementation id");
+  return {
+    contract,
+    networkMagic: uint32(value.networkMagic, "network magic"),
+    protocolVersion: PROTOCOL_VERSION,
+    implementationId: value.implementationId,
+  };
 }
+
+function condition(value) {
+  exactKeys(value, ["type", "hash"], "witness condition");
+  if (!WITNESS_RULE_CONDITIONS.includes(value.type))
+    fail("only CalledByContract witness conditions are expressible");
+  return { type: value.type, hash: hash160(value.hash, "witness condition hash") };
+}
+
+function rule(value) {
+  exactKeys(value, ["action", "condition"], "witness rule");
+  if (value.action !== "Allow")
+    fail("the account proxy carries exactly one Allow witness rule");
+  return { action: value.action, condition: condition(value.condition) };
+}
+
+/**
+ * A transaction signer descriptor. `WitnessRules` is the account proxy's
+ * scope and admits exactly one Allow/CalledByContract rule; every other scope
+ * is a plain wallet scope. Allowed contracts and groups are not part of the
+ * v4 transactions this SDK builds.
+ */
 function signer(value) {
-  exactKeys(value, value?.scopes === "CustomContracts" ? ["account", "scopes", "allowedcontracts"] : ["account", "scopes"], "signer");
-  if (typeof value.account !== "string" || !/^0x[0-9a-f]{40}$/.test(value.account)) fail("signer account must be canonical UInt160");
-  if (value.scopes === "None") return { account: value.account, scopes: "None" };
-  if (value.scopes !== "CustomContracts" || !Array.isArray(value.allowedcontracts) || !value.allowedcontracts.length || value.allowedcontracts.length > 16 ||
-      value.allowedcontracts.some((h) => typeof h !== "string" || !/^0x[0-9a-f]{40}$/.test(h)) || new Set(value.allowedcontracts).size !== value.allowedcontracts.length)
-    fail("unsupported or noncanonical signer scope");
-  return { account: value.account, scopes: value.scopes, allowedcontracts: [...value.allowedcontracts] };
+  if (value?.scopes === "WitnessRules") {
+    exactKeys(value, ["account", "scopes", "rules"], "signer");
+    if (
+      !Array.isArray(value.rules) ||
+      value.rules.length !== 1 ||
+      !value.rules[0]
+    )
+      fail("the account proxy carries exactly one witness rule");
+    return {
+      account: accountHash(value.account),
+      scopes: value.scopes,
+      rules: [rule(value.rules[0])],
+    };
+  }
+  if (value?.scopes === "CustomContracts") {
+    exactKeys(value, ["account", "scopes", "allowedcontracts"], "signer");
+    if (
+      !Array.isArray(value.allowedcontracts) ||
+      !value.allowedcontracts.length ||
+      value.allowedcontracts.length > 16 ||
+      value.allowedcontracts.some(
+        (h) => typeof h !== "string" || !/^0x[0-9a-f]{40}$/.test(h),
+      ) ||
+      new Set(value.allowedcontracts).size !== value.allowedcontracts.length
+    )
+      fail("signer allowlist must be 1..16 distinct canonical UInt160 values");
+    return {
+      account: accountHash(value.account),
+      scopes: value.scopes,
+      allowedcontracts: [...value.allowedcontracts],
+    };
+  }
+  exactKeys(value, ["account", "scopes"], "signer");
+  if (!["None", "CalledByEntry", "Global"].includes(value.scopes))
+    fail("unsupported signer scope");
+  return { account: accountHash(value.account), scopes: value.scopes };
 }
+
+/** Witness-rule signer encoding: scope byte, rule count, action, condition. */
+function signerBytes(s) {
+  const account = reverse(s.account.slice(2));
+  if (s.scopes === "None") return account + "00";
+  if (s.scopes === "CalledByEntry") return account + "01";
+  if (s.scopes === "Global") return account + "80";
+  if (s.scopes === "WitnessRules")
+    return (
+      account +
+      "40" +
+      vi(s.rules.length) +
+      s.rules
+        .map((r) => "01" + "28" + reverse(r.condition.hash))
+        .join("")
+    );
+  return (
+    account +
+    "10" +
+    vi(s.allowedcontracts.length) +
+    s.allowedcontracts.map((h) => reverse(h.slice(2))).join("")
+  );
+}
+
 function transaction(value) {
-  exactKeys(value, ["nonce", "systemFee", "networkFee", "validUntilBlock", "script", "signers"], "transaction");
-  fee(value.systemFee, "system fee"); fee(value.networkFee, "network fee");
-  if (!Array.isArray(value.signers) || !value.signers.length || value.signers.length > 16) fail("transaction needs 1..16 signers");
+  exactKeys(
+    value,
+    ["nonce", "systemFee", "networkFee", "validUntilBlock", "script", "signers"],
+    "transaction",
+  );
+  fee(value.systemFee, "system fee");
+  fee(value.networkFee, "network fee");
+  if (
+    !Array.isArray(value.signers) ||
+    !value.signers.length ||
+    value.signers.length > 16
+  )
+    fail("transaction needs 1..16 signers");
   const signers = value.signers.map(signer);
-  if (new Set(signers.map((s) => s.account)).size !== signers.length) fail("duplicate transaction signer");
+  if (new Set(signers.map((s) => s.account)).size !== signers.length)
+    fail("duplicate transaction signer");
   const script = hex(value.script, undefined, 65535);
   if (!script) fail("empty transaction script");
-  return { nonce: uint32(value.nonce, "nonce"), systemFee: value.systemFee, networkFee: value.networkFee,
-    validUntilBlock: uint32(value.validUntilBlock, "valid until block"), script, signers };
+  return {
+    nonce: uint32(value.nonce, "nonce"),
+    systemFee: value.systemFee,
+    networkFee: value.networkFee,
+    validUntilBlock: uint32(value.validUntilBlock, "valid until block"),
+    script,
+    signers,
+  };
 }
 function witnesses(values, count) {
-  if (!Array.isArray(values) || values.length !== count) fail("witness count does not match signers");
+  if (!Array.isArray(values) || values.length !== count)
+    fail("witness count does not match signers");
   return values.map((value) => {
     exactKeys(value, ["invocation", "verification"], "witness");
-    return { invocation: hex(value.invocation, undefined, 1024), verification: hex(value.verification, undefined, 1024) };
+    return {
+      invocation: hex(value.invocation, undefined, 1024),
+      verification: hex(value.verification, undefined, 1024),
+    };
   });
 }
 function unsigned(tx) {
-  return "00" + le(tx.nonce, 4) + le(tx.systemFee, 8) + le(tx.networkFee, 8) + le(tx.validUntilBlock, 4) + vi(tx.signers.length) +
-    tx.signers.map((s) => reverse(s.account.slice(2)) + (s.scopes === "None" ? "00" : "10" + vi(s.allowedcontracts.length) + s.allowedcontracts.map((h) => reverse(h.slice(2))).join(""))).join("") +
-    "00" + vb(tx.script);
+  return (
+    "00" +
+    le(tx.nonce, 4) +
+    le(tx.systemFee, 8) +
+    le(tx.networkFee, 8) +
+    le(tx.validUntilBlock, 4) +
+    vi(tx.signers.length) +
+    tx.signers.map(signerBytes).join("") +
+    "00" +
+    vb(tx.script)
+  );
+}
+
+/**
+ * The canonical proxy signer/witness for an execution plan.
+ *
+ * The proxy address is not a claim: it is recomputed from the account id, the
+ * core and the plan's call flags, so a review that pairs an account id with a
+ * foreign proxy script is refused here instead of on chain. The witness itself
+ * comes from shared/proxyWitness.mjs, so the SDK cannot grow a second
+ * construction; only the artifact's own signer/witness shapes are applied.
+ */
+function proxyArtifacts(c, contract, plan, payer) {
+  const proxyAddress = c.accountAddress(plan.accountId, {
+    coreContractHash: contract,
+    callFlags: plan.proxyCallFlags,
+  });
+  if (proxyAddress !== plan.accountAddress)
+    fail("review proxy address is not the account's proxy under this core");
+  const proxy = createProxyWitness({
+    coreHash: contract,
+    accountId: plan.accountId,
+    proxyHash: proxyAddress,
+    feePayer: payer,
+    callFlags: plan.proxyCallFlags,
+  });
+  return {
+    signer: signer({
+      account: "0x" + proxy.signer.account,
+      scopes: proxy.signer.scopes,
+      rules: proxy.signer.rules,
+    }),
+    witness: {
+      invocation: proxy.witness.invocationScript,
+      verification: proxy.witness.verificationScript,
+    },
+  };
 }
 
 /** The SDK and browser must call this exact complete-signed-transaction response validator. */
 export function validateNativeSignedPreflight(c, expected, result) {
-  if (result?.hash !== expected.txid || result?.network !== expected.networkMagic || result?.verification !== "Succeed" ||
-      result?.state !== "HALT" || result?.relayed !== false || result?.mempoolChecked !== false)
+  if (
+    result?.hash !== expected.txid ||
+    result?.network !== expected.networkMagic ||
+    result?.verification !== "Succeed" ||
+    result?.state !== "HALT" ||
+    result?.relayed !== false ||
+    result?.mempoolChecked !== false
+  )
     fail("signed transaction preflight rejected or returned mismatched identity");
-  if (!Number.isSafeInteger(result?.snapshot?.height)) fail("preflight snapshot height must be a UInt32 number");
+  if (!Number.isSafeInteger(result?.snapshot?.height))
+    fail("preflight snapshot height must be a UInt32 number");
   c.unsigned(result.snapshot.height, 32, "preflight snapshot height");
   c.hex(result?.snapshot?.hash, 32);
   const simulation = result.simulation;
-  if (simulation?.mode !== "single-transaction-next-block" || simulation?.onPersist !== "HALT" || simulation?.view !== 0 || simulation?.transactionCount !== 1 ||
-      !Number.isSafeInteger(simulation?.height) || simulation.height !== result.snapshot.height + 1 || simulation.height > 0xffffffff ||
-      !Number.isSafeInteger(simulation?.primaryIndex) || simulation.primaryIndex < 0 || simulation.primaryIndex > 0xff ||
-      typeof simulation?.timestamp !== "string" || !/^(?:0|[1-9][0-9]{0,19})$/.test(simulation.timestamp) ||
-      typeof simulation?.nextConsensus !== "string" || !/^0x[0-9a-f]{40}$/.test(simulation.nextConsensus))
-    fail("preflight simulation must declare successful single-transaction next-block preparation");
+  if (
+    simulation?.mode !== "single-transaction-next-block" ||
+    simulation?.onPersist !== "HALT" ||
+    simulation?.view !== 0 ||
+    simulation?.transactionCount !== 1 ||
+    !Number.isSafeInteger(simulation?.height) ||
+    simulation.height !== result.snapshot.height + 1 ||
+    simulation.height > 0xffffffff ||
+    !Number.isSafeInteger(simulation?.primaryIndex) ||
+    simulation.primaryIndex < 0 ||
+    simulation.primaryIndex > 0xff ||
+    typeof simulation?.timestamp !== "string" ||
+    !/^(?:0|[1-9][0-9]{0,19})$/.test(simulation.timestamp) ||
+    typeof simulation?.nextConsensus !== "string" ||
+    !/^0x[0-9a-f]{40}$/.test(simulation.nextConsensus)
+  )
+    fail(
+      "preflight simulation must declare successful single-transaction next-block preparation",
+    );
   c.unsigned(simulation.timestamp, 64, "preflight simulation timestamp");
-  if (expected.validUntilBlock !== undefined && expected.validUntilBlock <= simulation.height)
+  if (
+    expected.validUntilBlock !== undefined &&
+    expected.validUntilBlock <= simulation.height
+  )
     fail("signed transaction expires before the simulated block");
   const fees = parseNativeRpcFees(result, true);
   if (BigInt(fees.minimumRequiredFee) > BigInt(expected.systemFee))
@@ -117,211 +390,484 @@ export function validateNativeSignedPreflight(c, expected, result) {
 
 /** Public, portable transport. Crypto and standard wallet witness validation are injected. */
 export function createNativeTransactionArtifactTools({ codec: c, sha256, walletWitness } = {}) {
-  if (!c || typeof sha256 !== "function") fail("artifact codec and SHA256 adapter required");
-  const issued = new WeakMap(), submissions = new WeakMap();
-  function createArtifact(input) {
-    const p = profile(input.profile), networkMagic = uint32(input.networkMagic, "network magic"), tx = transaction(input.transaction), ws = witnesses(input.witnesses, tx.signers.length);
-    if (p.networkMagic !== networkMagic) fail("artifact profile network mismatch");
-    const unsignedHex = unsigned(tx), digest = hex(sha256(unsignedHex), 32), txid = "0x" + reverse(digest), signData = le(networkMagic, 4) + digest;
-    const rawTransaction = unsignedHex + vi(ws.length) + ws.map((w) => vb(w.invocation) + vb(w.verification)).join("");
+  if (!c || typeof sha256 !== "function")
+    fail("artifact codec and SHA256 adapter required");
+  const issued = new WeakMap(),
+    submissions = new WeakMap();
+
+  function bytes({ networkMagic, transaction: tx, witnesses: ws }) {
+    const magic = uint32(networkMagic, "network magic"),
+      parsed = transaction(tx),
+      parsedWitnesses = witnesses(ws, parsed.signers.length),
+      unsignedHex = unsigned(parsed),
+      digest = hex(sha256(unsignedHex), 32);
+    const rawTransaction =
+      unsignedHex +
+      vi(parsedWitnesses.length) +
+      parsedWitnesses
+        .map((w) => vb(w.invocation) + vb(w.verification))
+        .join("");
     hex(rawTransaction);
-    if (input.unsignedHex !== unsignedHex || input.txid !== txid || input.signData !== signData || input.rawTransaction !== rawTransaction)
-      fail("artifact transaction bytes, hash or signing data do not match canonical encoding");
-    return freeze({ format: "neo-native-signed-transaction", version: 1, networkMagic, profile: p, transaction: tx, witnesses: ws, unsignedHex, txid, signData, rawTransaction });
+    return {
+      networkMagic: magic,
+      transaction: parsed,
+      witnesses: parsedWitnesses,
+      unsignedHex,
+      txid: "0x" + reverse(digest),
+      signData: le(magic, 4) + digest,
+      rawTransaction,
+    };
   }
+
+  function createArtifact(input) {
+    const p = profile(input.profile),
+      canonical = bytes({
+        networkMagic: input.networkMagic,
+        transaction: input.transaction,
+        witnesses: input.witnesses,
+      });
+    if (p.networkMagic !== canonical.networkMagic)
+      fail("artifact profile network mismatch");
+    if (
+      input.unsignedHex !== canonical.unsignedHex ||
+      input.txid !== canonical.txid ||
+      input.signData !== canonical.signData ||
+      input.rawTransaction !== canonical.rawTransaction
+    )
+      fail("artifact transaction bytes, hash or signing data do not match canonical encoding");
+    return freeze({
+      format: "neo-native-signed-transaction",
+      version: 1,
+      networkMagic: canonical.networkMagic,
+      profile: p,
+      transaction: canonical.transaction,
+      witnesses: canonical.witnesses,
+      unsignedHex: canonical.unsignedHex,
+      txid: canonical.txid,
+      signData: canonical.signData,
+      rawTransaction: canonical.rawTransaction,
+    });
+  }
+
   function checked(client, imported) {
     const record = issued.get(imported);
-    if (!record || record.client !== client) fail("signed artifact must be imported by this transport and client");
-    if (client.networkMagic !== imported.profile.networkMagic || !same(profile(client.profile), imported.profile)) fail("current native profile changed");
+    if (!record || record.client !== client)
+      fail("signed artifact must be imported by this transport and client");
+    if (
+      client.networkMagic !== imported.profile.networkMagic ||
+      !same(profile(client.profile), imported.profile)
+    )
+      fail("current native profile changed");
     return record;
   }
+
+  /**
+   * A review is the reviewed intent: the v4 plan, the fee payer, the exact
+   * signer list and the simulation that admitted it. Nothing here trusts a
+   * review that was not signed; the artifact only binds to one.
+   */
+  function reviewedPlan(review) {
+    const plan = review?.plan;
+    if (!plan || !PLAN_KINDS.includes(plan.kind)) fail("review has no v4 plan");
+    // A batch registration names its accounts as a list, so a single account id
+    // is optional on registration plans; the script is not.
+    const accountId =
+      plan.accountId === undefined ? undefined : hex(plan.accountId, 20);
+    const script = hex(plan.script, undefined, 65535);
+    if (!script) fail("reviewed plan has no script");
+    const payer = hash160(review.feePayer, "review fee payer");
+    if (!Array.isArray(review.signers) || !review.signers.length)
+      fail("review has no signers");
+    const signers = review.signers.map(signer);
+    if (signers.length > 16) fail("review has too many signers");
+    if (new Set(signers.map((s) => s.account)).size !== signers.length)
+      fail("review has duplicate signers");
+    if (signers[0].account !== "0x" + payer)
+      fail("review fee payer must be the first signer");
+    const other = signers.slice(1).filter((s) => s.scopes === "WitnessRules");
+    if (plan.kind !== "execution") {
+      if (other.length) fail("only execution plans carry a proxy signer");
+      return { plan: { kind: plan.kind, accountId, script }, payer, signers, proxy: null };
+    }
+    const accountAddress = hex(plan.accountAddress, 20);
+    if (!Number.isInteger(plan.proxyCallFlags) || plan.proxyCallFlags < -1 || plan.proxyCallFlags > 16)
+      fail("review must carry the proxy call flags the core derives with");
+    const proxy = proxyArtifacts(
+      c,
+      hex(review.profile?.contract, 20),
+      { accountId, accountAddress, proxyCallFlags: plan.proxyCallFlags },
+      payer,
+    );
+    if (other.length !== 1 || !same(signers[1], proxy.signer))
+      fail("execution review must carry the canonical proxy signer at index 1");
+    return {
+      plan: { kind: plan.kind, accountId, script, accountAddress, proxyCallFlags: plan.proxyCallFlags },
+      payer,
+      signers,
+      proxy,
+    };
+  }
+
   async function bindArtifact(client, review, text) {
-    if (typeof text !== "string" || !text.length || text.length > NATIVE_SIGNED_ARTIFACT_MAX_CHARS) fail("signed artifact JSON exceeds input size limit");
+    if (
+      typeof text !== "string" ||
+      !text.length ||
+      text.length > NATIVE_SIGNED_ARTIFACT_MAX_CHARS
+    )
+      fail("signed artifact JSON exceeds input size limit");
     let input;
-    try { input = JSON.parse(text); } catch { fail("signed artifact must be valid JSON"); }
-    exactKeys(input, ["format", "version", "networkMagic", "profile", "transaction", "witnesses", "unsignedHex", "txid", "signData", "rawTransaction"], "artifact");
-    if (input.format !== "neo-native-signed-transaction" || input.version !== 1) fail("unsupported signed artifact version");
-    if (!review || review.submission !== "native-sdk" || !review.plan) fail("signed import requires the current exact-script review");
+    try {
+      input = JSON.parse(text);
+    } catch {
+      fail("signed artifact must be valid JSON");
+    }
+    exactKeys(
+      input,
+      [
+        "format",
+        "version",
+        "networkMagic",
+        "profile",
+        "transaction",
+        "witnesses",
+        "unsignedHex",
+        "txid",
+        "signData",
+        "rawTransaction",
+      ],
+      "artifact",
+    );
+    if (input.format !== "neo-native-signed-transaction" || input.version !== 1)
+      fail("unsupported signed artifact version");
+    if (!review || review.submission !== "native-sdk" || !review.plan)
+      fail("signed import requires the current exact-script review");
     const artifact = createArtifact(input);
-    if (artifact.networkMagic !== client.networkMagic || !same(artifact.profile, profile(review.profile))) fail("artifact network or reviewed profile mismatch");
-    if (artifact.transaction.script !== c.hex(review.plan.script)) fail("artifact script does not match current review");
-    if (!same(artifact.transaction.signers, review.signers.map(signer))) fail("artifact signer order, scopes or accounts do not match current review");
-    if (artifact.transaction.signers[0].account !== "0x" + c.hex(review.feePayer, 20)) fail("artifact payer does not match current review");
-    const proxy = review.plan.kind === "execution" ? c.hex(review.plan.accountAddress, 20) : null;
-    if (!walletWitness || typeof walletWitness.validate !== "function") fail("standard wallet signature validation is unavailable");
+    if (
+      artifact.networkMagic !== client.networkMagic ||
+      !same(artifact.profile, profile(review.profile))
+    )
+      fail("artifact network or reviewed profile mismatch");
+    const reviewed = reviewedPlan(review);
+    if (artifact.transaction.script !== reviewed.plan.script)
+      fail("artifact script does not match current review");
+    if (!same(artifact.transaction.signers, reviewed.signers))
+      fail("artifact signer order, scopes or accounts do not match current review");
+    if (!walletWitness || typeof walletWitness.validate !== "function")
+      fail("standard wallet signature validation is unavailable");
     for (const [index, descriptor] of artifact.transaction.signers.entries()) {
       const witness = artifact.witnesses[index];
-      if (proxy && descriptor.account === "0x" + proxy) {
-        if (index !== 1 || witness.invocation !== "" || witness.verification !== c.verificationScript(review.plan.accountId) || !same(descriptor, signer(review.plan.proxySigner))) fail("noncanonical native proxy witness");
-      } else if (!(await walletWitness.validate(witness, descriptor.account.slice(2), artifact.signData))) fail("invalid wallet transaction witness");
+      if (reviewed.proxy && index === 1) {
+        if (
+          descriptor.account !== reviewed.proxy.signer.account ||
+          witness.invocation !== "" ||
+          witness.verification !== reviewed.proxy.witness.verification
+        )
+          fail("noncanonical native proxy witness");
+      } else if (
+        !(await walletWitness.validate(
+          witness,
+          descriptor.account.slice(2),
+          artifact.signData,
+        ))
+      )
+        fail("invalid wallet transaction witness");
     }
-    if (proxy && artifact.transaction.signers[1]?.account !== "0x" + proxy) fail("missing canonical native proxy signer");
+    if (reviewed.proxy && artifact.transaction.signers[1]?.account !== reviewed.proxy.signer.account)
+      fail("missing canonical native proxy signer");
     return artifact;
   }
-  const feesOf = (artifact) => ({ system: artifact.transaction.systemFee, network: artifact.transaction.networkFee,
-    total: (BigInt(artifact.transaction.systemFee) + BigInt(artifact.transaction.networkFee)).toString() });
+
+  const feesOf = (artifact) => ({
+    system: artifact.transaction.systemFee,
+    network: artifact.transaction.networkFee,
+    total: (
+      BigInt(artifact.transaction.systemFee) + BigInt(artifact.transaction.networkFee)
+    ).toString(),
+  });
+
   async function importArtifact(client, review, text, caps) {
-    const artifact = await bindArtifact(client, review, text), approved = {
-      system: c.unsigned(caps?.maxSystemFee, 63, "system fee cap"), network: c.unsigned(caps?.maxNetworkFee, 63, "network fee cap"), total: c.unsigned(caps?.maxTotalFee, 63, "total fee cap"),
-    };
-    const system = fee(artifact.transaction.systemFee, "system fee"), network = fee(artifact.transaction.networkFee, "network fee");
-    if (system > approved.system || network > approved.network || system + network > approved.total) fail("artifact fees exceed approved caps");
+    const artifact = await bindArtifact(client, review, text),
+      approved = {
+        system: c.unsigned(caps?.maxSystemFee, 63, "system fee cap"),
+        network: c.unsigned(caps?.maxNetworkFee, 63, "network fee cap"),
+        total: c.unsigned(caps?.maxTotalFee, 63, "total fee cap"),
+      };
+    const system = fee(artifact.transaction.systemFee, "system fee"),
+      network = fee(artifact.transaction.networkFee, "network fee");
+    if (system > approved.system || network > approved.network || system + network > approved.total)
+      fail("artifact fees exceed approved caps");
     const reviewedFees = parseNativeRpcFees({
       gasconsumed: review.simulation?.gasConsumed,
-      minimumrequiredfee: review.simulation?.minimumRequiredFee === null ? undefined : review.simulation?.minimumRequiredFee,
+      minimumrequiredfee:
+        review.simulation?.minimumRequiredFee === null
+          ? undefined
+          : review.simulation?.minimumRequiredFee,
     });
-    if (system < BigInt(reviewedFees.minimumRequiredFee ?? reviewedFees.gasConsumed)) fail("artifact system fee is below the reviewed admission requirement");
+    if (system < BigInt(reviewedFees.minimumRequiredFee ?? reviewedFees.gasConsumed))
+      fail("artifact system fee is below the reviewed admission requirement");
     await client.revalidatePlan(review.plan);
-    if (!same(artifact.profile, profile(client.profile))) fail("current native profile changed");
+    if (!same(artifact.profile, profile(client.profile)))
+      fail("current native profile changed");
     const height = uint32(await client.rpc.send("getblockcount", []), "block count");
-    if (!height || artifact.transaction.validUntilBlock <= height || artifact.transaction.validUntilBlock > height + 100) fail("signed transaction must expire within the next 100 blocks");
+    if (
+      !height ||
+      artifact.transaction.validUntilBlock <= height ||
+      artifact.transaction.validUntilBlock > height + 100
+    )
+      fail("signed transaction must expire within the next 100 blocks");
     const imported = freeze({ ...artifact, review, fees: feesOf(artifact) });
     issued.set(imported, { client });
     return imported;
   }
-  function archivedReview(input) {
+
+  /**
+   * A review archive carries the v4 recipe that rebuilt its plan. The rebuilt
+   * plan must reproduce the archived script, account id and method byte for
+   * byte; historical descriptions and unsigned claims are not authenticated.
+   */
+  function archivedReview(client, input) {
     let text;
-    try { text = typeof input === "string" ? input : JSON.stringify(input); }
-    catch { fail("archived review must be bounded JSON"); }
-    if (typeof text !== "string" || text.length > NATIVE_SIGNED_ARTIFACT_MAX_CHARS) fail("archived review exceeds input size limit");
+    try {
+      text = typeof input === "string" ? input : JSON.stringify(input);
+    } catch {
+      fail("archived review must be bounded JSON");
+    }
+    if (typeof text !== "string" || text.length > NATIVE_SIGNED_ARTIFACT_MAX_CHARS)
+      fail("archived review exceeds input size limit");
     let archive;
-    try { archive = JSON.parse(text); } catch { fail("archived review must be valid JSON"); }
-    if (archive?.format !== "neo-native-reviewed-request" || archive.version !== 1 || archive.submission !== "native-sdk") fail("unsupported archived review format or signing path");
-    const p = profile(archive.profile), prior = archive.plan, recipe = archive.recipe;
-    if (!prior || !recipe || !recipe.input) fail("archived review requires a reconstructable recipe");
-    const inputPlan = recipe.input, H = c.hashValue, S = c.stringValue, contract = p.contract, zero = "00".repeat(20);
+    try {
+      archive = JSON.parse(text);
+    } catch {
+      fail("archived review must be valid JSON");
+    }
+    if (
+      archive?.format !== "neo-native-reviewed-request" ||
+      archive.version !== 1 ||
+      archive.submission !== "native-sdk"
+    )
+      fail("unsupported archived review format or signing path");
+    const p = profile(archive.profile),
+      prior = archive.plan,
+      recipe = archive.recipe;
+    if (!prior || !recipe || !recipe.input)
+      fail("archived review requires a reconstructable recipe");
+    const args = recipe.input;
     let plan;
-    if (recipe.method === "buildRegistration" && prior.kind === "registration") {
-      const identity = c.deriveIdentity({ networkMagic: p.networkMagic, custodyAddress: inputPlan.custodyAddress, salt: inputPlan.salt });
-      plan = { kind: "registration", ...identity, method: "registerAccount", script: c.dynamicCall(contract, "registerAccount", [
-        H(inputPlan.custodyAddress), { type: "ByteString", value: c.hex(inputPlan.salt, 32) }, H(inputPlan.verifier ?? zero), H(inputPlan.hook ?? zero), H(inputPlan.recoveryAddress ?? zero),
-      ]) };
-    } else if (recipe.method === "buildAction" && prior.kind === "lifecycle") {
-      const allowed = ["proposeVerifier", "activateVerifier", "cancelVerifier", "proposeHook", "activateHook", "cancelHook", "proposeRecoveryAddress", "activateRecoveryAddress", "cancelRecoveryAddress", "proposeRecovery", "executeRecovery", "cancelRecovery", "freeze", "unfreeze", "cancelModuleCall"];
-      const method = inputPlan.action, accountId = c.hex(inputPlan.accountId, 20), params = [H(accountId)];
-      if (!allowed.includes(method)) fail("unsupported archived lifecycle action");
-      if (method.startsWith("propose")) params.push(H(inputPlan.address));
-      if (method === "cancelModuleCall") {
-        if (!["verifier", "hook"].includes(inputPlan.role) || prior.role !== inputPlan.role || prior.requiresExactScript !== true) fail("archived cancellation requires its exact role and guard");
-        params.push(S(inputPlan.role));
-      }
-      let script = c.dynamicCall(contract, method, params);
-      if (method === "cancelModuleCall") {
-        const pending = hex(prior.pendingCallBytes, undefined, 8192);
-        if (!pending) fail("archived cancellation has no guarded pending bytes");
-        script = c.dynamicCall(contract, "getPendingModuleCall", params, 5) + "11c010" + c.encodeValue(S("serialize")) +
-          c.encodeValue(H("acce6fd80d44e1796aa0c2c625e9e4e0ce39efc0")) + "41627d5b52" + c.encodeValue({ type: "ByteString", value: pending }) + "9739" + script;
-      }
-      plan = { kind: "lifecycle", accountId, accountAddress: c.accountAddress(accountId), method, script };
-    } else if (recipe.method === "buildModuleCall" && prior.kind === "configuration") {
-      if (!["verifier", "hook"].includes(inputPlan.role) || prior.role !== inputPlan.role) fail("unsupported archived module role");
-      const accountId = c.hex(inputPlan.accountId, 20), method = "call" + (inputPlan.role === "verifier" ? "Verifier" : "Hook") + (inputPlan.child ? "Child" : "");
-      const args = c.canonicalValue({ type: "Array", value: inputPlan.args ?? [] });
-      plan = { kind: "configuration", accountId, accountAddress: c.accountAddress(accountId), method, script: c.dynamicCall(contract, method, [
-        H(accountId), ...(inputPlan.child ? [H(inputPlan.child)] : []), S(inputPlan.method), args,
-      ]) };
-    } else if (recipe.method === "prepareOperation" && prior.kind === "execution") {
-      if (!Array.isArray(prior.preparedOperations) || prior.preparedOperations.length !== 1 || typeof prior.batch !== "boolean") fail("archived workspace execution requires one exact operation");
-      const prepared = prior.preparedOperations[0], context = prepared?.context, accountId = c.hex(inputPlan.accountId, 20);
-      if (!context || context.networkMagic !== p.networkMagic || c.hex(context.accountId, 20) !== accountId) fail("archived operation context mismatch");
-      const source = prepared.operation;
-      const operation = { targetContract: c.hex(source.targetContract, 20), method: source.method,
-        args: c.canonicalValue({ type: "Array", value: source.args ?? [] }).value,
-        nonce: c.unsigned(source.nonce, 255, "archived operation nonce").toString(), deadline: c.unsigned(source.deadline, 255, "archived operation deadline").toString(), signature: c.hex(source.signature) };
-      if (c.hex(inputPlan.targetContract, 20) !== operation.targetContract || inputPlan.method !== operation.method ||
-          c.serializeValue({ type: "Array", value: inputPlan.args ?? [] }) !== c.serializeValue({ type: "Array", value: operation.args }) ||
-          c.unsigned(inputPlan.deadline, 255, "recipe deadline").toString() !== operation.deadline ||
-          c.unsigned(inputPlan.channel ?? 0, 191, "recipe channel") !== c.splitNonce(operation.nonce).channel || c.hex(recipe.signature) !== operation.signature)
-        fail("archived operation recipe does not match its signed operation");
-      const accountAddress = c.accountAddress(accountId);
-      plan = { kind: "execution", accountId, accountAddress, batch: prior.batch, preparedOperations: [{ operation }],
-        script: c.buildExecutionScript(accountId, [operation], context, prior.batch),
-        proxySigner: { account: "0x" + accountAddress, scopes: "CustomContracts", allowedcontracts: ["0x" + operation.targetContract] },
-      };
-    } else fail("unsupported archived review recipe");
-    if (c.hex(prior.accountId, 20) !== plan.accountId || prior.script !== plan.script ||
-        (plan.kind !== "execution" && prior.method !== plan.method) ||
-        (prior.accountAddress !== undefined && c.hex(prior.accountAddress, 20) !== plan.accountAddress))
+    if (recipe.method === "buildCreateAccountScript" && prior.kind === "registration")
+      plan = client.buildCreateAccountScript(args);
+    else if (
+      recipe.method === "buildCreateAccountsScript" &&
+      prior.kind === "registration"
+    ) {
+      if (typeof client.buildCreateAccountsScript !== "function")
+        fail("this kernel has no batch registration");
+      plan = client.buildCreateAccountsScript(args);
+    } else if (recipe.method === "buildAccountActionScript" && prior.kind === "account") {
+      if (!ACCOUNT_ACTIONS.includes(args.method))
+        fail("unsupported archived account action");
+      plan = client.buildAccountActionScript(args);
+    } else if (
+      recipe.method === "buildCustomActionScript" &&
+      prior.kind === "account"
+    ) {
+      // The custom kernel's custody-gated actions (metadata, escrow entry) are
+      // core calls like any other; the recipe must replay through the method
+      // that built it or the archived bytes are not the reviewed intent.
+      if (typeof client.buildCustomActionScript !== "function")
+        fail("this kernel has no custom account actions");
+      plan = client.buildCustomActionScript(args);
+    } else if (recipe.method === "buildConfigurationScript" && prior.kind === "configuration") {
+      if (!CONFIGURATION_KINDS.includes(args.kind))
+        fail("unsupported archived configuration intent");
+      plan = client.buildConfigurationScript(args);
+    } else if (recipe.method === "buildExecutionScript" && prior.kind === "execution")
+      plan = client.buildExecutionScript(args);
+    else fail("unsupported archived review recipe");
+    if (
+      (prior.accountId === undefined
+        ? plan.accountId !== undefined
+        : hex(prior.accountId, 20) !== plan.accountId) ||
+      prior.script !== plan.script ||
+      prior.method !== plan.method ||
+      (prior.accountAddress !== undefined &&
+        hex(prior.accountAddress, 20) !== plan.accountAddress) ||
+      (plan.kind === "execution" &&
+        (prior.batch !== plan.batch ||
+          prior.proxyCallFlags !== plan.proxyCallFlags))
+    )
       fail("archived recipe and plan do not reconstruct the signed script");
-    // Only byte-bound semantics survive. Historical account snapshots, descriptions,
-    // pending-intent labels and unsigned authority-role claims are not authenticated.
-    return freeze({ format: archive.format, version: 1, profile: p, submission: "native-sdk", feePayer: c.hex(archive.feePayer, 20), signers: archive.signers.map(signer), plan });
+    client.prepare(plan);
+    return freeze({
+      format: archive.format,
+      version: 1,
+      profile: p,
+      submission: "native-sdk",
+      feePayer: hash160(archive.feePayer, "archived fee payer"),
+      signers: archive.signers.map(signer),
+      plan,
+    });
   }
+
   async function restoreForReceipt(client, archive, text) {
-    const review = archivedReview(archive), artifact = await bindArtifact(client, review, text);
     await client.discover();
-    if (client.networkMagic !== artifact.networkMagic || !same(artifact.profile, profile(client.profile))) fail("current native profile changed");
-    const imported = freeze({ ...artifact, review, fees: feesOf(artifact), receiptOnly: true, semanticsVerified: true });
+    const review = archivedReview(client, archive),
+      artifact = await bindArtifact(client, review, text);
+    if (
+      client.networkMagic !== artifact.networkMagic ||
+      !same(artifact.profile, profile(client.profile))
+    )
+      fail("current native profile changed");
+    const imported = freeze({
+      ...artifact,
+      review,
+      fees: feesOf(artifact),
+      receiptOnly: true,
+      semanticsVerified: true,
+    });
     issued.set(imported, { client, receiptOnly: true });
     return imported;
   }
+
   async function preflight(client, imported) {
-    if (checked(client, imported).receiptOnly) fail("receipt-only restoration cannot authorize transaction preflight");
+    if (checked(client, imported).receiptOnly)
+      fail("receipt-only restoration cannot authorize transaction preflight");
     await client.revalidatePlan(imported.review.plan);
     checked(client, imported);
     let result;
-    try { result = await client.rpc.send("invoketransaction", [toBase64(imported.rawTransaction)]); }
-    catch (cause) {
-      const error = new Error(`Native transaction: signed transaction preflight unavailable: ${cause?.message ?? cause}`, { cause });
-      if (cause && typeof cause === "object") for (const key of ["code", "data"]) if (Object.hasOwn(cause, key)) error[key] = cause[key];
+    try {
+      result = await client.rpc.send("invoketransaction", [
+        toBase64(imported.rawTransaction),
+      ]);
+    } catch (cause) {
+      const error = new Error(
+        `Native transaction: signed transaction preflight unavailable: ${cause?.message ?? cause}`,
+        { cause },
+      );
+      if (cause && typeof cause === "object")
+        for (const key of ["code", "data"])
+          if (Object.hasOwn(cause, key)) error[key] = cause[key];
       throw error;
     }
     checked(client, imported);
-    return validateNativeSignedPreflight(c, { txid: imported.txid, networkMagic: client.networkMagic, plan: imported.review.plan, systemFee: imported.transaction.systemFee, validUntilBlock: imported.transaction.validUntilBlock }, result);
+    return validateNativeSignedPreflight(
+      c,
+      {
+        txid: imported.txid,
+        networkMagic: client.networkMagic,
+        plan: imported.review.plan,
+        systemFee: imported.transaction.systemFee,
+        validUntilBlock: imported.transaction.validUntilBlock,
+      },
+      result,
+    );
   }
+
   function broadcast(client, imported, { assertCurrent = () => {} } = {}) {
-    try { if (checked(client, imported).receiptOnly) fail("receipt-only restoration cannot authorize broadcast"); assertCurrent(); }
-    catch (error) {
+    try {
+      if (checked(client, imported).receiptOnly)
+        fail("receipt-only restoration cannot authorize broadcast");
+      assertCurrent();
+    } catch (error) {
       if (issued.has(imported)) error.txid = imported.txid;
       error.submissionAttempted = false;
       return Promise.reject(error);
     }
     let byId = submissions.get(client);
-    if (!byId) { byId = new Map(); submissions.set(client, byId); }
+    if (!byId) {
+      byId = new Map();
+      submissions.set(client, byId);
+    }
     const key = imported.txid + ":" + imported.rawTransaction;
     if (byId.has(key)) return byId.get(key);
     let submissionAttempted = false;
     const promise = (async () => {
       await preflight(client, imported);
-      checked(client, imported); assertCurrent();
+      checked(client, imported);
+      assertCurrent();
       submissionAttempted = true;
-      const result = await client.rpc.send("sendrawtransaction", [toBase64(imported.rawTransaction)]);
-      if (result?.hash && String(result.hash).toLowerCase() !== imported.txid) fail("RPC returned a different transaction id");
-      if (result !== true && !result?.hash) fail("RPC did not confirm transaction submission");
+      const result = await client.rpc.send("sendrawtransaction", [
+        toBase64(imported.rawTransaction),
+      ]);
+      if (result?.hash && String(result.hash).toLowerCase() !== imported.txid)
+        fail("RPC returned a different transaction id");
+      if (result !== true && !result?.hash)
+        fail("RPC did not confirm transaction submission");
       return { txid: imported.txid, submitted: true, confirmed: false };
     })().catch((error) => {
-      error.txid = imported.txid; error.submissionAttempted = submissionAttempted;
+      error.txid = imported.txid;
+      error.submissionAttempted = submissionAttempted;
       if (!submissionAttempted) byId.delete(key);
       throw error;
     });
     byId.set(key, promise);
     return promise;
   }
+
   async function receipt(client, imported) {
     checked(client, imported);
     await client.discover();
     checked(client, imported);
     const tx = await client.rpc.send("getrawtransaction", [imported.txid, true]);
     if (!tx?.blockhash) return { txid: imported.txid, confirmed: false };
-    if (String(tx.hash).toLowerCase() !== imported.txid) fail("persisted transaction identity mismatch");
-    if (/^0+$/.test(c.hex(tx.blockhash, 32))) fail("persisted transaction has a zero block hash");
-    if (tx.confirmations !== undefined && (!Number.isSafeInteger(tx.confirmations) || tx.confirmations < 1))
+    if (String(tx.hash).toLowerCase() !== imported.txid)
+      fail("persisted transaction identity mismatch");
+    if (/^0+$/.test(c.hex(tx.blockhash, 32)))
+      fail("persisted transaction has a zero block hash");
+    if (
+      tx.confirmations !== undefined &&
+      (!Number.isSafeInteger(tx.confirmations) || tx.confirmations < 1)
+    )
       fail("persisted transaction has invalid confirmations");
-    const [wire, log] = await Promise.all([client.rpc.send("getrawtransaction", [imported.txid, false]), client.rpc.send("getapplicationlog", [imported.txid])]);
+    const [wire, log] = await Promise.all([
+      client.rpc.send("getrawtransaction", [imported.txid, false]),
+      client.rpc.send("getapplicationlog", [imported.txid]),
+    ]);
     checked(client, imported);
-    if (fromBase64(wire) !== imported.rawTransaction) fail("persisted transaction bytes differ from signed transaction");
-    if (String(log?.txid).toLowerCase() !== imported.txid) fail("application log transaction identity mismatch");
+    if (fromBase64(wire) !== imported.rawTransaction)
+      fail("persisted transaction bytes differ from signed transaction");
+    if (String(log?.txid).toLowerCase() !== imported.txid)
+      fail("application log transaction identity mismatch");
     const executions = log.executions?.filter((x) => x.trigger === "Application");
-    if (!executions || executions.length !== 1) fail("confirmed transaction must have one Application execution");
-    const execution = executions[0], failures = [];
-    if (execution.vmstate !== "HALT") failures.push(`Application state is ${execution.vmstate ?? "unknown"}`);
+    if (!executions || executions.length !== 1)
+      fail("confirmed transaction must have one Application execution");
+    const execution = executions[0],
+      failures = [];
+    if (execution.vmstate !== "HALT")
+      failures.push(`Application state is ${execution.vmstate ?? "unknown"}`);
     else {
-      try { for (const index of validateNativeInvocationResult(imported.review.plan, execution.stack)) failures.push(`Token transfer ${index + 1} did not return Boolean true`); }
-      catch (error) { failures.push(error.message); }
+      try {
+        for (const index of validateNativeInvocationResult(
+          imported.review.plan,
+          execution.stack,
+        ))
+          failures.push(`Token transfer ${index + 1} did not return Boolean true`);
+      } catch (error) {
+        failures.push(error.message);
+      }
     }
-    return freeze({ txid: imported.txid, confirmed: true, succeeded: failures.length === 0, failures, blockHash: tx.blockhash, vmState: execution.vmstate,
-      exception: execution.exception ?? null, stack: execution.stack ?? [], notifications: execution.notifications ?? [], gasConsumed: execution.gasconsumed ?? null,
-      systemFee: imported.transaction.systemFee, networkFee: imported.transaction.networkFee });
+    return freeze({
+      txid: imported.txid,
+      confirmed: true,
+      succeeded: failures.length === 0,
+      failures,
+      blockHash: tx.blockhash,
+      vmState: execution.vmstate,
+      exception: execution.exception ?? null,
+      stack: execution.stack ?? [],
+      notifications: execution.notifications ?? [],
+      gasConsumed: execution.gasconsumed ?? null,
+      systemFee: imported.transaction.systemFee,
+      networkFee: imported.transaction.networkFee,
+    });
   }
-  return Object.freeze({ createArtifact, importArtifact, restoreForReceipt, preflight, broadcast, receipt });
+
+  return Object.freeze({
+    bytes,
+    createArtifact,
+    importArtifact,
+    restoreForReceipt,
+    preflight,
+    broadcast,
+    receipt,
+  });
 }

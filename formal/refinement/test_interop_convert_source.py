@@ -269,7 +269,7 @@ class ModelProjectionAgreementTests(unittest.TestCase):
         self.assertEqual(proofs.program_expression(gate.INTEROP_CONVERSION_PROGRAM),
                          '(convert_program 4 true true true true true true true true true '
                          'true true true true true 2048%N true true true)')
-        self.assertEqual(22,len(gate.SCOPES))
+        self.assertEqual(21,len(gate.SCOPES))
 
 
 @unittest.skipUnless(os.environ.get('SA_INTEROP_CONVERSION_SOURCE_DIR'),

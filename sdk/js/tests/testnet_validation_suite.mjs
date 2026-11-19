@@ -14,7 +14,15 @@ const ROOT_DIR = path.resolve(MODULE_DIR, "..");
 const SDK_REPORT_DIR = path.resolve(ROOT_DIR, "..", "..", "docs", "reports");
 const REPO_REPORT_DIR = path.resolve(ROOT_DIR, "..", "..", "docs");
 const REPO_ROOT = path.resolve(ROOT_DIR, "..", "..");
-const DATE_PREFIX = "2026-03-14";
+// One run id for every stage, so a suite run names a single deployment tag and
+// its report can be read back against the contracts it deployed.
+const SUITE_RUN_ID = (
+  process.env.SA_VALIDATION_RUN_ID ||
+  `suite-${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}`
+).toLowerCase();
+if (!process.env.SA_VALIDATION_RUN_ID) {
+  process.env.SA_VALIDATION_RUN_ID = SUITE_RUN_ID;
+}
 const { shouldSkipPaymasterRelayValidation } = paymasterRuntimeConfig;
 const { DEFAULT_TESTNET_RPC_URLS, resolveTestnetRpcCandidates } = testnetRpcHelpers;
 const { resolveLocalPaymasterHandlerPath } = localPaymasterHandlerHelpers;
@@ -24,44 +32,52 @@ if (!process.env.MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH && LOCAL_PAYMASTER_HANDLE
   process.env.MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH = LOCAL_PAYMASTER_HANDLER_PATH;
 }
 
+// Every runbook reads the paying wallet as `TEST_WIF || NEO_TESTNET_WIF`, so a
+// stage is ready when either one is set; requiring `TEST_WIF` alone would skip
+// a suite whose operator only exported the v4-era name.
+const WIF_ENV = ["TEST_WIF", "NEO_TESTNET_WIF"];
+const RUNTIME_TOKEN_ENV = ["MORPHEUS_RUNTIME_TOKEN", "PHALA_API_TOKEN", "PHALA_SHARED_SECRET"];
+
 const STAGES = [
   {
     id: "smoke",
-    title: "V3 Smoke",
+    title: "V4 Smoke",
     command: ["node", "tests/testnet_smoke.js"],
-    requiredEnv: ["TEST_WIF"],
+    requiredEnvAny: [WIF_ENV],
   },
   {
     id: "plugin_matrix",
-    title: "V3 Plugin Matrix",
+    title: "V4 Plugin Matrix",
     command: ["node", "tests/testnet_plugin_matrix.js"],
-    requiredEnv: ["TEST_WIF"],
+    requiredEnvAny: [WIF_ENV],
   },
   {
     id: "market_escrow",
-    title: "V3 Market Escrow",
+    title: "V4 Market Escrow",
     command: ["node", "tests/testnet_market_escrow.js"],
-    requiredEnv: ["TEST_WIF"],
+    requiredEnvAny: [WIF_ENV],
   },
   {
     id: "paymaster_onchain",
-    title: "V3 Paymaster On-Chain",
+    title: "V4 Paymaster On-Chain",
     command: ["node", "tests/testnet_paymaster_onchain.mjs"],
-    requiredEnv: ["TEST_WIF"],
+    requiredEnvAny: [WIF_ENV],
   },
   {
+    // An off-chain allowlist probe: it needs the deployed core hash and the
+    // account that core derived, but never a wallet.
     id: "paymaster_policy",
-    title: "V3 Paymaster Policy",
+    title: "V4 Paymaster Policy",
     command: ["node", "tests/testnet_paymaster_policy.mjs"],
-    requiredEnvAny: [["MORPHEUS_RUNTIME_TOKEN", "PHALA_API_TOKEN", "PHALA_SHARED_SECRET"]],
+    requiredEnv: ["PAYMASTER_ACCOUNT_ID", "SA_CORE_HASH_TESTNET"],
+    requiredEnvAny: [RUNTIME_TOKEN_ENV],
     optional: true,
   },
   {
     id: "paymaster",
-    title: "V3 Paymaster Relay",
+    title: "V4 Paymaster Relay",
     command: ["node", "tests/testnet_paymaster_relay.mjs"],
-    requiredEnv: ["TEST_WIF"],
-    requiredEnvAny: [["MORPHEUS_RUNTIME_TOKEN", "PHALA_API_TOKEN", "PHALA_SHARED_SECRET"]],
+    requiredEnvAny: [WIF_ENV, RUNTIME_TOKEN_ENV],
     optional: true,
     envOverrides: {
       TEST_WIF: process.env.NEO_TESTNET_WIF || process.env.PAYMASTER_TEST_WIF || process.env.TEST_WIF || "",
@@ -86,6 +102,16 @@ function envSnapshot() {
     rpcCandidateCount: resolveTestnetRpcCandidates(process.env).length,
     defaultRpcCandidates: DEFAULT_TESTNET_RPC_URLS,
     hasTestWif: Boolean(process.env.TEST_WIF),
+    hasNeoTestnetWif: Boolean(process.env.NEO_TESTNET_WIF),
+    validationRunId: process.env.SA_VALIDATION_RUN_ID || null,
+    deployTag: process.env.SA_VALIDATION_DEPLOY_TAG || `sa-v4-${SUITE_RUN_ID}`,
+    coreHashTestnet: process.env.SA_CORE_HASH_TESTNET || null,
+    matrixScenarios: process.env.SA_MATRIX_SCENARIOS || null,
+    feeCaps: {
+      maxSystemFee: process.env.SA_MAX_SYSTEM_FEE || "50000000",
+      maxNetworkFee: process.env.SA_MAX_NETWORK_FEE || "5000000",
+      maxTotalFee: process.env.SA_MAX_TOTAL_FEE || "55000000",
+    },
     hasMorpheusRuntimeToken: Boolean(process.env.MORPHEUS_RUNTIME_TOKEN || process.env.PHALA_API_TOKEN || process.env.PHALA_SHARED_SECRET),
     morpheusPaymasterAppId: process.env.MORPHEUS_PAYMASTER_APP_ID || "ddff154546fe22d15b65667156dd4b7c611e6093",
     paymasterAccountId: process.env.PAYMASTER_ACCOUNT_ID || null,
@@ -174,15 +200,19 @@ async function summarizePluginMatrix(stdout = "") {
     }
   }
 
+  // The matrix report names the deployed core and every module under
+  // `deployments`; the test probe that stands in for a target contract is
+  // recorded there as `probe`.
+  const scenarios = summary.scenarios && typeof summary.scenarios === "object" && !Array.isArray(summary.scenarios)
+    ? Object.entries(summary.scenarios)
+    : Object.entries(report?.matrix || {}).map(([name, item]) => [name, item?.status || "unknown"]);
+
   return {
     reportPath,
-    core: summary.core || report?.contracts?.core || null,
-    mockTarget: summary.mockTarget || report?.contracts?.mockTarget || null,
-    scenarios: Array.isArray(summary.scenarios)
-      ? summary.scenarios
-      : report?.matrix
-        ? Object.keys(report.matrix)
-        : [],
+    core: report?.deployments?.core?.hash || null,
+    mockTarget: report?.deployments?.modules?.probe || null,
+    scenarios: scenarios.map(([name, status]) => ({ name, status })),
+    failed: scenarios.filter(([, status]) => status !== "passed").map(([name]) => name),
   };
 }
 
@@ -216,14 +246,16 @@ async function summarizePaymasterPolicy(stdout = "") {
 function summarizePaymaster(stdout = "") {
   const summary = latestJsonObject(stdout) || {};
   return {
-    txid: summary.txid || null,
-    accountId: summary.paymaster?.account_id || null,
-    policyId: summary.paymaster?.policy_id || null,
-    approvalDigest: summary.paymaster?.approval_digest || null,
-    attestationHash: summary.paymaster?.attestation_hash || null,
-    appId: summary.paymaster?.tee_attestation?.app_id || null,
+    txid: summary.relayTxid || null,
+    coreHash: summary.coreHash || null,
+    verifierHash: summary.verifierHash || null,
+    accountId: summary.accountId || null,
+    validatorId: summary.validatorId ?? null,
+    policyId: summary.paymaster?.policyId ?? null,
+    approvalDigest: summary.paymaster?.approvalDigest || null,
     vmstate: summary.execution?.vmstate || null,
-    stack: summary.execution?.stack || [],
+    result: summary.execution?.result || null,
+    refusedOperation: summary.refusal?.operation || null,
   };
 }
 
@@ -236,8 +268,9 @@ function summarizeMarketEscrow(stdout = "") {
     hook: summary.whitelistHook?.hash || null,
     listingId: summary.listingId ?? null,
     accountId: summary.accountId || null,
-    buyerRecorded: summary.buyerRecorded || null,
-    backupOwner: summary.backupOwner || null,
+    buyerRecorded: summary.buyerRecorded ?? null,
+    buyer: summary.buyer || null,
+    custodyAfterSale: summary.custodyAfterSale || null,
     status: summary.status ?? null,
   };
 }
@@ -357,10 +390,12 @@ function buildMarkdownReport(report) {
   const paymaster = report.stages.find((stage) => stage.id === "paymaster");
 
   const smokeTxLines = Object.entries(smoke?.summary?.txids || {}).map(([key, value]) => `${key}: \`${value}\``);
-  const pluginScenarioLines = (pluginMatrix?.summary?.scenarios || []).map((name) => `${name}`);
+  const pluginScenarioLines = (pluginMatrix?.summary?.scenarios || []).map(
+    (item) => `${item.name}: \`${item.status}\``,
+  );
 
   const lines = [
-    "# V3 Testnet Validation Suite Report",
+    "# V4 Testnet Validation Suite Report",
     "",
     `Date: ${report.createdAt}`,
     "",
@@ -368,7 +403,12 @@ function buildMarkdownReport(report) {
     "",
     markdownList([
       `RPC: \`${report.environment.TESTNET_RPC_URL}\``,
+      `Validation run id: \`${report.environment.validationRunId || "n/a"}\``,
+      `Deployment tag: \`${report.environment.deployTag}\``,
       `Has TEST_WIF: \`${report.environment.hasTestWif}\``,
+      `Has NEO_TESTNET_WIF: \`${report.environment.hasNeoTestnetWif}\``,
+      `Core under test: \`${report.environment.coreHashTestnet || "deployed by the smoke stage"}\``,
+      `Matrix scenarios: \`${report.environment.matrixScenarios || "all"}\``,
       `Has Morpheus runtime token: \`${report.environment.hasMorpheusRuntimeToken}\``,
       `Paymaster app id: \`${report.environment.morpheusPaymasterAppId}\``,
       `Paymaster account override: \`${report.environment.paymasterAccountId || "none"}\``,
@@ -396,10 +436,12 @@ function buildMarkdownReport(report) {
     markdownList([
       `Report path: \`${pluginMatrix?.summary?.reportPath || "n/a"}\``,
       `Core hash: \`${pluginMatrix?.summary?.core || "n/a"}\``,
-      `Mock target: \`${pluginMatrix?.summary?.mockTarget || "n/a"}\``,
+      `Test probe: \`${pluginMatrix?.summary?.mockTarget || "n/a"}\``,
+      `Scenarios: \`${(pluginMatrix?.summary?.scenarios || []).length}\``,
+      `Failed: \`${(pluginMatrix?.summary?.failed || []).join(", ") || "none"}\``,
     ]),
     "",
-    ...(pluginScenarioLines.length > 0 ? ["Scenarios:", "", markdownList(pluginScenarioLines), ""] : []),
+    ...(pluginScenarioLines.length > 0 ? ["Scenario results:", "", markdownList(pluginScenarioLines), ""] : []),
   ];
 
   if (marketEscrow) {
@@ -413,8 +455,9 @@ function buildMarkdownReport(report) {
         `Whitelist hook: \`${marketEscrow.summary.hook || "n/a"}\``,
         `Listing ID: \`${marketEscrow.summary.listingId ?? "n/a"}\``,
         `Account ID: \`${marketEscrow.summary.accountId || "n/a"}\``,
-        `Buyer recorded: \`${marketEscrow.summary.buyerRecorded || "n/a"}\``,
-        `Backup owner after sale: \`${marketEscrow.summary.backupOwner || "n/a"}\``,
+        `Buyer recorded: \`${marketEscrow.summary.buyerRecorded ?? "n/a"}\``,
+        `Buyer: \`${marketEscrow.summary.buyer || "n/a"}\``,
+        `Custody after sale: \`${marketEscrow.summary.custodyAfterSale || "n/a"}\``,
         `Listing status: \`${marketEscrow.summary.status ?? "n/a"}\``,
       ]),
       "",
@@ -468,16 +511,20 @@ function buildMarkdownReport(report) {
       "",
       markdownList([
         `Relay txid: \`${paymaster.summary.txid || "n/a"}\``,
+        `Core hash: \`${paymaster.summary.coreHash || "n/a"}\``,
         `Account ID: \`${paymaster.summary.accountId || "n/a"}\``,
-        `Policy ID: \`${paymaster.summary.policyId || "n/a"}\``,
+        `Validator id: \`${paymaster.summary.validatorId ?? "n/a"}\``,
+        `Policy ID: \`${paymaster.summary.policyId ?? "n/a"}\``,
         `Approval digest: \`${paymaster.summary.approvalDigest || "n/a"}\``,
-        `Attestation hash: \`${paymaster.summary.attestationHash || "n/a"}\``,
-        `CVM app id: \`${paymaster.summary.appId || "n/a"}\``,
         `VM state: \`${paymaster.summary.vmstate || "n/a"}\``,
+        `Result: \`${paymaster.summary.result || "n/a"}\``,
+        `Refused operation: \`${paymaster.summary.refusedOperation || "n/a"}\``,
       ]),
       "",
     );
-  } else if (report.skippedStages.length > 0) {
+  }
+
+  if (report.skippedStages.length > 0) {
     lines.push(
       "## Skipped Stages",
       "",
@@ -515,7 +562,7 @@ async function main() {
   };
 
   if (args.dryRun) {
-    console.log("Dry run only. Planned stages:");
+    console.log(`Dry run only. Run id ${SUITE_RUN_ID}. Planned stages:`);
     for (const stage of STAGES) {
       const missingEnv = missingRequiredEnv(stage);
       const skipReason = optionalSkipReason(stage);
@@ -523,8 +570,10 @@ async function main() {
         console.log(`- ${stage.title}: skip (${skipReason})`);
         continue;
       }
-      if (stage.optional && missingEnv.length > 0) {
-        console.log(`- ${stage.title}: skip (${missingEnv.join(", ")} missing)`);
+      if (missingEnv.length > 0) {
+        // A required stage without its env aborts the real run, so the dry run
+        // says so instead of listing a command that cannot start.
+        console.log(`- ${stage.title}: ${stage.optional ? "skip" : "blocked"} (${missingEnv.join(", ")} missing)`);
         continue;
       }
       console.log(`- ${stage.title}: ${stage.command.join(" ")}`);

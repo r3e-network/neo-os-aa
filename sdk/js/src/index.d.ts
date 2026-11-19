@@ -1,1380 +1,758 @@
 /**
- * Type definitions for the Neo N3 Smart Account SDK.
+ * @r3e-network/neo-smart-account — Neo Smart Account v4 SDK.
  *
- * These declarations describe the public surface exported from
- * `src/index.js` (the package `main`). All Hash160 values are hex strings
- * (40 hex chars / 20 bytes), with or without a `0x` prefix unless a
- * comment states otherwise; args hashes are 32 bytes (64 hex chars).
- * Deadlines are expressed in Neo `Runtime.Time` milliseconds, not seconds.
- */
-
-// ===========================================================================
-// Shared primitives
-// ===========================================================================
-
-/**
- * A Hash160 value: 40 hex characters (20 bytes), optionally `0x`-prefixed.
- * Kept as a plain string alias for documentation; no branding is enforced.
- */
-export type Hash160 = string;
-
-/**
- * A Neo N3 address (Base58, `N`-prefixed, 34 characters).
- */
-export type NeoAddress = string;
-
-/**
- * A 32-byte hash as 64 hex characters, optionally `0x`-prefixed.
- */
-export type Bytes32Hex = string;
-
-/**
- * Integer-like value accepted by encoders. Strings are used to carry
- * BigInteger values that exceed the safe-integer range.
- */
-export type IntegerLike = string | number | bigint;
-
-/**
- * A Neo contract parameter as understood by the RPC layer. Arguments passed
- * to UserOperations and payloads use this loose shape (e.g.
- * `{ type: 'Hash160', value: '...' }`). The runtime does not constrain the
- * value, so it is typed as `unknown`.
- */
-export interface ContractParameter {
-  type: string;
-  value?: unknown;
-}
-
-// ===========================================================================
-// Errors
-// ===========================================================================
-
-/**
- * A single error-code specification: a stable machine code plus a default
- * human-readable message.
- */
-export interface ErrorCodeSpec {
-  code: string;
-  message: string;
-  /** Present on RPC-mapped contract errors; carries the raw RPC detail. */
-  rpcDetail?: string;
-}
-
-/**
- * The registry of error-code specifications used across the SDK. Each entry
- * is an {@link ErrorCodeSpec}; the key set is stable but treated as a record
- * for forward compatibility.
- */
-export type ErrorCodes = Record<string, ErrorCodeSpec>;
-
-/**
- * Error registry. Every SDK error carries one of these `code` values on the
- * thrown `Error` instance (see {@link createError}).
- */
-export declare const EC: ErrorCodes;
-
-/**
- * An `Error` augmented with a stable SDK error code and structured details.
- */
-export interface SdkError extends Error {
-  code: string;
-  details: Record<string, unknown>;
-}
-
-/**
- * Creates a structured {@link SdkError} from an error-code specification.
+ * One client surface for two kernels. `SmartAccountClient` drives a deployed
+ * custom kernel (market escrow, platform registrar, metadata, sponsored
+ * execution); `NativeSmartAccountClient` drives the native core. Both speak the
+ * same 13-field operation, nonce namespace, digests and `SA_*` vocabulary.
  *
- * @param errorCode - An entry from {@link EC}.
- * @param details - Additional context attached to `error.details`.
+ * There is no v3 compatibility layer: `registerAccount`, `getVerifier`,
+ * `updateVerifier`, `getHook`, `updateHook`, `createSponsoredUserOpPayload`
+ * and the 6-field operation do not exist.
  */
-export declare function createError(
-  errorCode: ErrorCodeSpec,
-  details?: Record<string, unknown>,
-): SdkError;
 
-/**
- * Maps an RPC error (string or object with a `message`) onto an SDK
- * error-code specification, or `null` when no mapping applies.
- */
-export declare function mapRpcError(
-  error: string | { message?: string } | null | undefined,
-): ErrorCodeSpec | null;
+export * from "./native";
 
-/**
- * Formats an error for display, combining its code, message, and details.
- */
-export declare function formatError(error: SdkError | Error | string): string;
+import type {
+  AccountActionInput,
+  AccountActionPlan,
+  BroadcastResult,
+  ConfigurationInput,
+  ConfigurationPlan,
+  ExecutionInput,
+  ExecutionPlan,
+  InvocationResult,
+  ModuleBinding,
+  NativePlan,
+  NativePreparedTransaction,
+  NativeProfile,
+  NativeSignedTransaction,
+  NativeSignedTransactionArtifact,
+  NativeTransactionPreflight,
+  NativeTransactionReceipt,
+  ProtocolCodec,
+  RegistrationPlan,
+  SignerDescriptor,
+  SignerScope,
+  SimulationResult,
+  SmartAccountKernel,
+  TransactionOptions,
+  UserOperation,
+  VMInteger,
+  VMValue,
+  WitnessRule,
+} from "./native";
 
-// ===========================================================================
-// EIP-712 typed data
-// ===========================================================================
+/** The custom kernel pushes CallFlags.All in its proxy verification script. */
+export declare const CUSTOM_PROXY_CALL_FLAGS: 15;
+/** `SmartAccount.State.cs` pins this implementation id. */
+export declare const CUSTOM_IMPLEMENTATION_ID: "org.r3e.neo.smart-account.v4";
+/** Custom-only ABI gate: `[parameterTypes, returntype]` per method. */
+export declare const CUSTOM_REQUIRED_ABI: Readonly<
+  Record<string, readonly [readonly string[], string]>
+>;
 
-/** A single EIP-712 type field descriptor. */
-export interface Eip712Field {
-  name: string;
-  type: string;
-}
+/** Neo address or 40-hex hash to display-order hex. */
+export declare function normalizeAddress(address: string): string;
 
-/** The EIP-712 domain shared by the legacy and V3 layouts. */
-export interface Eip712Domain {
-  name: string;
-  version: string;
-  chainId: IntegerLike;
-  /** Verifying contract as a `0x`-prefixed 40-hex string. */
-  verifyingContract: string;
-}
+// ---------------------------------------------------------------------------
+// Operations
+// ---------------------------------------------------------------------------
 
-/**
- * Legacy MetaTransaction EIP-712 typed data. The legacy flow verifies against
- * the master contract (not the account's verifier plugin).
- */
-export interface MetaTransactionTypedData {
-  domain: Eip712Domain;
-  types: {
-    MetaTransaction: Eip712Field[];
-  };
-  message: {
-    /** `0x`-prefixed account script hash (20 bytes). */
-    accountAddress: string;
-    /** `0x`-prefixed target contract hash (20 bytes). */
-    targetContract: string;
-    /** `0x`-prefixed keccak256 of the method name (32 bytes). */
-    methodHash: string;
-    /** `0x`-prefixed args hash (32 bytes). */
-    argsHash: string;
-    /** Decimal string. */
-    nonce: string;
-    /** Decimal string (Neo Runtime.Time milliseconds). */
-    deadline: string;
-  };
-}
-
-/**
- * V3 UserOperation EIP-712 typed data. Verified against the account's verifier
- * plugin using an account-id binding.
- */
-export interface UserOperationTypedData {
-  domain: Eip712Domain;
-  types: {
-    UserOperation: Eip712Field[];
-  };
-  message: {
-    /** `0x`-prefixed account id (20 bytes, `bytes20`). */
-    accountId: string;
-    /** `0x`-prefixed authorized SA core hash (20 bytes, `bytes20`). */
-    coreContract: string;
-    /** `0x`-prefixed target contract hash (20 bytes). */
-    targetContract: string;
-    /** Raw method name (the V3 layout signs the string, not its hash). */
-    method: string;
-    /** `0x`-prefixed args hash (32 bytes). */
-    argsHash: string;
-    /** Decimal string. */
-    nonce: string;
-    /** Decimal string (Neo Runtime.Time milliseconds). */
-    deadline: string;
-  };
-}
-
-/** Options for {@link buildMetaTransactionTypedData}. */
-export interface BuildMetaTransactionTypedDataOptions {
-  chainId: IntegerLike;
-  /** Master contract hash the legacy flow verifies against. */
-  verifyingContract: Hash160;
-  accountAddressScriptHash?: Hash160;
-  accountAddressHash?: Hash160;
-  targetContract: Hash160;
-  method: string;
-  /** Args hash (32 bytes / 64 hex chars). */
-  argsHashHex: Bytes32Hex;
-  nonce: IntegerLike;
-  /** Deadline in Neo Runtime.Time milliseconds. */
-  deadline: IntegerLike;
-}
-
-/** Options for {@link buildV3UserOperationTypedData}. */
-export interface BuildV3UserOperationTypedDataOptions {
-  chainId: IntegerLike;
-  /** Verifier contract hash. */
-  verifyingContract: Hash160;
-  accountIdHash: Hash160;
-  /** Authorized SA core hash; signatures are invalid on another core. */
-  coreContractHash: Hash160;
-  targetContract: Hash160;
-  method: string;
-  /** Args hash (32 bytes / 64 hex chars). */
-  argsHashHex: Bytes32Hex;
-  nonce: IntegerLike;
-  /** Deadline in Neo Runtime.Time milliseconds. */
-  deadline: IntegerLike;
-}
-
-/** Builds the legacy MetaTransaction EIP-712 typed data. */
-export declare function buildMetaTransactionTypedData(
-  options: BuildMetaTransactionTypedDataOptions,
-): MetaTransactionTypedData;
-
-/** Builds the V3 UserOperation EIP-712 typed data. */
-export declare function buildV3UserOperationTypedData(
-  options: BuildV3UserOperationTypedDataOptions,
-): UserOperationTypedData;
-
-// ===========================================================================
-// Web3Auth contract-compatible signing helpers
-// ===========================================================================
-
-/** Options for {@link buildContractCompatibleStructHash}. */
-export interface BuildContractCompatibleStructHashOptions {
-  accountIdHash: Hash160;
-  /** Authorized SA core hash; signatures are invalid on another core. */
-  coreContractHash: Hash160;
-  targetContract: Hash160;
-  method: string;
-  /** Args hash (32 bytes / 64 hex chars). */
-  argsHash: Bytes32Hex;
-  nonce: IntegerLike;
-  /** Deadline in Neo Runtime.Time milliseconds. */
-  deadline: IntegerLike;
-}
-
-/** Options for {@link buildWeb3AuthSigningPayload}. */
-export interface BuildWeb3AuthSigningPayloadOptions {
-  chainId: IntegerLike;
-  verifierHash: Hash160;
-  accountIdHash: Hash160;
-  /** Authorized SA core hash; signatures are invalid on another core. */
-  coreContractHash: Hash160;
-  targetContract: Hash160;
-  method: string;
-  /** Args hash (32 bytes / 64 hex chars). */
-  argsHash: Bytes32Hex;
-  nonce: IntegerLike;
-  /** Deadline in Neo Runtime.Time milliseconds. */
-  deadline: IntegerLike;
-}
-
-/**
- * Builds the contract-compatible UserOperation struct hash.
- * @returns 32-byte struct hash as a `0x`-prefixed hex string.
- */
-export declare function buildContractCompatibleStructHash(
-  options: BuildContractCompatibleStructHashOptions,
-): string;
-
-/**
- * Builds the contract-compatible EIP-712 domain separator.
- * @returns 32-byte domain separator as a `0x`-prefixed hex string.
- */
-export declare function buildContractCompatibleDomainSeparator(
-  network: IntegerLike,
-  verifyingContract: Hash160,
-): string;
-
-/**
- * Builds the complete 66-byte Web3Auth signing payload
- * (`0x1901 || domainSeparator(32) || structHash(32)`).
- */
-export declare function buildWeb3AuthSigningPayload(
-  options: BuildWeb3AuthSigningPayloadOptions,
-): Uint8Array;
-
-/**
- * Converts a Hash160 (big-endian display hex) to a 32-byte `bytes20` word
- * (20 bytes, right-padded with zeros).
- */
-export declare function toBytes20Word(hash160: Hash160): Uint8Array;
-
-/**
- * Converts a Hash160 (big-endian display hex) to a 32-byte EVM `address` word
- * (left-padded with zeros).
- */
-export declare function toAddressWord(hash160: Hash160): Uint8Array;
-
-/** Converts a NeoVM signed-domain integer (0 <= value < 2^255) to a 32-byte big-endian word. */
-export declare function toUint256Word(value: IntegerLike): Uint8Array;
-
-// ===========================================================================
-// Stack decoding
-// ===========================================================================
-
-/**
- * A Neo RPC stack item (`{ type, value }`). Decode helpers accept these and
- * tolerate `null`/`undefined`.
- */
-export interface StackItem {
-  type?: string;
-  value?: unknown;
-}
-
-/**
- * Decodes a ByteString/Buffer stack item to a hex string (no `0x` prefix).
- */
-export declare function decodeByteStringStackHex(
-  item: StackItem | null | undefined,
-): string;
-
-/** Sanitizes a hex string: strips a leading `0x` and lower-cases it. */
-export declare function sanitizeHex(hex: unknown): string;
-
-// ===========================================================================
-// Token transfer results
-// ===========================================================================
-//
-// The account core hands the result of the call it executes back untouched and the transaction still HALTs when
-// that result is a refusal. A NEP-17 / NEP-11 `transfer` answers `false` when nothing moved; the account then
-// burns its nonce and the fee for nothing. These are the rules the relay route and the wallet apply (shared source:
-// shared/transferOutcome.mjs). Only a method named `transfer` and only a Boolean `false` count: `false` is the
-// normal result of other calls, and a result that is not a Boolean says nothing.
-
-/** Stable code of the verdict "a token transfer returned false". */
-export declare const TRANSFER_RETURNED_FALSE: 'transfer_returned_false';
-
-/** Human-readable text of that verdict. */
-export declare const TRANSFER_RETURNED_FALSE_MESSAGE: string;
-
-/** A relay-ready meta invocation as the wallet and the relay route carry it. */
-export interface MetaInvocation {
-  scriptHash?: Hash160;
-  operation?: string;
-  args?: ContractParameter[];
-}
-
-/**
- * Positions of the transfer operations of a simulated invocation whose result is a Boolean false. `stack` is the
- * stack the VM returned for it; `[0]` is the operation's result, or for a batch (`executeUserOps`) the array of
- * one result per operation. Empty means nothing is wrong, or nothing can be judged.
- */
-export declare function findFailedTransferInInvocation(options: {
-  invocation: MetaInvocation | null | undefined;
-  stack?: StackItem[] | null;
-}): number[];
-
-/**
- * The same verdict for one `executions[]` entry of a `getapplicationlog` result: the operations are read from its
- * `UserOpExecuted` notifications.
- */
-export declare function findFailedTransferInExecution(execution: {
-  stack?: StackItem[] | null;
-  notifications?: Array<{ eventname?: string; state?: StackItem | null }> | null;
-} | null | undefined): number[];
-
-/**
- * True for a `transfer` whose source is the account's own proxy address: the token checks that address as a
- * witness, an owner or relay signature does not provide it, so the transfer returns false.
- */
-export declare function isProxySourcedTransfer(operation: {
-  method: string;
-  /** Source hash, 40 hex characters, `0x` optional. */
-  from: string;
-  /** The account's proxy address, same form. */
-  proxy: string;
-}): boolean;
-
-// ===========================================================================
-// UserOperation
-// ===========================================================================
-
-/**
- * The built UserOperation object. Field names are PascalCase to match the
- * on-chain struct fields consumed by the master/verifier contracts.
- */
-export interface UserOperation {
-  /** Target contract hash (40 hex chars). */
-  TargetContract: Hash160;
-  /** Method name to invoke. */
-  Method: string;
-  /** Method arguments in Neo contract-parameter form. */
-  Args: ContractParameter[];
-  /** Nonce value. */
-  Nonce: IntegerLike;
-  /** Deadline in Neo Runtime.Time milliseconds. */
-  Deadline: IntegerLike;
-  /** Signature hex (empty until signed). */
-  Signature: string;
-}
-
-/** Plain-object representation produced by {@link UserOperationBuilder.toJSON}. */
-export interface UserOperationBuilderState {
-  accountIdHash: string;
-  targetContract: string;
-  method: string;
-  args: ContractParameter[];
-  nonce: IntegerLike;
-  deadline: IntegerLike | string;
-  verifierHash: string;
-  coreContractHash: string;
-  chainId: string;
-  accountAddressScriptHash: string;
-  accountAddressHash: string;
-  signature: string;
-  /** Cached args hash, or `null` when not yet computed/set. */
-  argsHash: string | null;
-}
-
-/** Constructor options for {@link UserOperationBuilder}. */
 export interface UserOperationBuilderOptions {
-  accountIdHash?: string;
-  targetContract?: string;
-  method?: string;
-  args?: ContractParameter[];
-  nonce?: IntegerLike;
-  deadline?: IntegerLike | string;
-  verifierHash?: string;
+  networkMagic?: VMInteger;
   coreContractHash?: string;
-  chainId?: IntegerLike;
-  accountAddressScriptHash?: string;
-  accountAddressHash?: string;
-  signature?: string;
+  accountId?: string;
 }
 
-/** Default deadline buffer (seconds) applied by {@link UserOperationBuilder.autoDeadline}. */
-export declare const DEFAULT_DEADLINE_BUFFER: number;
-
-/** Default nonce value. */
-export declare const DEFAULT_NONCE: number;
-
 /**
- * Fluent builder for constructing UserOperations and their EIP-712 typed data.
- *
- * Setters return `this` for chaining; {@link UserOperationBuilder.autoNonce}
- * returns a `Promise<UserOperationBuilder>` when given an async fetcher.
+ * Builds the v4 13-field operation offline. The builder owns input shape only:
+ * it composes the channel nonce, checks every bound and hands out the exact
+ * value the core serializes. It never hashes a signature and never talks to RPC.
  */
 export declare class UserOperationBuilder {
-  accountIdHash: string;
-  targetContract: string;
-  method: string;
-  args: ContractParameter[];
-  nonce: IntegerLike;
-  deadline: IntegerLike | string;
-  verifierHash: string;
-  coreContractHash: string;
-  chainId: string;
-  accountAddressScriptHash: string;
-  accountAddressHash: string;
-  signature: string;
-
   constructor(options?: UserOperationBuilderOptions);
-
-  /** Sets the account id hash (20 bytes). */
-  setAccountId(accountIdHash: string): this;
-  /** Sets the target contract hash (20 bytes). */
-  setTarget(contractHash: string): this;
-  /** Sets the method name. */
+  setNetworkMagic(networkMagic: VMInteger): this;
+  setCoreContractHash(coreContractHash: string): this;
+  setAccountId(accountId: string): this;
+  setTarget(targetContract: string): this;
   setMethod(method: string): this;
-  /** Replaces the argument array. */
-  setArgs(args: ContractParameter[]): this;
-  /** Appends a single argument. */
-  addArg(arg: ContractParameter): this;
-  /** Sets the nonce. */
-  setNonce(nonce: IntegerLike): this;
-  /**
-   * Auto-generates the nonce. With a synchronous fetcher (or none) returns
-   * `this`; with an async fetcher returns a promise resolving to `this` so the
-   * awaited nonce (never the promise) is stored.
-   */
-  autoNonce(): this;
-  autoNonce(fetchNonceFn: () => IntegerLike): this;
-  autoNonce(fetchNonceFn: () => Promise<IntegerLike>): Promise<this>;
-  /** Sets the deadline (Neo Runtime.Time milliseconds). */
-  setDeadline(deadline: IntegerLike): this;
-  /** Auto-generates a deadline `bufferSeconds` in the future. */
-  autoDeadline(bufferSeconds?: number): this;
-  /** Sets the verifier contract hash for V3 EIP-712 signing. */
-  setVerifier(verifierHash: string): this;
-  /** Sets the authorized SA core hash for V3 EIP-712 signing. */
-  setCoreContract(coreContractHash: string): this;
-  /** Sets the chain id for EIP-712 signing. */
-  setChainId(chainId: IntegerLike): this;
-  /** Sets the legacy account address script hash. */
-  setAccountAddressScriptHash(scriptHash: string): this;
-  /** Sets the signature hex. */
+  setArgs(args?: VMValue[]): this;
+  addArg(arg: VMValue): this;
+  setRouting(routing: {
+    validatorId?: VMInteger;
+    credentialGeneration?: VMInteger;
+    authorityEpoch: VMInteger;
+    configurationNonce: VMInteger;
+  }): this;
+  setNonceSubkey(nonceSubkey: string): this;
+  setNonce(nonce: VMInteger): this;
+  setNonceSequence(input: { channel: VMInteger; sequence: VMInteger }): this;
+  setDeadline(deadline: VMInteger): this;
+  autoDeadline(bufferMs?: number): this;
   setSignature(signature: string): this;
-  /** Sets the args hash directly (32 bytes / 64 hex chars). */
-  setArgsHash(argsHash: Bytes32Hex): this;
-  /** Alias for {@link setArgsHash}; takes a pre-computed args hash. */
-  computeArgsHash(argsHash: Bytes32Hex): this;
-
-  /** Builds the {@link UserOperation} object. */
+  setHookProofs(hookProofs?: UserOperation["hookProofs"]): this;
+  nonceChannel(): string;
   build(): UserOperation;
-  /** Builds the V3 UserOperation EIP-712 typed data. */
-  buildEIP712(argsHash?: Bytes32Hex): UserOperationTypedData;
-  /** Builds the legacy MetaTransaction EIP-712 typed data. */
-  buildLegacyEIP712(
-    argsHash: Bytes32Hex | undefined,
-    verifyingContract: Hash160,
-  ): MetaTransactionTypedData;
-
-  /** Returns a deep-enough clone, preserving the cached args hash. */
+  digest(): string;
+  toValue(): VMValue;
+  serialize(): string;
   clone(): UserOperationBuilder;
-  /** Resets all fields to their defaults. */
-  reset(): this;
-  /** Returns a plain-object snapshot of the builder state. */
-  toJSON(): UserOperationBuilderState;
+  reset(): UserOperationBuilder;
+  toJSON(): Record<string, unknown>;
 }
 
-/** Creates a new {@link UserOperationBuilder}. */
 export declare function createUserOpBuilder(
   options?: UserOperationBuilderOptions,
 ): UserOperationBuilder;
 
-// ===========================================================================
-// Simulation / pre-flight
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
 
-/** Individual preview checks returned by a simulation. */
-export interface SimulationChecks {
-  /** Deadline is in the future and accepted by the contract preview. */
-  deadlineValid: boolean;
-  /** Nonce is valid and unused. */
-  nonceAcceptable: boolean;
-  /** A verifier is configured. */
-  hasVerifier: boolean;
-  /** Verifier hash (big-endian display hex), or empty. */
-  verifier: string;
-  /** Hook hash (big-endian display hex), or empty. */
-  hook: string;
-  /**
-   * How `executeUserOp` authorizes the operation: through the configured verifier, or (no verifier) through the
-   * backup owner's native witness. An account without a verifier is valid and is not refused.
-   */
-  authorization: 'verifier' | 'owner-witness';
-  /** Backup owner hash (big-endian display hex) on the owner-witness path; empty when it was not read. */
-  backupOwner: string;
-  /**
-   * Only on the owner-witness path when `signers` were supplied: whether they carry the backup owner's witness.
-   */
-  ownerWitnessPresent?: boolean;
+export interface ErrorCode {
+  readonly code: string;
+  readonly message: string;
 }
 
-/**
- * Result of {@link simulateUserOperation}.
- *
- * `passed` reflects the preview checks only and never implies signature
- * validity. `signatureVerified` is always `false`: the signature is validated
- * only on-chain by `executeUserOp` (or by the relay's full simulation).
- */
-export interface SimulationResult {
-  passed: boolean;
-  /** Always `false`; the simulation never verifies the signature. */
-  signatureVerified: false;
-  /** Empty when an early validation error short-circuits the preview. */
-  checks: SimulationChecks | Record<string, never>;
-  errors: string[];
-  warnings: string[];
-}
+/** SDK error codes (`SDK_*`, `NET_*`, `CONTRACT_*`, `ENCODING_*`). */
+export declare const EC: Readonly<Record<string, ErrorCode>>;
+/** The contract's v4 abort codes mapped to their operator-facing text. */
+export declare const SA_ERRORS: Readonly<Record<string, string>>;
+export declare const SA_ERROR_CODES: readonly string[];
 
-/** Options for {@link simulateUserOperation}. */
-export interface SimulateUserOperationOptions {
-  accountIdHash?: Hash160;
-  /** Legacy account address or hash (alternative to `accountIdHash`). */
-  accountAddress?: Hash160 | NeoAddress;
-  targetContract: Hash160;
+export declare function createError(
+  errorCode: ErrorCode,
+  details?: Record<string, unknown>,
+): Error;
+export declare function mapRpcError(
+  error: unknown,
+): (ErrorCode & { rpcDetail?: string }) | null;
+export declare function formatError(error: unknown): string;
+
+// ---------------------------------------------------------------------------
+// Transfer result rules (shared with the relay route and the wallet)
+// ---------------------------------------------------------------------------
+
+export declare const TRANSFER_RETURNED_FALSE: "transfer_returned_false";
+export declare const TRANSFER_RETURNED_FALSE_MESSAGE: string;
+export declare function findFailedTransferInInvocation(input: {
+  invocation?: unknown;
+  stack?: readonly unknown[];
+}): number[];
+export declare function findFailedTransferInExecution(execution: unknown): number[];
+export declare function isProxySourcedTransfer(input: {
+  method?: string;
+  from?: string;
+  proxy?: string;
+}): boolean;
+
+// ---------------------------------------------------------------------------
+// Session keys
+// ---------------------------------------------------------------------------
+
+export declare const SESSION_KEY_INSTALL_COMMAND: "setSessionKey";
+export declare const SESSION_KEY_CLEAR_COMMAND: "clearSessionKey";
+export declare const MAX_SESSION_KEY_DESCRIPTION_BYTES: 128;
+export declare const MAX_SESSION_DURATION_MS: number;
+
+export interface SessionKeyInstallOptions {
+  publicKeyHex: string;
+  targetContract: string;
   method: string;
-  args?: ContractParameter[];
-  nonce?: IntegerLike;
-  /** Deadline in Neo Runtime.Time milliseconds. */
-  deadline?: IntegerLike;
-  /**
-   * RPC signers of the transaction that will carry the operation. Only used for an account without a verifier,
-   * to check that the backup owner's witness is among them.
-   */
-  signers?: unknown[];
+  validUntilMs: VMInteger;
+  spendingLimitDatoshi?: VMInteger;
+  description?: string;
 }
 
-/**
- * Simulates a UserOperation against the contract preview. Pre-flight only:
- * it never verifies the signature (see {@link SimulationResult}).
- *
- * An account without a verifier is not refused: `checks.authorization` is `'owner-witness'` and the result
- * requires a non-zero backup owner (and, when `signers` are supplied, that owner's witness among them).
- *
- * A token `transfer` whose source is the account's own proxy address is reported in `errors` (`OP_001`,
- * {@link EC}`.OPERATION_PROXY_TRANSFER_REFUSED`) and `passed` is false: it would HALT with result false, move
- * nothing and still spend the nonce and the fee.
- */
-export declare function simulateUserOperation(
-  client: SmartAccountClient,
-  options: SimulateUserOperationOptions,
-): Promise<SimulationResult>;
-
-/** Options for {@link preFlightCheck}. */
-export interface PreFlightCheckOptions {
-  accountHashOrAddress: Hash160 | NeoAddress;
-  /** Expected verifier hash (big-endian display hex). */
-  verifierHash?: Hash160;
-  /** Expected hook hash (big-endian display hex). */
-  hookHash?: Hash160;
-  /** Optional simulation options run as part of the suite. */
-  userOp?: SimulateUserOperationOptions;
+export interface SessionKeyPermissionRequest {
+  readonly permission: {
+    readonly signer: { readonly type: "key"; readonly data: { readonly publicKey: string } };
+    readonly permissions: ReadonlyArray<{
+      readonly type: "contract-call";
+      readonly data: {
+        readonly address: string;
+        readonly selector: string;
+        readonly spendingLimit: string;
+      };
+    }>;
+    readonly expiry: number;
+  };
+  readonly installCommand: VMValue[];
+  readonly sessionKeyArgs: {
+    readonly publicKeyHex: string;
+    readonly targetContract: string;
+    readonly method: string;
+    readonly validUntilMs: string;
+    readonly spendingLimitDatoshi: string;
+    readonly description: string;
+  };
 }
 
-/** Aggregate result of {@link preFlightCheck}. */
-export interface PreFlightCheckResult {
-  passed: boolean;
-  checks: Record<string, unknown>;
-  errors: string[];
-  warnings: string[];
-}
+export declare function buildSessionKeyInstallCommand(
+  options: SessionKeyInstallOptions,
+): VMValue[];
+export declare function buildSessionKeyClearCommand(): VMValue[];
+export declare function buildSessionKeyPermission(
+  options: SessionKeyInstallOptions,
+): SessionKeyPermissionRequest;
 
-/** Runs a comprehensive pre-flight check suite for an account/operation. */
-export declare function preFlightCheck(
-  client: SmartAccountClient,
-  options: PreFlightCheckOptions,
-): Promise<PreFlightCheckResult>;
+// ---------------------------------------------------------------------------
+// Retry
+// ---------------------------------------------------------------------------
 
-// ===========================================================================
-// Retry utility
-// ===========================================================================
-
-/** Configuration for {@link withRetry}. */
-export interface RetryConfig {
+export interface RetryOptions {
   maxAttempts?: number;
   baseDelayMs?: number;
   backoffMultiplier?: number;
   maxDelayMs?: number;
-  /** Invoked before each retry sleep. */
   onRetry?: (attempt: number, error: unknown, delayMs: number) => void;
 }
 
-/** Retries `fn` with exponential backoff while the error is retryable. */
 export declare function withRetry<T>(
   label: string,
   fn: (attempt: number) => Promise<T> | T,
-  config?: RetryConfig,
+  options?: RetryOptions | false,
 ): Promise<T>;
 
-/** Returns whether an error looks transient/retryable. */
+/** True for a transport failure the shared classification retries. */
 export declare function isRetryableError(error: unknown): boolean;
 
-// ===========================================================================
-// Client
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Simulation and preflight
+// ---------------------------------------------------------------------------
 
-/** A virtual account derived from a seed. */
-export interface VirtualAccount {
-  /** Account id hash (40 hex chars). */
-  accountIdHash: Hash160;
-  /** Verification script hex. */
-  verifyScript: string;
-  /** Script hash (40 hex chars). */
-  scriptHash: Hash160;
-  /** Neo address. */
-  address: NeoAddress;
-}
-
-/** Options for {@link SmartAccountClient.deriveRegistrationAccountIdHash}. */
-export interface RegistrationAccountIdOptions {
-  verifierContractHash?: Hash160;
-  verifierParamsHex?: string;
-  hookContractHash?: Hash160;
-  backupOwnerAddress: Hash160 | NeoAddress;
-  /** Escape-hatch timelock in seconds (default: 30 days). */
-  escapeTimelock?: number;
-}
-
-/** Options for {@link SmartAccountClient.createAccountPayload}. */
-export interface CreateAccountPayloadOptions {
-  verifierContractHash?: Hash160;
-  verifierParamsHex?: string;
-  hookContractHash?: Hash160;
-  backupOwnerAddress: Hash160 | NeoAddress;
-  /** Escape-hatch timelock in seconds (default: 30 days). */
-  escapeTimelock?: number;
-}
-
-/** Initial session key options for registration-time installation. */
-export interface SessionKeyOptions {
-  /** secp256r1 public key: compressed (33 bytes, 02/03 prefix) or uncompressed (65 bytes, 04 prefix), hex. */
-  publicKeyHex: string;
-  /** Target contract hash (big-endian display hex). */
-  targetContract: Hash160;
-  /** Allowed target method ("*" wildcard cannot carry a spending limit). */
-  method: string;
-  /** Expiry in Neo Runtime.Time milliseconds; the contract enforces future expiry and the 30-day cap. */
-  validUntilMs: IntegerLike;
-  /** Total spending cap in datoshi; 0 = unlimited and the only legal value for non-"transfer" methods. */
-  spendingLimitDatoshi?: IntegerLike;
-  /** Human-readable label, at most 128 UTF-8 bytes. */
-  description?: string;
-}
-
-/** Options for {@link SmartAccountClient.createSessionKeyAccountPayload}. */
-export interface CreateSessionKeyAccountPayloadOptions {
-  /** SessionKeyVerifier contract hash. */
-  sessionKeyVerifierHash: Hash160;
-  /** Initial session key installed at registration time. */
-  sessionKey: SessionKeyOptions;
-  hookContractHash?: Hash160;
-  backupOwnerAddress: Hash160 | NeoAddress;
-  /** Escape-hatch timelock in seconds (default: 30 days). */
-  escapeTimelock?: number;
+/** What a simulation reported about one execution plan. */
+export interface ExecutionSimulation extends SimulationResult {
+  readonly plan: ExecutionPlan;
 }
 
 /**
- * ERC-7715-shaped session-key permission grant plus the on-chain artifacts.
- * The 7715 envelope is wallet-facing (expiry in unix seconds); the blob and
- * call arguments carry the canonical Neo values (Runtime.Time ms, datoshi).
+ * Simulates exactly the script a transaction would carry. A VM fault is
+ * reported, not thrown; `incompleteTransfers` names the positions of transfer
+ * operations whose result was a Boolean false.
  */
-export interface SessionKeyPermission {
-  permission: {
-    signer: { type: 'key'; data: { publicKey: string } };
-    permissions: [{
-      type: 'contract-call';
-      data: { address: string; selector: string; spendingLimit: string };
-    }];
-    /** Unix seconds (7715 convention). */
-    expiry: number;
-  };
-  /** Version-0x01 blob for createAccountPayload's verifierParamsHex. */
-  registrationBlobHex: string;
-  /** Canonical call arguments for the post-registration setSessionKey path. */
-  sessionKeyArgs: {
-    publicKeyHex: string;
-    targetContract: string;
-    method: string;
-    validUntilMs: string;
-    spendingLimitDatoshi: string;
-    description: string;
-  };
+export declare function simulateUserOperation(
+  client: SmartAccountKernel,
+  input: ExecutionInput,
+): Promise<ExecutionSimulation>;
+
+export declare function simulatePlan(
+  client: SmartAccountKernel,
+  plan: NativePlan,
+  signers?: readonly SignerDescriptor[],
+): Promise<SimulationResult>;
+
+/** The local half of a preflight, before any wallet is asked to sign. */
+export interface PreflightResult {
+  readonly accountId: string;
+  readonly accountAddress: string;
+  readonly operationDigest: string;
+  readonly channel: string;
+  readonly sequence: string;
+  readonly validator: ModuleBinding;
 }
-
-/** Blob format version consumed by SessionKeyVerifier.setPublicKey. */
-export declare const SESSION_KEY_BLOB_VERSION: number;
-/** Contract-side session-key description cap in UTF-8 bytes. */
-export declare const MAX_SESSION_KEY_DESCRIPTION_BYTES: number;
-/** Contract-side session lifetime cap in milliseconds (30 days). */
-export declare const MAX_SESSION_DURATION_MS: number;
-
-/** Builds the version-0x01 registration-time session key blob (hex, no 0x). */
-export declare function buildSessionKeyRegistrationBlob(
-  options: SessionKeyOptions,
-): string;
-
-/** Builds an ERC-7715-shaped session-key permission plus on-chain artifacts. */
-export declare function buildSessionKeyPermission(
-  options: SessionKeyOptions,
-): SessionKeyPermission;
 
 /**
- * ERC-4337-shaped UserOperation. `sender` is the V3 account id (not an EOA);
- * `callData` is the Neo VM invocation script; gas fields are '0x0' because
- * Neo N3 prices execution in the VM; `deadline` (Runtime.Time ms) is an
- * extension field with no 4337 counterpart.
+ * Checks the account state, digest, channel nonce, deadline and validator
+ * instance against one unsigned operation; throws the `SA_*`-shaped SDK error
+ * the chain would otherwise raise after the signature was produced.
  */
-export interface Erc4337UserOperation {
-  sender: string;
-  nonce: string;
-  callData: string;
-  signature: string;
-  callGasLimit: string;
-  verificationGasLimit: string;
-  preVerificationGas: string;
-  maxFeePerGas: string;
-  maxPriorityFeePerGas: string;
-  deadline: string;
-}
+export declare function preflightUserOperation(
+  client: SmartAccountKernel,
+  input: { accountId: string; operation: UserOperation },
+): Promise<PreflightResult>;
 
-/** Maps a V3 UserOperation onto the ERC-4337 field names. */
-export declare function toErc4337UserOperation(options: {
-  accountIdHash: Hash160;
-  targetContract: Hash160;
-  method: string;
-  args?: ContractParameter[];
-  nonce?: IntegerLike;
-  deadline?: IntegerLike;
-  signatureHex?: string;
-}): Erc4337UserOperation;
+// ---------------------------------------------------------------------------
+// Proxy witness (the account's second signer)
+// ---------------------------------------------------------------------------
 
-/** ERC-4337 estimateUserOperationGas counterpart anchored on simulateValidation. */
-export declare function estimateUserOperationGas(
-  client: SmartAccountClient,
-  options: UserOpSimulationOptions,
-): Promise<{
-  preVerificationGas: string;
-  verificationGasLimit: string;
-  callGasLimit: string;
-  simulation: UserOpSimulation;
-  note: string;
-}>;
+export declare const DEFAULT_CALL_FLAGS: 15;
 
-/** A contract invocation payload returned by the `create*Payload` methods. */
-export interface ContractInvocationPayload {
-  scriptHash: Hash160;
+export interface ProxyInvocation {
   operation: string;
+  scriptHash: string;
   args: unknown[];
 }
 
-/**
- * Account-scoped options. Exactly one of `accountScriptHash` or
- * `accountAddress` must be supplied.
- */
-export interface AccountScopedOptions {
-  accountScriptHash?: Hash160;
-  accountAddress?: Hash160 | NeoAddress;
+export interface ProxyWitnessArtifacts {
+  readonly signer: {
+    readonly account: string;
+    readonly scopes: "WitnessRules";
+    readonly rules: readonly WitnessRule[];
+    readonly allowedContracts?: readonly string[];
+  };
+  readonly witness: { readonly invocationScript: string; readonly verificationScript: string };
 }
 
-/** Deployed custom recovery support is distinct from the account's permanent mode. */
-export type OwnerOnlyRecoveryStatus =
-  | { supported: false; ownerOnlyRecovery: null }
-  | { supported: true; ownerOnlyRecovery: boolean };
-
-/** Options for {@link SmartAccountClient.createUpdateVerifierPayload}. */
-export interface UpdateVerifierPayloadOptions extends AccountScopedOptions {
-  verifierContractHash: Hash160;
-  verifierParamsHex?: string;
-}
-
-/** Options for {@link SmartAccountClient.createUpdateHookPayload}. */
-export interface UpdateHookPayloadOptions extends AccountScopedOptions {
-  /** New hook contract hash; empty removes the hook. */
-  hookContractHash?: Hash160;
-}
-
-/** Options for {@link SmartAccountClient.createSetMetadataUriPayload}. */
-export interface SetMetadataUriPayloadOptions extends AccountScopedOptions {
-  metadataUri?: string;
-}
-
-/** Options for {@link SmartAccountClient.createEIP712Payload}. */
-export interface CreateEIP712PayloadOptions {
-  chainId: IntegerLike;
-  /** V3 account id hash (40 hex chars). */
-  accountIdHash?: Hash160;
-  /** Account id seed/hex; derives `accountIdHash` when provided. */
-  accountIdHex?: string;
-  /** Verifier hash (V3); auto-resolved from the contract when omitted. */
-  verifierHash?: Hash160;
-  /** Legacy account script hash. */
-  accountAddressScriptHash?: Hash160;
-  /** Legacy account address hash. */
-  accountAddressHash?: Hash160;
-  targetContract: Hash160;
-  method: string;
-  args?: ContractParameter[];
-  nonce: IntegerLike;
-  /** Deadline in Neo Runtime.Time milliseconds. */
-  deadline: IntegerLike;
-}
-
-/** Options for {@link SmartAccountClient.getUserOpValidationPreview}. */
-export interface UserOpValidationPreviewOptions {
-  accountIdHash?: Hash160;
-  accountAddress?: Hash160 | NeoAddress;
-  targetContract: Hash160;
-  method: string;
-  args?: ContractParameter[];
-  nonce?: IntegerLike;
-  /** Deadline in Neo Runtime.Time milliseconds. */
-  deadline?: IntegerLike;
-}
-
-/** Decoded validation preview returned by the contract. */
-export interface UserOpValidationPreview {
-  deadlineValid: boolean;
-  nonceAcceptable: boolean;
-  hasVerifier: boolean;
-  /** Verifier hash (big-endian display hex). */
-  verifier: string;
-  /** Hook hash (big-endian display hex). */
-  hook: string;
-}
-
-/**
- * Aggregated account descriptor returned by {@link SmartAccountClient.describeAccount}
- * (the core's describeAccount read). Hash fields are big-endian display hex;
- * timelock/timestamp fields are decimal strings. Never faults on an unknown
- * account: `exists` is false and every other field is zeroed.
- */
-export interface AccountDescriptor {
-  exists: boolean;
-  verifier: string;
-  hook: string;
-  backupOwner: string;
-  /** Escape-hatch timelock in seconds (decimal string). */
-  escapeTimelock: string;
-  /** Timestamp the escape was triggered (decimal string, ms). */
-  escapeTriggeredAt: string;
-  escapeActive: boolean;
-  /** Market escrow contract hash (big-endian display hex, '' when unset). */
-  marketEscrowContract: string;
-  /** Market escrow listing id (decimal string). */
-  marketEscrowListingId: string;
-  marketEscrowActive: boolean;
-  pendingVerifierUpdate: boolean;
-  /** Verifier update maturity timestamp (decimal string, ms). */
-  pendingVerifierMatureAt: string;
-  pendingHookUpdate: boolean;
-  /** Hook update maturity timestamp (decimal string, ms). */
-  pendingHookMatureAt: string;
-}
-
-/** Options for {@link SmartAccountClient.simulateValidation}. */
-export interface UserOpSimulationOptions extends UserOpValidationPreviewOptions {
-  /**
-   * Optional RPC signers. Attach the backup owner to learn whether the
-   * native witness fallback would authorize the operation.
-   */
-  signers?: unknown[];
-}
-
-/**
- * Non-faulting preflight result returned by {@link SmartAccountClient.simulateValidation}
- * (named after ERC-4337's EntryPoint simulateValidation): unknown accounts decode to an
- * all-false result instead of throwing.
- */
-export interface UserOpSimulation {
-  accountExists: boolean;
-  deadlineOk: boolean;
-  nonceOk: boolean;
-  verifierBound: boolean;
-  nativeWitnessPresent: boolean;
-  marketEscrowBlocks: boolean;
-  escapeActive: boolean;
-}
-
-/**
- * Full account state. All Hash160 fields are big-endian display hex; timelock
- * and timestamp fields are decimal strings.
- */
-export interface AccountState {
-  accountId: Hash160;
-  verifier: Hash160;
-  hook: Hash160;
-  backupOwner: Hash160;
-  /** Escape-hatch timelock in seconds (decimal string). */
-  escapeTimelock: string;
-  /** Timestamp the escape was triggered (decimal string, ms). */
-  escapeTriggeredAt: string;
-  escapeActive: boolean;
-  metadataUri: string;
-}
-
-/** A pending module call (verifier or hook) on an account. */
-export interface PendingModuleCall {
-  hasPending: boolean;
-  /** Earliest execution time (decimal string, Neo Runtime.Time ms). */
-  executeAfter: string;
-  /** Module hash (big-endian display hex). */
-  moduleHash: Hash160;
-  /** Call hash hex. */
-  callHash: string;
-}
-
-/** Options for {@link SmartAccountClient.createSponsoredUserOpPayload}. */
-export interface SponsoredUserOpPayloadOptions extends AccountScopedOptions {
-  userOp: UserOperation;
-  paymasterHash: Hash160;
-  sponsorAddress: Hash160 | NeoAddress;
-  /** GAS reimbursement in fractions (10^8 = 1 GAS). */
-  reimbursementAmount: IntegerLike;
-}
-
-/** Options for {@link SmartAccountClient.createSponsoredBatchPayload}. */
-export interface SponsoredBatchPayloadOptions extends AccountScopedOptions {
-  userOps: UserOperation[];
-  paymasterHash: Hash160;
-  sponsorAddress: Hash160 | NeoAddress;
-  /** Total GAS reimbursement for the batch (fractions). */
-  reimbursementAmount: IntegerLike;
-}
-
-/** Options for {@link SmartAccountClient.validatePaymasterOp}. */
-export interface ValidatePaymasterOpOptions {
-  paymasterHash: Hash160;
-  sponsorAddress: Hash160 | NeoAddress;
-  accountAddress: Hash160 | NeoAddress;
-  targetContract: Hash160;
-  method: string;
-  reimbursementAmount: IntegerLike;
-}
-
-/**
- * The Neo N3 Smart Account SDK client.
- *
- * Provides account derivation, payload construction, EIP-712 signing-data
- * generation, read-only contract queries, and paymaster/sponsored-operation
- * helpers.
- */
-export declare class SmartAccountClient {
-  /** The configured master contract hash (40 hex chars). */
-  masterContractHash: Hash160;
-  /** The underlying neon-js RPC client. */
-  rpcClient: unknown;
-
-  /**
-   * @param rpcUrl - RPC endpoint URL (`http://` or `https://`).
-   * @param masterContractHash - Master contract hash (40 hex chars).
-   */
-  constructor(rpcUrl: string, masterContractHash: Hash160);
-
-  /** Invokes a script with transient-failure retry. */
-  invokeScriptWithRetry(script: unknown, signers?: unknown[]): Promise<any>;
-  /** Invokes a contract function with transient-failure retry. */
-  invokeFunctionWithRetry(
-    scriptHash: Hash160,
-    operation: string,
-    params?: unknown[],
-    signers?: unknown[],
-  ): Promise<any>;
-
-  /**
-   * Builds a direct core invocation for irreversible owner-only recovery.
-   * Requires the backup-owner witness and mature escape timelock on chain.
-   * Does not sign, submit or establish deployed capability. Use the account ID,
-   * never its asset proxy address. Plugins cannot be reinstalled after success.
-   */
-  createFinalizeEscapeToOwnerPayload(options: AccountScopedOptions): ContractInvocationPayload;
-  /**
-   * Validates deployed manifest capability, then strictly reads permanent mode.
-   * Unsupported ABI yields null; malformed RPC data and VM faults throw.
-   */
-  getOwnerOnlyRecoveryStatus(accountHashOrAddress: Hash160 | NeoAddress): Promise<OwnerOnlyRecoveryStatus>;
-
-  /** Builds the verification script from a display-order account id. */
-  buildVerifyScript(accountIdHex: string): string;
-  /** Derives the account id hash from a seed or existing hash. */
-  deriveAccountIdHash(accountIdHexOrSeed: string): Hash160;
-  /** Derives the registration-bound account id hash used by V3 creation (big-endian display form, matching the on-chain ComputeRegistrationAccountId display string). */
-  deriveRegistrationAccountIdHash(
-    options?: RegistrationAccountIdOptions,
-  ): Hash160;
-  /** Derives a virtual account from a seed. */
-  deriveVirtualAccount(accountIdSeedHex: string): VirtualAccount;
-  /** Derives a Neo address from an uncompressed EVM public key. */
-  deriveAddressFromEVM(uncompressedPubKey: string): NeoAddress;
-
-  /** Builds the payload to register a new V3 account. */
-  createAccountPayload(
-    options: CreateAccountPayloadOptions,
-  ): ContractInvocationPayload;
-  /**
-   * Builds the registration payload for a session-key account whose first
-   * session key is installed immediately at registration time (the key
-   * travels inside verifierParams, so the account id commits to it).
-   */
-  createSessionKeyAccountPayload(
-    options: CreateSessionKeyAccountPayloadOptions,
-  ): ContractInvocationPayload;
-  /** Builds the payload to update an account's verifier. */
-  createUpdateVerifierPayload(
-    options: UpdateVerifierPayloadOptions,
-  ): ContractInvocationPayload;
-  /** Builds the payload to update an account's hook. */
-  createUpdateHookPayload(
-    options: UpdateHookPayloadOptions,
-  ): ContractInvocationPayload;
-  /** Builds the payload to set an account's metadata URI. */
-  createSetMetadataUriPayload(
-    options: SetMetadataUriPayloadOptions,
-  ): ContractInvocationPayload;
-  /** Builds the payload to confirm a pending hook update. */
-  createConfirmHookUpdatePayload(
-    options: AccountScopedOptions,
-  ): ContractInvocationPayload;
-  /** Builds the payload to confirm a pending verifier update. */
-  createConfirmVerifierUpdatePayload(
-    options: AccountScopedOptions,
-  ): ContractInvocationPayload;
-  /** Builds the payload to cancel a pending hook update. */
-  createCancelHookUpdatePayload(
-    options: AccountScopedOptions,
-  ): ContractInvocationPayload;
-  /** Builds the payload to cancel a pending verifier update. */
-  createCancelVerifierUpdatePayload(
-    options: AccountScopedOptions,
-  ): ContractInvocationPayload;
-
-  /** Computes the on-chain args hash (keccak256 of serialized args). */
-  computeArgsHash(args?: ContractParameter[]): Promise<Bytes32Hex>;
-
-  /**
-   * Generates the EIP-712 typed data for signing a UserOperation. Returns the
-   * V3 layout when an account id is supplied, otherwise the legacy layout.
-   */
-  createEIP712Payload(
-    options: CreateEIP712PayloadOptions,
-  ): Promise<UserOperationTypedData | MetaTransactionTypedData>;
-
-  /** Decodes a stack item into an array of Neo addresses. */
-  decodeAddressArray(stackItem: StackItem | null | undefined): NeoAddress[];
-
-  /** Reads the account implementation id string. */
-  getAccountImplementationId(): Promise<string>;
-  /** Checks whether an execution mode is supported. */
-  supportsExecutionMode(mode: string): Promise<boolean>;
-  /** Checks whether a module type is supported. */
-  supportsModuleType(moduleType: string): Promise<boolean>;
-  /** Checks whether a module is installed on an account. */
-  isModuleInstalled(
-    accountHashOrAddress: Hash160 | NeoAddress,
-    moduleType: string,
-    moduleHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<boolean>;
-  /**
-   * Checks a message signature through the ERC-1271-compatible Neo adapter.
-   * Returns `0x1626ba7e` for valid or `0xffffffff` for invalid.
-   */
-  isValidSignature(
-    accountHashOrAddress: Hash160 | NeoAddress,
-    hash: Bytes32Hex,
-    /** Compact r||s or recoverable r||s||v signature (64 or 65 bytes). */
-    signature: string,
-  ): Promise<string>;
-
-  /** Returns a validation preview for a UserOperation before submission. */
-  getUserOpValidationPreview(
-    options: UserOpValidationPreviewOptions,
-  ): Promise<UserOpValidationPreview>;
-
-  /**
-   * Reads the complete account descriptor in one call (ERC-7579-style
-   * capability discovery). Never faults on an unknown account.
-   */
-  describeAccount(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<AccountDescriptor>;
-
-  /**
-   * Non-faulting preflight of the core's execution-time checks (named after
-   * ERC-4337's EntryPoint simulateValidation). Signature verification and hook execution
-   * are deliberately excluded.
-   */
-  simulateValidation(
-    options: UserOpSimulationOptions,
-  ): Promise<UserOpSimulation>;
-
-  /** Returns the full state of a smart account. */
-  getAccountState(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<AccountState>;
-
-  /** Whether a pending verifier update exists. */
-  getHasPendingVerifierUpdate(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<boolean>;
-  /** Whether a pending hook update exists. */
-  getHasPendingHookUpdate(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<boolean>;
-  /** Time (Neo Runtime.Time ms) a pending verifier update can be confirmed. */
-  getPendingVerifierUpdateTime(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<number>;
-  /** Time (Neo Runtime.Time ms) a pending hook update can be confirmed. */
-  getPendingHookUpdateTime(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<number>;
-  /** Returns the pending verifier module call, if any. */
-  getPendingVerifierCall(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<PendingModuleCall>;
-  /** Returns the pending hook module call, if any. */
-  getPendingHookCall(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<PendingModuleCall>;
-  /** Whether an execution is currently active for an account. */
-  getIsExecutionActive(
-    accountHashOrAddress: Hash160 | NeoAddress,
-  ): Promise<boolean>;
-
-  // --- Paymaster / sponsored transactions ---
-
-  /** Builds the payload to execute a sponsored UserOperation via paymaster. */
-  createSponsoredUserOpPayload(
-    options: SponsoredUserOpPayloadOptions,
-  ): ContractInvocationPayload;
-  /** Builds the payload to execute a sponsored batch of UserOperations. */
-  createSponsoredBatchPayload(
-    options: SponsoredBatchPayloadOptions,
-  ): ContractInvocationPayload;
-  /** Queries a sponsor's GAS deposit balance (fractions, BigInteger string). */
-  querySponsorBalance(
-    paymasterHash: Hash160,
-    sponsorAddress: Hash160 | NeoAddress,
-  ): Promise<string>;
-  /** Validates whether a sponsored operation would be accepted. */
-  validatePaymasterOp(options: ValidatePaymasterOpOptions): Promise<boolean>;
-
-  /** @deprecated Removed in V3; always throws. */
-  getAccountsByAdmin(): Promise<never>;
-  /** @deprecated Removed in V3; always throws. */
-  getAccountsByManager(): Promise<never>;
-  /** @deprecated Removed in V3; always throws. */
-  getAccountAddressesByAdmin(): Promise<never>;
-  /** @deprecated Removed in V3; always throws. */
-  getAccountAddressesByManager(): Promise<never>;
-}
-
-/** Exact virtual account witness preimage; Hash160 inputs use display byte order. */
-export function createProxyVerificationScript(options: { coreHash: Hash160; accountId: Hash160 }): string;
-/** Build a restricted proxy signer and empty-invocation witness after reading the on-chain scope. */
-export function createProxyWitness(options: {
-  coreHash: Hash160; accountId: Hash160; targetContract: Hash160;
-  scopeTarget: Hash160; feePayer: Hash160; expectedProxyHash?: Hash160;
-}): {
-  signer: { account: string; scopes: 'WitnessRules'; rules: Array<{ action: 'Allow'; condition: {
-    type: 'Or'; expressions: Array<{ type: 'CalledByContract'; hash: string }>;
-  } }> };
-  witness: { invocationScript: string; verificationScript: string };
-};
-
-/** Thrown when the account has no verify-scope target: no proxy-witness transaction exists. */
-export declare const PROXY_SCOPE_TARGET_REQUIRED: string;
-
-/** The signer of the fee-paying wallet. Only custom scopes a wallet can express are accepted. */
-export type ProxyFeePayerScope = 'None' | 'CalledByEntry' | 'CustomContracts' | 'Global';
-
-export interface ProxySigner {
-  account: string;
-  scopes: 'WitnessRules';
-  rules: Array<{ action: 'Allow'; condition: {
-    type: 'Or'; expressions: Array<{ type: 'CalledByContract'; hash: string }>;
-  } }>;
-}
-
-export interface ProxyFeePayerSigner {
-  account: string;
-  scopes: ProxyFeePayerScope;
-  allowedContracts?: string[];
-}
-
-export interface ProxyWitness {
-  invocationScript: string;
-  verificationScript: string;
-}
-
-/**
- * The complete proxy-witness account transaction. `script` is the shape-bound
- * `executeUserOp`/`executeUserOps` call, `signers` is `[feePayer, proxy]` in that order, and
- * `proxyWitness` is attached to the transaction after the fee payer has signed it.
- */
 export interface ProxyWitnessTransaction {
   readonly script: string;
-  readonly operation: 'executeUserOp' | 'executeUserOps';
+  readonly operation: string;
   readonly coreHash: string;
   readonly accountId: string;
-  readonly scopeTarget: string;
-  readonly targetContract: string;
   readonly proxyHash: string;
-  readonly proxySigner: ProxySigner;
-  readonly proxyWitness: ProxyWitness;
-  readonly feePayerSigner: ProxyFeePayerSigner;
-  readonly signers: readonly [ProxyFeePayerSigner, ProxySigner];
-  /** Alias of `proxyWitness`, for the transaction API's `addWitness`. */
-  readonly witness: ProxyWitness;
+  readonly proxySigner: ProxyWitnessArtifacts["signer"];
+  readonly proxyWitness: ProxyWitnessArtifacts["witness"];
+  readonly feePayerSigner: SignerDescriptor;
+  readonly signers: readonly SignerDescriptor[];
+  readonly witness: ProxyWitnessArtifacts["witness"];
 }
 
-/**
- * The one application call a proxy witness may authorize. Refuses every other entrypoint, a second
- * call, another core or another account, so the emitted script is bound to its shape.
- */
-export function buildExecuteUserOpScript(options: {
-  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation;
+export declare function createProxyVerificationScript(input: {
+  coreHash: string;
+  accountId: string;
+  callFlags?: number;
 }): string;
 
-/**
- * Build the proxy-witness transaction. `scopeTarget` must be freshly read from the same core/RPC
- * that submits the transaction; an absent or all-zero scope target is refused with
- * `PROXY_SCOPE_TARGET_REQUIRED`. The proxy is never permitted to pay the enclosing fees.
- */
-export function buildProxyWitnessTransaction(options: {
-  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation;
-  scopeTarget: Hash160 | null | undefined; expectedProxyHash?: Hash160;
-  feePayer: Hash160; feePayerScope?: ProxyFeePayerScope; feePayerAllowedContracts?: string[];
+export declare function createProxyWitness(input: {
+  coreHash: string;
+  accountId: string;
+  proxyHash: string;
+  feePayer: string;
+  expectedProxyHash?: string;
+  callFlags?: number;
+}): ProxyWitnessArtifacts;
+
+export declare function buildExecuteUserOpScript(input: {
+  coreHash: string;
+  accountId: string;
+  invocation: ProxyInvocation;
+  callFlags?: number;
+}): string;
+
+export declare function buildProxyWitnessTransaction(input: {
+  coreHash: string;
+  accountId: string;
+  invocation: ProxyInvocation;
+  proxyHash: string;
+  expectedProxyHash?: string;
+  feePayer: string;
+  feePayerScope?: SignerScope;
+  feePayerAllowedContracts?: readonly string[];
+  callFlags?: number;
 }): ProxyWitnessTransaction;
 
-/**
- * The browser-wallet signing path: the same transaction with the fee payer expressed in a custom
- * scope (`CustomContracts` with an allowlist, or `Global`) that a wallet will accept. The proxy
- * keeps its restricted WitnessRules and its witness is still attached by the dApp.
- */
-export function buildProxyWalletSignRequest(options: {
+export declare function buildProxyWalletSignRequest(input: {
   transaction: ProxyWitnessTransaction;
-  scope?: ProxyFeePayerScope; allowedContracts?: string[];
-}): ProxyWitnessTransaction;
+  scope?: SignerScope;
+  allowedContracts?: readonly string[];
+}): ProxyWitnessTransaction & { readonly feePayerSigner: SignerDescriptor };
 
-/**
- * Build the transaction from the account's on-chain scope state. `readState` is the only source of
- * `scopeTarget` and `expectedProxyHash` and must read the same core/RPC that submits the
- * transaction; neither value may be taken from request metadata. Injected so the relay, the wallet
- * frontend and the local chain fixture all resolve this authority through one entry point.
- */
-export function resolveProxyWitnessTransaction(options: {
-  coreHash: Hash160; accountId: Hash160; invocation: MetaInvocation; feePayer: Hash160;
-  readState: (request: { coreHash: string; accountId: string }) => Promise<{ scopeTarget?: Hash160 | null; expectedProxyHash?: Hash160 | null }>;
-  feePayerScope?: ProxyFeePayerScope; feePayerAllowedContracts?: string[];
+export declare function resolveProxyWitnessTransaction(input: {
+  coreHash: string;
+  accountId: string;
+  invocation: ProxyInvocation;
+  proxyHash: string;
+  feePayer: string;
+  readState: (state: { coreHash: string; accountId: string }) => Promise<{ proxyHash?: string }>;
+  feePayerScope?: SignerScope;
+  feePayerAllowedContracts?: readonly string[];
+  callFlags?: number;
 }): Promise<ProxyWitnessTransaction>;
 
-/** MultiSig config read from the bound verifier. configDigest pins order and threshold; no client claim of quorum. */
-export interface MultiSigContext {
-  readonly version: 1;
-  readonly networkMagic: string;
-  readonly coreContractHash: Hash160;
-  readonly accountIdHash: Hash160;
-  readonly verifierHash: Hash160;
-  readonly verifiers: readonly Hash160[];
-  readonly threshold: number;
-  readonly configDigest: string;
+// ---------------------------------------------------------------------------
+// Threshold (validatorId route, §5)
+// ---------------------------------------------------------------------------
+
+export declare const THRESHOLD_MAX_MEMBERS: 10;
+
+export interface ThresholdMemberInput {
+  moduleId: VMInteger;
+  credentialGeneration: VMInteger;
+  signature?: string;
 }
-export interface MultiSigOperation {
-  coreContractHash: Hash160;
-  accountIdHash: Hash160;
-  networkMagic: string;
-  configDigest: string;
-  targetContract: Hash160;
+
+export interface PreparedThresholdMember {
+  readonly moduleId: string;
+  readonly credentialGeneration: string;
+  readonly digest: string;
+}
+
+export interface ThresholdSignatureResult {
+  readonly signatureHex: string;
+  readonly members: readonly PreparedThresholdMember[];
+}
+
+/** The v4 threshold tools: member digests and the serialized field 11 value. */
+export interface ThresholdTools {
+  memberDigest(
+    operationDigest: string,
+    moduleId: VMInteger,
+    credentialGeneration: VMInteger,
+  ): string;
+  prepareMembers(input: {
+    operationDigest: string;
+    members: readonly Pick<ThresholdMemberInput, "moduleId" | "credentialGeneration">[];
+  }): readonly PreparedThresholdMember[];
+  assembleSignature(input: { members: readonly ThresholdMemberInput[] }): string;
+  assembleOperationSignature(input: {
+    operationDigest: string;
+    members: readonly ThresholdMemberInput[];
+  }): ThresholdSignatureResult;
+}
+
+export declare const thresholdTools: ThresholdTools;
+
+/**
+ * The threshold tools bound to one account: the pure helpers, plus a member
+ * reader that resolves each member's credential generation from the core
+ * before computing its digest. `prepareMembers` therefore reads state and is
+ * asynchronous, which is why it replaces the pure form instead of widening it.
+ */
+export interface ThresholdClient extends Omit<ThresholdTools, "prepareMembers"> {
+  prepareMembers(input: {
+    accountId: string;
+    operationDigest: string;
+    memberIds: readonly VMInteger[];
+  }): Promise<readonly PreparedThresholdMember[]>;
+}
+
+export declare function createThresholdClient(options: {
+  client: Pick<SmartAccountKernel, "getModule">;
+}): ThresholdClient;
+
+/** Serialized `[[memberModuleId, signature]]` list for operation field 11. */
+export declare function serializeMemberSignatures(
+  entries: ReadonlyArray<readonly [VMInteger, string]>,
+): string;
+
+/** Hex parameters to base64 JSON-RPC parameters. */
+export declare function toMultiSigRpcParameter(parameter: any): any;
+
+// ---------------------------------------------------------------------------
+// Meta-transaction signing (the validator's EIP-712 surface)
+// ---------------------------------------------------------------------------
+
+export interface TypedDataInput {
+  chainId: VMInteger;
+  verifyingContract: string;
+  accountId: string;
+  coreContractHash: string;
+  validatorId?: VMInteger;
+  targetContract: string;
   method: string;
-  args: ContractParameter[];
   argsHashHex: string;
-  nonce: string;
-  deadline: string;
+  nonce: VMInteger;
+  deadline: VMInteger;
+  operationDigest: string;
 }
-export interface MultiSigChildProof {
-  childVerifierHash: Hash160;
-  kind: 'evm' | 'opaque';
-  operation: MultiSigOperation;
-  signatureHex: string;
-  typedData?: UserOperationTypedData;
-  signatureFullHex?: string;
-  signerAddress?: string;
-}
-export interface MultiSigBundle {
-  signatureHex: string;
-  invocation: ContractInvocationPayload;
-  context: MultiSigContext;
-  operation: MultiSigOperation;
-  slots: (string | null)[];
-  /** Signature simulation passed at read time; not transaction execution/finality. */
-  chainValidated: boolean;
-}
-export type MultiSigRead = (contract: Hash160, method: string, args: ContractParameter[]) => Promise<{ state: string; stack: unknown[]; exception?: string }>;
-export interface MultiSigBundleInput { context: MultiSigContext; operation: MultiSigOperation; childProofs: MultiSigChildProof[]; }
-export interface MultiSigPrepareInput {
-  context: MultiSigContext;
-  operation: { targetContract: Hash160; method: string; args: ContractParameter[]; deadline: IntegerLike; channel?: IntegerLike };
-}
-export interface MultiSigConfigurationInput { context: MultiSigContext; childVerifierHash: Hash160; method: 'setPublicKey' | 'setConfig'; args: ContractParameter[]; }
-export interface MultiSigPendingConfiguration { moduleHash: Hash160; callHash: string; initiatedAt: string; }
-export declare function serializeMultiSigSignatures(signatures: (string | null)[]): string;
-export declare function fetchMultiSigContext(input: { coreContractHash: Hash160; accountIdHash: Hash160; networkMagic: IntegerLike; expectedVerifierHash?: Hash160; read: MultiSigRead }): Promise<MultiSigContext>;
-export declare function prepareMultiSigOperation(input: MultiSigPrepareInput & { read: MultiSigRead }): Promise<MultiSigOperation>;
-export declare function buildMultiSigChildTypedData(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160 }): UserOperationTypedData;
-export declare function buildMultiSigBundle(input: MultiSigBundleInput): MultiSigBundle;
-export declare function validateMultiSigBundle(input: MultiSigBundleInput & { read: MultiSigRead; networkMagic: IntegerLike }): Promise<MultiSigBundle>;
-export declare function buildMultiSigChildConfigurationInvocation(input: MultiSigConfigurationInput): ContractInvocationPayload;
-export declare function readMultiSigPendingConfiguration(input: { context: MultiSigContext; read: MultiSigRead }): Promise<MultiSigPendingConfiguration>;
-export interface MultiSigClient {
-  fetchContext(input: { coreContractHash: Hash160; accountIdHash: Hash160; expectedVerifierHash?: Hash160 }): Promise<MultiSigContext>;
-  prepareOperation(input: MultiSigPrepareInput): Promise<MultiSigOperation>;
-  buildChildTypedData: typeof buildMultiSigChildTypedData;
-  fetchChildPayload(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160 }): Promise<{ childVerifierHash: Hash160; operation: MultiSigOperation; payloadHex: string }>;
-  buildBundle: typeof buildMultiSigBundle;
-  buildChildConfiguration: typeof buildMultiSigChildConfigurationInvocation;
-  readPendingConfiguration(input: { context: MultiSigContext }): Promise<MultiSigPendingConfiguration>;
-  validateBundle(input: MultiSigBundleInput): Promise<MultiSigBundle>;
-}
-export declare function createMultiSigClient(input: { rpcUrl?: string; rpcClient?: { getVersion(): Promise<{ protocol: { network: number } }>; send(method: string, params: unknown[]): ReturnType<MultiSigRead> }; signers?: unknown[] }): MultiSigClient;
 
-export declare function fetchMultiSigChildPayload(input: { context: MultiSigContext; operation: MultiSigOperation; childVerifierHash: Hash160; read: MultiSigRead }): Promise<{ childVerifierHash: Hash160; operation: MultiSigOperation; payloadHex: string }>;
+export interface UserOperationTypedData {
+  readonly domain: {
+    readonly name: "Neo Smart Account";
+    readonly version: "4";
+    readonly chainId: VMInteger;
+    readonly verifyingContract: string;
+  };
+  readonly types: {
+    readonly UserOperation: ReadonlyArray<{ readonly name: string; readonly type: string }>;
+  };
+  readonly message: {
+    readonly accountId: string;
+    readonly coreContract: string;
+    readonly validatorId: string;
+    readonly targetContract: string;
+    readonly method: string;
+    readonly argsHash: string;
+    readonly nonce: string;
+    readonly deadline: string;
+    readonly operationDigest: string;
+  };
+}
 
-// Native protocol profile is separate from deployed public V3.
-export * from './native';
+export declare function buildUserOperationTypedData(
+  input: TypedDataInput,
+): UserOperationTypedData;
+/** The 66-byte `0x1901 ‖ domainSeparator ‖ structHash` the validator verifies. */
+export declare function buildUserOperationSigningPayload(
+  input: TypedDataInput,
+): Uint8Array;
+/** keccak256 of the signing payload: the 32 bytes a raw signer signs. */
+export declare function buildUserOperationSigningDigest(input: TypedDataInput): string;
+export declare function methodHash(method: string): string;
+export declare function toBytes20Word(hash160: string): Uint8Array;
+export declare function toAddressWord(hash160: string): Uint8Array;
+export declare function toUint256Word(value: VMInteger): Uint8Array;
+
+export declare function sanitizeHex(value: unknown): string;
+export declare function decodeByteStringStackHex(item: unknown): string;
+export declare function decodeIntegerStack(item: unknown): bigint;
+export declare function decodeStackBoolean(item: unknown): boolean;
+export declare function decodeHash160Stack(item: unknown): string;
+
+/** The `validateUserOp` preview: acceptance and the core's §4.3 digest. */
+export declare function decodeValidationPreviewStack(item: unknown): {
+  accepted: boolean;
+  operationDigest: string;
+};
+
+/** The raw 16-field `getAccount` Array, decoded without a client identity. */
+export interface DecodedAccountDescriptor {
+  readonly exists: true;
+  readonly status: number;
+  readonly statusName: string;
+  readonly custody: string;
+  readonly recoveryAuthority: string;
+  readonly authorityEpoch: string;
+  readonly configurationNonce: string;
+  readonly recoveryTimelockMs: string;
+  readonly defaultOperationAuthorization: boolean;
+  readonly defaultMessageAuthorization: boolean;
+  readonly ownerOnlyRecovery: boolean;
+  readonly hookOrderRevision: string;
+  readonly controlRevision: string;
+  readonly recoveryPending: boolean;
+  readonly recoveryMatureAt: string;
+  readonly marketEscrowActive: boolean;
+  readonly legacyRow: boolean;
+}
+
+export interface DecodedModuleDescriptor {
+  readonly moduleId: string;
+  readonly moduleType: number;
+  readonly contractHash: string;
+  readonly contractId: string;
+  readonly updateCounter: string;
+  readonly nefSha256: string;
+  readonly profileSha256: string;
+  readonly moduleRevision: string;
+  readonly credentialGeneration: string;
+  readonly instanceIsolation: boolean;
+  readonly messageCapability: boolean;
+  readonly thresholdMemberEligible: boolean;
+}
+
+export interface DecodedRecoveryStatus {
+  readonly pending: boolean;
+  readonly initiatedAt: string;
+  readonly matureAt: string;
+  readonly authorityEpochAtInit: string;
+  readonly newCustody: string;
+}
+
+export declare function decodeAccountDescriptorStack(
+  item: unknown,
+): DecodedAccountDescriptor | null;
+export declare function decodeModuleDescriptorStack(
+  item: unknown,
+): DecodedModuleDescriptor | null;
+export declare function decodeRecoveryStatusStack(
+  item: unknown,
+): DecodedRecoveryStatus | null;
+
+// ---------------------------------------------------------------------------
+// The custom kernel
+// ---------------------------------------------------------------------------
+
+export interface CustomClientOptions {
+  rpcUrl?: string;
+  rpcClient?: { send(method: string, params: unknown[]): Promise<any> };
+  networkMagic: VMInteger;
+  contractHash: string;
+  retry?: RetryOptions | false;
+}
+
+export interface CreateAccountsInput {
+  custodyAddress: string;
+  salts: readonly string[];
+  recoveryTimelockMs?: VMInteger;
+}
+
+export interface LegacyRegistrationInput {
+  verifier: string;
+  verifierParams: string;
+  hookId: string;
+  backupOwner: string;
+  escapeTimelock?: VMInteger;
+}
+
+export interface CustomActionInput {
+  method: string;
+  accountId: string;
+  args?: VMValue[];
+}
+
+/** The custody-authorised custom actions this client will build a plan for. */
+export type CustodyAction = "setMetadataUri";
+
+export interface MarketEscrowState {
+  readonly marketContract: string;
+  readonly listingId: string;
+  readonly active: boolean;
+}
+
+export interface MigrationState {
+  readonly status: string;
+  readonly manifestDigest: string;
+  readonly classification: string;
+  readonly legacyModuleCount: string;
+  readonly legacyScopeInvalidated: boolean;
+  readonly importedAt: string;
+}
+
+export interface PlatformAccountInput {
+  appBinding: string;
+  backupOwner: string;
+  escapeTimelock?: VMInteger;
+}
+
+export interface StablePlatformAccountInput {
+  appBinding: string;
+  escapeTimelock?: VMInteger;
+}
+
+export interface SponsoredExecutionInput {
+  accountId: string;
+  operations: UserOperation | readonly UserOperation[];
+  paymaster: string;
+  sponsor: string;
+  reimbursementAmount: VMInteger;
+}
+
+export interface SponsoredExecutionPlan extends ExecutionPlan {
+  readonly method: "executeSponsoredUserOp" | "executeSponsoredUserOps";
+  readonly operations: readonly UserOperation[];
+  readonly paymaster: string;
+  readonly sponsor: string;
+  readonly reimbursementAmount: string;
+}
+
+/**
+ * Drives one deployed custom kernel. Everything protocol-shaped is inherited
+ * from the shared kernel client; this class adds registration, custody actions,
+ * market/registrar/migration reads and sponsored execution.
+ */
+export declare class SmartAccountClient implements SmartAccountKernel {
+  constructor(options: CustomClientOptions);
+  readonly networkMagic: number;
+  readonly contractHash: string;
+  readonly callFlags: number;
+  profile: NativeProfile | null;
+  proxyAddress(accountId: string): string;
+  invokeScript(
+    script: string,
+    signers?: readonly SignerDescriptor[],
+  ): Promise<InvocationResult>;
+  discover(): Promise<NativeProfile & { kernel: "custom" }>;
+  deriveIdentity(input: { custodyAddress: string; salt: string }): {
+    readonly accountId: string;
+    readonly verificationScript: string;
+    readonly accountAddress: string;
+  };
+  // Reads shared with the native kernel (see ./native for descriptor shapes).
+  getAccount(accountId: string): Promise<import("./native").AccountDescriptor | null>;
+  getProtocolInfo(): Promise<import("./native").ProtocolInfo>;
+  getModules(
+    accountId: string,
+    moduleType: string,
+    options?: { cursor?: VMInteger; limit?: number },
+  ): Promise<import("./native").ModulePage>;
+  getModule(
+    accountId: string,
+    moduleId: VMInteger,
+  ): Promise<import("./native").ModuleBinding | null>;
+  isModuleInstalled(
+    accountId: string,
+    moduleType: string,
+    moduleHash: string,
+    additionalContext?: string,
+  ): Promise<boolean>;
+  getHookOrder(accountId: string): Promise<import("./native").HookOrder>;
+  deriveNonceRouting(
+    accountId: string,
+    routing: import("./native").NonceRouting,
+  ): string;
+  getNonce(
+    accountId: string,
+    routing: import("./native").NonceRouting,
+  ): Promise<import("./native").NonceState>;
+  getNonceSequence(accountId: string, channel: VMInteger): Promise<string>;
+  getOperationDigest(accountId: string, operation: UserOperation): Promise<string>;
+  validateUserOp(
+    accountId: string,
+    operation: UserOperation,
+  ): Promise<import("./native").OperationValidation>;
+  isValidSignature(
+    accountId: string,
+    hash: string,
+    envelope: VMValue[],
+  ): Promise<import("./native").SignatureCheck>;
+  getRecoveryStatus(
+    accountId: string,
+  ): Promise<import("./native").RecoveryStatus | null>;
+  getPendingConfiguration(
+    accountId: string,
+    intentId: VMInteger,
+  ): Promise<import("./native").PendingConfiguration | null>;
+  getPendingConfigurationIntentIds(accountId: string): Promise<readonly string[]>;
+  buildCreateAccountScript(input: {
+    custodyAddress: string;
+    salt: string;
+    recoveryTimelockMs?: VMInteger;
+    actions?: VMValue[];
+  }): RegistrationPlan;
+  buildExecutionScript(input: ExecutionInput): ExecutionPlan;
+  buildConfigurationScript(input: ConfigurationInput): ConfigurationPlan;
+  buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
+  simulate(plan: NativePlan, signers?: readonly SignerDescriptor[]): Promise<SimulationResult>;
+  execute(plan: NativePlan, signers?: readonly SignerDescriptor[]): Promise<InvocationResult>;
+  prepare<T extends NativePlan>(plan: T): T;
+  revalidatePlan(plan: NativePlan): Promise<true>;
+  // Registration (§10)
+  buildCreateAccountsScript(
+    input: CreateAccountsInput,
+  ): import("./native").BatchRegistrationPlan;
+  /** Legacy identity of a v3 registration (migration evidence, read-only). */
+  getRegistrationAccountId(input: LegacyRegistrationInput): Promise<string>;
+  // Custody-authorised account actions
+  freezeAccount(accountId: string): AccountActionPlan;
+  unfreezeAccount(accountId: string): AccountActionPlan;
+  beginRecovery(accountId: string, newCustody: string): AccountActionPlan;
+  cancelRecovery(accountId: string): AccountActionPlan;
+  executeRecovery(accountId: string): AccountActionPlan;
+  revokeCredentials(accountId: string, moduleId: VMInteger): AccountActionPlan;
+  buildCustomActionScript(input: CustomActionInput): AccountActionPlan;
+  setMetadataUri(accountId: string, metadataUri: string): AccountActionPlan;
+  // Market escrow state (writes belong to the market contract)
+  getMarketEscrow(accountId: string): Promise<MarketEscrowState>;
+  isMarketService(marketContract: string): Promise<boolean>;
+  // Platform registrar (registrar-sourced; ids stay v3-stable)
+  computePlatformAccountId(input: PlatformAccountInput): Promise<string>;
+  computeStablePlatformAccountId(input: StablePlatformAccountInput): Promise<string>;
+  getPlatformAccountBinding(accountId: string): Promise<string | null>;
+  getAccountIdByProxy(proxy: string): Promise<string>;
+  getProxyScriptHash(accountId: string): Promise<string>;
+  getPlatformRegistrar(): Promise<string>;
+  getPendingPlatformRegistrar(): Promise<string>;
+  getPlatformRegistrarAvailableAt(): Promise<string>;
+  // Metadata, migration and sponsored execution
+  getMetadataUri(accountId: string): Promise<string>;
+  isMigrationRequired(accountId: string): Promise<boolean>;
+  getMigrationState(accountId: string): Promise<MigrationState>;
+  buildSponsoredExecutionScript(
+    input: SponsoredExecutionInput,
+  ): SponsoredExecutionPlan;
+  // Transaction lifecycle
+  prepareTransaction(
+    plan: NativePlan,
+    options: TransactionOptions,
+  ): Promise<NativePreparedTransaction>;
+  signTransaction(prepared: NativePreparedTransaction): Promise<NativeSignedTransaction>;
+  exportSignedTransaction(
+    signed: NativeSignedTransaction,
+  ): NativeSignedTransactionArtifact;
+  preflightTransaction(
+    signed: NativeSignedTransaction,
+  ): Promise<NativeTransactionPreflight>;
+  broadcastTransaction(signed: NativeSignedTransaction): Promise<BroadcastResult>;
+  getTransactionReceipt(
+    signed: NativeSignedTransaction,
+  ): Promise<NativeTransactionReceipt>;
+}
+
+export declare function createSmartAccountClient(
+  options: CustomClientOptions,
+): SmartAccountClient;
+
+/** The single protocol codec every entry point shares. */
+export declare const codec: ProtocolCodec;

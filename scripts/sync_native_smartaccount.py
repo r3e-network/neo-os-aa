@@ -24,11 +24,13 @@ import os
 import sys
 from pathlib import Path
 
-# The eleven contract files that have generated copies in the core checkout.
+# The twelve contract files that have generated copies in the core checkout.
 SYNCED_FILES = [
     "SmartAccount.cs",
     "SmartAccount.Execution.cs",
+    "SmartAccount.Intents.cs",
     "SmartAccount.Keys.cs",
+    "SmartAccount.Message.cs",
     "SmartAccount.Modules.cs",
     "SmartAccountCanonicalJson.cs",
     "SmartAccountEnvelope.cs",
@@ -36,7 +38,7 @@ SYNCED_FILES = [
     "SmartAccountModulePolicy.cs",
     "SmartAccountModuleProtocol.cs",
     "SmartAccountProtocol.cs",
-    "SmartAccountState.cs",
+    "SmartAccountRecords.cs",
 ]
 
 # Header of the generated copies in neo-native-core (exactly one occurrence).

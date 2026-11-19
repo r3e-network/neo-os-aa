@@ -18,16 +18,15 @@
 custom 源码协议在其可执行 nonce 域、操作形状隔离、插件生命周期与有界策略
 基数方面是内部一致的。当前源码候选已编译并经过运行时测试，而
 固定版本的公开工件仍是单独验证过的部署身份。
-源码候选当前有 109 条 ABI（由于保留了一个重载条目，实为 108 个唯一方法名）；
-固定版本的公开工件有 90 条 ABI。当前源码还在每个核心内新增了
-共享的按交易补偿上限，以及无回调的 `finalizeEscapeToOwner`：
-一种永久的、仅 owner 的恢复模式。后者保留身份与 nonce 历史，
-同时禁止其后所有插件安装；它不提供 native epoch 模块重装。
-2026-11-16 的以太坊 AA 对齐修订新增了 `describeAccount`
-能力发现读取，以及不 fault 的 `simulateValidation` 预检
-（沿用 ERC-4337 的 EntryPoint 名称），并让 `SessionKeyVerifier.setPublicKey`
-在注册期接收 version-0x01 初始密钥 blob 作为 verifier 参数，因此
-会话密钥账户从第一天起就可用。
+协议 v4 源码候选编译为 81 条 ABI；`contracts/build/` 下固定版本的公开工件是冻结的
+v3（`UnifiedSmartWalletV3`）身份，有 90 条 ABI，已不再是源码的形态。
+当前源码还在每个核心内新增了共享的按交易补偿上限，以及带时间锁、不调用任何回调的恢复通道
+`beginRecovery` / `cancelRecovery` / `executeRecovery`（通过 `getRecoveryStatus` 读回）：
+到期后轮换托管权，在完全不调用 validator、hook、Market 或 Oracle 的情况下清扫全部模块实例、策略、
+意图与 nonce 通道，并推进 authority epoch；它不提供 native epoch 模块重装。
+所有模块变更都走 `proposeConfiguration` / `confirmConfiguration` / `cancelConfiguration`
+意图路径并带 24 小时时间锁，且 validator 的凭据由它自己的 `configure` 回调写入，
+因此会话密钥账户从其初次安装起就可用，而不再依赖某个注册期的 verifier 参数 blob。
 这些本地修复有 NeoVM 回归覆盖与对应的形式模型。
 仍有三个发布门禁需要显式说明：
 
@@ -92,18 +91,18 @@ Huyao 之前的兼容实现不强制这些边界，不得被视为
 **实现位置：** `contracts/custom/SmartAccount.Accounts.cs`
 
 **特性：**
-- **安装：** `registerAccount()` 设置初始 verifier 与 hook
-- **带时间锁的更新：** `updateVerifier()` 与 `updateHook()` 通过 24 小时（86,400,000ms）的 ConfigUpdateTimelock 替换已安装插件；向空槽位的首次安装是立即生效的
-- **确认：** `confirmVerifierUpdate()` 与 `confirmHookUpdate()` 允许在时间锁之后完成
-- **取消：** `cancelVerifierUpdate()` 与 `cancelHookUpdate()` 允许立即取消
-- **授权：** 所有配置变更都要求 `BackupOwner` 原生 witness
-- **权限检查：** `VerifierAuthority.canConfigureVerifier()` 与 `HookAuthority.canConfigureHook()`
-- **事件：** 所有生命周期事件均已发出（ModuleInstalled、ModuleUpdateInitiated、ModuleUpdateConfirmed、ModuleUpdateCancelled、ModuleRemoved）
+- **安装：** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` 通过其 `actions` 列表原子地安装初始 validator 与 hook 实例；批量 `createAccounts` 创建不安装任何模块的账户
+- **带时间锁的更新：** `proposeConfiguration(accountId, actions, readSet)` 开启一个 24 小时（86,400,000ms）的意图，用于安装、配置、替换或移除模块实例；向空槽位安装也走同一路径
+- **确认：** `confirmConfiguration(accountId, intentId, actions)` 在时间锁之后执行或重置该意图
+- **取消：** `cancelConfiguration(accountId, intentId)` 立即取消
+- **授权：** 每次配置变更都要求托管 witness；`getPendingConfiguration` 与 `getPendingConfigurationIntentIds` 暴露队列
+- **权限检查：** 核心通过 `getModule(accountId, moduleId)` 与 `getAuthorizedModuleId(accountId, phase)` 解析实例；模块自身由 `ValidatorAuthority` / `HookAuthority` 把关
+- **事件：** 所有生命周期事件均已发出（ModuleInstanceInstalled、ModuleInstanceConfigured、ModuleInstanceRemoved、ConfigurationIntentProposed、ConfigurationIntentConfirmed、ConfigurationIntentCancelled、ConfigurationIntentExpired、HookOrderSet、ThresholdPolicySet）
 
 **与 ERC-7579 的对比：**
-- ERC-7579 `onInstall(bytes32)` → Neo 的 `registerAccount()` 直接调用
-- ERC-7579 `onUninstall(bytes32)` → Neo 基于授权的移除
-- ERC-7579 不规定该等待期；custom 核心在替换已安装插件时等待 24 小时
+- ERC-7579 `onInstall(bytes32)` → Neo 的 `onInstall(Hash160, Integer, Integer, Array)`，由配置意图触达
+- ERC-7579 `onUninstall(bytes32)` → Neo 的 `onUninstall(Hash160, Integer, Integer, Array)` 加上核心侧的实例移除与 `InstanceKey` 清理
+- ERC-7579 不规定该等待期；custom 核心在提议的模块变更可被确认之前等待 24 小时
 - 核心工件升级与平台 owner 轮换使用独立的七天延迟；两者都不是按账户的插件替换计时器
 
 **评估：** ✓ 源码验证的生命周期实现；这不认证每个未来插件，也不认证固定版本的公开工件
@@ -143,40 +142,42 @@ BigInteger sequence = nonce & 0xFFFFFFFFFFFFFFFF;
 
 ---
 
-### 3. 逃生机制（timelock、冷却、最终化）✓
+### 3. 无回调恢复（时间锁、取消、执行）✓
 
 **实现位置：** `contracts/custom/SmartAccount.Escape.cs`
 
 **流程：**
 ```mermaid
 stateDiagram-v2
-    [*] --> Configured: BackupOwner set
-    Configured --> EscapeInitiated: initiateEscape(accountId) called
-    EscapeInitiated --> Configured: Successful operation with BackupOwner witness cancels escape
-    EscapeInitiated --> EscapeFinalized: Timelock expires + finalizeEscape(accountId, newVerifier)
-    EscapeFinalized --> Configured: Selected verifier installed or BackupOwner fallback
+    [*] --> Configured: createAccount 固定 recoveryTimelockMs
+    Configured --> RecoveryInitiated: beginRecovery(accountId, newCustody)
+    RecoveryInitiated --> Configured: cancelRecovery(accountId)
+    RecoveryInitiated --> RecoveryExecuted: 到达 matureAt + executeRecovery(accountId)
+    RecoveryExecuted --> Configured: 托管权轮换、模块清扫、epoch 推进
 ```
 
-已部署的名称携带账户 id：`initiateEscape(accountId)` 与
-`finalizeEscape(accountId, newVerifier)` 是
-`contracts/build/SmartAccount.manifest.json` 中的两个 ABI 方法（`contracts/custom/SmartAccount.Escape.cs`）。
+这些名称携带账户 id：`beginRecovery(accountId, newCustody)`、
+`cancelRecovery(accountId)` 与无需许可的 `executeRecovery(accountId)` 是当前 v4 源码的 ABI 方法
+（`contracts/custom/SmartAccount.Escape.cs`）；`getRecoveryStatus(accountId)` 以
+`[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]` 回读待处理记录，
+无待处理记录时返回空数组。
 
 **特性：**
-- **时间锁：** 可配置 7-90 天（604,800-7,776,000 秒）
-- **冷却：** 在冷却标记保留期间，两次发起之间间隔一小时；成功最终化会删除该标记
-- **活动取消：** 一次成功的 `executeUserOp()` 只有在携带当前 BackupOwner witness 时才能取消进行中的逃生；仅 verifier 的执行无法取消它
-- **最终化：** `finalizeEscape()` 安装选定的 V3 verifier（可带参数），或以其为零表示 BackupOwner 授权，并移除旧 hook；旧插件清理必须成功，否则交易回滚。当前源码还提供 `finalizeEscapeToOwner(accountId)`，它不调用任何插件、保留身份/nonce，并永久禁用所有插件安装
-- **事件：** 发出 `EscapeInitiated`、`EscapeFinalized`、`EscapeCancelled`
+- **时间锁：** `recoveryTimelockMs` 在 `createAccount` 中按账户固定，必须为 7-90 天（604,800,000-7,776,000,000 毫秒）；`beginRecovery` 记下 `matureAt = now + recoveryTimelockMs`
+- **授权：** 调用必须携带托管权或已配置的恢复授权方 witness；非零 `newCustody` 还额外要求该地址的 witness
+- **单条待处理记录：** 已有待处理记录时再次 `beginRecovery` 会被拒绝（`SA_RECOVERY_PENDING`），且永不重置计时；`cancelRecovery`（托管权或恢复授权方）删除该记录
+- **执行：** `executeRecovery` 到期后无需许可，但会拒绝过期的 `authorityEpochAtInit`；它不发起任何外部调用，清扫全部模块实例、阈值策略、hook 顺序、消息主体集合、待处理意图、nonce 通道与待处理迁移状态，轮换托管权，清空恢复授权方，重新启用内置授权并推进 authority epoch、configuration nonce 与控制修订号；孤立的 Market 控制绑定随之失效
+- **事件：** `RecoveryInitiated`、`RecoveryCancelled`、`RecoveryExecuted`，以及复用的 `EscapeInitiated` / `EscapeCancelled` / `EscapeFinalized` 镜像
 
 **安全属性：**
-- **延迟接管：** 7-90 天的最短期限阻止立即接管
-- **无预言机依赖：** 纯链上状态机
+- **延迟接管：** 7-90 天的最短期限阻止立即轮换托管权
+- **无插件依赖：** 没有任何 validator、hook、Market 或 Oracle 能阻断或观察到恢复过程
 - **无按账户部署：** 适用于虚拟账户
-- **审计痕迹：** 所有逃生事件均已发出
+- **审计痕迹：** 恢复事件与复用的逃生镜像事件均已发出
 
 **与 ERC-4337/7579 的对比：**
 - 以太坊 AA：未规定原生恢复（依钱包而异）
-- Neo：显式的 backup-owner 逃生路径，其活性取决于 owner witness 与成功的插件清理
+- Neo：显式的托管权轮换恢复，其活性只依赖时间锁与账户自身状态
 - Neo：**优势**：适用于虚拟账户（零部署成本）
 
 **评估：** ✓ 源码验证的恢复状态机；这不是无条件恢复或资产访问的保证
@@ -248,7 +249,8 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 
 ---
 
-`initiateEscape(accountId)` 启动 backup-owner 恢复窗口。
+`beginRecovery(accountId, newCustody)` 记录一条待生效的托管权轮换；`cancelRecovery`
+删除它，`executeRecovery` 在账户的 `recoveryTimelockMs` 到期后应用它。
 
 ### 6. 市场托管（取消、过期、争议）✓
 
@@ -314,19 +316,19 @@ ClearVerifyContext(accountId);
 - **校验上下文：** 把 `CheckWitness(accountId)` 限制到特定执行
 - **无状态变更：** verifier 以 `CallFlags.ReadOnly` 调用
 - **隔离：** verifier 无法直接访问账户状态
-- **权限门禁：** `VerifierAuthority.canConfigureVerifier()` 检查权限
+- **权限门禁：** `ValidatorAuthority.RequireValidation` / `RequireLifecycle` 与 `HookAuthority.RequirePreCheck` / `RequirePostCheck` 把每个回调绑定到核心记录的阶段与实例
 
-**支持的 Verifier：**
-- **Web3AuthVerifier：** EVM EIP-712 签名
-- **WebAuthnVerifier：** 硬件生物识别
-- **TEEVerifier：** 可信执行环境
-- **SessionKeyVerifier：** 临时委派
-- **MultiSigVerifier：** 阈值批准
-- **SubscriptionVerifier：** 链下额度
+**支持的 Validator：**
+- **Web3AuthValidator：** EVM EIP-712 签名
+- **P256Validator：** passkey / 硬件生物识别
+- **TeeKeyValidator：** 可信执行环境
+- **SessionKeyValidator：** 临时委派
+- **MultiSigValidator：** 一个已配置的子签名者（组合由核心持有）
+- **SubscriptionValidator：** 链下额度
 
 **SDK 集成：**
-- `buildContractCompatibleStructHash()` 与合约编码精确匹配
-- `buildWeb3AuthSigningPayload()` 生成完整的 66 字节签名 payload
+- `buildUserOperationTypedData()` 与合约编码精确匹配
+- `buildUserOperationSigningPayload()` 生成完整的 66 字节签名 payload
 - `signMessage()` 施加 EIP-191 包装（verifier 期望的形式）
 
 **评估：** ✓ 完整的 Neo 原生脚本模型兼容

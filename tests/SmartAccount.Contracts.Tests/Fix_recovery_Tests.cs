@@ -13,7 +13,7 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Regression tests for the three security fixes in <c>SocialRecoveryVerifier</c>:
+/// Regression tests for the three security fixes in <c>SocialRecoveryService</c>:
 ///   1. Per-account oracle-credit accounting — <c>OnNEP17Payment</c> earmarks GAS to the
 ///      account named in the payment memo, and <c>DepositOracleCredits</c> may only be driven by
 ///      that account's owner and only spends that account's credited balance (no shared-pool drain).
@@ -60,27 +60,34 @@ public partial class FixRecoveryTests
         public RecoveryHarness()
         {
             Core = Fx.Deploy("SmartAccount");
-            Verifier = Fx.Deploy("SocialRecoveryVerifier");
+            Verifier = Fx.Deploy("SocialRecoveryService");
             // SA-06: setup is only accepted for accounts attested by the admin-pinned
             // canonical SA core (deployer = validators is the contract admin).
             Fx.CallVoid(Verifier, "setAuthorizedCore", Core);
         }
 
         /// <summary>
-        /// Registers an account on the real SA core with <paramref name="owner"/> as its backup
-        /// owner and returns the core-derived 20-byte account id. <c>getBackupOwner</c> on the
-        /// core then attests the owner — the SA-06 anti-squat precondition for setup.
+        /// Creates a v4 account whose custody is <paramref name="owner"/> and whose
+        /// recovery authority is this service, and returns the core-derived
+        /// 20-byte account id. <c>getAccount()[2]/[3]</c> on the core then attest
+        /// the custody and the recovery service — the SA-06 anti-squat
+        /// precondition for setup.
         /// </summary>
         public byte[] RegisterAccount(UInt160 owner)
         {
-            UInt160 accountId = Fx.CallUInt160(
-                Core, "computeRegistrationAccountId",
-                UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, owner, 2_592_000u);
-
-            Fx.SetSigners(owner);
-            Fx.CallVoid(
-                Core, "registerAccount",
-                accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, owner, 2_592_000u);
+            byte[] salt = RuntimeFixture.Salt("recovery-" + owner);
+            UInt160 accountId = Fx.CallUInt160(Core, "computeAccountIdentity", owner, salt);
+            // Atomic creation carries the recovery policy, so the account reaches
+            // its configured state without the 24 h configuration intent wait.
+            object[] actions = new object[]
+            {
+                RuntimeFixture.SetRecoveryPolicy(Verifier, RuntimeFixture.MinRecoveryTimelockMs)
+            };
+            // Installing a non-zero recovery authority additionally requires that
+            // subject's witness, so the service signs alongside the custody.
+            Fx.SetSigners(owner, Verifier);
+            Fx.CallVoid(Core, "createAccount", accountId, owner, salt,
+                RuntimeFixture.MinRecoveryTimelockMs, actions);
             return accountId.ToArray();
         }
 
@@ -100,6 +107,17 @@ public partial class FixRecoveryTests
                 new object?[] { factor }, (BigInteger)1, timelock, verifierPubKey);
             return accountId;
         }
+
+        /// <summary>
+        /// The executor of the account's currently authorized action session, or
+        /// <see cref="UInt160.Zero"/>. Protocol v4 retired the service-side
+        /// <c>verifyExecution</c>/<c>verifyExecutionMetaTx</c> decision — the SA
+        /// core now decides a user operation through the installed
+        /// <c>ActionSessionValidator</c> — and publishes this read in its place,
+        /// so the regression assertions below name the live executor directly.
+        /// </summary>
+        public UInt160 AuthorizedSessionExecutor(byte[] accountId) =>
+            Fx.CallUInt160(Verifier, "getAuthorizedSessionExecutor", accountId);
 
         // Synthetic stored request for the callback boundary. This does not
         // claim a real Oracle transport/request integration execution.
@@ -334,7 +352,7 @@ public partial class FixRecoveryTests
         h.Fx.CallVoid(
             h.Verifier, "submitActionTicket",
             accountA, Executor, actionIdA, expiresAt, master, epochA, actionNullifier, signatureA);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", accountA));
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(accountA));
     }
 
     [TestMethod]
@@ -453,7 +471,7 @@ public partial class FixRecoveryTests
         StringAssert.Contains(error.Message, "Action identity not enrolled");
         Assert.AreEqual(BigInteger.Zero, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
         Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionNullifierUsed", account, nullifier));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.AreEqual(UInt160.Zero, h.AuthorizedSessionExecutor(account));
     }
 
     [TestMethod]
@@ -467,13 +485,13 @@ public partial class FixRecoveryTests
         byte[] signature = key.Sign(h.ComputeActionDigest(account, "v4", Executor, id, expiry, master, epoch, nullifier));
         h.Fx.SetSigners(Executor);
         h.Fx.CallVoid(h.Verifier, "submitActionTicket", account, Executor, id, expiry, master, epoch, nullifier, signature);
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecutionMetaTx", account, new object?[] { Executor }));
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(account));
+        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
         h.Fx.SetSigners(OwnerA); h.Fx.CallVoid(h.Verifier, "setActionIdentity", account, master, false);
         Assert.IsTrue(h.Fx.CallInteger(h.Verifier, "getActionAuthorizationEpoch", account) > epoch);
         h.Fx.SetSigners(Executor);
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecutionMetaTx", account, new object?[] { Executor }));
+        Assert.AreEqual(UInt160.Zero, h.AuthorizedSessionExecutor(account));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
         Assert.ThrowsExactly<TestException>(() => h.Fx.CallVoid(h.Verifier, "submitActionTicket",
             account, Executor, id, expiry, master, epoch, nullifier, signature));
         Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
@@ -524,12 +542,15 @@ public partial class FixRecoveryTests
         h.Fx.SetSigners(Executor);
         h.Fx.CallVoid(h.Verifier, "submitActionTicket", account, Executor, id, expiry, master, epoch, nullifier, signature);
         h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(999));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        // v4 keeps two independent getters: the session read the core executes
+        // against, and the authorization row itself. They must agree.
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(account));
         Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
         h.Fx.AdvanceTime(TimeSpan.FromMilliseconds(1));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.AreEqual(UInt160.Zero, h.AuthorizedSessionExecutor(account));
         Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionSessionAuthorized", account));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecutionMetaTx", account, new object?[] { Executor }));
+        // The retired meta-tx read was "the live executor is among the signers";
+        // with the executor already zero at exact expiry that read is subsumed.
     }
 
     [TestMethod]
@@ -558,7 +579,7 @@ public partial class FixRecoveryTests
         byte[] goodNullifier = new byte[32]; goodNullifier[0] = 0x32;
         byte[] signature = key.Sign(h.ComputeActionDigest(account, "oracle", Executor, id, expiry, master, epoch, goodNullifier));
         Deliver(1, Packet(master, epoch, goodNullifier, signature));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.AreEqual(Executor, h.AuthorizedSessionExecutor(account));
         string nextId = h.BuildActionId(account, Executor, expiry);
         byte[] nextNullifier = new byte[32]; nextNullifier[0] = 0x33;
         byte[] staleSignature = key.Sign(h.ComputeActionDigest(account, "oracle", Executor, nextId, expiry, master, epoch, nextNullifier));
@@ -570,7 +591,7 @@ public partial class FixRecoveryTests
         Assert.ThrowsExactly<TestException>(() => Deliver(2, Packet(master, epoch, nextNullifier, staleSignature)));
         Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Verifier, "getSessionNonce", account));
         Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "isActionNullifierUsed", account, nextNullifier));
-        Assert.IsFalse(h.Fx.CallBoolean(h.Verifier, "verifyExecution", account));
+        Assert.AreEqual(UInt160.Zero, h.AuthorizedSessionExecutor(account));
     }
 
     // Fix 3 — recovery timelock bounds (estate-standard 7–90 day window)

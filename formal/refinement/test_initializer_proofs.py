@@ -28,7 +28,7 @@ class InitializerProofTests(unittest.TestCase):
         cls.inventory["inputs"] = {str(nef): cls.inventory["nef"]["sha256"]}
         # Bind a portable ABI-only test manifest without claiming the original
         # production manifest container hash or depending on ignored outputs.
-        manifest = Path(cls.directory.name) / "SmartAccountV3.manifest.json"
+        manifest = Path(cls.directory.name) / "SmartAccount.manifest.json"
         raw = json.dumps({"abi": {"methods": cls.inventory["manifest"]["methods"]}}, sort_keys=True).encode()
         manifest.write_bytes(raw)
         cls.inventory["manifest"]["sha256"] = hashlib.sha256(raw).hexdigest()
@@ -39,7 +39,7 @@ class InitializerProofTests(unittest.TestCase):
         self.assertNotRegex(fixture, r'/(?:Users|private|var|opt)/')
         bound = proof.bind(self.inventory)
         self.assertEqual(len(bound["slots"]), len(self.inventory["sourceMap"]["debug"]["static-variables"]))
-        self.assertEqual(bound["slots"]["Prefix_TransactionReimbursement"], 38)
+        self.assertEqual(bound["slots"]["Prefix_TransactionReimbursement"], 58)
 
     def test_missing_duplicate_slot_and_wrong_type_rejected(self):
         for kind in ("missing", "duplicate", "type"):
@@ -47,11 +47,17 @@ class InitializerProofTests(unittest.TestCase):
             slots = inventory["sourceMap"]["debug"]["static-variables"]
             if kind == "missing": slots.pop()
             elif kind == "duplicate": slots.append(slots[0])
-            else: slots[0] = slots[0].replace("ByteArray", "Integer")
+            else:
+                index = next(i for i, item in enumerate(slots) if "ByteArray" in item)
+                slots[index] = slots[index].replace("ByteArray", "Integer")
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 proof.bind(inventory)
 
     def test_actual_source_program_is_target_independent(self):
+        # The v4 static initializers carry no string literals. The literals that can
+        # move without contradicting their own Roslyn fold are the integer operands of
+        # the byte element conversions, so a change there must move the source
+        # projection while leaving the decoded initializer binding untouched.
         before = proof.bind(self.inventory)
         changed = copy.deepcopy(self.inventory)
         contract = next(t for t in changed["source"]["types"]
@@ -67,13 +73,26 @@ class InitializerProofTests(unittest.TestCase):
                     "IFieldInitializerOperation.InitializedFields", {}).get("items", [])
                 if any(item.get("id") in field_ids for item in initialized):
                     initializer_operations.append(operation)
-        node = next(i for operation in initializer_operations
-                    for i in proof.initializer_source.nodes(operation)
-                    if i["kind"] == "Literal" and i["type"] == "string")
-        node["constant"]["value"]["value"] = "changed"
-        after = proof.bind(changed)
-        self.assertNotEqual(before["source"]["sourceProjectionSha256"], after["source"]["sourceProjectionSha256"])
-        self.assertEqual(before["initializer"], after["initializer"])
+        for node in (i for operation in initializer_operations
+                     for i in proof.initializer_source.nodes(operation)
+                     if i["kind"] == "Literal" and i["type"] == "int"):
+            constant = node.get("constant") or {}
+            value = constant.get("value") or {}
+            text = value.get("value")
+            if constant.get("hasValue") is not True or not isinstance(text, str) or not text.isdigit():
+                continue
+            value["value"] = str(int(text) + 1)
+            try:
+                after = proof.bind(changed)
+            except ValueError:
+                continue  # the strict fold, width and dimension validators reject it
+            finally:
+                value["value"] = text
+            self.assertNotEqual(before["source"]["sourceProjectionSha256"],
+                                after["source"]["sourceProjectionSha256"])
+            self.assertEqual(before["initializer"], after["initializer"])
+            return
+        self.fail("No static initializer literal could be moved independently")
 
     def test_full_kernel_and_semantic_rejection(self):
         with tempfile.TemporaryDirectory(prefix="sa-source-init-kernel-") as output:

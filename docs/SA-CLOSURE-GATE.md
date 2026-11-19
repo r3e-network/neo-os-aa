@@ -490,7 +490,7 @@ The subsequent lanes are:
 | Interop descriptor charge | `interop-descriptor-charge-order` | Pinned neo `OnSysCall`/`AddFee` bodies and the `InteropDescriptor` declaration, derived charge record and fresh certificate; stops at the argument-window effect, before any parameter is popped |
 | Exception identity | `exception-identity-and-catchability` | Six pinned neo/neo-vm declarations (instruction loop, throw walk, both fault hooks, the catchable class and the limit record), derived surfacing record and fresh certificate; stops at the fault-state effect, before instruction semantics or the transaction layer |
 | Load admission | `load-time-manifest-and-token-admission` | Five pinned core declarations (nef, method token, manifest, ABI, method descriptor), derived 24-slot declaration record and fresh certificate; stops at the value the loader returns, before deployment, gas or the permission decision |
-| Private hook tuple | `private-hook-params-reference-refinement` | Complete private method range/bytes, typed record projection and reference certificate; no public entry is closed |
+| Private hook view | none (retired) | The v3 `private-hook-params-reference-refinement` lane certified the retired `BuildHookOperationParams` constructor, which protocol v4 deleted. `hook_params_source` now projects the v4 `BuildCanonicalOperationView` at source level only (13 protocol fields in order, deep copies at arguments and hook proofs); no Coq artefact models `CallHookPreCheck`/`CallHookPostCheck`, and no public entry is closed |
 | Runtime source bridge | `runtime-instruction-source-bridge` | Pinned VM source commit and source-derived certificate |
 | Runtime collection bridge | `runtime-collection-source-bridge` | Pinned VM handlers and certificate; RET/SIZE/ISTYPE/CONVERT remain explicit partial projections |
 | Codec | `ledger-codec` | Captured model and pinned native source identities |
@@ -692,8 +692,10 @@ any plausible trace: `crosscheck_runtime` rejects a receipt whose `nefSha256` or
 mismatch`. That check is what kept this lane failing closed after the contract
 rename invalidated the 2026-10-13 capture, and again after the 2026-11-16
 design-phase legacy-compatibility sweep changed the custom core artifact;
-each time the lane stayed red until the producer test was re-run against the
-fresh artifact (currently NEF `9f714866…`). The reviewed five-shape capture
+each time the lane stayed red until the producer test was re-run against the    
+fresh artifact (the archived capture still pins NEF `9f714866…`; the current     
+artifact is `2887bad3…`, so the lane is red until a new capture exists). The      
+reviewed five-shape capture
 is archived in-repo as
 `formal/refinement/fixtures/helper-gas-runtime-live-receipts.json.gz`
 (SHA256 `6d141d14…`); the superseded pre-rename capture is kept beside it and its

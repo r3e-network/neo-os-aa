@@ -209,8 +209,8 @@ def main():
         source_before = binding.project_snapshot(root)
         require(all(inventory.get("inputs", {}).get(path) == digest for path, digest in source_before.items()),
                 "source membership/content missing from inventory")
-        nef = args.nef or root / "contracts/bin/public/SmartAccountV3.nef"
-        manifest = args.manifest or root / "contracts/bin/public/SmartAccountV3.manifest.json"
+        nef = args.nef or root / "contracts/bin/public/SmartAccount.nef"
+        manifest = args.manifest or root / "contracts/bin/public/SmartAccount.manifest.json"
         binding.validate_inventory(inventory, nef, manifest, root)
         report = build_method_inventory(inventory)
         if args.certificate:

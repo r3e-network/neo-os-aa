@@ -197,7 +197,8 @@ export function normalizeSAAccountRow(row) {
   return {
     accountIdHash,
     backupOwner: optionalHash(row.backup_owner),
-    verifier: optionalHash(row.verifier),
+    // The read API still names this column `verifier`; the account model calls it a validator.
+    validator: optionalHash(row.verifier),
     hookId: optionalHash(row.hook_id),
     registryBlockIndex: Number.isFinite(blockIndex) && blockIndex > 0 ? blockIndex : 0,
     registryTxHash: typeof row.registry_tx_hash === 'string' ? row.registry_tx_hash : '',

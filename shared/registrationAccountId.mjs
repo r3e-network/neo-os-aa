@@ -1,164 +1,183 @@
 /**
- * Shared registration account-id derivation for the Neo N3 Smart Account
- * stack.
+ * Account identity for the Neo N3 Smart Account v4 stack.
  *
- * Single source of truth for the V3 registration account-id payload layout
- * that was previously duplicated between the CJS SDK
- * (sdk/js/src/index.js) and the frontend (frontend/src/utils/neo.js) — and
- * the source of a byte-order split-brain where the two sides disagreed on
- * the returned convention.
+ * Single source of truth for the derivation that both kernels implement:
  *
- * Byte-order contract (mirrors SmartAccount.Accounts.cs
- * ComputeRegistrationAccountId):
+ *   payload = 'aa524704' || custody               || salt
+ *   digest  = ripemd160(sha256(payload))
+ *   accountId display hex = digest                (big-endian)
+ *   accountId stored bytes = reverse(digest)      (UInt160 internal order)
  *
- *   payload = 'aa524701' || backupOwner || verifier || hook ||
- *             uint32LE(escapeTimelock) || verifierParams
- *   rawHash = ripemd160(sha256(payload))
+ * `custody` is a 40-hex-character display-form hash160; the derivation hashes
+ * its internal (little-endian) bytes, i.e. reverse(display). The salt is 1..128
+ * bytes of caller-chosen uniqueness material. No core hash and no network
+ * enter the identity: the same custody+salt yields the same account id under
+ * both kernels (docs/SA-MODULE-PROTOCOL.md §16.1).
  *
- * The contract returns (UInt160)ReverseBytes(rawHash); since a UInt160's
- * display string is the reverse of its internal bytes, the on-chain
- * DISPLAY form equals rawHash in natural order. This module therefore
- * exposes two explicitly-named conventions:
+ * The proxy verification script is the account address:
  *
- * - deriveRegistrationAccountIdDisplayHex: big-endian display hex (rawHash
- *   in natural order). Matches the contract's display form and is the only
- *   correct value for RPC {type:'Hash160'} parameters, hash display, and
- *   storage of the id as a string.
- * - deriveRegistrationAccountIdChainHex: the internal little-endian VM
- *   byte order (reverseHex of the display form). Use only when pushing the
- *   raw 20 bytes into a script (e.g. the verify script PUSHDATA), where
- *   the VM interprets pushed bytes as the UInt160 internal representation.
+ *   PUSHDATA1 20 accountId | PUSH1 PACK | PUSH<flags> | PUSHDATA1 "verify" |
+ *   PUSHDATA1 20 core | SYSCALL System.Contract.Call
  *
- * The 20-byte inputs (backupOwnerHash160/verifierHash160/hookHash160) are
- * big-endian display hex, matching the contract's ToRegistrationHashBytes
- * which reverses each UInt160 argument to big-endian before hashing.
+ * The custom kernel builds PUSH15 (CallFlags.All = 15); the native kernel
+ * pushes PUSH5 (CallFlags.ReadOnly = 5). The flag is an explicit parameter
+ * because the account address must be the one the submitting kernel derives.
  *
- * Dependency-light by design: the ripemd160(sha256(x)) primitive is
- * injected by each consumer (ethers in the frontend, neon in the SDK), and
- * address/hash normalization with consumer-specific errors stays in the
- * consumers; this module owns the byte-critical layout and both return
- * conventions.
+ * The pre-v4 registration identity ('aa524701' || ...) is retained ONLY for
+ * the platform registrar, whose registered account ids must stay stable across
+ * the upgrade (contracts/custom/SmartAccount.Accounts.cs). It is not a v4
+ * authorization source and is not used by ordinary registration.
  *
- * Consumers:
- * - sdk/js/src/index.js (CJS; loads this ESM graph via require)
- * - frontend/src/utils/neo.js (ESM, relative import; reachable in the
- *   frontend build the same way as shared/metaTxCore.mjs)
+ * Dependency-light by design: the hash160 primitive is injected, and the hex
+ * helpers come from metaTxCore.mjs, so the SDK, the relay route and the wallet
+ * frontend derive identical bytes.
  */
 
 import { sanitizeHex, reverseHex } from './metaTxCore.mjs';
 
-/** Domain separator prefix, mirrors RegistrationAccountIdDomain in the contract. */
-export const REGISTRATION_ACCOUNT_ID_DOMAIN_HEX = 'aa524701';
+/** Domain prefix of the v4 account identity (contract AccountIdentityDomainV4). */
+export const ACCOUNT_IDENTITY_DOMAIN_HEX = 'aa524704';
+/** Pre-v4 registration domain, platform-registrar ids only. */
+export const PLATFORM_REGISTRATION_DOMAIN_HEX = 'aa524701';
 
-export const MIN_REGISTRATION_ESCAPE_TIMELOCK_SECONDS = 7 * 24 * 60 * 60;
-export const MAX_REGISTRATION_ESCAPE_TIMELOCK_SECONDS = 90 * 24 * 60 * 60;
-export const DEFAULT_REGISTRATION_ESCAPE_TIMELOCK_SECONDS = 30 * 24 * 60 * 60;
+export const REGISTRATION_SALT_MIN_BYTES = 1;
+export const REGISTRATION_SALT_MAX_BYTES = 128;
+
+/** Recovery timelock bounds in milliseconds (AccountControl.RecoveryTimelock*Ms). */
+export const MIN_RECOVERY_TIMELOCK_MS = 604_800_000; // 7 days
+export const MAX_RECOVERY_TIMELOCK_MS = 7_776_000_000; // 90 days
 
 const ZERO_HASH160_HEX = '00'.repeat(20);
+const VERIFY_METHOD_HEX = '766572696679'; // "verify"
+const MIN_REGISTRATION_ESCAPE_TIMELOCK_SECONDS = 7 * 24 * 60 * 60;
+const MAX_REGISTRATION_ESCAPE_TIMELOCK_SECONDS = 90 * 24 * 60 * 60;
+const DEFAULT_REGISTRATION_ESCAPE_TIMELOCK_SECONDS = 30 * 24 * 60 * 60;
 
-/**
- * Validates the escape timelock against the contract registration bounds.
- * Messages intentionally match what the SDK and frontend threw before the
- * derivation was hoisted here.
- *
- * @param {number} uint32 - Timelock in seconds
- * @private
- */
-function validateRegistrationEscapeTimelock(uint32) {
+function requireDisplayHash160(value, fieldName) {
+  const sanitized = sanitizeHex(value);
+  if (!/^[0-9a-f]{40}$/.test(sanitized)) {
+    throw new Error(`Invalid account identity: ${fieldName} must be 40 hex characters`);
+  }
+  return sanitized;
+}
+
+function requireSaltHex(value) {
+  const sanitized = sanitizeHex(value ?? '');
+  if (!/^(?:[0-9a-f]{2})*$/.test(sanitized)) {
+    throw new Error('Invalid account identity: salt must be canonical hex bytes');
+  }
+  const bytes = sanitized.length / 2;
+  if (bytes < REGISTRATION_SALT_MIN_BYTES || bytes > REGISTRATION_SALT_MAX_BYTES) {
+    throw new Error(
+      `Invalid account identity: salt must contain ${REGISTRATION_SALT_MIN_BYTES} through ${REGISTRATION_SALT_MAX_BYTES} bytes`,
+    );
+  }
+  return sanitized;
+}
+
+/** NeoVM constant push for the small call-flag values both kernels use. */
+function pushSmallInt(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < -1 || n > 16) {
+    throw new Error('Invalid account identity: call flags must be -1..16');
+  }
+  return (n + 16).toString(16).padStart(2, '0');
+}
+
+function toUint32LittleEndianHex(uint32) {
   if (!Number.isInteger(uint32) || uint32 < 0 || uint32 > 0xffffffff) {
     throw new Error('Invalid escape timelock');
   }
-  if (uint32 < MIN_REGISTRATION_ESCAPE_TIMELOCK_SECONDS || uint32 > MAX_REGISTRATION_ESCAPE_TIMELOCK_SECONDS) {
+  if (
+    uint32 < MIN_REGISTRATION_ESCAPE_TIMELOCK_SECONDS ||
+    uint32 > MAX_REGISTRATION_ESCAPE_TIMELOCK_SECONDS
+  ) {
     throw new Error('Invalid escape timelock: expected 7-90 days');
   }
+  return [uint32 & 0xff, (uint32 >>> 8) & 0xff, (uint32 >>> 16) & 0xff, (uint32 >>> 24) & 0xff]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 /**
- * Encodes a uint32 as 4 little-endian hex bytes, mirroring the contract's
- * UInt32ToLittleEndianBytes.
+ * Creates the identity derivers with an injected hash160.
  *
- * @param {number} uint32 - Value to encode
- * @returns {string} 8 hex characters, little-endian
- * @private
+ * @param {Object} options
+ * @param {Function} options.hash160 - hash160(hexBytes) returning
+ *   ripemd160(sha256(bytes)) as 40 hex characters in natural (display) order
  */
-function toUint32LittleEndianHex(uint32) {
-  validateRegistrationEscapeTimelock(uint32);
-
-  return [
-    uint32 & 0xff,
-    (uint32 >>> 8) & 0xff,
-    (uint32 >>> 16) & 0xff,
-    (uint32 >>> 24) & 0xff,
-  ].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Requires a value to be a 40-hex-character display-form hash160. This is
- * defense-in-depth: consumers normalize and validate with their own coded
- * errors before delegating here.
- *
- * @param {string} value - Candidate hash160 hex
- * @param {string} fieldName - Field label for the error message
- * @returns {string} Sanitized 40-character hex
- * @private
- */
-function requireDisplayHash160(value, fieldName) {
-  const sanitized = sanitizeHex(value);
-  if (!/^[0-9a-f]{40}$/i.test(sanitized)) {
-    throw new Error(`Invalid registration hash160: ${fieldName} must be 40 hex characters`);
-  }
-  return sanitized;
-}
-
-/**
- * Requires verifier initialization bytes to be an even-length hexadecimal
- * string.  `sanitizeHex` only removes a prefix and lowercases; passing its
- * result directly to byte decoders would otherwise turn malformed pairs into
- * zero or silently drop them, producing an account id that does not match the
- * bytes sent to `registerAccount`/`updateVerifier`.
- *
- * @param {string} value - Candidate verifier parameters
- * @returns {string} Sanitized even-length hexadecimal string
- * @private
- */
-function requireVerifierParamsHex(value) {
-  const sanitized = sanitizeHex(value || '');
-  if (!/^(?:[0-9a-f]{2})*$/i.test(sanitized)) {
-    throw new Error('Invalid verifier parameters hex');
-  }
-  return sanitized;
-}
-
-/**
- * Creates the registration account-id derivers with an injected hash160.
- *
- * @param {Object} options - Factory options
- * @param {Function} options.hash160 - hash160(hexString) returning the
- *   ripemd160(sha256(bytes)) digest as hex in natural byte order (e.g.
- *   ethers ripemd160(sha256) or neon u.hash160)
- * @returns {{
- *   deriveRegistrationAccountIdDisplayHex: Function,
- *   deriveRegistrationAccountIdChainHex: Function,
- * }} The derivers for the two byte-order conventions
- */
-export function createRegistrationAccountIdDeriver({ hash160 } = {}) {
+export function createRegistrationIdentityDeriver({ hash160 } = {}) {
   if (typeof hash160 !== 'function') {
-    throw new TypeError('createRegistrationAccountIdDeriver requires a hash160(hex) implementation');
+    throw new TypeError('createRegistrationIdentityDeriver requires a hash160(hex) implementation');
   }
 
   /**
-   * Computes the raw registration hash in natural byte order.
+   * v4 identity of a custody+salt pair.
    *
-   * @returns {string} 40-character hex of ripemd160(sha256(payload))
-   * @private
+   * @param {{ custody: string, salt: string }} options 40-hex custody, salt hex
+   * @returns {{ accountId: string, identityPreimageHex: string }}
    */
-  function computeRawHashHex({
+  function deriveAccountIdentity({ custody, salt } = {}) {
+    const owner = requireDisplayHash160(custody, 'custody');
+    if (owner === ZERO_HASH160_HEX) {
+      throw new Error('Invalid account identity: custody must be nonzero');
+    }
+    const saltHex = requireSaltHex(salt);
+    const identityPreimageHex = `${ACCOUNT_IDENTITY_DOMAIN_HEX}${reverseHex(owner)}${saltHex}`;
+    const accountId = sanitizeHex(hash160(identityPreimageHex));
+    if (!/^[0-9a-f]{40}$/.test(accountId) || accountId === ZERO_HASH160_HEX) {
+      throw new Error('Invalid account identity: hash160 returned a malformed id');
+    }
+    return { accountId, identityPreimageHex };
+  }
+
+  /** Stored (little-endian) form of the same identity, for script bytes only. */
+  function deriveAccountIdentityChainHex(options) {
+    return reverseHex(deriveAccountIdentity(options).accountId);
+  }
+
+  /**
+   * The fixed proxy verification script. `callFlags` defaults to 15
+   * (CallFlags.All, the custom kernel); the native kernel passes 5.
+   */
+  function deriveProxyScript({ accountId, coreContractHash, callFlags = 15 } = {}) {
+    const account = requireDisplayHash160(accountId, 'accountId');
+    const core = requireDisplayHash160(coreContractHash, 'coreContractHash');
+    return [
+      '0c14',
+      reverseHex(account),
+      '11c0',
+      pushSmallInt(callFlags),
+      '0c06',
+      VERIFY_METHOD_HEX,
+      '0c14',
+      reverseHex(core),
+      '41627d5b52',
+    ].join('').toLowerCase();
+  }
+
+  /**
+   * The account address: the proxy script's hash in chain (display) order.
+   * hash160 yields the natural digest; a script hash is displayed and carried
+   * in RPC parameters reversed, so the two derivations (this one and the
+   * protocol codec's `accountAddress`) name the same on-chain value.
+   */
+  function deriveAccountAddress(options) {
+    return reverseHex(sanitizeHex(hash160(deriveProxyScript(options))));
+  }
+
+  /**
+   * Pre-v4 registration identity retained for the platform registrar only:
+   * 'aa524701' || backupOwner || verifier || hook ||
+   * uint32LE(escapeTimelock) || verifierParams, each hash in display order.
+   */
+  function derivePlatformRegistrarAccountId({
     backupOwnerHash160,
     verifierHash160 = '',
     hookHash160 = '',
     escapeTimelock = DEFAULT_REGISTRATION_ESCAPE_TIMELOCK_SECONDS,
     verifierParamsHex = '',
-  }) {
+  } = {}) {
     const backupOwner = requireDisplayHash160(backupOwnerHash160, 'backupOwnerHash160');
     const verifier = verifierHash160
       ? requireDisplayHash160(verifierHash160, 'verifierHash160')
@@ -166,53 +185,26 @@ export function createRegistrationAccountIdDeriver({ hash160 } = {}) {
     const hook = hookHash160
       ? requireDisplayHash160(hookHash160, 'hookHash160')
       : ZERO_HASH160_HEX;
-
+    const params = sanitizeHex(verifierParamsHex || '');
+    if (!/^(?:[0-9a-f]{2})*$/.test(params)) {
+      throw new Error('Invalid verifier parameters hex');
+    }
     const payloadHex = [
-      REGISTRATION_ACCOUNT_ID_DOMAIN_HEX,
+      PLATFORM_REGISTRATION_DOMAIN_HEX,
       backupOwner,
       verifier,
       hook,
       toUint32LittleEndianHex(escapeTimelock),
-      requireVerifierParamsHex(verifierParamsHex),
+      params,
     ].join('');
-
     return sanitizeHex(hash160(payloadHex));
   }
 
-  /**
-   * Derives the registration-bound account id in big-endian display form.
-   *
-   * This equals the on-chain ComputeRegistrationAccountId display string
-   * and is the value registerAccount expects as its {type:'Hash160'}
-   * accountId argument.
-   *
-   * @param {Object} options - Registration options
-   * @param {string} options.backupOwnerHash160 - Backup owner, 40-hex display form
-   * @param {string} [options.verifierHash160=''] - Verifier contract, 40-hex display form ('' binds zero)
-   * @param {string} [options.hookHash160=''] - Hook contract, 40-hex display form ('' binds zero)
-   * @param {number} [options.escapeTimelock=2592000] - Escape hatch timelock in seconds
-   * @param {string} [options.verifierParamsHex=''] - Verifier parameters hex
-   * @returns {string} 40-character big-endian display hex account id
-   */
-  function deriveRegistrationAccountIdDisplayHex(options) {
-    return computeRawHashHex(options);
-  }
-
-  /**
-   * Derives the registration-bound account id in the internal little-endian
-   * VM byte order (reverseHex of the display form). Only use this when
-   * pushing the raw 20 bytes into a script, where pushed bytes are read as
-   * the UInt160 internal representation — never for RPC Hash160 params.
-   *
-   * @param {Object} options - Same options as deriveRegistrationAccountIdDisplayHex
-   * @returns {string} 40-character little-endian chain-order hex account id
-   */
-  function deriveRegistrationAccountIdChainHex(options) {
-    return reverseHex(computeRawHashHex(options));
-  }
-
   return {
-    deriveRegistrationAccountIdDisplayHex,
-    deriveRegistrationAccountIdChainHex,
+    deriveAccountIdentity,
+    deriveAccountIdentityChainHex,
+    deriveProxyScript,
+    deriveAccountAddress,
+    derivePlatformRegistrarAccountId,
   };
 }

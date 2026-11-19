@@ -112,6 +112,11 @@ namespace SmartAccount
             public bool InstanceIsolation;
             public bool MessageCapability;
             public bool ThresholdMemberEligible;
+            // Back-pointer to the ACTIVE threshold policy this instance belongs
+            // to, 0 when it is not a member (spec §5). Maintained by the policy
+            // executor, so routing and uninstall checks read this record instead
+            // of scanning every policy of the account.
+            public BigInteger ActivePolicyId;
         }
 
         /// <summary>Core-owned hook order (spec §3), stored under 0x54 + accountId.</summary>

@@ -8,9 +8,10 @@ import { selectSignedInvocation, isDeployedEntrypoint } from './signedInvocation
 import { isProxySourcedTransfer } from '../../shared/transferOutcome.mjs';
 import { buildProxyWalletSignRequest, resolveProxyWitnessTransaction } from '../../shared/proxyWitness.mjs';
 import { resolveWalletSigningScope } from './walletSigningScope.js';
+import { smartAccountCodec } from '../../services/smartAccountCodec.js';
 import {
   computeArgsHash,
-  buildExecuteUserOpInvocation as buildV3ExecuteUserOpInvocation,
+  decodeHash160Stack,
 } from './metaTx.js';
 
 function buildPayloadDigest(draftRecord = {}) {
@@ -43,44 +44,25 @@ function toArrayParam(args = []) {
   };
 }
 
-function buildV3UserOperationParam({ operationBody = null, nonce = '0', deadline = '0', signatureHex = '0x' } = {}) {
-  const targetContract = sanitizeHex(operationBody?.targetContract || '');
-  const method = String(operationBody?.method || '').trim();
-  const args = Array.isArray(operationBody?.args) ? cloneImmutable(operationBody.args) : [];
-
-  if (!targetContract || !method) {
-    return null;
-  }
-
-  return {
-    type: 'Struct',
-    value: [
-      toHash160Param(targetContract),
-      { type: 'String', value: method },
-      toArrayParam(args),
-      { type: 'Integer', value: String(nonce) },
-      { type: 'Integer', value: String(deadline) },
-      { type: 'ByteArray', value: `0x${sanitizeHex(signatureHex || '')}` },
-    ],
-  };
-}
-
-function buildExecuteUserOpInvocation({ saContractHash = '', account = {}, operationBody = null, signerAddress = '', nonce = '0', deadline = '' } = {}) {
-  const invocation = buildV3ExecuteUserOpInvocation({
-    saContractHash,
-    accountIdHash: account.accountIdHash || '',
-    targetContract: operationBody?.targetContract,
-    method: operationBody?.method,
-    methodArgs: Array.isArray(operationBody?.args) ? operationBody.args : [],
-    nonce,
-    deadline: String(deadline || Date.now() + 3600_000),
-    signatureHex: '',
+/**
+ * The staged intent of a draft: the operation body only. A v4 envelope cannot be
+ * staged before signing — its validator instance, credential generation,
+ * authority epoch and configuration nonce come from the account's current chain
+ * state — so the anchor is the intent the operator approved, and every signed
+ * envelope is compared against it.
+ */
+function normalizeOperationBody(operationBody = null) {
+  if (!operationBody) return null;
+  const targetContract = sanitizeHex(operationBody.targetContract || '');
+  const method = String(operationBody.method || '').trim();
+  if (!targetContract || !method) return null;
+  return cloneImmutable({
+    targetContract,
+    method,
+    args: Array.isArray(operationBody.args) ? operationBody.args : [],
+    kind: operationBody.kind || 'invoke',
+    requiresProxyWitness: Boolean(operationBody?.metadata?.requiresProxyWitness),
   });
-  if (!invocation) return null;
-  return {
-    ...invocation,
-    signers: signerAddress ? [{ account: signerAddress, scopes: 1 }] : [],
-  };
 }
 
 export function buildRelayPayloadOptions({ runtime = null, transactionBody = {}, signatures = [] } = {}) {
@@ -136,29 +118,29 @@ export function buildStagedTransactionBody({
   morpheusNetwork = RUNTIME_CONFIG.morpheusNetwork,
   createdAt = new Date().toISOString(),
 } = {}) {
-  // A staged body carries the V3 envelope or nothing. The previous V1/V2 fallback built an
-  // invocation naming an entrypoint no deployed contract exports, which the relay now refuses at
-  // validation; refusing here keeps the caller from staging a draft that can never be submitted.
-  const v3Invocation = buildExecuteUserOpInvocation({
-    saContractHash,
-    account,
-    operationBody,
-    signerAddress,
-  });
-  const clientInvocation = v3Invocation;
-  if (!clientInvocation) {
-    throw new Error(EC.v3AccountRequired);
+  // A staged body carries the approved intent or nothing. Building an unsigned envelope here would
+  // mean guessing the validator instance and the account's current epochs, and a guessed envelope is
+  // exactly what the selector must not accept.
+  const stagedOperation = normalizeOperationBody(operationBody);
+  if (!stagedOperation) {
+    throw new Error(EC.operationBodyRequired);
+  }
+  // A v4 operation is authorized for exactly one account: the account id is what the route read
+  // and the signed envelope are matched against, so a body without one has no subject.
+  const accountId = sanitizeHex(account?.accountIdHash || '');
+  if (!/^[0-9a-f]{40}$/.test(accountId)) {
+    throw new Error(EC.accountRequired);
   }
 
   return cloneImmutable({
     version: 1,
     network: resolveNetworkLabel(network, morpheusNetwork),
     accountAddressScriptHash: account.accountAddressScriptHash || '',
-    accountIdHash: account.accountIdHash || '',
+    accountIdHash: accountId,
     kind: operationBody?.kind || 'invoke',
     requiresProxyWitness: Boolean(operationBody?.metadata?.requiresProxyWitness),
-    clientInvocation,
-    v3Invocation,
+    signerAddress: sanitizeHex(signerAddress || ''),
+    operationBody: stagedOperation,
     rawTransaction: sanitizeHex(rawTransaction || ''),
     notes: String(notes || '').trim(),
     createdAt,
@@ -194,21 +176,40 @@ export function buildDraftApprovalTypedData({ draftRecord, chainId = RUNTIME_CON
   };
 }
 
+function decodeHash160Item(item) {
+  if (item?.type === 'Hash160' && item.value) return sanitizeHex(item.value);
+  if (item?.type === 'ByteString' && item.value) {
+    const raw = sanitizeHex(item.value);
+    return raw ? raw.match(/../g).reverse().join('') : '';
+  }
+  return '';
+}
+
+function decodeTextItem(item) {
+  if (item?.type !== 'ByteString' || typeof item.value !== 'string') return '';
+  const bytes = Uint8Array.from(sanitizeHex(item.value).match(/../g) || [], (pair) => Number.parseInt(pair, 16));
+  return new TextDecoder().decode(bytes);
+}
+
+/** One v4 operation's transfer shape: target is field 1, method 2, args 3. */
+function operationCalls(operation) {
+  const fields = ['Struct', 'Array'].includes(operation?.type) ? operation.value : null;
+  if (!Array.isArray(fields) || fields.length !== 13) return [];
+  return [{ method: decodeTextItem(fields[2]), args: fields[3]?.value || [] }];
+}
+
 function proxySourcedCalls(transactionBody, invocation) {
   const proxy = transactionBody?.accountAddressScriptHash;
   const args = invocation?.args || [];
-  // Only the deployed V3 envelopes are decoded here. A V1/V2 envelope is refused earlier, by
-  // selectSignedInvocation; decoding it here as well would keep the dead names in the client for no
-  // reachable caller.
   let calls = [{ method: invocation?.operation, args }];
-  if (['executeUserOp', 'executeSponsoredUserOp'].includes(invocation?.operation)) {
-    calls = [{ method: args[1]?.value?.[1]?.value, args: args[1]?.value?.[2]?.value }];
-  } else if (['executeUserOps', 'executeSponsoredUserOps'].includes(invocation?.operation)) {
-    calls = (args[1]?.value || []).map((op) => ({ method: op?.value?.[1]?.value, args: op?.value?.[2]?.value }));
+  if (invocation?.operation === 'executeUserOp') {
+    calls = operationCalls(args[1]);
+  } else if (invocation?.operation === 'executeUserOps') {
+    calls = (args[1]?.value || []).flatMap((operation) => operationCalls(operation));
   }
   return calls.filter((call) => isProxySourcedTransfer({
     method: call.method,
-    from: call.args?.[0]?.type === 'Hash160' ? call.args[0].value : '',
+    from: decodeHash160Item(call.args?.[0]),
     proxy,
   }));
 }
@@ -218,15 +219,19 @@ function proxyWitnessRequired(transactionBody, invocation) {
 }
 
 function decodeHash160StackHex(item) {
-  if (item?.type === 'Hash160' && item.value) return sanitizeHex(item.value);
-  if (item?.type === 'ByteString' && item.value) {
-    const binary = globalThis.atob ? globalThis.atob(item.value) : '';
-    const raw = Array.from(binary, (char) => char.charCodeAt(0).toString(16).padStart(2, '0')).join('');
-    return raw ? Array.from(raw.match(/../g) || []).reverse().join('') : '';
-  }
-  return '';
+  // An RPC stack item carries a ByteString as base64 in the stored byte order; the shared decoder
+  // reverses it into display hex. Invocation arguments use hex instead and are read with
+  // decodeHash160Item above.
+  return decodeHash160Stack(item);
 }
 
+/**
+ * The one chain value a proxy-witness transaction needs: the address the core
+ * derives for the account. The v3 scope target and verifier reads are gone — a
+ * v4 operation's own target is the only authorized target, and the custody
+ * witness is checked inside the core (a nested call), which is why the wallet is
+ * asked for a contract scope rather than CalledByEntry.
+ */
 async function readProxyScopeStateWith({ rpcUrl, coreHash, accountId, fetchImpl }) {
   const read = async (operation) => {
     const response = await fetchImpl(rpcUrl, {
@@ -246,12 +251,11 @@ async function readProxyScopeStateWith({ rpcUrl, coreHash, accountId, fetchImpl 
     return decodeHash160StackHex(result?.stack?.[0]);
   };
   return {
-    expectedProxyHash: await read('getProxyScriptHash'),
-    scopeTarget: await read('getVerifyScopeTarget'),
-    // Whether the owner is checked inside a verifier decides which scopes a wallet may be asked
-    // for. It is read from the same core in the same call as the scope state, so the decision and
-    // the transaction cannot disagree about the account.
-    verifierHash: await read('getVerifier'),
+    proxyHash: await read('getProxyScriptHash'),
+    // The core checks the custody witness for every route (it dispatches to the
+    // validator module, a nested call), so the scope decision treats the core as
+    // the contract that checks the owner.
+    verifierHash: coreHash,
   };
 }
 
@@ -271,20 +275,29 @@ export async function buildClientProxyWitnessTransaction({
   feePayerAllowedContracts = null,
   fetchImpl = globalThis.fetch,
 } = {}) {
-  const target = invocation || cloneImmutable(transactionBody?.clientInvocation || transactionBody?.v3Invocation || {});
+  const target = invocation || cloneImmutable(transactionBody?.metaInvocation || {});
   if (!target?.scriptHash || !target?.operation) throw new Error(EC.clientInvocationMissing);
   const args = target.args || [];
-  if (args[0]?.type !== 'Hash160') throw new Error(EC.clientInvocationMissing);
-  const accountId = sanitizeHex(args[0].value);
+  if (args[0]?.type !== 'ByteString') throw new Error(EC.clientInvocationMissing);
+  const accountId = decodeHash160Item(args[0]);
+  if (!accountId) throw new Error(EC.clientInvocationMissing);
   const coreHash = sanitizeHex(target.scriptHash);
+  // The proxy address is derived here, from the same preimage the core hashes, so the request is
+  // pinned to a value the client computed rather than to whatever the RPC answers; a read that
+  // disagrees is refused by the builder instead of producing a witness for another address.
+  const derivedProxy = smartAccountCodec.accountAddress(accountId, { coreContractHash: coreHash });
+  // The operation's own target is authorized by the validator signature, but the wallet's witness
+  // scope must still cover every contract the script calls: the core and that target.
+  const operationTarget = decodeHash160Item(args[1]?.value?.[1]) || decodeHash160Item(transactionBody?.operationBody?.targetContract);
   // One chain read serves both the transaction and the scope decision: the resolver asks for the
-  // account state once and the same answer is reused below, so a verifier change between two
-  // reads cannot produce a request and a transaction that disagree.
+  // account state once and the same answer is reused below, so a proxy change between two reads
+  // cannot produce a request and a transaction that disagree.
   let chainState = null;
   const built = await resolveProxyWitnessTransaction({
     coreHash,
     accountId,
     invocation: target,
+    proxyHash: derivedProxy,
     feePayer: sanitizeHex(feePayer),
     feePayerScope: 'CalledByEntry',
     readState: async (request) => {
@@ -296,7 +309,7 @@ export async function buildClientProxyWitnessTransaction({
   const decision = resolveWalletSigningScope({
     verifierHash: chainState && chainState.verifierHash,
     requestedScope: feePayerScope,
-    contractsCalled: [coreHash, built.targetContract],
+    contractsCalled: [coreHash, operationTarget].filter(Boolean),
     allowedContracts: feePayerAllowedContracts || undefined,
   });
   return buildProxyWalletSignRequest({
@@ -315,13 +328,10 @@ export function buildClientBroadcastRequest({
   proxyWitnessTransaction = null,
 } = {}) {
   const signed = selectSignedInvocation({ transactionBody, signatures, morpheusNetwork, networkMagic });
-  if (signed && !transactionBody?.clientInvocation && !transactionBody?.v3Invocation) {
-    throw new Error('Draft signed invocation mismatch: client submission requires a staged operation anchor');
-  }
-  const invocation = signed || cloneImmutable(transactionBody?.clientInvocation || {});
+  const invocation = signed || cloneImmutable(transactionBody?.metaInvocation || {});
   // Only the staged body may prescribe witnesses; collaborator metadata cannot.
-  if (signed && transactionBody?.clientInvocation?.signers) {
-    invocation.signers = cloneImmutable(transactionBody.clientInvocation.signers);
+  if (signed && transactionBody?.operationBody?.signers) {
+    invocation.signers = cloneImmutable(transactionBody.operationBody.signers);
   }
   if (!invocation.scriptHash || !invocation.operation) {
     throw new Error(EC.clientInvocationMissing);
@@ -453,7 +463,7 @@ export async function executeBroadcast({
   // returned on the error so a wallet with a real signing path can complete the move.
   let proxyWitnessTransaction = null;
   const stagedInvocation = selectSignedInvocation({ transactionBody, signatures, morpheusNetwork, networkMagic })
-    || cloneImmutable(transactionBody?.clientInvocation || transactionBody?.v3Invocation || {});
+    || cloneImmutable(transactionBody?.metaInvocation || {});
   if (proxyWitnessRequired(transactionBody, stagedInvocation)) {
     proxyWitnessTransaction = await (deps.buildClientProxyWitnessTransaction || buildClientProxyWitnessTransaction)({
       transactionBody,
@@ -474,7 +484,7 @@ export async function executeBroadcast({
   const typedRecords = signatures.filter((item) => item?.metadata?.metaInvocation && item?.metadata?.typedData);
   if (request.operation === 'executeUserOp' && typedRecords.length) {
     // Metadata hashes are untrusted. Recompute the actual staged argument hash with the target core.
-    const hash = await (deps.computeArgsHash || computeArgsHash)({ rpcUrl: walletService.rpcUrl, saContractHash: request.scriptHash, args: request.args[1].value[2].value });
+    const hash = await (deps.computeArgsHash || computeArgsHash)({ rpcUrl: walletService.rpcUrl, saContractHash: request.scriptHash, args: request.args[1].value[3].value });
     if (typedRecords.some((item) => sanitizeHex(item.metadata.typedData.message?.argsHash) !== sanitizeHex(hash))) {
       throw new Error('Draft signed invocation mismatch: on-chain arguments hash');
     }

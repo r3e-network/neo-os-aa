@@ -1,5 +1,29 @@
 #!/usr/bin/env node
 
+/**
+ * v4 paymaster policy probe.
+ *
+ * The probe asks the paymaster to authorize the exact request the v4 relay
+ * sends (`executeUserOp` to the core, with the downstream target and method
+ * derived from the 13-field operation) and then proves the policy refuses every
+ * single-field deviation.
+ *
+ * Nothing here touches the chain: the probe is an off-chain allowlist check, so
+ * it needs an already-deployed v4 core hash and the account id that core derived.
+ *
+ * Environment:
+ *   SA_CORE_HASH_TESTNET                deployed v4 core (required)
+ *   PAYMASTER_ACCOUNT_ID               account the policy allowlists (required)
+ *   MORPHEUS_RUNTIME_TOKEN | PHALA_API_TOKEN | PHALA_SHARED_SECRET
+ *                                       paymaster bearer token (required)
+ *   MORPHEUS_PAYMASTER_APP_ID           dapp id the paymaster allowlists
+ *   MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH
+ *                                       run the allowlist handler in-process
+ *   SKIP_PAYMASTER_ALLOWLIST_UPDATE=1   keep the handler's own allowlist
+ *
+ * A runbook, not a gate: `npm test` does not run it.
+ */
+
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,11 +33,13 @@ import localPaymasterHandlerHelpers from "./local-paymaster-handler.js";
 const { resolveLocalPaymasterHandlerPath } = localPaymasterHandlerHelpers;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-const PHALA_API_TOKEN = process.env.MORPHEUS_RUNTIME_TOKEN || process.env.PHALA_API_TOKEN || process.env.PHALA_SHARED_SECRET || "";
+const PAYMASTER_API_TOKEN = process.env.MORPHEUS_RUNTIME_TOKEN || process.env.PHALA_API_TOKEN || process.env.PHALA_SHARED_SECRET || "";
 const PAYMASTER_APP_ID = process.env.MORPHEUS_PAYMASTER_APP_ID || "ddff154546fe22d15b65667156dd4b7c611e6093";
 const PAYMASTER_DAPP_ID = String(process.env.MORPHEUS_PAYMASTER_DAPP_ID || PAYMASTER_APP_ID).trim();
-const PAYMASTER_ACCOUNT_ID = process.env.PAYMASTER_ACCOUNT_ID || "0x0c3146e78efc42bfb7d4cc2e06e3efd063c01c56";
-const CORE_HASH = process.env.SA_CORE_HASH_TESTNET || "0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2";
+// A v3 core hash has no v4 entry points, so the policy probe refuses to run
+// against one: both identifiers must come from the deployment under test.
+const PAYMASTER_ACCOUNT_ID = String(process.env.PAYMASTER_ACCOUNT_ID || "").trim();
+const CORE_HASH = String(process.env.SA_CORE_HASH_TESTNET || "").trim();
 const DISALLOWED_TARGET_CONTRACT = `0x${"f0".repeat(20)}`;
 const PAYMASTER_METHOD = process.env.MORPHEUS_PAYMASTER_METHOD || "executeUserOp";
 const PAYMASTER_MAX_GAS_UNITS = Number(process.env.MORPHEUS_PAYMASTER_TESTNET_MAX_GAS_UNITS || 5_000_000);
@@ -52,8 +78,13 @@ const LOCAL_PAYMASTER_RUNTIME_ENV_KEYS = [
   "PHALA_SHARED_SECRET",
 ];
 
-if (!PHALA_API_TOKEN) {
+if (!PAYMASTER_API_TOKEN) {
   console.error("MORPHEUS_RUNTIME_TOKEN, PHALA_API_TOKEN, or PHALA_SHARED_SECRET is required.");
+  process.exit(1);
+}
+
+if (!PAYMASTER_ACCOUNT_ID || !CORE_HASH) {
+  console.error("PAYMASTER_ACCOUNT_ID and SA_CORE_HASH_TESTNET are required: the probe checks a policy pinned to a deployed v4 core.");
   process.exit(1);
 }
 
@@ -71,7 +102,7 @@ function buildPaymasterOverrides() {
     MORPHEUS_PAYMASTER_TESTNET_ALLOW_DAPPS: PAYMASTER_DAPP_ID,
     MORPHEUS_PAYMASTER_TESTNET_ALLOW_ACCOUNTS: normalizedAccount,
     MORPHEUS_PAYMASTER_TESTNET_ALLOW_TARGETS: normalizedTarget,
-    MORPHEUS_PAYMASTER_TESTNET_ALLOW_METHODS: "executeUserOp,executeUnifiedByAddress",
+    MORPHEUS_PAYMASTER_TESTNET_ALLOW_METHODS: "executeUserOp,executeSponsoredUserOp",
     MORPHEUS_PAYMASTER_TESTNET_MAX_GAS_UNITS: String(PAYMASTER_MAX_GAS_UNITS),
   };
 }
@@ -99,7 +130,7 @@ async function callLocalPaymaster(payload, overrides) {
     const req = new Request("http://local/paymaster/authorize", {
       method: "POST",
       headers: {
-        authorization: `Bearer ${PHALA_API_TOKEN}`,
+        authorization: `Bearer ${PAYMASTER_API_TOKEN}`,
         "content-type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -116,14 +147,13 @@ async function callLocalPaymaster(payload, overrides) {
 }
 
 async function callDirectPaymaster(payload) {
-  const endpoint = PAYMASTER_ENDPOINT.endsWith("/paymaster/authorize")
-    ? PAYMASTER_ENDPOINT
-    : `${PAYMASTER_ENDPOINT}/paymaster/authorize`;
-  const response = await fetch(endpoint, {
+  // `resolvePaymasterAuthorizeEndpoint` already appends the authorize path, so
+  // the explicit override binds to exactly one route.
+  const response = await fetch(PAYMASTER_ENDPOINT, {
     method: "POST",
     headers: {
-      authorization: `Bearer ${PHALA_API_TOKEN}`,
-      "x-phala-token": PHALA_API_TOKEN,
+      authorization: `Bearer ${PAYMASTER_API_TOKEN}`,
+      "x-phala-token": PAYMASTER_API_TOKEN,
       "content-type": "application/json",
     },
     body: JSON.stringify(payload),
@@ -183,6 +213,10 @@ async function main() {
     dapp_id: PAYMASTER_DAPP_ID,
     target_contract: normalizeHash(CORE_HASH),
     method: PAYMASTER_METHOD,
+    // The relay derives these two from the 13-field operation, so the approved
+    // request must carry the same shape the relay actually posts.
+    userop_target_contract: normalizeHash(process.env.SA_PAYMASTER_PROBE_TARGET || "0xef4073a0f2b305a38ec4050e4d3d28bc40ea63f5"),
+    userop_method: process.env.SA_PAYMASTER_PROBE_METHOD || "symbol",
     estimated_gas_units: 1985656,
     operation_hash: `0x${"44".repeat(32)}`,
   };

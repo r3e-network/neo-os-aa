@@ -9,7 +9,7 @@ import {
   shouldStripAttribute,
 } from "../src/features/docs/rendering.js";
 import { MORPHEUS_PUBLIC_REGISTRY } from "../src/config/generatedMorpheusRegistry.js";
-import { planCreateAccount } from "../src/features/studio/createAccountPresets.js";
+import { planCreateAccount } from "../src/features/studio/createAccountPlan.js";
 import { createCreateFormState } from "../src/features/studio/constants.js";
 
 const frontendRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -85,13 +85,19 @@ test("sdk doc references the canonical testnet SA core from the generated regist
 test("sdk paymaster docs track the current helper signatures", () => {
   const sdkDoc = read("src/assets/docs/sdk-usage.md");
 
-  assert.match(sdkDoc, /querySponsorBalance\(paymasterHash, sponsorAddress\)/);
-  assert.match(sdkDoc, /createSponsoredUserOpPayload\({/);
+  // v4 reads the paymaster's own state instead of wrapping it, and builds the sponsored envelope
+  // itself; the v3 helpers (`querySponsorBalance`, `createSponsoredUserOpPayload`,
+  // `validatePaymasterOp({...})`) do not exist on the client any more.
+  assert.match(sdkDoc, /getSponsorDeposit\(sponsor\)/);
+  assert.match(sdkDoc, /buildSponsoredExecutionScript\({/);
   assert.match(sdkDoc, /accountScriptHash|accountAddress/);
-  assert.match(sdkDoc, /userOp/);
+  assert.match(sdkDoc, /executeSponsoredUserOp/);
   assert.match(sdkDoc, /paymasterHash/);
   assert.match(sdkDoc, /sponsorAddress/);
-  assert.match(sdkDoc, /validatePaymasterOp\({/);
+  assert.match(
+    sdkDoc,
+    /validatePaymasterOp\(sponsor, accountId, targetContract, method, reimbursementAmount\)/,
+  );
 });
 
 test("repo docs describe a hardened policy-gated execution surface", () => {
@@ -140,11 +146,16 @@ test("repo README includes a quickstart covering install build and test workflow
   assert.match(readme, /npm run build/i);
 });
 
-test("custom verifier docs explain verifier approval does not bypass runtime restrictions", () => {
-  const verifierDoc = read("src/assets/docs/custom-verifiers.md");
+test("custom module docs explain a module cannot bypass the core gate", () => {
+  const moduleDoc = read("src/assets/docs/custom-modules.md");
 
-  assert.match(verifierDoc, /does not bypass/i);
-  assert.match(verifierDoc, /whitelist|blacklist|max-transfer|method policy/i);
+  // v4 replaced the "custom verifier" binding with a module that runs behind the core gate: the
+  // callback surface is verified at install, and no module removes the timelock, the hook order or
+  // the recovery sweep. The doc must keep saying so.
+  assert.match(moduleDoc, /never bypasses/i);
+  assert.match(moduleDoc, /timelock|hook order|recovery/i);
+  assert.match(moduleDoc, /callback surface|onInstall/i);
+  assert.match(moduleDoc, /instance isolation|instance-isolated/i);
 });
 
 test("core explainer docs provide onboarding architecture workflow and boundary guidance", () => {
@@ -218,7 +229,7 @@ test("operations docs cover the app workspace, anonymous drafts, both broadcast 
   assert.match(mixedMultisigDoc, /100 activity entries/i);
   assert.match(mixedMultisigDoc, /12 submission receipts/i);
   assert.match(
-    read("src/assets/docs/hook-plugin-guide.md"),
+    read("src/assets/docs/module-guide.md"),
     /Choose In Layers/i,
   );
   assert.match(
@@ -238,8 +249,8 @@ test("operations docs cover the app workspace, anonymous drafts, both broadcast 
   assert.match(sdkDoc, /safe to expose client-side/i);
   assert.match(sdkDoc, /server-only/i);
   assert.match(sdkDoc, /SUPABASE_SERVICE_ROLE_KEY/i);
-  assert.match(sdkDoc, /AA_RELAY_ALLOWED_HASH/i);
-  assert.match(sdkDoc, /AA_RELAY_ALLOW_RAW_FORWARD/i);
+  assert.match(sdkDoc, /SA_RELAY_ALLOWED_HASH/i);
+  assert.match(sdkDoc, /SA_RELAY_ALLOW_RAW_FORWARD/i);
   assert.match(sdkDoc, /frontend\/\.env\.example/i);
   assert.match(sdkDoc, /draft-operator/i);
   assert.match(sdkDoc, /signed operator mutation/i);
@@ -258,8 +269,8 @@ test("operations docs cover the app workspace, anonymous drafts, both broadcast 
   assert.match(sdkDoc, /Testnet vs Production Checklist/i);
   assert.match(sdkDoc, /testnet/i);
   assert.match(sdkDoc, /production/i);
-  assert.match(sdkDoc, /AA_RELAY_WIF/i);
-  assert.match(sdkDoc, /VITE_AA_EXPLORER_BASE_URL/i);
+  assert.match(sdkDoc, /SA_RELAY_WIF/i);
+  assert.match(sdkDoc, /VITE_SA_EXPLORER_BASE_URL/i);
   assert.match(sdkDoc, /relay meta mode|relay invocation mode/i);
   assert.match(sdkDoc, /Minimum Capability Matrix/i);
   assert.match(sdkDoc, /without Supabase/i);
@@ -267,10 +278,10 @@ test("operations docs cover the app workspace, anonymous drafts, both broadcast 
   assert.match(sdkDoc, /without explorer/i);
   assert.match(sdkDoc, /Troubleshooting/i);
   assert.match(sdkDoc, /missing Supabase env/i);
-  assert.match(sdkDoc, /AA_RELAY_WIF/i);
+  assert.match(sdkDoc, /SA_RELAY_WIF/i);
   assert.match(sdkDoc, /relay meta mode/i);
   assert.match(sdkDoc, /explorer base url/i);
-  assert.match(sdkDoc, /VITE_AA_EXPLORER_BASE_URL/i);
+  assert.match(sdkDoc, /VITE_SA_EXPLORER_BASE_URL/i);
   assert.match(sdkDoc, /100 activity entries/i);
   assert.match(sdkDoc, /12 submission receipts/i);
 });
@@ -370,7 +381,7 @@ test("studio controller uses local neo helpers instead of Neon SDK bundles", () 
   );
 });
 
-test("studio account creation derives account id from the registration config", () => {
+test("studio account creation derives the v4 identity from custody and salt", () => {
   const controllerSource = read("src/features/studio/useStudioController.js");
   const panelSource = read(
     "src/features/studio/components/CreateAccountPanel.vue",
@@ -378,34 +389,44 @@ test("studio account creation derives account id from the registration config", 
   const i18nSource = read("src/i18n/index.js");
   const zhSource = read("src/i18n/zh-CN.js");
 
-  // The id is derived from the registration config, not from a user-supplied
-  // seed: a changed verifier must derive a different id, and the submitted
-  // registerAccount invocation must carry that same id. This replaces a source
-  // regex that only named the derivation function.
-  const derivationForm = {
+  // The id is hash160(0xAA524704 || custody || salt), so both inputs must
+  // change it and the createAccount invocation must carry the same id. No
+  // verifier is chosen at creation: modules are installed by intent later.
+  const form = {
     ...createCreateFormState(),
-    backupOwner: `0x${"ab".repeat(20)}`,
+    custody: `0x${"ab".repeat(20)}`,
+    salt: "11".repeat(16),
   };
-  const firstPlan = planCreateAccount(derivationForm, "mainnet");
-  derivationForm.verifierContract = `0x${"cd".repeat(20)}`;
-  const secondPlan = planCreateAccount(derivationForm, "mainnet");
-  assert.notEqual(firstPlan.accountIdHash, secondPlan.accountIdHash);
-  assert.equal(secondPlan.invocation.args[0].value, secondPlan.accountIdHash);
-  assert.doesNotMatch(
-    controllerSource,
-    /deriveAccountIdHash\(createForm\.value\.accountId\)/,
+  const coreHash = `0x${"22".repeat(20)}`;
+  const firstPlan = planCreateAccount(form, coreHash);
+  const saltedPlan = planCreateAccount({ ...form, salt: "33".repeat(16) }, coreHash);
+  const custodyPlan = planCreateAccount(
+    { ...form, custody: `0x${"cd".repeat(20)}` },
+    coreHash,
   );
-  assert.doesNotMatch(controllerSource, /createForm\.value\.accountId/);
-  assert.doesNotMatch(panelSource, /Advanced: Custom Account Seed/);
+  assert.notEqual(firstPlan.accountId, saltedPlan.accountId);
+  assert.notEqual(firstPlan.accountId, custodyPlan.accountId);
+  assert.equal(firstPlan.invocation.operation, "createAccount");
+  assert.equal(firstPlan.invocation.args[0].value, firstPlan.accountId);
+  assert.equal(firstPlan.invocation.args[1].value, firstPlan.custodyAddress);
+  assert.equal(firstPlan.invocation.args[2].value, `0x${form.salt}`);
+  assert.equal(firstPlan.invocation.args[3].value, String(firstPlan.recoveryTimelockMs));
+  assert.equal(
+    firstPlan.recoveryTimelockMs,
+    form.recoveryTimelockDays * 86_400_000,
+  );
+  assert.match(controllerSource, /from ['"]\.\/createAccountPlan\.js['"]/);
+  assert.doesNotMatch(controllerSource, /registerAccount/);
+  assert.doesNotMatch(panelSource, /backupOwner/);
   assert.doesNotMatch(panelSource, /Account Seed \(UUID\)/);
   assert.doesNotMatch(panelSource, /v-model="createForm\.accountId"/);
-  assert.match(panelSource, /min="7"/);
-  assert.match(panelSource, /max="90"/);
+  assert.match(panelSource, /:min="minRecoveryDays"/);
+  assert.match(panelSource, /:max="maxRecoveryDays"/);
   assert.match(
     i18nSource,
-    /Countdown before escape hatch activates \(7-90 days\)/,
+    /Countdown before a recovery authority can take over \(7-90 days\)/,
   );
-  assert.match(zhSource, /逃生舱激活前的倒计时（7-90 天）/);
+  assert.match(zhSource, /接管前的倒计时（7-90 天）/);
 });
 
 test("studio governance and permissions panels expect accountId hashes instead of legacy seeds", () => {

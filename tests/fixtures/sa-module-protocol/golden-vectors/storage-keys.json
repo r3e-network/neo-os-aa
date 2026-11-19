@@ -1,0 +1,57 @@
+{
+  "vectorId": "sa4-storage-keys",
+  "kind": "storage-key",
+  "constantsRevision": {
+    "custom": "ae220783aa0a303f47332adf135aa44416c58c0e",
+    "native": "0d9ad4f08797f4b2e8ad63c83182fa554ef33fb9"
+  },
+  "input": {
+    "accountId": "0xf2125dfcd4f8992f79231d8c175fc499baa10130",
+    "moduleId": 1,
+    "moduleType": 1,
+    "intentId": 1,
+    "policyId": 1,
+    "channelBytesHex": "013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd"
+  },
+  "expected": {
+    "keys": {
+      "0x50": "50",
+      "0x51": "513001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
+      "0x52": "523001a1ba99c45f178c1d23792f99f8d4fc5d12f20000000000000001",
+      "0x53": "533001a1ba99c45f178c1d23792f99f8d4fc5d12f2010000000000000001",
+      "0x54": "543001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
+      "0x55": "553001a1ba99c45f178c1d23792f99f8d4fc5d12f20000000000000001",
+      "0x56": "563001a1ba99c45f178c1d23792f99f8d4fc5d12f2013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd",
+      "0x57": "573001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
+      "0x58": "583001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
+      "0x59": "593001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
+      "0x5A": "5a3001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
+      "0x5B": "5b3001a1ba99c45f178c1d23792f99f8d4fc5d12f20000000000000001",
+      "0x5C": "5c3001a1ba99c45f178c1d23792f99f8d4fc5d12f2013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd",
+      "0x5D": "5d3001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
+      "0x5E": "5e3001a1ba99c45f178c1d23792f99f8d4fc5d12f2"
+    },
+    "lengths": {
+      "0x50": 1,
+      "0x51": 21,
+      "0x52": 29,
+      "0x53": 30,
+      "0x54": 21,
+      "0x55": 29,
+      "0x56": 45,
+      "0x57": 21,
+      "0x58": 21,
+      "0x59": 21,
+      "0x5A": 21,
+      "0x5B": 29,
+      "0x5C": 45,
+      "0x5D": 21,
+      "0x5E": 21
+    },
+    "moduleTypeCodes": {
+      "validator": 1,
+      "hook": 4
+    }
+  },
+  "notes": "The §7.1 key table, byte for byte. Account bytes are the raw UInt160 bytes and every integer suffix is fixed-width big-endian, so the same key builder produces the same key in both kernels. 0x5F is reserved and never produced."
+}

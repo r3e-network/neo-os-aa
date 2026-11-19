@@ -27,8 +27,8 @@ namespace Neo.SmartContract.Native
     /// specification is docs/SA-MODULE-PROTOCOL.md (Chinese counterpart
     /// docs/SA-MODULE-PROTOCOL.zh-CN.md).
     ///
-    /// PAIRED FILE: contracts/SmartAccount.ModuleProtocol.cs (ordinary kernel,
-    /// #39). The two files MUST carry identical numeric values at all times; a
+    /// PAIRED FILE: contracts/custom/SmartAccount.ModuleProtocol.cs (custom
+    /// kernel, #39). The two files MUST carry identical numeric values at all times; a
     /// divergence is a protocol defect, not an implementation choice.
     /// </summary>
     internal static class SmartAccountModuleProtocol
@@ -113,10 +113,21 @@ namespace Neo.SmartContract.Native
         // ------------------------------------------------------------------
 
         internal const long GasFactorDatoshi = 100_000_000;
-        internal const long ValidationAggregateGasLimit = 100_000_000;   // 1 GAS, shared by the routed validator and all threshold members
+        internal const long ValidationPerCallGasLimit = 100_000_000;     // 1 GAS per validateUserOp
+        internal const long CompletionPerCallGasLimit = 100_000_000;     // 1 GAS per onUserOpComplete
         internal const long HookCallbackGasLimit = 250_000_000;          // 2.5 GAS per preCheck/postCheck
-        internal const long ValidatorCompletionGasLimit = 100_000_000;   // 1 GAS aggregate
         internal const long LifecycleCallbackGasLimit = 250_000_000;     // 2.5 GAS per onInstall/onUninstall/configure
+
+        // Envelope-scoped aggregate pools (spec §11). A pool is the per-call
+        // cap times the maximum multiplicity of one envelope, so one maximal
+        // threshold round always fits. The per-call cap — never the pool — is
+        // the bound on an individual module.
+        internal const long ValidationAggregateGasLimit =
+            ValidationPerCallGasLimit * (1 + MaxThresholdPolicyMembers);
+        internal const long CompletionAggregateGasLimit =
+            CompletionPerCallGasLimit * (1 + MaxThresholdPolicyMembers);
+        internal const long HookAggregateGasLimit =
+            HookCallbackGasLimit * MaxHookModuleInstances;
 
         // ------------------------------------------------------------------
         // 6. Signing domains and ERC-1271 magic (spec §4.3, §8)
@@ -159,6 +170,22 @@ namespace Neo.SmartContract.Native
         internal const byte PrefixNonceNamespace = 0x5C;
         internal const byte PrefixMarketControlEpoch = 0x5D;
         internal const byte PrefixConfigIntentIndex = 0x5E;
+
+        // ------------------------------------------------------------------
+        // 7b. Configuration action codes (spec §9) — element 0 of an action
+        //     Array; identical numbering in both kernels.
+        // ------------------------------------------------------------------
+
+        internal const int ActionInstallModule = 1;
+        internal const int ActionUninstallModule = 2;
+        internal const int ActionConfigureModule = 3;
+        internal const int ActionSetHookOrder = 4;
+        internal const int ActionSetDefaultPolicy = 5;
+        internal const int ActionRebindModuleCode = 6;
+        internal const int ActionSetThresholdPolicy = 7;
+        internal const int ActionSetRecoveryPolicy = 8;
+        internal const int ActionSetMessageSubjects = 9;
+        internal const int ActionMigrateAccount = 10;
 
         // ------------------------------------------------------------------
         // 8. Canonical key builders (spec §7.1)
@@ -250,7 +277,7 @@ namespace Neo.SmartContract.Native
 
         // ------------------------------------------------------------------
         // 9. Error codes (spec §17) — stable SA_* string constants shared
-        //    verbatim with the ordinary constants file.
+        //    verbatim with the custom constants file.
         // ------------------------------------------------------------------
 
         internal const string ErrorProtocolVersion = "SA_PROTOCOL_VERSION";
@@ -303,7 +330,7 @@ namespace Neo.SmartContract.Native
         // ------------------------------------------------------------------
         // 10. Event display names (spec §18) — new module-model events;
         //     existing AA-free event names stay in SmartAccount.Events.cs
-        //     (ordinary) / SmartAccount.Events.cs (native).
+        //     (custom) / SmartAccount.Events.cs (native).
         // ------------------------------------------------------------------
 
         internal const string EventNameModuleInstanceInstalled = "ModuleInstanceInstalled";

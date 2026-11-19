@@ -8,6 +8,7 @@ import {
   buildClientBroadcastRequest,
 } from '../src/features/operations/execution.js';
 import { createProxyVerificationScript } from '../src/shared/proxyWitness.mjs';
+import { gasTransferArgs, userOpParam } from './fixtures/saChainFixtures.js';
 
 // What the *provider* is asked for is the contract with the wallet: a scope label the wallet cannot
 // act on is the same as asking for nothing. These tests drive the frontend path the way a browser
@@ -16,7 +17,6 @@ import { createProxyVerificationScript } from '../src/shared/proxyWitness.mjs';
 const CORE = 'd2a4cff31913016155e38e474a2c06d08be276cf';
 const TARGET = 'ef4073a0f2b305a38ec4050e4d3d28bc40ea63f5';
 const ACCOUNT = 'ab'.repeat(20);
-const VERIFIER = 'cd'.repeat(20);
 const FEE_PAYER = '11'.repeat(20);
 const WALLET_ADDRESS = 'NZWalletAddressForTheShim';
 
@@ -35,44 +35,27 @@ function stackHash(hash) {
   };
 }
 
-function chainFetch({ verifier = VERIFIER, scopeTarget = TARGET, proxy = PROXY } = {}) {
+function chainFetch({ proxy = PROXY } = {}) {
   return async (_url, init) => {
     const body = JSON.parse(init.body);
     const method = body.params[1];
     const answers = {
       getProxyScriptHash: stackHash(proxy),
-      getVerifyScopeTarget: stackHash(scopeTarget),
-      getVerifier: stackHash(verifier),
     };
     return { async json() { return { jsonrpc: '2.0', id: 1, result: answers[method] }; } };
   };
 }
+
+/** A §4.1 account id argument: a ByteString of the stored byte order. */
+const accountArgument = () => ({ type: 'ByteString', value: Buffer.from(ACCOUNT, 'hex').reverse().toString('hex') });
 
 function invocation() {
   return {
     scriptHash: CORE,
     operation: 'executeUserOp',
     args: [
-      { type: 'Hash160', value: ACCOUNT },
-      {
-        type: 'Struct',
-        value: [
-          { type: 'Hash160', value: TARGET },
-          { type: 'String', value: 'transfer' },
-          {
-            type: 'Array',
-            value: [
-              { type: 'Hash160', value: PROXY },
-              { type: 'Hash160', value: '22'.repeat(20) },
-              { type: 'Integer', value: '100000000' },
-              { type: 'Any', value: null },
-            ],
-          },
-          { type: 'Integer', value: '0' },
-          { type: 'Integer', value: '9999999999999' },
-          { type: 'ByteArray', value: '01'.repeat(64) },
-        ],
-      },
+      accountArgument(),
+      userOpParam({ target: TARGET, method: 'transfer', args: gasTransferArgs({ from: PROXY, to: '22'.repeat(20) }) }),
     ],
   };
 }
@@ -164,7 +147,7 @@ test('the wallet is asked for the protocol bit mask, not the scope label', async
   });
   const request = buildClientBroadcastRequest({
     signerAddress: FEE_PAYER,
-    transactionBody: { requiresProxyWitness: true, accountAddressScriptHash: built.proxyHash, clientInvocation: invocation() },
+    transactionBody: { requiresProxyWitness: true, accountAddressScriptHash: built.proxyHash, v4Invocation: invocation() },
     proxyWitnessTransaction: built,
   });
   await walletService.invoke(request);
@@ -197,7 +180,7 @@ test('two entries for one account reach the wallet as one signer', async () => {
   await walletService.invoke({
     scriptHash: CORE,
     operation: 'executeUserOp',
-    args: [{ type: 'Hash160', value: ACCOUNT }],
+    args: invocation().args,
     signers: [
       { account: FEE_PAYER, scopes: 'CustomContracts', allowedContracts: [CORE] },
       { account: FEE_PAYER, scopes: built.feePayerSigner.scopes, allowedContracts: built.feePayerSigner.allowedContracts },
@@ -221,7 +204,7 @@ test('two entries for one account reach the wallet as one signer', async () => {
     walletService.invoke({
       scriptHash: CORE,
       operation: 'executeUserOp',
-      args: [{ type: 'Hash160', value: ACCOUNT }],
+      args: invocation().args,
       signers: [
         { account: FEE_PAYER, scopes: 'CalledByEntry' },
         { account: FEE_PAYER, scopes: 'CustomContracts', allowedContracts: [CORE, TARGET] },
@@ -243,16 +226,13 @@ test('the proxy signer stays restricted and the proxy never pays', async () => {
     fetchImpl: chainFetch(),
   });
 
-  // CU-39's witness checks, re-asserted through the wallet path: the scope target is required, the
-  // proxy keeps its single restricted WitnessRules entry, and it is never the fee payer.
-  assert.equal(built.scopeTarget, TARGET);
+  // CU-39's witness checks, re-asserted through the wallet path: the v4 operation's own target is
+  // the only authorized target, the proxy keeps its single restricted WitnessRules entry, and it is
+  // never the fee payer.
   assert.equal(built.proxySigner.scopes, 'WitnessRules');
   assert.deepEqual(built.proxySigner.rules, [{
     action: 'Allow',
-    condition: {
-      type: 'Or',
-      expressions: [{ type: 'CalledByContract', hash: CORE }, { type: 'CalledByContract', hash: TARGET }],
-    },
+    condition: { type: 'CalledByContract', hash: CORE },
   }]);
   assert.equal(built.feePayerSigner.account, FEE_PAYER);
   assert.notEqual(built.feePayerSigner.account, built.proxyHash);
@@ -260,7 +240,7 @@ test('the proxy signer stays restricted and the proxy never pays', async () => {
 
   const request = buildClientBroadcastRequest({
     signerAddress: FEE_PAYER,
-    transactionBody: { requiresProxyWitness: true, accountAddressScriptHash: built.proxyHash, clientInvocation: invocation() },
+    transactionBody: { requiresProxyWitness: true, accountAddressScriptHash: built.proxyHash, v4Invocation: invocation() },
     proxyWitnessTransaction: built,
   });
   await walletService.invoke(request);
@@ -281,7 +261,7 @@ test('a refused owner check is raised before the wallet is asked to sign', async
       feePayer: FEE_PAYER,
       feePayerScope: 'CalledByEntry',
       rpcUrl: 'http://127.0.0.1:1',
-      fetchImpl: chainFetch({ verifier: VERIFIER }),
+      fetchImpl: chainFetch(),
     }),
     (error) => error.message === EC.walletScopeOwnerRequiresCustomScope,
   );

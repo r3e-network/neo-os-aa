@@ -17,11 +17,11 @@ from one path does not establish runtime guarantees for the other. See the
 
 | Profile | Implementation boundary | Deployment requirement |
 | --- | --- | --- |
-| `public` | Standard `System.Contract.Call`; account nonce, verifier, hooks and execution in one transaction | Published Neo runtime; current core and matching plugin artifacts |
-| Private `PLATFORM` | Adds bounded verifier child calls | Runtime with the matching private syscall; not deployable by choosing a public RPC URL |
-| Native SmartAccount | ABI 2 `SmartAccount`, independently derived identity, epoch-scoped modules and bounded callbacks | Corresponding Neo core implementation and hardfork activation; public V3 deployment does not activate it |
+| `public` | Standard `System.Contract.Call`; account nonce, validator modules and hooks, and execution in one transaction | Published Neo runtime; current core and matching module artifacts |
+| Private `PLATFORM` | Adds bounded module child calls | Runtime with the matching private syscall; not deployable by choosing a public RPC URL |
+| Native SmartAccount | ABI 2 `SmartAccount`, independently derived identity, epoch-scoped modules and bounded callbacks | Corresponding Neo core implementation and hardfork activation; the public v4 deployment does not activate it |
 
-The public profile has no per-child verifier gas budget. Relays and sponsors must
+The public profile has no per-child module gas budget. Relays and sponsors must
 bound transaction fees and review the selected modules and their mutable child
 configuration. Private-profile proofs do not close this public-runtime limitation.
 
@@ -32,7 +32,7 @@ module storage, explicit epoch/configuration commitments in execution, bounded
 callbacks, witness fee estimation for supported signer shapes and signed-transaction preview. See
 [the native architecture](NATIVE_SYSTEM_ARCHITECTURE.md), [SDK](NATIVE_SDK.md) and
 [workspace](NATIVE_ACCOUNT_WORKSPACE.md). It requires the matching native runtime
-and activation; public V3 deployment is not evidence of native availability.
+and activation; the public v4 deployment is not evidence of native availability.
 
 Source custody: `contracts/native/SmartAccount/` in this
 repository is the only editable copy of the native `SmartAccount` contract
@@ -55,32 +55,32 @@ aggregate signer domains. Verifier callbacks have a 1 GAS budget; hooks and
 maintenance have 2.5 GAS each. These bounds do not guarantee a maximum batch fits
 the network's global Verification budget.
 
-## Public V3 account and operator workflows
+## Public v4 account and operator workflows
 
 | Capability | Supported contract | Remaining boundary |
 | --- | --- | --- |
-| Account identity | Read account ID, derived proxy and verifier from the selected core; reject mismatches | Legacy reverse indexes may require an explicit account ID |
+| Account identity | Read the account ID, the derived proxy and the installed validator modules from the selected core; reject mismatches | Legacy reverse indexes may require an explicit account ID |
 | Shared drafts | Execute a staged, consistent signed invocation | Collaborator records and UI signature counts do not establish chain authorization |
-| MultiSig | Chain-ordered child proofs over the same operation, with child-specific signing domains | Threshold counts verifier modules; it does not prove independent humans or custody |
+| MultiSig | Chain-ordered child proofs over the same operation, with child-specific signing domains | Threshold counts validator modules; it does not prove independent humans or custody |
 | Session transfers | Exact NEP-17 arguments, proxy sender, nonnegative amount, Boolean success | A token's declared amount does not measure arbitrary additional balance loss |
 | Daily limits | Fixed-window accounting and actual net debit, including targets returning false or zero | Token `balanceOf` is a trust dependency; this is not a per-asset universal balance oracle |
 | Subscription transfers | Positive amount and successful NEP-17 outcome before consuming a period | Generic non-transfer targets retain their documented return semantics |
 | Direct proxy transfer | Derived witness, core scope readback and explicit bounded fee reserve | Relay mode and administrator-configured scope; ordinary wallet invoke APIs cannot add this witness |
 | Sponsored execution | Policy-checked settlement with a shared transaction reimbursement ceiling in each core | Sponsored proxy witnesses are refused; arbitrary settlement must not inherit proxy asset authority |
 | Operator key recovery | Durable browser key storage and passphrase-encrypted backup | Import requires the draft's already-pinned public key; a link alone cannot replace it |
-| Backup-owner escape | Timelock and owner witness; ordinary cleanup-based finalization or callback-free permanent owner-only recovery | Owner-only recovery cannot be undone or reinstall plugins; escrow, external approvals and plugin-held funds remain separate |
+| Backup-owner escape | Timelock and owner witness; ordinary cleanup-based finalization or callback-free permanent owner-only recovery | Owner-only recovery cannot be undone or reinstall modules; escrow, external approvals and module-held funds remain separate |
 
-## Plugin names are not full product guarantees
+## Module names are not full product guarantees
 
-- `WebAuthnVerifier` verifies its documented P-256 proof format. It is not by
+- `P256Validator` verifies its documented P-256 proof format. It is not by
   itself a complete WebAuthn ceremony with origin, RP ID and authenticator-data
   validation.
-- `TEEVerifier` trusts its registered signing key. A valid signature alone does
+- `TeeKeyValidator` trusts its registered signing key. A valid signature alone does
   not establish a particular enclave's attestation.
-- `ZKEmailVerifier` is disabled and unbindable (`supportsV3()` = false rejects registration and updates); do not offer it as a working account option.
-- `ZkLoginVerifier` uses its documented delegated signing path; do not describe
+- `ZKEmailVerifier` is disabled and cannot be installed (`getModuleProfile()` advertises no capability and the core rejects the install); do not offer it as a working account option.
+- `DelegatedIdentityValidator` uses its documented delegated signing path; do not describe
   it as a locally verified general-purpose zero-knowledge login proof.
-- Social recovery's plugin owner and the core backup owner are separate state.
+- Social recovery's module owner and the core backup owner are separate state.
   Updating one is not evidence that the other changed.
 
 ## Validation and release
@@ -107,22 +107,23 @@ with the reviewed source; exercise account creation, configuration, transfer,
 failure rollback, recovery and fee settlement on the intended runtime. User wallet
 signing and public-chain deployment are separate operational steps.
 
-## Current source: permanent owner-only recovery
+## Current source: callback-free custody recovery
 
-After the escape delay, `finalizeEscapeToOwner(accountId)` detaches both plugin
-roots without calling either plugin. The independent owner-only recovery state
-is permanent: the same account cannot install a verifier or hook again, including
-through a new composite root, old pending update, market transfer or platform
-backup-owner rotation. Identity, asset address and nonce history remain intact.
-The backup owner authorizes subsequent operations through the ordinary fallback.
+`beginRecovery(accountId, newCustody)` records a pending custody rotation that matures
+after the account's `recoveryTimelockMs` (7-90 days, fixed at creation); `cancelRecovery`
+deletes the record, and `executeRecovery` — permissionless once matured — applies it.
+Execution calls no validator, hook, Market or Oracle: it sweeps every module instance,
+threshold policy, hook order, message-subject set, pending intent, nonce channel and
+pending migration state, rotates custody to the approved address, clears the recovery
+authority, re-enables built-in authorization and advances the authority epoch,
+configuration nonce and control revision. `getRecoveryStatus` reads the pending record
+back as `[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]`.
 
-Use ordinary `finalizeEscape` when plugin cleanup works and continued plugin use
-is required. Owner-only recovery is the alternative when cleanup cannot complete.
-Neither route bypasses an active market escrow. Owner-only recovery does not
-erase old plugin storage, refund plugin-held funds, revoke token allowances, or
-remove an independent contract upgrade administrator. These additions are source
-candidate capabilities; integrations must discover the selected deployment ABI
-and read the chain state before exposing them.
+Recovery preserves identity, asset address and execution nonce history, but it is not a
+promise to erase old plugin storage, refund plugin-held funds, revoke token allowances,
+settle an active market escrow or remove the independent contract upgrade administrator.
+These are source-candidate capabilities; integrations must discover the selected
+deployment ABI and read the chain state before exposing them.
 
 ## Current source: platform services, freeze and discovery reads
 
@@ -142,10 +143,11 @@ descriptor (ERC-7579-style capability discovery), and
 4337-aware tooling finds the familiar entry point — is a non-faulting
 execution-check preflight (signature and hook execution excluded) that also
 reports the escrow latch and the native backup-owner witness. The same revision lets
-`SessionKeyVerifier.setPublicKey` accept a version-0x01 initial-key blob in
-the registration verifier params, so a session-key account works on day one;
-later key changes keep the 24h rotation cooldown. The SDK exposes
-`describeAccount` / `simulateValidation` / `createSessionKeyAccountPayload` plus
+`SessionKeyValidator` accept a version-0x01 initial-key blob in
+the module init data, so a session-key account works on day one;
+later key changes go through a fresh configuration intent with its own 24-hour
+maturity and seven-day expiry. The SDK exposes
+`describeAccount` / `simulateValidation` / `buildSessionKeyInstallCommand` plus
 ERC-4337-shaped (`toErc4337UserOperation`, `estimateUserOperationGas`) and
 ERC-7715-shaped (`buildSessionKeyPermission`) adapters; the typed-data
 signing layout is specified in [SA-EIP-712-SPEC.md](SA-EIP-712-SPEC.md).
@@ -153,7 +155,7 @@ signing layout is specified in [SA-EIP-712-SPEC.md](SA-EIP-712-SPEC.md).
 A same-day design-phase cleanup removed every pre-deployment compatibility
 path (legacy storage-prefix fallbacks, the one-time rotation migration, the
 v3 recovery action ticket and the migration/upgrade scripts), bringing the
-candidate to 109 raw methods (108 unique names; `finalizeEscape`
+bringing the candidate to 81 ABI entries against the 90 entries of the pinned public artifact.
 is overloaded) against the 90 methods of the pinned public artifact.
 
 The public deployments still run the 90-method artifact, so the extraction,

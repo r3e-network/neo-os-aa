@@ -36,10 +36,10 @@ const DOC_DEFINITIONS = {
       'zh-CN': () => import('@/assets/docs/data-flow.zh.md?raw'),
     },
   },
-  verifiers: {
-    title: { en: 'Custom Verifiers', 'zh-CN': '自定义验证器' },
+  modules: {
+    title: { en: 'Custom Modules', 'zh-CN': '自定义模块' },
     loaders: {
-      en: () => import('@/assets/docs/custom-verifiers.md?raw'),
+      en: () => import('@/assets/docs/custom-modules.md?raw'),
     },
   },
   evm: {
@@ -60,10 +60,10 @@ const DOC_DEFINITIONS = {
       en: () => import('@/assets/docs/sdk-usage.md?raw'),
     },
   },
-  pluginGuide: {
-    title: { en: 'Hook & Plugin Guide', 'zh-CN': 'Hook 与 Plugin 指南' },
+  moduleGuide: {
+    title: { en: 'Validator, Policy & Hook Modules', 'zh-CN': '验证器、策略与钩子模块' },
     loaders: {
-      en: () => import('@/assets/docs/hook-plugin-guide.md?raw'),
+      en: () => import('@/assets/docs/module-guide.md?raw'),
     },
   },
   addressMarket: {

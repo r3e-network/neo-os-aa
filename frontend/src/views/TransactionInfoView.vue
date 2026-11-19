@@ -772,7 +772,7 @@ const canRelayBroadcast = computed(() =>
   ),
 );
 const clientBroadcastReady = computed(() =>
-  Boolean(draft.value?.transaction_body?.clientInvocation),
+  Boolean(draft.value?.operation_body || draft.value?.transaction_body?.operationBody),
 );
 const selectedRelayPayloadLabel = computed(
   () =>
@@ -1045,13 +1045,12 @@ async function signWithEvmWallet() {
     const { signatureRecord } = await signUserOpWithEvm({
       rpcUrl: walletService.rpcUrl,
       saContractHash: getSmartAccountHash(),
-      accountIdHash: draft.value.account?.accountIdHash,
+      accountId: draft.value.account?.accountIdHash,
       operationBody: draft.value.operation_body,
       signerId: evmAddress.value,
-      chainId: runtime.networkMagic,
+      networkMagic: runtime.networkMagic,
       signTypedData: (typedData) => walletService.signTypedDataWithEvm(typedData),
-      missingAccountError: EC.v3AccountRequired,
-      missingVerifierError: EC.noVerifierPlugin,
+      missingAccountError: EC.accountRequired,
     });
     assertSignatureAccess();
     draft.value = await draftStore.appendSignature(

@@ -1,54 +1,72 @@
-using System.IO;
+using System;
 using System.Linq;
+using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo;
 using Neo.Extensions;
-using Neo.SmartContract.Manifest;
 using Neo.SmartContract.Testing.Exceptions;
 
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// The V3 marker is only a capability claim. Binding must also reject a deployed
-/// module whose manifest omits the lifecycle methods that the core calls.
+/// Module binding under protocol v4 (docs/SA-MODULE-PROTOCOL.md §7.3, §9, §10, §12).
+///
+/// The v3 suite pinned a "V3 marker" capability claim plus the retired verifier/hook call
+/// surfaces (<c>registerAccount</c>, <c>callVerifier</c>, <c>callVerifierChild</c>,
+/// <c>hasPendingVerifierCall</c>). v4 replaced that whole layer:
+/// <list type="bullet">
+///   <item>a module instance binds only when its own <c>getModuleProfile()</c> hashes to the
+///   32-byte digest the configuration action committed to AND its manifest exposes the
+///   complete callback surface of its module type;</item>
+///   <item>composition lives in the core (one hook order, core-owned threshold policies), so
+///   <c>MultiHook</c> is retired and a composite validator no longer calls children;</item>
+///   <item>every post-registration change is one atomic, 24h-timelocked configuration intent
+///   with per-resource conflicts instead of a single overwritable pending slot.</item>
+/// </list>
+/// These tests pin the v4 replacements of those guarantees, and the v4 rules that carry the
+/// same intent where the mechanism changed shape.
 /// </summary>
 [TestClass]
 public class Fix_ModuleAbi_Tests
 {
-    private const uint EscapeTimelockSeconds = 604_800;
-
     private static readonly UInt160 Owner =
         UInt160.Parse("0x2323232323232323232323232323232323232323");
 
+    private static readonly TimeSpan IntentWindow =
+        TimeSpan.FromHours(24) + TimeSpan.FromMinutes(1);
+
+    private static readonly byte[] WrongDigest =
+        Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
+
+    /// <summary>
+    /// A raw install action with a caller-chosen digest, so a module that cannot even answer
+    /// <c>getModuleProfile()</c> can be offered to the core.
+    /// </summary>
+    private static object[] RawInstall(int moduleType, UInt160 module, byte[] digest) =>
+        new object[]
+        {
+            RuntimeFixture.ActionInstallModule, (BigInteger)moduleType, module,
+            digest, (object[])Array.Empty<object?>()
+        };
+
+    // ------------------------------------------------------------------
+    // Profile + callback ABI binding happens before any instance exists
+    // ------------------------------------------------------------------
+
     [TestMethod]
-    public void MarkerOnlyVerifierIsRejectedBeforeBinding()
+    public void MarkerOnlyValidatorIsRejectedBeforeBinding()
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 markerOnly = fx.Deploy("MarkerOnlyModule");
 
-        UInt160 account = fx.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            markerOnly,
-            Array.Empty<byte>(),
-            UInt160.Zero,
-            Owner,
-            EscapeTimelockSeconds);
-
-        fx.SetSigners(Owner);
         TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            fx.CallVoid(
-                wallet,
-                "registerAccount",
-                account,
-                markerOnly,
-                Array.Empty<byte>(),
-                UInt160.Zero,
-                Owner,
-                EscapeTimelockSeconds));
+            fx.CreateAccount(wallet, Owner, "abi-marker-validator",
+                (object)RawInstall(RuntimeFixture.ModuleTypeValidator, markerOnly, WrongDigest)));
 
-        StringAssert.Contains(fault.Message, "Verifier V3 validation ABI missing");
+        // No getModuleProfile at all: the canonical-profile binding cannot even read the
+        // bytes it must hash, so the instance never materializes.
+        StringAssert.Contains(fault.Message, "SA_MODULE_CODE_BINDING_MISMATCH");
     }
 
     [TestMethod]
@@ -58,106 +76,42 @@ public class Fix_ModuleAbi_Tests
         UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 markerOnly = fx.Deploy("MarkerOnlyModule");
 
-        UInt160 account = fx.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            UInt160.Zero,
-            Array.Empty<byte>(),
-            markerOnly,
-            Owner,
-            EscapeTimelockSeconds);
-
-        fx.SetSigners(Owner);
         TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            fx.CallVoid(
-                wallet,
-                "registerAccount",
-                account,
-                UInt160.Zero,
-                Array.Empty<byte>(),
-                markerOnly,
-                Owner,
-                EscapeTimelockSeconds));
+            fx.CreateAccount(wallet, Owner, "abi-marker-hook",
+                (object)RawInstall(RuntimeFixture.ModuleTypeHook, markerOnly, WrongDigest)));
 
-        StringAssert.Contains(fault.Message, "Hook V3 pre ABI missing");
+        StringAssert.Contains(fault.Message, "SA_MODULE_CODE_BINDING_MISMATCH");
     }
 
     [TestMethod]
-    public void ExecutionOnlyVerifierReturnsInvalidErc1271ValueWithoutMessageAbi()
+    public void ProfileDigestMismatchIsRejectedBeforeBinding()
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccount");
-        string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
-        string verifierDir = Path.Combine(root, "contracts", "bin", "public", "verifiers");
-        byte[] nef = File.ReadAllBytes(Path.Combine(verifierDir, "NeoNativeVerifier.nef"));
-        ContractManifest manifest = ContractManifest.Parse(
-            File.ReadAllText(Path.Combine(verifierDir, "NeoNativeVerifier.manifest.json")));
-        manifest.Abi.Methods = manifest.Abi.Methods.Where(method =>
-            method.Name is not ("supportsMessageSignatures" or "isValidSignature")).ToArray();
-        UInt160 verifier = fx.DeployArtifact(nef, manifest.ToJson().ToString(), wallet);
+        UInt160 validator = fx.Deploy("validators/P256Validator", wallet.ToArray());
 
-        UInt160 account = fx.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            verifier,
-            Array.Empty<byte>(),
-            UInt160.Zero,
-            Owner,
-            EscapeTimelockSeconds);
+        TestException fault = Assert.ThrowsExactly<TestException>(() =>
+            fx.CreateAccount(wallet, Owner, "abi-digest",
+                (object)RawInstall(RuntimeFixture.ModuleTypeValidator, validator, WrongDigest)));
 
-        fx.SetSigners(Owner);
-        fx.CallVoid(
-            wallet,
-            "registerAccount",
-            account,
-            verifier,
-            Array.Empty<byte>(),
-            UInt160.Zero,
-            Owner,
-            EscapeTimelockSeconds);
-
-        byte[] result = fx.CallBytes(
-            wallet,
-            "isValidSignature",
-            account,
-            new byte[32],
-            new byte[64]);
-
-        CollectionAssert.AreEqual(
-            new byte[] { 0xFF, 0xFF, 0xFF, 0xFF },
-            result,
-            "A V3 verifier without the optional message-signature ABI must fail closed.");
+        StringAssert.Contains(fault.Message, "SA_MODULE_CODE_BINDING_MISMATCH",
+            "The committed digest must equal SHA-256 of the module's own getModuleProfile()");
     }
 
     [TestMethod]
-    public void WrongLifecycleReturnTypeIsRejectedBeforeBinding()
+    public void WrongValidatorLifecycleReturnTypeIsRejectedBeforeBinding()
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 malformed = fx.Deploy("WrongLifecycleAbiModule");
 
-        UInt160 account = fx.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            malformed,
-            Array.Empty<byte>(),
-            UInt160.Zero,
-            Owner,
-            EscapeTimelockSeconds);
-
-        fx.SetSigners(Owner);
+        // The profile is canonical (and hashes correctly), so the failure is the callback
+        // ABI shape: onInstall returns Any instead of Void.
         TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            fx.CallVoid(
-                wallet,
-                "registerAccount",
-                account,
-                malformed,
-                Array.Empty<byte>(),
-                UInt160.Zero,
-                Owner,
-                EscapeTimelockSeconds));
+            fx.CreateAccount(wallet, Owner, "abi-wrong-validator",
+                (object)fx.InstallValidator(malformed)));
 
-        StringAssert.Contains(fault.Message, "Verifier V3 validation ABI missing");
+        StringAssert.Contains(fault.Message, "SA_MODULE_TYPE_UNSUPPORTED");
     }
 
     [TestMethod]
@@ -167,232 +121,191 @@ public class Fix_ModuleAbi_Tests
         UInt160 wallet = fx.Deploy("SmartAccount");
         UInt160 malformed = fx.Deploy("WrongHookLifecycleAbiModule");
 
-        UInt160 account = fx.CallUInt160(
-            wallet,
-            "computeRegistrationAccountId",
-            UInt160.Zero,
-            Array.Empty<byte>(),
-            malformed,
-            Owner,
-            EscapeTimelockSeconds);
-
-        fx.SetSigners(Owner);
+        // preCheck returns Any instead of ByteArray.
         TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            fx.CallVoid(
-                wallet,
-                "registerAccount",
-                account,
-                UInt160.Zero,
-                Array.Empty<byte>(),
-                malformed,
-                Owner,
-                EscapeTimelockSeconds));
+            fx.CreateAccount(wallet, Owner, "abi-wrong-hook",
+                (object)fx.InstallHook(malformed)));
 
-        StringAssert.Contains(fault.Message, "Hook V3 pre ABI missing");
+        StringAssert.Contains(fault.Message, "SA_MODULE_TYPE_UNSUPPORTED");
     }
 
     [TestMethod]
-    public void MultiHookRejectsIncompleteChildBeforeStorage()
+    public void ValidatorWithoutMessageCapabilityFailsClosed()
     {
         RuntimeFixture fx = new();
-        UInt160 core = fx.Deploy("MockVerifierCore");
-        UInt160 multiHook = fx.Deploy("hooks/MultiHook", core.ToArray());
-        UInt160 markerOnly = fx.Deploy("MarkerOnlyModule");
+        UInt160 wallet = fx.Deploy("SmartAccount");
+        UInt160 validator = fx.Deploy("validators/NeoWitnessValidator", wallet.ToArray());
+        UInt160 account = fx.CreateAccount(wallet, Owner, "abi-message",
+            (object)fx.InstallValidator(validator));
+        BigInteger moduleId = fx.ModuleIds(wallet, account, RuntimeFixture.ModuleTypeNameValidator)[0];
 
+        // v3 stripped the optional message-signature ABI from the manifest and expected the
+        // ERC-1271 entry to fail closed. v4 records the capability from the canonical profile
+        // at install, and the module route refuses a validator that did not claim it.
+        object[] envelope =
+        {
+            (BigInteger)RuntimeFixture.ModuleProtocolVersion,
+            moduleId,
+            (BigInteger)1,
+            new object[] { new object[] { new byte[33], new byte[64] } }
+        };
+        byte[] result = fx.CallBytes(wallet, "isValidSignature", account, new byte[32], envelope);
+
+        // The module route folds the kernel's capability refusal into the ERC-1271
+        // magic, so this constant names the rejection row the case encodes.
+        const string CapabilityAbsent = "SA_MODULE_MESSAGE_CAPABILITY_ABSENT";
+        CollectionAssert.AreEqual(
+            new byte[] { 0xFF, 0xFF, 0xFF, 0xFF },
+            result,
+            CapabilityAbsent + ": a validator whose profile omits messageCapability must fail closed, never fault");
+    }
+
+    // ------------------------------------------------------------------
+    // Composition is core-owned: MultiHook retired, hook order composed
+    // ------------------------------------------------------------------
+
+    [TestMethod]
+    public void MultiHookIsNotInstallableInProtocolV4()
+    {
+        RuntimeFixture fx = new();
+        UInt160 wallet = fx.Deploy("SmartAccount");
+        UInt160 multiHook = fx.Deploy("hooks/MultiHook", wallet.ToArray());
+
+        // The retired combiner still binds (its profile is canonical) but refuses to install:
+        // v4 never nests composition, the core owns the hook order.
         TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            fx.CallVoid(core, "forward", multiHook, "setHooks", new object[] { Owner, new UInt160[] { markerOnly } }));
+            fx.CreateAccount(wallet, Owner, "abi-multihook", (object)fx.InstallHook(multiHook)));
 
-        StringAssert.Contains(fault.ToString(), "Child hook pre ABI missing");
-
-        UInt160 validHook = fx.Deploy("hooks/WhitelistHook", core.ToArray());
-        fx.CallVoid(core, "forward", multiHook, "setHooks", new object[] { Owner, new UInt160[] { validHook } });
+        StringAssert.Contains(fault.Message, "MultiHook is not installable in protocol v4",
+            "A retired composable hook must be rejected at install, not at execution");
     }
 
     [TestMethod]
-    public void MultiHook_ReconfigurationAndRemoval_CleansLeafChildState()
+    public void CoreHookOrderComposesInstalledHooks()
     {
         RuntimeFixture fx = new();
-        UInt160 core = fx.Deploy("MockVerifierCore");
-        UInt160 multiHook = fx.Deploy("hooks/MultiHook", core.ToArray());
-        UInt160 firstHook = fx.Deploy("hooks/WhitelistHook", core.ToArray());
-        UInt160 target = UInt160.Parse("0x4444444444444444444444444444444444444444");
+        UInt160 wallet = fx.Deploy("SmartAccount");
+        UInt160 whitelist = fx.Deploy("hooks/WhitelistHook", wallet.ToArray());
+        UInt160 dailyLimit = fx.Deploy("hooks/DailyLimitHook", wallet.ToArray());
 
-        fx.CallVoid(core, "forward", firstHook, "setWhitelist", new object[] { Owner, target, true });
-        fx.CallVoid(core, "forward", multiHook, "setHooks",
-            new object[] { Owner, new UInt160[] { firstHook } });
+        UInt160 account = fx.CreateAccount(wallet, Owner, "abi-hook-order",
+            (object)fx.InstallHook(whitelist), (object)fx.InstallHook(dailyLimit));
 
-        fx.CallVoid(core, "forward", multiHook, "setHooks",
-            new object[] { Owner, Array.Empty<UInt160>() });
-        Assert.IsFalse(fx.CallBoolean(firstHook, "isWhitelisted", Owner, target),
-            "A removed hook child must be cleaned during reconfiguration");
+        BigInteger[] hookIds = fx.ModuleIds(wallet, account, RuntimeFixture.ModuleTypeNameHook);
+        Assert.AreEqual(2, hookIds.Length);
+        CollectionAssert.AreEqual(hookIds, fx.HookOrderIds(wallet, account),
+            "The core hook order must list every installed hook in install order");
 
+        // Removing one child of the (retired) combiner became removing one entry of the
+        // core-owned order; the survivor keeps its execution slot.
+        fx.ConfigureAfterTimelock(wallet, account, Owner,
+            (object)RuntimeFixture.UninstallModule(hookIds[0]));
+        CollectionAssert.AreEqual(new[] { hookIds[1] }, fx.HookOrderIds(wallet, account),
+            "Uninstall must drop the instance from the core hook order");
     }
 
     [TestMethod]
-    public void MultiSigRejectsUndeployedChildBeforeStorage()
+    public void ThresholdPolicyRejectsUninstalledMember()
     {
         RuntimeFixture fx = new();
-        UInt160 core = fx.Deploy("MockVerifierCore");
-        UInt160 multiSig = fx.Deploy("verifiers/MultiSigVerifier", core.ToArray());
-        UInt160 undeployed = UInt160.Parse("0xabababababababababababababababababababab");
+        UInt160 wallet = fx.Deploy("SmartAccount");
 
+        // v3 pinned that a composite root validates its children before storing them. v4 has
+        // no child-of-verifier roster: the core owns the threshold policy and every member
+        // must already be an installed validator instance.
         TestException fault = Assert.ThrowsExactly<TestException>(() =>
-            fx.CallVoid(core, "forward", multiSig, "setConfig", new object[] { Owner, new UInt160[] { undeployed }, 1 }));
+            fx.CreateAccount(wallet, Owner, "abi-policy-member",
+                (object)RuntimeFixture.SetThresholdPolicy(0, 1,
+                    new[] { new BigInteger(99) }, true)));
 
-        StringAssert.Contains(fault.ToString(), "Child verifier is not deployed");
+        StringAssert.Contains(fault.Message, "SA_MODULE_NOT_INSTALLED");
     }
 
+    // ------------------------------------------------------------------
+    // Configuration intents: timelock, digest binding, resource conflicts
+    // ------------------------------------------------------------------
+
     [TestMethod]
-    public void CompositeRequiresPublishedRosterBeforeTimelockedLeafConfiguration()
+    public void ConfigurationIntentRequiresMaturityAndTheExactActionList()
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccount");
-        UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
-        UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
-        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,
-            Array.Empty<byte>(), UInt160.Zero, Owner, EscapeTimelockSeconds);
-        fx.SetSigners(Owner);
-        fx.CallVoid(wallet, "registerAccount", account, root, Array.Empty<byte>(),
-            UInt160.Zero, Owner, EscapeTimelockSeconds);
+        UInt160 validator = fx.Deploy("validators/P256Validator", wallet.ToArray());
+        UInt160 other = fx.Deploy("validators/SessionKeyValidator", wallet.ToArray());
+        UInt160 account = fx.CreateAccount(wallet, Owner, "abi-intent");
+        object[] install = fx.InstallValidator(validator);
 
-        object[] leafArgs = { account, new UInt160[] { Owner }, 1 };
-        TestException unpublished = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
-        StringAssert.Contains(unpublished.Message, "Invalid child verifier configuration");
-        Assert.IsFalse(fx.CallBoolean(wallet, "hasPendingVerifierCall", account));
-        Assert.IsTrue(fx.Call(child, "getConfig", account).IsNull);
+        BigInteger intentId = fx.ProposeConfiguration(wallet, account, Owner, (object)install);
 
-        object[] rootArgs = { account, new UInt160[] { child }, 1 };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", rootArgs));
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
-        TestException early = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
-        StringAssert.Contains(early.Message, "Timelock not elapsed");
-        Assert.IsTrue(fx.Call(child, "getConfig", account).IsNull);
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        fx.CallVoid(wallet, "callVerifierChild", account, child, "setConfig", leafArgs);
-        Assert.AreEqual(System.Numerics.BigInteger.One, fx.CallInteger(child, "getThreshold", account));
+        TestException immature = Assert.ThrowsExactly<TestException>(() =>
+            fx.ConfirmConfiguration(wallet, account, Owner, intentId, (object)install));
+        StringAssert.Contains(immature.Message, "SA_INTENT_IMMATURE",
+            "A module install must serve the uniform 24h module-change delay");
+        Assert.AreEqual(0, fx.ModuleIds(wallet, account, RuntimeFixture.ModuleTypeNameValidator).Length,
+            "An immature intent must not bind anything");
+
+        fx.AdvanceTime(IntentWindow);
+        TestException swapped = Assert.ThrowsExactly<TestException>(() =>
+            fx.ConfirmConfiguration(wallet, account, Owner, intentId,
+                (object)fx.InstallValidator(other)));
+        StringAssert.Contains(swapped.Message, "SA_OPERATION_MALFORMED",
+            "A matured intent is bound to its recorded action digest");
+
+        fx.ConfirmConfiguration(wallet, account, Owner, intentId, (object)install);
+        Assert.AreEqual(1, fx.ModuleIds(wallet, account, RuntimeFixture.ModuleTypeNameValidator).Length);
+        Assert.IsFalse(fx.AccountDefaultOperationAuthorization(wallet, account),
+            "Installing the first validator disables the built-in operation route");
     }
 
     [TestMethod]
-    public void PendingLeafConfigurationIsInvalidatedWhenVerifierRootChanges()
+    public void IndependentIntentsCoexistButConflictingOnesAreRejected()
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccount");
-        UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
-        UInt160 firstRoot = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
-        UInt160 secondRoot = fx.Deploy("MockVerifierCore");
-        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", firstRoot,
-            Array.Empty<byte>(), UInt160.Zero, Owner, EscapeTimelockSeconds);
-        fx.SetSigners(Owner);
-        fx.CallVoid(wallet, "registerAccount", account, firstRoot, Array.Empty<byte>(),
-            UInt160.Zero, Owner, EscapeTimelockSeconds);
+        UInt160 first = fx.Deploy("validators/NeoWitnessValidator", wallet.ToArray());
+        UInt160 second = fx.Deploy("validators/P256Validator", wallet.ToArray());
+        UInt160 account = fx.CreateAccount(wallet, Owner, "abi-intent-conflict");
 
-        object[] rootArgs = { account, new UInt160[] { child }, 1 };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", rootArgs));
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
-        object[] leafArgs = { account, new UInt160[] { Owner }, 1 };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
-        Assert.IsTrue(fx.CallBoolean(wallet, "hasPendingVerifierCall", account));
+        // v3 had one pending verifier-call slot that could not be overwritten. v4 has a
+        // bounded index of intents that conflict per resource: two different modules are
+        // independent proposals, the same module contract is one resource.
+        BigInteger firstIntent = fx.ProposeConfiguration(wallet, account, Owner, (object)fx.InstallValidator(first));
+        BigInteger secondIntent = fx.ProposeConfiguration(wallet, account, Owner, (object)fx.InstallValidator(second));
+        Assert.AreNotEqual(firstIntent, secondIntent);
+        Assert.AreEqual(2, PendingIntentCount(fx, wallet, account),
+            "Independent intents must coexist instead of overwriting each other");
 
-        fx.CallVoid(wallet, "updateVerifier", account, secondRoot, Array.Empty<byte>());
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        fx.CallVoid(wallet, "confirmVerifierUpdate", account);
-        TestException replaced = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
-        StringAssert.Contains(replaced.Message, "Verifier child configuration ABI missing");
-        Assert.IsTrue(fx.Call(child, "getConfig", account).IsNull,
-            "A child proposal under a replaced root must never initialize the child.");
+        TestException conflict = Assert.ThrowsExactly<TestException>(() =>
+            fx.ProposeConfiguration(wallet, account, Owner, (object)fx.InstallValidator(first)));
+        StringAssert.Contains(conflict.Message, "SA_INTENT_CONFLICT",
+            "Two unresolved intents must never write the same module resource");
+        Assert.AreEqual(2, PendingIntentCount(fx, wallet, account),
+            "The rejected proposal must not disturb the pending set");
     }
 
     [TestMethod]
-    public void SuccessfulLeafMutationInvalidatesFailedRootConfigurationIntent()
+    public void ExpiredIntentCannotBeConfirmed()
     {
         RuntimeFixture fx = new();
         UInt160 wallet = fx.Deploy("SmartAccount");
-        UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
-        UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
-        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,
-            Array.Empty<byte>(), UInt160.Zero, Owner, EscapeTimelockSeconds);
-        fx.SetSigners(Owner);
-        fx.CallVoid(wallet, "registerAccount", account, root, Array.Empty<byte>(),
-            UInt160.Zero, Owner, EscapeTimelockSeconds);
+        UInt160 validator = fx.Deploy("validators/P256Validator", wallet.ToArray());
+        UInt160 account = fx.CreateAccount(wallet, Owner, "abi-intent-expiry");
+        object[] install = fx.InstallValidator(validator);
 
-        object[] rootArgs = { account, new UInt160[] { child }, 1 };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", rootArgs));
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
+        BigInteger intentId = fx.ProposeConfiguration(wallet, account, Owner, (object)install);
+        // Maturity plus the 7-day expiry window.
+        fx.AdvanceTime(TimeSpan.FromDays(8) + TimeSpan.FromHours(1));
 
-        // Root provisioning may precede leaf key configuration. Duplicate signer
-        // domains are rejected when validating or posting an execution instead.
-        object[] invalidRootArgs = { account, new UInt160[] { child, child }, 2 };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
-        var failedRootProposedAt = fx.CallInteger(wallet, "getPendingVerifierCallTime", account);
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        TestException duplicate = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
-        StringAssert.Contains(duplicate.Message, "Duplicate verifier");
-
-        object[] leafArgs = { account, new UInt160[] { Owner }, 1 };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        fx.CallVoid(wallet, "callVerifierChild", account, child, "setConfig", leafArgs);
-        Assert.AreEqual(System.Numerics.BigInteger.One, fx.CallInteger(child, "getThreshold", account));
-        Assert.IsFalse(fx.CallBoolean(wallet, "hasPendingVerifierCall", account));
-
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", invalidRootArgs),
-            "A successful child mutation must require a fresh root proposal and timelock.");
-        Assert.IsTrue(fx.CallInteger(wallet, "getPendingVerifierCallTime", account) > failedRootProposedAt);
-        TestException early = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
-        StringAssert.Contains(early.Message, "Timelock not elapsed");
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        TestException stillInvalid = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "callVerifier", account, "setConfig", invalidRootArgs));
-        StringAssert.Contains(stillInvalid.Message, "Duplicate verifier");
+        TestException expired = Assert.ThrowsExactly<TestException>(() =>
+            fx.ConfirmConfiguration(wallet, account, Owner, intentId, (object)install));
+        StringAssert.Contains(expired.Message, "SA_INTENT_EXPIRED");
+        Assert.AreEqual(0, fx.ModuleIds(wallet, account, RuntimeFixture.ModuleTypeNameValidator).Length);
     }
 
-    [TestMethod]
-    public void PendingModuleCallCannotBeOverwrittenWhileInFlight()
+    private static int PendingIntentCount(RuntimeFixture fx, UInt160 core, UInt160 accountId)
     {
-        RuntimeFixture fx = new();
-        UInt160 wallet = fx.Deploy("SmartAccount");
-        UInt160 child = fx.Deploy("verifiers/NeoNativeVerifier", wallet.ToArray());
-        UInt160 root = fx.Deploy("verifiers/MultiSigVerifier", wallet.ToArray());
-        UInt160 account = fx.CallUInt160(wallet, "computeRegistrationAccountId", root,
-            Array.Empty<byte>(), UInt160.Zero, Owner, EscapeTimelockSeconds);
-        fx.SetSigners(Owner);
-        fx.CallVoid(wallet, "registerAccount", account, root, Array.Empty<byte>(),
-            UInt160.Zero, Owner, EscapeTimelockSeconds);
-
-        object[] rootArgs = { account, new UInt160[] { child }, 1 };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", rootArgs));
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        fx.CallVoid(wallet, "callVerifier", account, "setConfig", rootArgs);
-
-        // Stage a leaf configuration, then try to stage a DIFFERENT module call while the
-        // original 24h window is still running. Audit fix L-1: the single pending slot must
-        // not be silently overwritten (which previously also reset the timelock).
-        object[] leafArgs = { account, new UInt160[] { Owner }, 1 };
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifierChild", account, child, "setConfig", leafArgs));
-        var pendingAt = fx.CallInteger(wallet, "getPendingVerifierCallTime", account);
-
-        object[] otherRootArgs = { account, new UInt160[] { child, child }, 2 };
-        TestException overwritten = Assert.ThrowsExactly<TestException>(() =>
-            fx.Call(wallet, "callVerifier", account, "setConfig", otherRootArgs));
-        StringAssert.Contains(overwritten.Message, "Pending module call in flight");
-        Assert.AreEqual(pendingAt, fx.CallInteger(wallet, "getPendingVerifierCallTime", account),
-            "The rejected overwrite must not reset the original pending-call window.");
-        Assert.IsTrue(fx.CallBoolean(wallet, "hasPendingVerifierCall", account),
-            "The original pending call must survive the rejected overwrite attempt.");
-
-        // Once the original pending call expires, a different call may take the slot
-        // (expiry is the implicit cancellation; the slot itself stays single).
-        fx.AdvanceTime(TimeSpan.FromDays(1));
-        Assert.IsFalse(fx.CallBoolean(wallet, "callVerifier", account, "setConfig", otherRootArgs));
-        Assert.IsTrue(fx.CallInteger(wallet, "getPendingVerifierCallTime", account) > pendingAt);
+        Neo.VM.Types.Array ids =
+            (Neo.VM.Types.Array)fx.Call(core, "getPendingConfigurationIntentIds", accountId);
+        return ids.Count;
     }
 }

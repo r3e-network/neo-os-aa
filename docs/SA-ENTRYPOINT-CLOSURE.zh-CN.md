@@ -31,11 +31,11 @@ python3 formal/refinement/entrypoint_inventory.py \
 ```
 
 当前工件身份为 NEF SHA256
-`9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`
-（script `909ba759b66a4d84a4bd2aa2a2a78ef611c8b27e834b460a90f8ff83d387e1cd`，
-manifest `a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31`），
+`2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb`
+（script `6eef7f70838b1bb3b8bed9a6a515152a6b0d86a102a11ba489d74c422cbf715f`，
+manifest `f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f`），
 对应清单 SHA256
-`65a73399659594d72b8ae063f14fc64ed18120719111165b69f03785f81d7195`。
+`1cfeed33a34cc80d87fe95c68df8f3c94c00a6e4c1ffa106993ccef271b29df6`。
 其目标是普通 Neo 3.10.1 源码提交
 `d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d` 与 Neo.VM 源码提交
 `004cd6070a940405818d9357638277dd44407e2e`。
@@ -48,31 +48,35 @@ manifest `a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31`）�
 `compiler.loadedAssemblies` 记录）发生移动。判断两次构建是否为同一工件时，应比较这些
 字段，而不是清单摘要。
 
-当前结果归集了 109 个 manifest 条目、197 个字节方法、953 个类型化源码方法、371 个导出的
-源码 initializer，以及全部 10,594 条指令／30,678 个 script 字节。197 个 debug 身份全部
-唯一匹配到类型化方法的显示名，108 个有源码支撑的 ABI 描述符匹配其 manifest 描述符。剩下
+当前结果归集了 81 个 manifest 条目、276 个字节方法、400 个类型化源码方法、378 个导出的
+源码 initializer，以及全部 18,045 条指令／44,187 个 script 字节。276 个 debug 身份全部
+唯一匹配到类型化方法的显示名，80 个有源码支撑的 ABI 描述符匹配其 manifest 描述符。剩下
 那个 manifest 条目 `_initialize/0` 没有类型化／debug 方法映射，它的精确区间是
-`[29996,30678)`：682 字节、182 条指令，且仍未被源码绑定。
+`[43470,44187)`：717 字节、236 条指令，且仍未被源码绑定。
 
-图中有 426 个直接调用点、625 个外部效应点（77 个 token 调用与 548 个系统调用）、20 个
+图中有 640 个直接调用点、579 个外部效应点（91 个 token 调用与 488 个系统调用）、69 个
 局部控制流环分量、1 个调用递归分量，没有 `CALLA`，也没有 `PUSHA`。位于源码／debug 方法
-区间之外的 1,118 个字节被保留在 41 个生成／未映射区间中。initializer 归集了 682 个结构
-可达字节；另外 40 个区间中的 436 个字节，从保守根集合出发沿显式解码边没有路径可达。它们
+区间之外的 1,230 个字节被保留在 43 个生成／未映射区间中。initializer 归集了 717 个结构
+可达字节；另外 42 个区间中的 513 个字节，从保守根集合出发沿显式解码边没有路径可达。它们
 被标记为 `structurallyUnreachable`，且 `semanticDead:false`。未来一旦出现间接调用，这个
 结论即失效。本结果不对外部宿主绕过正常 manifest 派发规则所引入的执行作出任何断言。
 
 历史工件 NEF
 `4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198`
-（`[13557,13838)` helper，slot 34，100 个条目）与
+（`[13557,13838)` helper，slot 34，100 个条目）、
 `6c347dac40bd562edda3216e40c7007fad3a2bb24020013e730c58bd4ceed1c3`
-（`[17762,18043)` helper，slot 38，105 个条目）都是历史记录。它们的布局、slot 与计数
-不得套用到当前工件上。
+（`[17762,18043)` helper，slot 38，105 个条目）与
+`9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`
+（`[18900,19181)` helper，slot 38，109 个条目）都是历史记录。它们的布局、slot 与计数
+不得套用到当前工件上。v3 的私有 helper `BuildHookOperationParams`（`[15136,15160)`，
+24 字节／21 条指令）在本工件中完全没有对应物：v4 源码与解码出的方法表里都不存在这个名字，
+它曾占据的区间已不存在，固定它的泳道属于退役而不是重编号。
 
 源码图与字节图是彼此独立的：源码图记录已绑定的方法、构造函数、运算符与转换引用、
 属性／字段引用、源码循环以及未导出的元数据。编译器内联或内建指令降级不能成为把这两个图
 等同起来的理由。缺失的外部源码方法与未导出元数据保持未闭合。每个 ABI 闭包包含其方法体／
 被调用者的字节区间、传递引用的源码成员以及公共的 initializer 依赖。完整计数仍为
-`fullUnprovedCount:109`。外部／静态／间接效应按完整方法体加 initializer 作用域分别上报；
+`fullUnprovedCount:81`。外部／静态／间接效应按完整方法体加 initializer 作用域分别上报；
 独立的 `body*` 与 `initialization*` 字段保留其来源，避免仅选中纯方法体时掩盖了公共初始化
 效应。
 
@@ -85,41 +89,43 @@ manifest `a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31`）�
 [SA-CLOSURE-GATE.md](SA-CLOSURE-GATE.md) 中的聚合门禁会报告其选定泳道精化了哪些入口方法体，
 按互不重叠的 `entrypointCoverage` 桶划分：`fullyClosed`、`bodyLevelRefined` 与
 `dispatchLevelOnly`。这些桶只描述门禁自身选定的作用域。本清单仍然要求每个 manifest 条目
-保留其全部义务，当前 `fullUnprovedCount` 为 `109`。
+保留其全部义务，当前 `fullUnprovedCount` 为 `81`。
 
 自动选出的首批公开候选为：
 
 | ABI 入口 | 精确方法体区间 | 字节／指令数 | 尚缺的方法体工作 |
 | --- | --- | --- | --- |
-| `getAccountImplementationId/0` | `[22447,22480)` | 33 / 3 | 源码字符串／ABI 观察以及 VM 方法体定理 |
-| `supportsExecutionMode/1` | `[22480,22531)` | 51 / 18 | 布尔 `PUSHT`、字符串比较的边界／故障以及源码投影 |
-| `supportsModuleType/1` | `[22531,22580)` | 49 / 18 | 同样的要求 |
+| `getAccountImplementationId/0` | `[39563,39596)` | 33 / 3 | 源码字符串／ABI 观察以及 VM 方法体定理 |
+| `supportsModuleType/1` | `[39947,39979)` | 32 / 12 | 布尔 `PUSHT`、字符串比较的边界／故障以及源码投影 |
+| `supportsExecutionMode/1` | `[39979,40030)` | 51 / 18 | 同样的要求 |
 
 三者都没有静态字段、外部效应、内部调用或调用图环。它们的方法体证明单独在
 [SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md#public-pure-method-reference-refinement)
 中展开。它们的完整入口点依赖在本清单中仍然未闭合。
 
-自动选择还找出七个没有显式外部效应或调用图环的私有源码 helper。当前 `CapMethodVm.v`
-解码文本识别 `BuildHookOperationParams` 的全部字节操作码，区间 `[15136,15160)`，24 字节／
-21 条指令，源码位于 `SmartAccount.Execution.cs:298–309`。这是下一个最小的有用纯 helper
-候选：它使用现有的参数／堆／帧操作码，从一个 `UserOperation` 与调用方参数构造打包的
-参数数组。仅凭解码器的文本识别不能证明它的取值、别名、故障、源码投影或通用帧行为。
+自动选择还找出 29 个没有显式外部效应或调用图环的私有源码 helper，其中七个无需扩展
+`CapMethodVm.v` 的解码文本。最小的有用候选是
+`IsMemberOfActivePolicy`，`[10685,10694)`，9 字节／7 条指令，源码位于
+`SmartAccount.Modules.cs:333–334`，它询向一个模块实例是否为当前策略的成员——对已物化状态
+的布尔读取；其次是 `ExpectBool`，`[4114,4121)`，7 字节／4 条指令，
+`SmartAccount.Modules.cs:1472–1475`。仅凭解码器的文本识别不能证明它们的取值、别名、
+故障、源码投影或通用帧行为。
 
 | 其他 helper | 区间 | 字节／指令数 | 当前 CapMethodVm 解码文本缺失的操作码 |
 | --- | --- | --- | --- |
-| `UInt32ToLittleEndianBytes` | `[293,404)` | 111 / 71 | AND, JMPGE, JMPLE, NEWBUFFER, PUSHINT8, SHR |
-| `ValidateAccountId` | `[6155,6234)` | 79 / 27 | ISTYPE, NUMEQUAL, PUSHF, PUSHINT8, SIZE |
-| `AssertTargetIsNotProtocolOwned` | `[13687,14021)` | 334 / 32 | 无 |
-| `IsUnsignedIntegerWithinBytes` | `[14377,14594)` | 217 / 101 | AND, CONVERT, DEC, JMPGE, JMPLE, JMP_L, LT, PUSHF, PUSHINT32/64, PUSHT, SIZE |
-| `ValidatePlatformAccountBinding` | `[20225,20317)` | 92 / 24 | PUSHF, SIZE |
-| `DataPushInstructionSize` | `[27609,29009)` | 1400 / 568 | AND, GE, JMPGE, JMPIFNOT_L, JMPLE, JMP_L, PUSHF, PUSHINT8/32/64, PUSHT |
+| `UInt32ToLittleEndianBytes` | `[491,602)` | 111 / 71 | AND, JMPGE, JMPLE, NEWBUFFER, PUSHINT8, SHR |
+| `ValidateAccountId` | `[1467,1546)` | 79 / 27 | ISTYPE, NUMEQUAL, PUSHF, PUSHINT8, SIZE |
+| `AssertTargetIsNotProtocolOwned` | `[5772,6106)` | 334 / 32 | 无 |
+| `IsUnsignedIntegerWithinBytes` | `[20806,21023)` | 217 / 101 | AND, CONVERT, DEC, JMPGE, JMPLE, JMP_L, LT, PUSHF, PUSHINT32/64, PUSHT, SIZE |
+| `ValidatePlatformAccountBinding` | `[37302,37394)` | 92 / 24 | PUSHF, SIZE |
+| `DataPushInstructionSize` | `[41978,43378)` | 1400 / 568 | AND, GE, JMPGE, JMPIFNOT_L, JMPLE, JMP_L, PUSHF, PUSHINT8/32/64, PUSHT |
 
 机器画像由当前参考解码器文本推导得到，对它固定该模型的哈希，并明确上报其有限作用域。
 它不是受支持的指令语义证明。独立的公开纯方法模型扩展了 `PUSHT`；本清单不会悄悄地把该
 扩展视为 `CapMethodVm` 的一部分。
 
 唯一另一个没有静态字段效应或环的公开候选是 `computeArgsHash/1`，区间
-`[23686,23739)`，53 字节／13 条指令，源码位于 `SmartAccount.State.cs:274–283`。它需要
+`[40407,40460)`，53 字节／13 条指令，源码位于 `SmartAccount.State.cs:301–310`。它需要
 `StdLib.serialize` 与 `System.Contract.Call` 处理器对应关系，因此被归类为需要外部环境
 规范。方法名或表面上的源码纯度都不能消除这些真实的字节依赖。
 
@@ -174,7 +180,8 @@ manifest 没有描述的调用。在当前重测中，195 个探测的参数个�
 manifest 而不是源码文件。其中十个步骤落在插件上，其声明的返回类型从该插件自己的 manifest
 读出。第四个做八十四次调用，部署的是**另一方**而不是插件：平台注册通道与市场托管都断言其
 调用方是合约，因此注册服务合约本身、一个转发器与一个 paymaster 被安装进去，账户自身受
-注册门禁与市场门禁约束的入口在这些之后运行。在固定的工件上合计：228 次调用，186 次停机
+注册门禁与市场门禁约束的入口在这些之后运行。在这四个文件上次驱动的 109 条目工件上合计：
+228 次调用，186 次停机
 与 42 次故障，且故障原因与文件预测一致；228 帧全部与按操作码表编写的编码器逐字节一致；
 228 次全部落在声明的时刻与签名者上；三十八条读取链接逐字节成立；每一个声明的整数、布尔
 与数组长度都匹配。
@@ -186,13 +193,15 @@ manifest 而不是源码文件。其中十个步骤落在插件上，其声明�
 其改变的状态作证（两处平台注册、owner 轮换与三次托管状态迁移），5 个通过面向插件的回调
 路径到达，3 个声明为未到达：`_deploy/2` 与 `_initialize/0`——`System.Contract.Call` 因
 其名字以下划线开头而根本拒绝调用——以及 `rotatePlatformAccountOwner/3`，一个只有一行的
-别名，mock 调用的是它的目标。当前工件带有 109 个条目；闭合运行会针对它重新测量这份分解，
-而不是继承 105 条目的划分。在当前工件上重测：88 个条目由四个文件中的某个步骤按名调用
+别名，mock 调用的是它的目标。109 条目工件重新测量了这份分解，而不是继承 105 条目的划分：
+88 个条目由四个文件中的某个步骤按名调用
 （其中包括 `finalizeEscape` 的两个元数），6 个在调用方之后执行并由其改变的状态作证——
 注册器之后的两处平台注册与 owner 轮换应用，市场之后的三次托管迁移——1 个通过插件回调
 到达（`clearHookDependencies/1`，`MultiHook` 的 `clearAccount` 无条件调用它），14 个声明
 为未到达：两个引擎入口点，以及十二个没有场景驱动的运维条目（冻结生命周期、依赖写入者、
-子 hook 转发器、模拟读取与四次安全读取；对应关系文档列出了它们）。匹配的形状仍然不能说明
+子 hook 转发器、模拟读取与四次安全读取；对应关系文档列出了它们）。本清单中的 81 条目工件
+尚未经过这四个文件的驱动：场景泳道需要它的一份全新导出器 dump，而这份分解只能来自它的
+回执，因此这里不对它作出任何分解声明。匹配的形状仍然不能说明
 它携带了哪个取值。边界对是关于时间的同类陈述——回执显示测试装置处于两个时刻且结束方式
 不同，但对链上会盖上什么时间戳不作断言。当前场景还驱动了修正后的注册器取消路径：
 `cancelPlatformRegistrar` 在配置的时间锁完成，并发出 32 字节的
@@ -238,7 +247,7 @@ AAPlatformRegistrar 服务合约本身而不是已删除的 mock，并且 2026-1
   `SOURCE_FRONTEND_AND_COMPILER_CORRESPONDENCE` 得以闭合，然后精化 ApplicationEngine 派发
   以及 gas／异常／交易层。这就是今天 `implementationVerified` 的含义，而它是研究级工作量：
   为编译器接受的那部分 C# 给出语义，再加上代码生成。
-- **路线 B（信任字节码）。** 从主张中剔除编译器义务，改为针对全部 109 个入口点，从 NEF
+- **路线 B（信任字节码）。** 从主张中剔除编译器义务，改为针对全部 81 个入口点，从 NEF
   字节与经复核的 debug 映射出发证明精化。现有泳道已经按这种方式工作——它们解码固定的
   script，从不信任源码来获得语义——因此这条路靠重复推进而不是靠新理论。它对源码给出的是
   一个**更弱**的陈述（字节码匹配某份规范；从 C# 到这些字节的映射被假定），而对工件给出的
@@ -251,37 +260,57 @@ AAPlatformRegistrar 服务合约本身而不是已删除的 mock，并且 2026-1
 
 ### 十四个只读条目并不是廉价的胜利
 
+本工件上仍剩下十四个只读 ABI 条目——十三个方法名，因为 `getNonce` 有两个参数个数。
+v3 的待处理更新读取器 `getPendingVerifierUpdate` 与 `getPendingHookUpdate` 已不存在
+（控制记录改由 `getPendingConfiguration` 回答），而 `isValidSignature/3` 现在只是
+`[33325,34216)` 处独立 `IsValidSignatureCore` 方法体的 28 字节包装——后者 891 字节、409 条指令、
+十四个直接被调用者，以及 `sha256`、`verifyWithECDsa` 两个 token 和
+`System.Runtime.GasLeft`／`System.Runtime.GetCallingScriptHash` 两个系统调用。
+
+| 只读条目 | 精确方法体区间 | 字节／指令 | 直接被调用者 |
+| --- | --- | --- | --- |
+| `isOwnerOnlyRecovery/1` | `[17700,17718)` | 18 / 7 | `ValidateAccountId` `1467`、`HasOwnerOnlyRecovery` `17204` |
+| `isAccountFrozen/1` | `[17663,17700)` | 37 / 20 | `ValidateAccountId` `1467`、`GetAccountControl` `1566`、`HasLegacyFrozenLatch` `17156` |
+| `isMarketEscrowActive/1` | `[14388,14430)` | 42 / 14 | `GetMarketEscrowContract` `14430`、`GetMarketEscrowListingId` `14496` |
+| `getNonce/3` | `[35916,36022)` | 106 / 47 | `ValidateAccountId` `1467`、`RequireAccountControl` `30206`、`ResolveCredentialGeneration` `35797`、`ReadNonceCursor` `24023` 等七个 |
+| `getNonce/2` | `[40313,40407)` | 94 / 47 | `ValidateAccountId` `1467`、`IsUnsignedIntegerWithinBytes` `20806` |
+| `isModuleInstalled/4` | `[40220,40286)` | 66 / 26 | `ValidateAccountId` `1467`、`FindModuleIdByContract` `8613`、`ModuleTypeCodeFromName` `40030` |
+| `getPendingConfiguration/2` | `[31368,31422)` | 54 / 40 | `ValidateAccountId` `1467`、`GetConfigurationIntent` `27334` |
+| `isMarketService/1` | `[33147,33196)` | 49 / 17 | `IsRegisteredMarketService` `32012` |
+| `isValidSignature/3` | `[33297,33325)` | 28 / 14 | `IsValidSignatureCore` `33325`、`InvalidSignatureMagic` `34216` |
+| `isUserOpExecutionActive/0` | `[31440,31500)` | 60 / 35 | 无 |
+| `getAccountIdByProxy/1` | `[38688,38832)` | 144 / 51 | 无 |
+| `getPlatformAccountBinding/1` | `[38832,38858)` | 26 / 10 | `ValidateAccountId` `1467` |
+| `getProxyScriptHash/1` | `[37830,37914)` | 84 / 29 | `BuildProxyVerificationScript` `37914` |
+| `getAccountImplementationId/0` | `[39563,39596)` | 33 / 3 | 无 |
+
 用存储 getter 泳道自己的固定模型（`storage_getter_proofs.render_vm_program`，并准入固定的
-`StdLib.deserialize` token）渲染每个剩余的只读区域，十四个全部失败关闭，而失败的原因比
+`StdLib.deserialize` token）渲染每个区域，十四个全部失败关闭，而失败的原因比
 结论本身更重要：
 
-- 有五个调用多于一个 helper，停在 `CALL/CALL_L target N is not the
-  pinned shared callee`：`isOwnerOnlyRecovery` 调用三个（`GetAccountState`
-  `3471`、`HasOwnerOnlyRecovery` `3603`、`ValidateAccountId` `6155`）；
-  `isAccountFrozen`（`HasAccountFrozen` `3654`、`ValidateAccountId`）、
-  `isMarketEscrowActive`（`GetMarketEscrowContract` `3764`、
-  `GetMarketEscrowListingId` `3830`）、`getNonce`（`ValidateAccountId`、
-  `IsUnsignedIntegerWithinBytes` `14377`）与 `isValidSignature`
-  （`ModuleExposesSafeMethod` `1756`、`GetAccountState`）各调用两个。该泳道对每个 getter
+- 有八个调用多于一个 helper，停在 `CALL/CALL_L target N is not the
+  pinned shared callee`：`isAccountFrozen/1` 与 `isModuleInstalled/4` 各调用三个，
+  `getNonce/3` 调用七个，而 `isOwnerOnlyRecovery/1`、`isMarketEscrowActive/1`、
+  `getNonce/2`、`getPendingConfiguration/2` 与 `isValidSignature/3` 各调用两个。该泳道对每个 getter
   只绑定一个共享被调用者，因此它们需要多被调用者组合才能写下任何证明——这是结构扩展，
   不是再加一行表格。
-- `isModuleInstalled` 与多被调用者的 `isValidSignature` 还会读取
-  `LDARG2`/`LDARG1`，超出固定的单操作数被调用者参数绑定，因此该绑定必须与组合工作一起
+- `isModuleInstalled/4`、`getNonce/3`、`getPendingConfiguration/2` 与
+  `isValidSignature/3` 还会读取 `LDARG1`/`LDARG2`，超出固定的单操作数被调用者参数绑定，因此该绑定必须与组合工作一起
   放宽。
-- `getPendingVerifierUpdate`、`getPendingHookUpdate` 与
-  `getPlatformAccountBinding` 因 `INITSLOT` 形状超出固定的帧布局而失败——这是帧形状扩展，
+- `getPlatformAccountBinding/1` 因 `INITSLOT` 形状 超出固定的帧布局而失败——这是帧形状扩展，
   不是新语义。
-- `isUserOpExecutionActive` 发出了一对固定 GetContext/StorageGet 之外的系统调用；
-  `getProxyScriptHash` 调用 CryptoLib 的 `sha256` token，而该泳道只固定了
-  `StdLib.deserialize` 的 token 身份。各需要再固定一个外部身份，而不是新模型。
-- `isMarketService` 因 `PUSHT` 失败，固定模型不渲染它。
-- `getAccountImplementationId` 是一个三条指令的跳转 thunk，自身没有 `INITSLOT`；它的方法体
+- `isUserOpExecutionActive/0` 发出 `System.Runtime.GetScriptContainer` 并读取一条经 `deserialize`
+  的 in-flight 记录，超出固定的一对 GetContext/StorageGet；`getProxyScriptHash/1` 同时调用 CryptoLib 的
+  `sha256` 与 `ripemd160` token，而该泳道只固定了 `StdLib.deserialize` 的 token 身份。各需要再固定一个外部
+  身份，而不是新模型。
+- `isMarketService/1` 与 `isModuleInstalled/4` 因 `PUSHT` 失败，固定模型不渲染它。
+- `getAccountImplementationId/0` 是一个两条指令的跳转 thunk，自身没有 `INITSLOT`；它的方法体
   属于公开纯方法泳道。
-- `getAccountIdByProxy` 因 `Expected exactly one cast width witness` 失败：其可空
+- `getAccountIdByProxy/1` 因 `Expected exactly one cast width witness` 失败：其可空
   `UInt160` 读取同时带有 `DUP / ISNULL / SIZE / JMPEQ / THROW` 守卫与类型转换，因此
   `direct` 族的单见证假设覆盖不了它。它还需要内联的键拼接，以及容忍一个前置的
   `ExecutionEngine.Assert`。
 
-因此这些只读条目是：一次多被调用者扩展、一次被调用者参数放宽、两个额外固定的外部身份，以及
+因此这些只读条目是：一次多被调用者扩展、一次被调用者参数放宽、三个额外固定的外部身份，以及
 若干帧／类型转换见证形状，而不是十四个彼此独立的一行改动。任何安排这项工作的计划，都应
 把泳道工作排在前面，把入口工作排在后面。

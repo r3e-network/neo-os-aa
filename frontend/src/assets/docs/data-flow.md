@@ -33,7 +33,7 @@ Those boundaries do different jobs:
 
 | Boundary | What lives there | Who can mutate it | Why it exists |
 | --- | --- | --- | --- |
-| On-chain master contract | Admins, managers, thresholds, whitelist / blacklist, verifier, dome, limits, nonces | Authorized SA governance flows | Source of truth for authorization and execution |
+| On-chain master contract | Control record (status, custody, recovery authority, epoch, configuration nonce), module instances, hook order, threshold policies, pending configuration intents, nonce cursors | Configuration intents and execution | Source of truth for authorization and execution |
 | Browser memory | Current workspace state, selected payload mode, active wallet session | Current browser session | Fast UX and staging |
 | `localStorage` fallback | Local-only drafts and preferences | Same browser only | Offline / no-Supabase development path |
 | Supabase | Draft body, append-only signatures, bounded activity, bounded receipts, scoped slugs | Scope-limited collaboration flows | Shared review and multi-party coordination |
@@ -61,61 +61,64 @@ Practical meaning:
 
 ## 4. Storage Schema On-Chain
 
-The contract utilizes a unified internal storage mapping where keys are derived by concatenating a static prefix with a hashed representation of the user's `accountId`.
+Every key is `prefix (1 byte) ‖ accountId (20 bytes) ‖ fixed-width big-endian suffix`, so one account's
+state is a contiguous, self-describing region. Both kernels use the same bytes for 0x50–0x5F.
 
 ```mermaid
 flowchart TD
-    A[Master Contract Storage] --> B(Admins Map)
-    A --> C(Managers Map)
-    A --> E(Limits & Restrictions)
+    A[Core Storage 0x50-0x5F] --> B(0x51 Account Control)
+    A --> C(0x52 Module Instance plus 0x53 Index)
+    A --> D(0x54 Hook Order)
+    A --> E(0x55 Configuration Intent)
+    A --> F(0x56 Nonce Cursor)
+    A --> G(0x5D Market Lock)
 
-    B --> B1[Prefix: 0x01 + sha256(accountId)]
-    C --> C1[Prefix: 0x03 + sha256(accountId)]
-    D --> D1[Prefix: 0x0E + sha256(accountId)]
-    E --> E1[Prefix: 0x09 / 0x0B / 0x0C composite keys]
+    B --> B1[Custody, recovery authority, epoch, nonce, timelock]
+    C --> C1[Type, contract hash, code binding, generation, capabilities]
+    D --> D1[Ordered module ids plus revision]
+    E --> E1[Maturity, expiry, action digest, read set]
+    F --> F1[Channel cursor plus namespace digest]
+    G --> G1[Listing binding plus control epoch]
 ```
+
+Earlier prefixes are migration input only: the custom kernel's 0x01 rows and the native kernel's
+0x10 account array are read once at migration, and the retired authorization prefixes are never
+re-interpreted. New state is written only under 0x51 and above.
 
 ## 5. Internal Data Flow During Execution
 
-When an execution command enters the Master Contract, it flows through a rigid pipeline of isolation, verification, and restriction checks before any external smart contract is called.
+When an execution command enters the Master Contract, it flows through one pipeline: status and epoch,
+digest, route, hook sequence, dispatch.
 
 ```mermaid
 flowchart TD
-    Start[Transaction Payload Received] --> HasID{Account ID Valid?}
-    HasID -- Yes --> ActiveLock{Execution Lock Active?}
-    HasID -- No --> Reject[Revert: Invalid ID]
+    Start[Operation Received] --> Exists{Account exists}
+    Exists -- No --> RejectID[Revert: Unknown Account]
+    Exists -- Yes --> Active{Status Active}
+    Active -- No --> RejectFrozen[Revert: Frozen or Migrating]
+    Active -- Yes --> Digest[Compute Core Digest]
+    Digest --> Deadline{Deadline and Nonce Channel Valid?}
+    Deadline -- No --> RejectAuth[Revert: Stale Operation]
+    Deadline -- Yes --> Route{Builtin, Validator, or Threshold}
 
-    ActiveLock -- Yes --> RejectLock[Revert: Re-entrancy Blocked]
-    ActiveLock -- No --> Lock[Apply Execution Lock]
+    Route -- Builtin --> Default{Default Authorization Allows Custody?}
+    Default -- No --> RejectAuth
+    Route -- Validator --> Validate[Call validator module]
+    Validate --> AuthResult{Approved?}
+    AuthResult -- No --> RejectAuth
+    Default -- Yes --> Hooks
+    AuthResult -- Yes --> Hooks[Snapshot Hook Order]
 
-    Lock --> CustomVer{Custom Verifier Set?}
-
-    CustomVer -- Yes --> CallCustom[Contract.Call verifier.verify]
-    CallCustom --> AuthResult
-
-    CustomVer -- No --> CheckNative[Evaluate M-of-N Thresholds]
-    CheckNative --> AuthResult{Authorized?}
-
-    AuthResult -- Yes --> CheckBlacklist{Target Blacklisted?}
-    AuthResult -- No --> RejectAuth[Revert: Unauthorized]
-
-    CheckBlacklist -- Yes --> RejectBL[Revert: Target Blacklisted]
-    CheckBlacklist -- No --> CheckWhitelist{Whitelist Enabled?}
-
-    CheckWhitelist -- Yes --> InWhitelist{Target in Whitelist?}
-    InWhitelist -- No --> RejectWL[Revert: Not Whitelisted]
-    InWhitelist -- Yes --> TokenCheck
-    CheckWhitelist -- No --> TokenCheck
-
-    TokenCheck{Is Token Transfer?}
-    TokenCheck -- Yes --> OverLimit{Amount > Max Transfer?}
-    OverLimit -- Yes --> RejectLimit[Revert: Exceeds Limit]
-    OverLimit -- No --> Execute
-    TokenCheck -- No --> Execute
-
-    Execute[Dynamic Call to Target Contract] --> Unlock[Remove Execution Lock]
-    Unlock --> End[Transaction Success]
+    Hooks --> Pre[preCheck Forward]
+    Pre --> Target[Dispatch Target Call]
+    Target --> Post[postCheck Reverse]
+    Post --> Complete[Validator Completion Callback]
+    Complete --> End[Return Result]
 ```
+
+The hook snapshot is bound into the signature, so the set that runs is the set the signer approved. A
+frozen account, a matured recovery or a settlement advances the epoch, and every operation signed
+against the old epoch fails the deadline-and-nonce step instead of reaching a module.
 
 ## 6. Relay and Signed Operator Mutation Flow
 
@@ -148,17 +151,23 @@ This keeps long-lived drafts explainable and reviewable without letting metadata
 
 ## 8. Storage Key Prefixes Table
 
-| Prefix Identifier | Hex Value | Purpose |
+| Prefix | Key suffix | Purpose |
 | :--- | :---: | :--- |
-| `AdminsPrefix` | `0x01` | Serialized array of admin addresses. |
-| `AdminThresholdPrefix` | `0x02` | Integer threshold for admins. |
-| `ManagersPrefix` | `0x03` | Serialized array of manager addresses. |
-| `ManagerThresholdPrefix` | `0x04` | Integer threshold for managers. |
-| `BlacklistPrefix` | `0x09` | Composite key for blocked external contracts. |
-| `WhitelistPrefix` | `0x0B` | Composite key for allowed external contracts. |
-| `MaxTransferPrefix` | `0x0C` | Composite key for token transfer caps. |
-| `VerifierContractPrefix` | `0x12` | Script hash of custom verifier logic. |
+| `0x50` | none | Protocol version, layout version and activation state. |
+| `0x51` | accountId | Account control record: status, custody, recovery authority, epoch, nonce, timelock, revisions. |
+| `0x52` | accountId + moduleId | Module instance record: type, contract hash, code binding, revision, credential generation, capabilities. |
+| `0x53` | accountId + type + moduleId | Installed-instance index, scanned per type in ascending module id. |
+| `0x54` | accountId | Hook order list plus its revision. |
+| `0x55` | accountId + intentId | Configuration intent: maturity, expiry, action digest, read set. |
+| `0x56` | accountId + channel | Nonce cursor for one channel. |
+| `0x57` | accountId | Built-in message signer subjects and threshold. |
+| `0x5B` | accountId + policyId | Threshold member list and policy commitment. |
+| `0x5D` | accountId | Market lock bound to the listing and the control epoch. |
+| `0x5E` | accountId | Bounded index of pending configuration intents. |
+
+The retired authorization prefixes are reserved and never re-allocated: a migrated account's old
+bytes stay readable as evidence but no code derives authorization from them.
 
 ## Matrix Domain Resolution Boundary
 
-The `.matrix` contract is an external naming boundary. It does not replace SA authorization state. Instead, the frontend resolves a `.matrix` domain to a controller wallet address and then queries SA admin/manager address indexes to find the corresponding bound SA addresses.
+The `.matrix` contract is an external naming boundary. It does not replace SA authorization state. Instead, the frontend resolves a `.matrix` domain to a controller wallet address and then reads the accounts that wallet controls.

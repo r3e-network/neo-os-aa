@@ -11,15 +11,19 @@ using Neo.VM;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Confused-deputy regression suite for <c>SmartAccount.ExecuteUserOp</c>.
+/// Confused-deputy regression suite for <c>SmartAccount.executeUserOp</c> (spec §3.6).
 /// </summary>
 /// <remarks>
 /// One core contract backs every virtual account, so the target of a user operation always
 /// observes the same <c>Runtime.CallingScriptHash</c> no matter which account authorized the
 /// call. A contract that authorizes on "the caller is the SA core" therefore cannot tell one
 /// account from another, and the core must not lend that identity to an operation's target.
-/// Each test drives a real compiled core with an ordinary, correctly authorized user
-/// operation whose target is one of those caller-identity gates.
+///
+/// In v4 there is no verifier callback to register: an account is custody‖salt (spec §16.1),
+/// its custody key signs the built-in envelope (<c>validatorId = 0</c>, spec §8), and the core
+/// refuses protocol-owned native targets up front. Each test below drives a real compiled core
+/// with an ordinary, correctly signed operation whose target is one of those caller-identity
+/// gates, so a pass means the gate itself held.
 /// </remarks>
 [TestClass]
 public class Fix_confuseddeputy_Tests
@@ -27,16 +31,11 @@ public class Fix_confuseddeputy_Tests
     private static readonly UInt160 Victim =
         UInt160.Parse("0x13ef519c362973f9a34648a9eac5b71250b2a80a");
 
-    private static readonly UInt160 Attacker =
-        UInt160.Parse("0x9999999999999999999999999999999999999999");
-
     private static readonly UInt160 AttackerRelay =
         UInt160.Parse("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
     private static readonly UInt160 Sponsor =
         UInt160.Parse("0x7777777777777777777777777777777777777777");
-
-    private const uint EscapeTimelockSeconds = 2_592_000;
 
     private const long OneGas = 100_000_000;
 
@@ -50,34 +49,43 @@ public class Fix_confuseddeputy_Tests
 
         public UInt160 Wallet { get; }
 
+        private int _registrations;
+
         public Harness()
         {
             Wallet = Fx.Deploy("SmartAccount");
         }
 
-        /// <summary>Registers a verifier-less account, so the backup owner's witness authorizes operations.</summary>
-        public UInt160 RegisterAccount(UInt160 backupOwner)
+        /// <summary>
+        /// Registers a v4 account (identity = custody‖salt) with the given custody. A plain
+        /// address is enough when the account only receives direct, witness-authorized calls;
+        /// a key-derived custody is required for built-in user operations.
+        /// </summary>
+        public UInt160 RegisterAccount(UInt160 custody)
         {
-            UInt160 accountId = Fx.CallUInt160(
-                Wallet, "computeRegistrationAccountId",
-                UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, backupOwner, EscapeTimelockSeconds);
-
-            Fx.SetSigners(backupOwner);
-            Fx.CallVoid(
-                Wallet, "registerAccount",
-                accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, backupOwner, EscapeTimelockSeconds);
-            return accountId;
+            _registrations += 1;
+            return Fx.CreateAccount(Wallet, custody, "deputy-" + _registrations);
         }
 
-        /// <summary>Submits one fully authorized user operation for <paramref name="owner"/>'s own account.</summary>
-        public void ExecuteAs(UInt160 owner, UInt160 accountId, UInt160 target, string method, params object?[] args)
+        public UInt160 RegisterAccount(P256SessionKey custodyKey) =>
+            RegisterAccount(RuntimeFixture.CustodyOf(custodyKey));
+
+        /// <summary>
+        /// Submits one fully authorized built-in operation (validatorId 0, spec §8): the
+        /// custody key signs the operation digest envelope, exactly as a real owner would.
+        /// </summary>
+        public void ExecuteAs(
+            P256SessionKey custodyKey, UInt160 accountId, UInt160 target, string method, params object?[] args)
         {
-            Fx.SetSigners(owner);
-            BigInteger nonce = Fx.CallInteger(Wallet, "getNonce", accountId, BigInteger.Zero);
             object[] op = RuntimeFixture.UserOp(
-                target, method, args, nonce, Fx.Now() + 3_600_000, Array.Empty<byte>());
+                target, method, args,
+                Fx.PackedNonce(Wallet, accountId, 0), Fx.Now() + 3_600_000, new byte[] { 0x00 });
+            op[11] = Fx.SignBuiltIn(Wallet, accountId, op, custodyKey);
+            Fx.SetSigners(RuntimeFixture.CustodyOf(custodyKey));
             Fx.CallVoid(Wallet, "executeUserOp", accountId, op);
         }
+
+        public UInt160 CustodyOf(UInt160 accountId) => Fx.AccountCustody(Wallet, accountId);
 
         public byte[] DeployedScript(UInt160 contract)
         {
@@ -115,41 +123,46 @@ public class Fix_confuseddeputy_Tests
     [TestMethod]
     public void ExecuteUserOp_CannotReplaceCoreBytecodeThroughContractManagement()
     {
+        using P256SessionKey attacker = new();
         Harness h = new();
         UInt160 victimAccount = h.RegisterAccount(Victim);
-        UInt160 attackerAccount = h.RegisterAccount(Attacker);
+        UInt160 attackerAccount = h.RegisterAccount(attacker);
         byte[] scriptBefore = h.DeployedScript(h.Wallet);
         (byte[] nef, string manifest) = BuildAlwaysTrueVerifyArtifact();
 
-        Assert.ThrowsExactly<TestException>(
-            () => h.ExecuteAs(Attacker, attackerAccount, NativeContract.ContractManagement.Hash, "update", nef, manifest),
+        TestException ex = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteAs(attacker, attackerAccount, NativeContract.ContractManagement.Hash, "update", nef, manifest),
             "An account operation must not be able to upgrade the shared core");
+        StringAssert.Contains(ex.Message, "Operation target cannot be ContractManagement");
 
         CollectionAssert.AreEqual(scriptBefore, h.DeployedScript(h.Wallet),
             "The core bytecode must only change through the timelocked admin upgrade");
-        Assert.AreEqual(Victim, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", victimAccount),
-            "Unrelated accounts must keep their recorded authority");
+        Assert.AreEqual(Victim, h.CustodyOf(victimAccount),
+            "Unrelated accounts must keep their recorded custody");
     }
 
     [TestMethod]
     public void ExecuteUserOp_CannotDestroyCoreThroughContractManagement()
     {
+        using P256SessionKey attacker = new();
         Harness h = new();
         UInt160 victimAccount = h.RegisterAccount(Victim);
-        UInt160 attackerAccount = h.RegisterAccount(Attacker);
+        UInt160 attackerAccount = h.RegisterAccount(attacker);
         byte[] scriptBefore = h.DeployedScript(h.Wallet);
 
-        Assert.ThrowsExactly<TestException>(
-            () => h.ExecuteAs(Attacker, attackerAccount, NativeContract.ContractManagement.Hash, "destroy"),
+        TestException ex = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteAs(attacker, attackerAccount, NativeContract.ContractManagement.Hash, "destroy"),
             "An account operation must not be able to destroy the shared core");
+        StringAssert.Contains(ex.Message, "Operation target cannot be ContractManagement");
 
         CollectionAssert.AreEqual(scriptBefore, h.DeployedScript(h.Wallet));
-        Assert.AreEqual(Victim, h.Fx.CallUInt160(h.Wallet, "getBackupOwner", victimAccount));
+        Assert.AreEqual(Victim, h.CustodyOf(victimAccount));
     }
 
     [TestMethod]
     public void ExecuteUserOp_CannotSettlePaymasterReimbursementWithoutSponsoredExecution()
     {
+        using P256SessionKey attacker = new();
         Harness h = new();
         UInt160 paymaster = h.Fx.Deploy("SAPaymaster", h.Wallet.ToArray());
         BigInteger deposit = 5 * OneGas;
@@ -161,13 +174,16 @@ public class Fix_confuseddeputy_Tests
         h.Fx.CallVoid(paymaster, "setPolicy",
             UInt160.Zero, UInt160.Zero, "", (BigInteger)OneGas, deposit, deposit, BigInteger.Zero);
 
-        UInt160 attackerAccount = h.RegisterAccount(Attacker);
+        UInt160 attackerAccount = h.RegisterAccount(attacker);
         BigInteger relayBefore = h.Fx.GasBalanceOf(AttackerRelay);
 
-        Assert.ThrowsExactly<TestException>(
-            () => h.ExecuteAs(Attacker, attackerAccount, paymaster, "settleReimbursement",
+        TestException ex = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteAs(attacker, attackerAccount, paymaster, "settleReimbursement",
                 Sponsor, attackerAccount, UInt160.Zero, "", AttackerRelay, (BigInteger)OneGas),
             "Settlement must only follow a sponsored execution, never an ordinary operation");
+        // The core's execution-in-flight marker is what the paymaster reads: a core-routed
+        // operation is indistinguishable from the sponsored unwind on caller identity alone.
+        StringAssert.Contains(ex.Message, "Settlement must follow a completed sponsored execution");
 
         Assert.AreEqual(deposit, h.Fx.CallInteger(paymaster, "getSponsorDeposit", Sponsor),
             "The sponsor deposit must be untouched");
@@ -178,6 +194,7 @@ public class Fix_confuseddeputy_Tests
     [TestMethod]
     public void ExecuteUserOp_CannotAbandonAnotherAccountsMarketListing()
     {
+        using P256SessionKey attacker = new();
         Harness h = new();
         UInt160 market = h.Fx.Deploy("SAAddressMarket");
         h.Fx.CallVoid(market, "setAllowedSA", h.Wallet, true);
@@ -190,11 +207,12 @@ public class Fix_confuseddeputy_Tests
         h.Fx.CallVoid(market, "createListing", h.Wallet, victimAccount, (BigInteger)OneGas, "SA address", "");
         BigInteger listingId = h.Fx.CallInteger(market, "getListingCount");
 
-        UInt160 attackerAccount = h.RegisterAccount(Attacker);
+        UInt160 attackerAccount = h.RegisterAccount(attacker);
 
-        Assert.ThrowsExactly<TestException>(
-            () => h.ExecuteAs(Attacker, attackerAccount, market, "abandonListing", victimAccount, listingId),
+        TestException ex = Assert.ThrowsExactly<TestException>(
+            () => h.ExecuteAs(attacker, attackerAccount, market, "abandonListing", victimAccount, listingId),
             "Only the core's own escrow unwind may retire a listing");
+        StringAssert.Contains(ex.Message, "Account is still locked in market escrow");
 
         Neo.VM.Types.Array listing = (Neo.VM.Types.Array)h.Fx.Call(market, "getListing", listingId);
         Assert.AreEqual((BigInteger)ListingStatusActive, listing[ListingStatusIndex].GetInteger(),
@@ -212,28 +230,20 @@ public class Fix_confuseddeputy_Tests
         // the remainder of the outer operation. The probe runs the nested frame and
         // then reads the marker inside one operation target, so the returned value
         // observes the state after the nested unwind.
+        using P256SessionKey custody = new();
         Harness h = new();
         UInt160 probe = h.Fx.Deploy("MockVerifierCore");
-        UInt160 outerAccount = h.Fx.CallUInt160(
-            h.Wallet, "computeRegistrationAccountId",
-            UInt160.Zero, new byte[] { 0x01 }, UInt160.Zero, Victim, EscapeTimelockSeconds);
-        UInt160 innerAccount = h.Fx.CallUInt160(
-            h.Wallet, "computeRegistrationAccountId",
-            UInt160.Zero, new byte[] { 0x02 }, UInt160.Zero, Victim, EscapeTimelockSeconds);
-        h.Fx.SetSigners(Victim);
-        h.Fx.CallVoid(
-            h.Wallet, "registerAccount",
-            outerAccount, UInt160.Zero, new byte[] { 0x01 }, UInt160.Zero, Victim, EscapeTimelockSeconds);
-        h.Fx.CallVoid(
-            h.Wallet, "registerAccount",
-            innerAccount, UInt160.Zero, new byte[] { 0x02 }, UInt160.Zero, Victim, EscapeTimelockSeconds);
+        UInt160 outerAccount = h.RegisterAccount(custody);
+        UInt160 innerAccount = h.RegisterAccount(custody);
 
         // The inner operation is a benign read on the core itself; the outer
         // operation's target (MockVerifierCore.forwardAfter) first triggers that
         // nested execution and afterwards queries the marker.
         object[] innerOp = RuntimeFixture.UserOp(
-            h.Wallet, "isEscapeActive", new object?[] { innerAccount },
-            BigInteger.Zero, h.Fx.Now() + 3_600_000, Array.Empty<byte>());
+            h.Wallet, "isExecutionActive", new object?[] { innerAccount },
+            h.Fx.PackedNonce(h.Wallet, innerAccount, 0), h.Fx.Now() + 3_600_000, new byte[] { 0x00 });
+        innerOp[11] = h.Fx.SignBuiltIn(h.Wallet, innerAccount, innerOp, custody);
+
         object[] outerOp = RuntimeFixture.UserOp(
             probe, "forwardAfter",
             new object?[]
@@ -241,16 +251,17 @@ public class Fix_confuseddeputy_Tests
                 h.Wallet, "executeUserOp", new object?[] { innerAccount, innerOp },
                 h.Wallet, "isUserOpExecutionActive", Array.Empty<object>()
             },
-            BigInteger.Zero, h.Fx.Now() + 3_600_000, Array.Empty<byte>());
+            h.Fx.PackedNonce(h.Wallet, outerAccount, 0), h.Fx.Now() + 3_600_000, new byte[] { 0x00 });
+        outerOp[11] = h.Fx.SignBuiltIn(h.Wallet, outerAccount, outerOp, custody);
 
-        h.Fx.SetSigners(Victim);
+        h.Fx.SetSigners(RuntimeFixture.CustodyOf(custody));
         Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "executeUserOp", outerAccount, outerOp),
             "The marker must still report in-flight after the nested frame unwinds");
 
         // Once the outermost frame closes, the marker is cleared and both sequences
         // are consumed exactly once.
         Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isUserOpExecutionActive"));
-        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Wallet, "getNonce", outerAccount, BigInteger.Zero));
-        Assert.AreEqual(BigInteger.One, h.Fx.CallInteger(h.Wallet, "getNonce", innerAccount, BigInteger.Zero));
+        Assert.AreEqual(BigInteger.One, h.Fx.CurrentNonceSequence(h.Wallet, outerAccount, 0));
+        Assert.AreEqual(BigInteger.One, h.Fx.CurrentNonceSequence(h.Wallet, innerAccount, 0));
     }
 }

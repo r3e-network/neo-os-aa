@@ -8,14 +8,14 @@ using Neo.SmartContract.Testing.Exceptions;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Behavioral VM tests for audit finding SA-06: <c>SocialRecoveryVerifier.SetupRecovery</c>
+/// Behavioral VM tests for audit finding SA-06: <c>SocialRecoveryService.SetupRecovery</c>
 /// was first-write-wins with NO proof of account control. Its <c>CheckWitness(owner)</c> did
 /// not help — an attacker passes THEIR OWN address as <c>owner</c> (they can witness
 /// themselves), binding a victim's known accountId to attacker-controlled nullifiers/verifier,
 /// permanently DoSing the legit owner's setup and making the attacker the recovery root for
 /// that accountId.
 ///
-/// The fix mirrors the repo's plugin invariant (VerifierAuthority M-7): the verifier pins a
+/// The fix mirrors the repo's plugin invariant (ValidatorAuthority M-7): the verifier pins a
 /// canonical SA core (<c>setAuthorizedCore</c>, initial-set-only and contract-admin gated;
 /// re-pointing flows through the 7-day <c>proposeAuthorizedCore</c>/<c>confirmAuthorizedCore</c>
 /// window), and <c>setupRecovery</c> requires <c>saContract == authorizedCore()</c> plus the
@@ -54,7 +54,7 @@ public class Fix_RecoverySquat_Tests
         public SquatHarness(bool bindCore = true)
         {
             Core = Fx.Deploy("SmartAccount");
-            Verifier = Fx.Deploy("SocialRecoveryVerifier");
+            Verifier = Fx.Deploy("SocialRecoveryService");
             if (bindCore)
             {
                 // Deployer (validators) is the contract admin; bind the canonical core.
@@ -63,21 +63,30 @@ public class Fix_RecoverySquat_Tests
         }
 
         /// <summary>
-        /// Registers an account on the real SA core with <paramref name="owner"/> as its backup
-        /// owner and returns the core-derived 20-byte account id.
+        /// Creates a protocol-v4 account on the real SA core whose custody is
+        /// <paramref name="owner"/> and whose recorded recovery authority is this
+        /// service, and returns the core-derived 20-byte account id. That is the
+        /// attestation <c>setupRecovery</c> re-reads through the pinned core.
         /// </summary>
         public byte[] RegisterAccount(UInt160 owner)
         {
-            UInt160 accountId = Fx.CallUInt160(
-                Core, "computeRegistrationAccountId",
-                UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, owner, 2_592_000u);
-
-            Fx.SetSigners(owner);
-            Fx.CallVoid(
-                Core, "registerAccount",
-                accountId, UInt160.Zero, Array.Empty<byte>(), UInt160.Zero, owner, 2_592_000u);
+            _registrations += 1;
+            byte[] salt = RuntimeFixture.Salt("squat-" + _registrations + "-" + owner);
+            UInt160 accountId = Fx.CallUInt160(Core, "computeAccountIdentity", owner, salt);
+            // v4 registers the recovery policy atomically with the account, so no
+            // 24 h configuration-intent wait separates creation from attestation.
+            object[] actions =
+            {
+                RuntimeFixture.SetRecoveryPolicy(Verifier, RuntimeFixture.MinRecoveryTimelockMs)
+            };
+            // A non-zero recovery authority must witness the policy update.
+            Fx.SetSigners(owner, Verifier);
+            Fx.CallVoid(Core, "createAccount", accountId, owner, salt,
+                RuntimeFixture.MinRecoveryTimelockMs, actions);
             return accountId.ToArray();
         }
+
+        private int _registrations;
 
         /// <summary>Valid setup arguments for <paramref name="accountId"/>; vary one field per test.</summary>
         public object?[] SetupArgs(byte[] accountId, UInt160 owner, UInt160 saContract, byte[] verifierPubKey)
@@ -240,7 +249,7 @@ public class Fix_RecoverySquat_Tests
     {
         RuntimeFixture fx = new();
         UInt160 core = fx.Deploy("SmartAccount");
-        UInt160 verifier = fx.Deploy("SocialRecoveryVerifier");
+        UInt160 verifier = fx.Deploy("SocialRecoveryService");
 
         Assert.AreEqual(UInt160.Zero, fx.CallUInt160(verifier, "authorizedCore"), "Core starts unset");
 

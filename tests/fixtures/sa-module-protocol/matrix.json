@@ -1,0 +1,296 @@
+{
+  "matrixId": "sa-module-protocol-kernel-matrix",
+  "note": "Machine-checked form of README section 3. Every row names at least one passing custom driver unless its status is partial, and then the note names the part this repository cannot pin. ProtocolMatrixCoverageTests resolves every custom entry against the test assembly (the type must exist, the method must be public and carry [TestMethod]) and requires every named fixture to exist, so a row cannot reference a test that was renamed or deleted.",
+  "rows": [
+    {
+      "id": "F-1",
+      "invariant": "multiple scalar validators + same-address multi-instance installs",
+      "status": "pinned",
+      "fixture": "golden-vectors/operation-envelope.json",
+      "custom": [
+        "ProtocolFixtureTests.OperationEnvelopeMatchesThePinnedBytesAndDigest",
+        "SourceInvariantTests.SourceInvariant_ExecuteUserOp_AuthorizationPaths",
+        "MultiSigInstanceConfigurationRuntimeTests.MemberKeysBindAtomicallyUnderTheCoreInstallPhase"
+      ],
+      "native": [
+        "UT_SmartAccountFixtures.OperationEnvelopeMatchesThePinnedBytesAndDigest"
+      ],
+      "note": "the envelope vector pins the routed validator fields; the runtime suites pin routing and member-key binding"
+    },
+    {
+      "id": "F-2",
+      "invariant": "switching validator cannot skip any hook; all hooks run per snapshot",
+      "status": "pinned",
+      "fixture": "golden-vectors/operation-envelope.json",
+      "custom": [
+        "Fix_ModuleAbi_Tests.CoreHookOrderComposesInstalledHooks",
+        "ProtocolFixtureTests.OperationEnvelopeMatchesThePinnedBytesAndDigest"
+      ],
+      "native": [],
+      "note": "the envelope digest binds hookProofs, so a validator switch cannot drop the proof set"
+    },
+    {
+      "id": "F-3",
+      "invariant": "threshold members not independently routable; duplicate identity / cycles / nesting rejected",
+      "status": "pinned",
+      "fixture": "rejection-regression.json",
+      "custom": [
+        "Fix_ModuleAbi_Tests.ThresholdPolicyRejectsUninstalledMember",
+        "MultiSigInstanceConfigurationRuntimeTests.IneligibleInstanceCannotBecomeAPolicyMember",
+        "Fix_ModuleAbi_Tests.MultiHookIsNotInstallableInProtocolV4"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-4",
+      "invariant": "post stage only over the approved snapshot set",
+      "status": "pinned",
+      "fixture": null,
+      "custom": [
+        "CompositeArgumentIsolationRuntimeTests.HookPostCheckCannotChangeTheNextHooksResult"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-5",
+      "invariant": "per-hook forward pre / reverse post; false/FAULT behavior",
+      "status": "pinned",
+      "fixture": null,
+      "custom": [
+        "CompositeArgumentIsolationRuntimeTests.HookPostCheckCannotChangeTheNextHooksResult",
+        "CallbackResultBoundaryRuntimeTests.InteropIteratorTargetResultFailsClosedBeforeHookPostCheck"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-6",
+      "invariant": "proof/args/result/hookData tampering rejected",
+      "status": "pinned",
+      "fixture": "rejection-regression.json",
+      "custom": [
+        "CompositeArgumentIsolationRuntimeTests.HookCannotChangeTheTargetsAuthenticatedArguments",
+        "RejectionCodeCoverageTests.DuplicateHookProofIdsAreRejected",
+        "ProtocolFixtureTests.OperationFieldCountOtherThanThirteenIsRejected"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-7",
+      "invariant": "empty-slot install, uninstall, last-validator, default policy all timelocked",
+      "status": "pinned",
+      "fixture": null,
+      "custom": [
+        "HookInstanceConfigurationRuntimeTests.HookInstanceIsConfiguredOnlyThroughAMaturedIntent",
+        "PendingConfigUpdateReadRuntimeTests.PendingRecord_ExposesExactActionsAndTimesReadOnly",
+        "AuthorityTimelockRuntimeTests.AuthorityCore_InstantRepointing_IsRejectedAcrossVerifiersAndPaymaster"
+      ],
+      "native": [
+        "UT_SmartAccount.ConfigurationIntentsAreTimelockedAndCustodyGated"
+      ],
+      "note": ""
+    },
+    {
+      "id": "F-8",
+      "invariant": "pending intents: concurrency, conflicts, maturity, expiry, stale revision",
+      "status": "pinned",
+      "fixture": null,
+      "custom": [
+        "Fix_ModuleAbi_Tests.IndependentIntentsCoexistButConflictingOnesAreRejected",
+        "Fix_ModuleAbi_Tests.ConfigurationIntentRequiresMaturityAndTheExactActionList",
+        "PendingConfigUpdateReadRuntimeTests.ExpiredIntent_IsCleanedWithoutAWitness"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-9",
+      "invariant": "frozen state: every state-changing ABI blocked, not just execute",
+      "status": "pinned",
+      "fixture": null,
+      "custom": [
+        "Fix_AccountFreeze_Tests.FrozenAccount_RejectsEveryConfigurationPath",
+        "Fix_AccountFreeze_Tests.Freeze_BlocksUserOpExecution_AndUnfreezeRestoresIt"
+      ],
+      "native": [
+        "UT_SmartAccount.FreezeUnfreezeAndRecoveryFailClosedWithoutAuthority"
+      ],
+      "note": ""
+    },
+    {
+      "id": "F-10",
+      "invariant": "validation/message to post/configuration/cleanup escalation; target-to-module; same/cross-account reentrancy",
+      "status": "pinned",
+      "fixture": null,
+      "custom": [
+        "FixVerifyContextTests.Fix_VerifyContext_UnmatchedNativeCallerIsRejected",
+        "SourceInvariantTests.SourceInvariant_ExecuteUserOp_AuthorizationPaths"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-11",
+      "invariant": "contractId/updateCounter/NEF/profile drift rejected before and after",
+      "status": "pinned",
+      "fixture": "rejection-regression.json",
+      "custom": [
+        "Fix_AdminTimelock_Tests.ReversedDigestProposal_CannotConfirmEvenAfterTimelock",
+        "Fix_ModuleAbi_Tests.ProfileDigestMismatchIsRejectedBeforeBinding"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-12",
+      "invariant": "revoke-regrant, uninstall-reinstall, market sale replay all fail",
+      "status": "pinned",
+      "fixture": "rejection-regression.json",
+      "custom": [
+        "Fix_SessionKeyRevocationReproTests.RevokedSessionKey_OldUnconsumedSignature_IsDeadAfterSameKeyRegrant",
+        "Fix_SessionKeyRevocationReproTests.UninstalledValidator_OldSignature_IsDeadAfterReinstall",
+        "Fix_SubscriptionSubIdReproTests.SameSubId_ChargesAgainOnReinstalledInstance"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-13",
+      "invariant": "same subId re-creation works; new/old nonce lanes never shared",
+      "status": "pinned",
+      "fixture": "golden-vectors/nonce-channel.json",
+      "custom": [
+        "ExecuteUserOpRuntimeTests.ExecuteUserOp_ParallelNonceSubkeysAdvanceIndependently",
+        "ProtocolFixtureTests.NonceChannelMatchesThePinnedDerivation"
+      ],
+      "native": [
+        "UT_SmartAccountFixtures.NonceChannelMatchesThePinnedDerivation"
+      ],
+      "note": ""
+    },
+    {
+      "id": "F-14",
+      "invariant": "unconsumed recovery ticket replay across clear/setup fails; consumed nullifiers keep failing",
+      "status": "pinned",
+      "fixture": "rejection-regression.json",
+      "custom": [
+        "FixRecoveryTests.Fix2_ActionSignatureIsBoundToAccount_AndCannotBeReplayed",
+        "FixRecoveryTests.Fix2_ActionSignatureCannotReplayAcrossSameTextAccounts"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-15",
+      "invariant": "recovery executes without any plugin/Market/Oracle callback",
+      "status": "pinned",
+      "fixture": null,
+      "custom": [
+        "Fix_Escape_Tests.ExecuteRecovery_SweepsTheModuleModelAndRotatesCustody",
+        "OwnerOnlyRecoveryRuntimeTests.OwnerOnlyRecovery_LatchesAndSurvivesARecovery"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "F-16",
+      "invariant": "no-plugin operations + built-in message signatures; contract custody cannot fake a message signature",
+      "status": "pinned",
+      "fixture": "golden-vectors/message-envelope.json",
+      "custom": [
+        "ProtocolFixtureTests.MessageEnvelopeMatchesThePinnedDerivation",
+        "ProtocolFixtureTests.MessageEnvelopeFailuresReturnTheFailureMagic"
+      ],
+      "native": [
+        "UT_SmartAccountFixtures.MessageEnvelopeMatchesThePinnedDerivation",
+        "UT_SmartAccount.MessageSignaturesReturnTheStrictEr1271Magic"
+      ],
+      "note": ""
+    },
+    {
+      "id": "F-17",
+      "invariant": "gas Plan B: over-budget return, exhaust-without-return, descendant burn, whitelist path; Verification vs Application separately",
+      "status": "pinned",
+      "fixture": null,
+      "custom": [
+        "ImplementationRefinementGasRuntimeTests.ActualBudgetAtMeasuredCeilingHaltsAndOneDatoshiLessFaults",
+        "SourceInvariantTests.SourceInvariant_ModuleLifecycleCallbacksUseHardBudget"
+      ],
+      "native": [],
+      "note": "the custom public build meters after the fact and rolls back; the platform build is the Plan B lane (see docs/SA-FORMAL-VERIFICATION.md)"
+    },
+    {
+      "id": "M-1",
+      "invariant": "real 53/407 account migration fixtures, all legacy prefixes, unknown rows, five-field and 14-slot legacy decoders",
+      "status": "partial",
+      "fixture": "golden-vectors/migration.json",
+      "custom": [
+        "ProtocolFixtureTests.MigrationStateMachineMatchesThePinnedVector",
+        "ProtocolFixtureTests.UnknownClassificationKeepsTheAccountRequired"
+      ],
+      "native": [],
+      "note": "the five-field 0x01 decoder and the state machine are pinned; the 53/407 real exports and the native 14-slot decoder cannot be pinned because no export data exists in this repository"
+    },
+    {
+      "id": "M-2",
+      "invariant": "MultiHook order preserved as hookOrder; MultiSig threshold preserved as policy",
+      "status": "partial",
+      "fixture": "golden-vectors/migration.json",
+      "custom": [
+        "Fix_ModuleAbi_Tests.CoreHookOrderComposesInstalledHooks",
+        "Fix_ModuleAbi_Tests.ThresholdPolicyRejectsUninstalledMember"
+      ],
+      "native": [],
+      "note": "the v4 equivalents are pinned; the legacy-to-v4 module mapping needs a real export, because import invalidates the legacy module scope instead of re-creating instances"
+    },
+    {
+      "id": "M-3",
+      "invariant": "nonce/epoch monotonic; proxy/coreHash/name unchanged on the legacy side",
+      "status": "pinned",
+      "fixture": "golden-vectors/migration.json",
+      "custom": [
+        "ProtocolFixtureTests.MigrationStateMachineMatchesThePinnedVector"
+      ],
+      "native": [],
+      "note": ""
+    },
+    {
+      "id": "M-4",
+      "invariant": "0x12/0x1C invalidation declared and never authorization",
+      "status": "pinned",
+      "fixture": "golden-vectors/migration.json",
+      "custom": [
+        "ProtocolFixtureTests.MigrationStateMachineMatchesThePinnedVector"
+      ],
+      "native": [],
+      "note": "legacyScopeInvalidated is declared at the mark and stays declared after the import"
+    },
+    {
+      "id": "M-5",
+      "invariant": "owner-only, frozen, recovery-pending, market-locked accounts",
+      "status": "partial",
+      "fixture": "golden-vectors/migration.json",
+      "custom": [
+        "ProtocolFixtureTests.OwnerOnlyImportCarriesTheRecoveryConstraintForward",
+        "Fix_AccountFreeze_Tests.FrozenAccount_RejectsEveryConfigurationPath"
+      ],
+      "native": [],
+      "note": "owner-only import and the frozen-account gate are pinned; market-locked and recovery-pending imports need a legacy escrow or an in-flight escape to exist first"
+    },
+    {
+      "id": "M-6",
+      "invariant": "interrupted migration, repeated (idempotent) migration, rollback artifacts, old pending/old signature rejection",
+      "status": "pinned",
+      "fixture": "golden-vectors/migration.json",
+      "custom": [
+        "ProtocolFixtureTests.MigrationStateMachineMatchesThePinnedVector",
+        "ProtocolFixtureTests.UnknownClassificationKeepsTheAccountRequired"
+      ],
+      "native": [],
+      "note": "the vector replays an identical digest as a no-op and rejects a different digest"
+    }
+  ]
+}

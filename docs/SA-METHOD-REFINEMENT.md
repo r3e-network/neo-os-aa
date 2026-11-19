@@ -35,22 +35,23 @@ ApplicationEngine composition, public protocol activation or deployment. The
 
 This is a structural inventory and implementation plan. It proves no VM, ApplicationEngine, compiler, storage, or whole-method semantics. The current arithmetic certificate remains a region certificate; it cannot establish a whole-method certificate.
 
-### Current artifact summary (2026-11-17)
+### Current artifact summary (2026-11-19)
 
-The current SmartAccount V3 NEF is
-`9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`
+The current SmartAccount v4 NEF is
+`2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb`
 with script SHA256
-`909ba759b66a4d84a4bd2aa2a2a78ef611c8b27e834b460a90f8ff83d387e1cd`.
+`6eef7f70838b1bb3b8bed9a6a515152a6b0d86a102a11ba489d74c422cbf715f`.
 Its `CapReimbursementToActualCost` helper is the complete interval
-`[18900,19181)`: 281 bytes, 116 instructions, and 52 distinct opcode names.
-The initializer is `[29996,30678)`: 682 bytes and 182 instructions. The helper
-reads static slot 38; the initializer stores the reimbursement key with
-`PUSHDATA1 21` at 30497, `CONVERT Buffer` at 30500, and `STSFLD 38` at 30502.
-The current compiler artifact has 109 ABI entries, not the historical 100.
+`[36048,36329)`: 281 bytes, 116 instructions, and 52 distinct opcode names —
+the same byte-identical body as the 2026-11-17 artifact, shifted by 17,148
+bytes. The initializer is `[43470,44187)`: 717 bytes and 236 instructions. The
+helper reads static slot 58; the initializer stores the reimbursement key with
+`PUSHDATA1 21` at 44026, `CONVERT Buffer` at 44029, and `STSFLD 58` at 44031.
+The current compiler artifact has 81 ABI entries.
 
-Only `INITSLOT` at 18900 has no exact declared source point; the other 115 instructions have explicit debug source points. The optional existing arithmetic certificate claims 22 instructions, leaving 94 method instructions unaccounted for by that certificate. These are counts of declared coverage, not proof acceptance.
+Only `INITSLOT` at 36048 has no exact declared source point; the other 115 instructions have explicit debug source points. The optional existing arithmetic certificate claims 22 instructions, leaving 94 method instructions unaccounted for by that certificate. These are counts of declared coverage, not proof acceptance.
 
-The two `LDSFLD` instructions at 18911 and 19165 use static index 38, named `Prefix_TransactionReimbursement`. Outside this helper, initialization is `30497: 0c0121` (PUSHDATA1 containing `21`), `30500: db30` (CONVERT to Buffer), `30502: 6726` (STSFLD 38). (The pre-sweep build `6c347dac…` had the same shape with `INITSLOT` at 13557, `LDSFLD` sites at 13568/13822, initializer instructions at 25432/25435/25437 and static index 34; the 2026-11-16 design-phase legacy sweep moved the offsets and the slot.) Thus a helper entry-state specification must bind slot 38 to `Buffer([0x21])` and establish that initialization ran. Those three initializer instructions are not part of the 116-instruction helper.
+The two `LDSFLD` instructions at 36059 and 36313 use static index 58, named `Prefix_TransactionReimbursement`. Outside this helper, initialization is `44026: 0c0121` (PUSHDATA1 containing `21`), `44029: db30` (CONVERT to Buffer), `44031: 673a` (STSFLD 58). (The pre-sweep build `6c347dac…` had the same shape with `INITSLOT` at 13557, `LDSFLD` sites at 13568/13822, initializer instructions at 25432/25435/25437 and static index 34; the 2026-11-16 design-phase legacy sweep moved the offsets and the slot.) Thus a helper entry-state specification must bind slot 58 to `Buffer([0x21])` and establish that initialization ran. Those three initializer instructions are not part of the 116-instruction helper.
 
 ### Historical candidate and scope
 
@@ -315,7 +316,7 @@ rendered source program and prove its relation to independently decoded bytes.
 ## Complete reimbursement-helper reference refinement
 
 The certificate covers all **281 bytes / 116 instructions / 52 opcode names** at
-`[18900,19181)` of `CapReimbursementToActualCost`. It compares the complete
+`[36048,36329)` of `CapReimbursementToActualCost`. It compares the complete
 14-statement source program, independently projected from the typed source
 inventory, with an executable reference VM that decodes the actual NEF bytes.
 No expected settlement is passed to a native-call oracle or substituted for a
@@ -432,7 +433,7 @@ certificate.
 ## Complete reimbursement helper runtime checks
 
 These tests execute the original private `CapReimbursementToActualCost` method in
-the reviewed custom NEF, from PC 18900 through RET at PC 19180. They extend the
+the reviewed custom NEF, from PC 36048 through RET at PC 36328. They extend the
 22-instruction arithmetic checks with transaction fields, initial storage, default
 record construction, transaction-hash reset, actual native deserialize/serialize,
 assertion, heap update and Storage.Put. They are concrete runtime correspondence
@@ -449,10 +450,10 @@ there is no source surrogate, copied arithmetic script or replacement native
 codec. This private-method seam does not prove the two public entrypoint guards
 or their complete caller paths.
 
-NEF SHA256: `9f714866c5ba1b6cf31d63036d9805d73058055f325fd412e303356534ba2f76`.
-Manifest SHA256: `a6533d47d4a72c3c8159923ce54cb136ab02acb0e9a8c5f24cf75bd4ea838e31`.
-Script SHA256: `909ba759b66a4d84a4bd2aa2a2a78ef611c8b27e834b460a90f8ff83d387e1cd`.
-Every offset in this file is inside `[18900,19181)`, the helper's current
+NEF SHA256: `2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb`.
+Manifest SHA256: `f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f`.
+Script SHA256: `6eef7f70838b1bb3b8bed9a6a515152a6b0d86a102a11ba489d74c422cbf715f`.
+Every offset in this file is inside `[36048,36329)`, the helper's current
 281-byte, 116-instruction interval. The current build includes the VM-integer margin guard and the expanded helper
 frame; the earlier 208-byte/96-instruction candidate is historical and is not
 the artifact pinned by this document. Older revisions pinned NEF
@@ -939,13 +940,15 @@ It moved three times after the dated paths above were captured: the rename to
 `SmartAccountV3` shortened the script by 10 bytes
 (`083ed325…` / `e79fa049…` → `be43cd05…` / `35fbb188…`), the helper's
 VM-integer headroom assertion then grew it by 73 bytes, and the 2026-11-16
-design-phase legacy-compatibility sweep changed it again (current NEF
-`9f714866…`, manifest `a6533d47…`, as pinned by the regenerated five-shape
-helper-gas runtime capture). Those files have not been recopied since any of
-these changes, so they are evidence about an earlier build only and must be
+design-phase legacy-compatibility sweep changed it again, and the v4 module
+protocol moved it once more (current NEF `2887bad3…`, manifest `f44cddeb…`).
+The five-shape helper-gas runtime capture was regenerated against that v4
+artifact on 2026-11-19 (`formal/refinement/fixtures/helper-gas-runtime-live-
+receipts.json.gz`), so that capture is current. The other rows and per-
+invocation receipts above still describe the earlier build and must be
 regenerated before being cited for the current NEF. SAPaymaster and
-MockTransferTarget were not affected by any of the three changes and their
-rows are current.
+MockTransferTarget were not affected by any of the changes and their rows are
+current.
 
 MockTransferTarget is explicitly a compiled test target, not a production token.
 The in-memory nesting adversary is also test-only. Actual GAS reimbursement uses

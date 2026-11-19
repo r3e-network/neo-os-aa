@@ -1,8 +1,8 @@
 export const STUDIO_TABS = [
   { key: 'operations', label: 'Operations Workspace', description: 'Load, compose, sign, share, and broadcast SA transactions' },
-  { key: 'create', label: 'Create Account', description: 'Deploy a new deterministic smart-contract account' },
-  { key: 'manage', label: 'Manage Governance', description: 'Update verifier, hook, backup owner, and escape settings' },
-  { key: 'permissions', label: 'Permissions & Limits', description: 'Call verifier and hook plugin methods directly' },
+  { key: 'create', label: 'Create Account', description: 'Create a v4 account from a custody, a salt and its recovery timelock' },
+  { key: 'manage', label: 'Manage Configuration', description: 'Install, configure and remove modules, hook order, and recovery policy' },
+  { key: 'permissions', label: 'Module Calls', description: 'Call installed module methods directly' },
   { key: 'source', label: 'View Source', description: 'Browse the on-chain contract source files' }
 ];
 
@@ -12,57 +12,77 @@ export const DEFAULT_RECENT_TRANSACTIONS_LIMIT = 8;
 export function createCreateFormState() {
   return {
     matrixDomain: '',
-    verifierContract: '',
-    verifierParams: '',
-    hookContract: '',
-    backupOwner: '',
-    escapeTimelockDays: 30,
+    custody: '',
+    salt: '',
+    recoveryTimelockDays: 30,
   };
 }
 
 export function createManageFormState() {
   return {
     accountAddress: '',
-    verifierContract: '',
-    verifierParams: '',
-    hookContract: '',
-    backupOwner: '',
-    escapeTimelock: '',
-    escapeTriggeredAt: '',
-    escapeActive: false,
-    escapeMode: 'backup-owner',
-    escapeNewVerifier: '',
-    escapeVerifierParams: '',
-    escapeAllowEmptyParams: false,
-    escapeOwnerOnlyAcknowledged: false,
+    // getAccount descriptor
+    status: '',
+    custody: '',
+    recoveryAuthority: '',
+    recoveryTimelockMs: '',
+    authorityEpoch: '',
+    configurationNonce: '',
+    hookOrderRevision: '',
+    defaultOperationAuthorization: true,
+    defaultMessageAuthorization: true,
+    ownerOnlyRecovery: false,
+    recoveryPending: false,
+    recoveryMatureAt: '',
+    marketEscrowActive: false,
+    // installed modules and the pending intent
+    modules: [],
+    hookIds: [],
+    pendingIntent: null,
+    // install / configure inputs
+    moduleType: 'validator',
+    moduleContract: '',
+    moduleProfileDigest: '',
+    moduleInitDataJson: '[]',
+    selectedModuleId: '',
+    moduleConfigJson: '[]',
+    moduleDeInitDataJson: '[]',
+    // policy inputs
+    thresholdPolicyId: '0',
+    threshold: '1',
+    thresholdMembers: [],
+    thresholdActive: true,
+    recoveryPolicyAuthority: '',
+    recoveryPolicyTimelockDays: 30,
+    ownerOnlyAcknowledged: false,
+    // recovery inputs
+    newCustody: '',
   };
 }
 
 export function createPermissionsFormState() {
   return {
     accountAddress: '',
-    verifierMethod: '',
-    verifierArgsJson: '[]',
-    hookMethod: '',
-    hookArgsJson: '[]',
+    moduleId: '',
+    method: '',
+    argsJson: '[]',
   };
 }
 
 export function createManageBusyState() {
   return {
     load: false,
-    hook: false,
-    verifier: false,
-    initiateEscape: false,
-    finalizeEscape: false,
-    governance: false,
+    propose: false,
+    confirm: false,
+    cancel: false,
+    recovery: false,
+    freeze: false,
   };
 }
 
 export function createPermissionsBusyState() {
   return {
-    verifierCall: false,
-    hookCall: false,
+    call: false,
   };
 }
 

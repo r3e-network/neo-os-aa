@@ -22,7 +22,7 @@ activation and the exact protocol profile before enabling account actions.
 The deployed-contract track is usable on the published Neo N3 runtime after
 its own artifact, integration, and deployment readback gates. Its identity,
 wire format, callback resources, recovery and sponsorship guarantees remain
-profile-specific; passing native profile checks does not reclassify a V3
+profile-specific; passing native profile checks does not reclassify a v4
 deployment as native.
 
 The [usability follow-up](docs/reports/sa-native-usability-20261009.md) covers
@@ -34,8 +34,8 @@ local implementation evidence from the remaining protocol and activation gates.
 
 Runtime and deployment boundaries:
 
-- This repository retains `SmartAccountV3` compatibility for the public deployments listed below, alongside the native `SmartAccount` implementation.
-- V3 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus verifier and hook plugins.
+- This repository ships protocol version 4 for the public deployments listed below, alongside the native `SmartAccount` implementation; the deployed contract keeps the `SmartAccountV3` manifest label so existing indexers keep resolving it.
+- v4 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus validator and hook modules installed through configuration intents.
 - The `public` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
 - [System capability boundaries](docs/SA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
 - The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
@@ -44,8 +44,8 @@ Runtime and deployment boundaries:
 The two implementation versions live on this branch, each in its own directory
 under `contracts/`: the [custom user-contract](contracts/custom/README.md) in
 `contracts/custom/` and the [native SmartAccount profile](contracts/native/README.md)
-in `contracts/native/`. The verifier, hook and recovery plugins that both
-implementations bind live in `contracts/plugins/`. Each `profile.json` maps its
+in `contracts/native/`. The validator, hook and recovery modules that both
+implementations install live in `contracts/plugins/`. Each `profile.json` maps its
 implementation's canonical source roots, compatibility paths, artifacts and
 profile-specific verification commands.
 
@@ -66,17 +66,18 @@ checked by the architecture source-coverage gate.
 Proposed v2 binding: in `neo-os-web/docs/workspace/neoos-target-architecture.v2.json` (status `PROPOSED`, validated by `npm run check:architecture:v2` in `neo-os-web`) this repository is v2 layer L1 (chain-protocol) and owns C03 account. The v1 binding above remains the enforced contract until the v2 adoption procedure completes.
 
 
-## Public V3 features
-- **Deterministic V3 Accounts**: Each account is keyed by a 20-byte `accountId` and derives a stable Neo virtual address without deploying per-user wallet logic.
-- **Verifier Plugin Authorization**: Bind Web3Auth, TEE, WebAuthn, session keys, multisig, or other verifier plugins per account.
-- **Hook Plugin Policy Enforcement**: Attach optional hook plugins for daily limits, token restrictions, credential gates, and post-execution controls.
-- **Backup-Owner Recovery**: Every account can define a native Neo backup owner plus timelocked verifier rotation. Finalization currently requires successful cleanup by the old plugins; see [recovery boundaries](docs/ACCOUNT_RECOVERY_AND_IDENTITY.md).
+## Protocol v4 features
+- **Deterministic accounts**: Each account is keyed by a 20-byte `accountId` derived from a custody key and salt, and resolves to a stable Neo virtual address without deploying per-user wallet logic.
+- **Validator Module Authorization**: Install Web3Auth, TEE, P-256, session-key, subscription, delegated-identity, witness or multi-signature validator modules per account instance.
+- **Hook Module Policy Enforcement**: Attach hook modules for daily limits, token restrictions, credential gates and post-execution controls; the core owns the hook order that runs them.
+- **Configuration Intents**: Installing, uninstalling, re-binding or re-configuring a module is staged as an intent that matures after 24 hours and expires seven days later; `proposeConfiguration`, `confirmConfiguration` and `cancelConfiguration` are the only write paths.
+- **Backup-Owner Recovery**: Every account can define a native Neo backup owner, and recovery is delegated to an installed recovery service; see [recovery boundaries](docs/ACCOUNT_RECOVERY_AND_IDENTITY.md).
 - **Trustless SA Address Escrow Market**: Deterministic SA addresses can be listed, escrow-locked, purchased with GAS, and transferred atomically on-chain.
-- **Cross-Chain EVM Compatibility**: V3 supports secp256k1 / Keccak256 EIP-712 `UserOperation` signatures through the Web3Auth verifier path.
+- **Cross-Chain EVM Compatibility**: v4 accepts secp256k1 / Keccak256 EIP-712 signatures through the delegated identity validator path.
 - **On-Chain Paymaster (Sponsored Transactions)**: The `SAPaymaster` contract enables trustless gasless execution — sponsors deposit GAS, create per-account or global sponsorship policies, and relays are reimbursed automatically after successful `UserOp` execution. Supports per-op limits, daily budgets, total budgets, target/method restrictions, and expiry timestamps.
-- **Policy-Gated Execution**: New integrations should flow through `executeUserOp(accountId, op)` where nonce handling, verification, hooks, and target execution stay centralized.
+- **Policy-Gated Execution**: New integrations should flow through `executeUserOp(accountId, op)` where nonce handling, validation, hooks, and target execution stay centralized.
 
-## Public V3 App + Market Deployment
+## Public v4 App + Market Deployment
 
 The frontend now separates:
 
@@ -91,7 +92,7 @@ For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VIT
 If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `SA_RELAY_WIF` on the server, prefer `SA_RELAY_RPC_URL` for the relay backend, pin `SA_RELAY_ALLOWED_HASH` to the intended SA contract, and leave `SA_RELAY_ALLOW_RAW_FORWARD=0` unless you explicitly want raw passthrough in `frontend/api/relay-transaction.js`.
 For local setup, start from `frontend/.env.example` and copy the values you need into `frontend/.env.local` or your hosting provider's environment-variable dashboard.
 
-For on-chain sponsored transactions via the `SAPaymaster` contract, set `VITE_SA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the SA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `createSponsoredUserOpPayload` and `validatePaymasterOp` methods.
+For on-chain sponsored transactions via the `SAPaymaster` contract, set `VITE_SA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the SA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `buildSponsoredExecutionScript` and the paymaster's `validatePaymasterOp`.
 
 Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/SA-PROXY-TRANSFERS.md).
 
@@ -109,8 +110,8 @@ The relay route now forwards optional paymaster metadata and can request Morpheu
 
 Production integrations should treat the core SA runtime as having three distinct boundaries:
 
-- **validation preview**: `previewUserOpValidation(accountId, op)` is a read-only check for deadline validity, nonce acceptability, and current verifier/hook bindings
-- **authorization**: only the configured verifier plugin or backup-owner witness can authorize `executeUserOp`
+- **validation preview**: `previewUserOpValidation(accountId, op)` is a read-only check for deadline validity, nonce acceptability, and the installed validator/hook module set
+- **authorization**: only an installed validator module, or the backing witness of a delegated session, can authorize `executeUserOp`
 - **execution**: hooks and target contracts still run after authorization and can still reject the operation
 
 The relay is an operator convenience layer, not an authority layer:
@@ -118,19 +119,19 @@ The relay is an operator convenience layer, not an authority layer:
 - **relay trust boundary**: the relay can simulate, package, and submit, but it cannot authorize on behalf of the account
 - relay preflight and validation preview help operators simulate readiness before submit
 - relay submission can package and pay for transactions, but it does not replace on-chain signature validation
-- paymaster sponsorship (on-chain or off-chain) does not replace the configured verifier or backup-owner witness
+- paymaster sponsorship (on-chain or off-chain) does not replace the installed validator or backup-owner witness
 - paymaster does not authorize execution — it only funds the relay reimbursement after successful verification
 
 ### Module Lifecycle
 
-V3 now exposes a generic module lifecycle for new tooling while preserving the legacy verifier/hook events for compatibility.
+v4 stages every module change as a configuration intent and reports the resulting instance:
 
-- **install**: first binding of a verifier or hook emits `ModuleInstalled`
-- **replace**: timelocked rotations emit `ModuleUpdateInitiated` and later `ModuleUpdateConfirmed`
-- **remove**: clearing a binding, escape-driven clearing, or market-settlement cleanup emits `ModuleRemoved`
-- **cancel**: aborting a pending verifier or hook rotation emits `ModuleUpdateCancelled`
+- **install**: installing a module instance emits `ModuleInstanceInstalled`; binding it to the core through a confirmed intent emits `ModuleInstalled`
+- **configure**: re-configuring a live instance emits `ModuleInstanceConfigured`
+- **uninstall**: removing an instance emits `ModuleInstanceRemoved`; clearing its core binding emits `ModuleRemoved`
+- **intents**: `proposeConfiguration` emits `ConfigurationIntentProposed`, `confirmConfiguration` emits `ConfigurationIntentConfirmed`, `cancelConfiguration` emits `ConfigurationIntentCancelled`, and an intent past its seven-day window emits `ConfigurationIntentExpired`
 
-This generic lifecycle is the recommended surface for indexers, dashboards, and operational tooling that should not care whether the bound module is a verifier or a hook.
+`HookOrderSet` and `ThresholdPolicySet` record the core-owned hook order and the multi-signature threshold. This is the recommended surface for indexers, dashboards, and operational tooling: an event names the module id and type instead of assuming one bound verifier field.
 
 ## Canonical Morpheus Network Anchors
 
@@ -165,14 +166,14 @@ Current published Morpheus CVM attestation anchors:
 - DataFeed CVM: `datafeed-morpheus-neo-r3e` / `ac5b6886a2832df36e479294206611652400178f`
 - DataFeed attestation explorer: `https://cloud.phala.com/explorer/app_ac5b6886a2832df36e479294206611652400178f`
 
-Do not conflate the SA recovery verifier with the independent NeoDID registry:
+Do not conflate the SA recovery service with the independent NeoDID registry:
 
-- `SocialRecoveryVerifier` is the SA-specific recovery verifier
+- `SocialRecoveryVerifier` is the registered SA-specific recovery service entry; in v4 an account reaches it through the installed recovery-service validator rather than a bound field
 - `NeoDIDRegistry` is the independent Morpheus identity / action-ticket registry
 
 Current validation references:
 
-- `docs/SECURITY_MODEL.md` is the bounded-claim ledger for verifiers, hooks, recovery and paymaster paths.
+- `docs/SECURITY_MODEL.md` is the bounded-claim ledger for validator modules, hooks, recovery and paymaster paths.
 - `docs/PROTOCOL_COMPLETENESS_AUDIT.md` states protocol coverage and the deployment gates that remain open.
 - The on-chain `SAPaymaster` contract provides an alternative trustless sponsorship model without off-chain dependencies.
 
@@ -215,7 +216,7 @@ If you want the clearest end-to-end explanation, read these docs in order:
 - **Data Flow & Storage** — what lives in the browser, Supabase, relay, and on-chain boundaries
 - **SDK Integration** — runtime variables, relay behavior, and deployment setup
 - **Mixed Multi-Sig (N3 + EVM)** — how combined native + EVM signing works in practice
-- **Morpheus Private Actions** — NeoDID / Web3Auth integration, session keys, and TEE verifier private actions in `docs/MORPHEUS_PRIVATE_ACTIONS.md`
+- **Morpheus Private Actions** — NeoDID / Web3Auth integration, session keys, and TEE validator private actions in `docs/MORPHEUS_PRIVATE_ACTIONS.md`
 
 ## Quickstart
 
@@ -227,7 +228,7 @@ If you want the clearest end-to-end explanation, read these docs in order:
   by `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
   `node scripts/check_neo_platform_packages.mjs` checks the pins and
   `docs/SA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. `public`
-  verifier callbacks execute on the published TestEngine. Only the separate `PLATFORM` artifact
+  validator and hook callbacks execute on the published TestEngine. Only the separate `PLATFORM` artifact
   requires the private `System.Contract.CallWithGasLimit` extension; its budget guarantees must
   not be attributed to the public build (`docs/NEO-PLATFORM-PACKAGES.md`).
 
@@ -309,7 +310,7 @@ See [`docs/TESTNET_QUICKSTART.md`](docs/TESTNET_QUICKSTART.md) for the dry-run-f
 ```bash
 cd sdk/js
 cp .env.example .env
-# fill in TEST_WIF
+# fill in TEST_WIF or NEO_TESTNET_WIF
 npm run testnet:validate:dry-run
 npm run testnet:validate
 ```
@@ -318,14 +319,16 @@ When public testnet RPC reliability matters, you can pin one endpoint with `TEST
 
 For the off-chain Morpheus paymaster lanes, the validators also fall back to the remote worker path through `phala` (or `npx --yes phala`) when the public `paymaster/authorize` endpoint rejects a valid Phala Cloud API token with `401` or `403`.
 
-The runner now executes the current V3 live testnet flow in order:
+The runner executes the v4 live testnet flow in order:
 
 - `testnet_smoke.js`
 - `testnet_plugin_matrix.js`
 - `testnet_market_escrow.js`
 - `testnet_paymaster_onchain.mjs`
-- `testnet_paymaster_policy.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
+- `testnet_paymaster_policy.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available, plus `SA_CORE_HASH_TESTNET` and `PAYMASTER_ACCOUNT_ID`
 - `testnet_paymaster_relay.mjs` when `MORPHEUS_RUNTIME_TOKEN` or `PHALA_API_TOKEN` is available
+
+Every stage deploys the v4 kernel and the modules it installs under their canonical manifest names, because the SDK client only adopts a contract named `SmartAccount` and the kernel binds a module by comparing the profile's `contractName` with the deployed manifest name ([§7.3](docs/SA-MODULE-PROTOCOL.md)). Only non-module contracts (paymaster, address market, test probe) carry a per-run suffix. `SA_VALIDATION_RUN_ID` names one run, `SA_VALIDATION_DEPLOY_TAG` overrides the derived tag, and `SA_MATRIX_SCENARIOS` narrows the plugin matrix to a comma-separated scenario list.
 
 You can also run the stages individually with:
 
@@ -370,7 +373,7 @@ The evidence this repository can reproduce today is the local-chain suite
 
 Production note:
 
-- `ZKEmailVerifier` is intentionally disabled until a real proof-verification implementation is added. It advertises no V3 capability, so the core rejects binding it to an account at registration or update time; its validation path also fails closed as defense in depth. The previous placeholder behavior was not production-safe.
+- `ZKEmailVerifier` is intentionally disabled until a real proof-verification implementation is added. It advertises no capability, so the core rejects installing it on an account; its validation path also fails closed as defense in depth. The previous placeholder behavior was not production-safe.
 
 ### Historical V1/V2 Validation (archived)
 
@@ -385,12 +388,12 @@ verbatim in
 ## Structure
 - `contracts/custom/`: C# Smart Contract implementation of the Master Entry Contract (the user-contract `SmartAccount` core) and its service contracts.
 - `contracts/native/`: True source of the native consensus `SmartAccount` service and the overlay Neo core project that compiles it.
-- `contracts/plugins/`: Plugin contracts shared by both implementations.
-- `contracts/plugins/verifiers/`: Verifier plugins (Web3Auth, TEE, WebAuthn, SessionKey, MultiSig, etc.).
-- `contracts/plugins/hooks/`: Hook plugins (DailyLimit, Whitelist, TokenRestricted, MultiHook, NeoDIDCredential).
-- `contracts/plugins/recovery/`: Morpheus social-recovery verifier.
-- `contracts/plugins/templates/`: Starting points for third-party verifier and hook plugins.
-- `contracts/plugins/native-profile/`: Native-profile builds of the shared plugins.
+- `contracts/plugins/`: Module contracts shared by both implementations.
+- `contracts/plugins/validators/`: Validator modules (Web3Auth, NeoWitness, P256, TeeKey, SessionKey, Subscription, DelegatedIdentity, MultiSig, and the disabled ZKEmail template).
+- `contracts/plugins/hooks/`: Hook modules (DailyLimit, Whitelist, TokenRestricted, NeoDIDCredential; MultiHook is retired).
+- `contracts/plugins/recovery/`: The optional social-recovery service and the action-session validator that delegates to it.
+- `contracts/plugins/templates/`: Starting points for third-party validator and hook modules.
+- `contracts/plugins/native-profile/`: Native-profile builds of the shared modules.
 - `contracts/custom/paymaster/`: On-chain Paymaster contract for sponsored/gasless transactions.
 - `contracts/custom/market/`: Standalone `SAAddressMarket` escrow contract.
 - `contracts/custom/registrar/`: Standalone `SAPlatformRegistrar` service contract for platform-account registration and owner-rotation timelocks, extracted from the core.

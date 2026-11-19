@@ -1,21 +1,40 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 
+import { EC } from '../src/config/errorCodes.js';
 import {
   DEFAULT_NEO_ADDRESS_VERSION,
-  createVerifyScript,
+  MAX_RECOVERY_TIMELOCK_MS,
+  MIN_RECOVERY_TIMELOCK_MS,
+  REGISTRATION_SALT_MAX_BYTES,
+  createProxyScript,
+  deriveAccountAddress,
   deriveAccountIdHash,
-  deriveRegistrationAccountIdHash,
-  deriveRegistrationAccountIdChainHex,
+  deriveAccountIdentity,
+  deriveAccountIdentityChainHex,
   getAddressFromScriptHash,
   getScriptHashFromAddress,
+  hash160,
   reverseHex,
   invokeReadFunction,
 } from '../src/utils/neo.js';
 
 const require = createRequire(import.meta.url);
 const { SmartAccountClient } = require('../../sdk/js/src/index.js');
+
+/** hash160 as the protocol defines it, computed here instead of by the module under test. */
+const hash160Hex = (hex) => createHash('ripemd160')
+  .update(createHash('sha256').update(Buffer.from(hex, 'hex')).digest())
+  .digest('hex');
+
+const CORE_HASH = '5be915aea3ce85e4752d522632f0a9520e377aaf';
+const CUSTODY = '13ef519c362973f9a34648a9eac5b71250b2a80a';
+const SALT = '0a1b2c3d';
+
+// §16.1: accountId = hash160('aa524704' || reverse(custody) || salt).
+const EXPECTED_ACCOUNT_ID = hash160Hex(`aa524704${reverseHex(CUSTODY)}${SALT}`);
 
 test('reverseHex reverses byte order', () => {
   assert.equal(reverseHex('0123456789abcdef'), 'efcdab8967452301');
@@ -28,110 +47,91 @@ test('Neo address helpers round-trip a known script hash', () => {
   assert.equal(address, 'NLtL2v28d7TyMEaXcPqtekunkFRksJ7wxu');
   assert.equal(getScriptHashFromAddress(address), scriptHash);
   assert.equal(DEFAULT_NEO_ADDRESS_VERSION, 53);
+  assert.equal(hash160(reverseHex(scriptHash)), hash160Hex(reverseHex(scriptHash)));
 });
 
 test('deriveAccountIdHash normalizes arbitrary seeds into a 20-byte account id', () => {
   assert.equal(
     deriveAccountIdHash('56e5bbd0603bdf01699c047b2397ee0e'),
-    'f951cd3eb5196dacde99b339c5dcca37ac38cc22'
+    'f951cd3eb5196dacde99b339c5dcca37ac38cc22',
   );
+  // A 20-byte id is already an id: it is returned untouched.
+  assert.equal(deriveAccountIdHash(`0x${CUSTODY}`), CUSTODY);
+  assert.throws(() => deriveAccountIdHash(''), (error) => error.message === EC.accountSeedRequired);
 });
 
-const REGISTRATION_VECTOR = {
-  verifierContractHash: '0x5be915aea3ce85e4752d522632f0a9520e377aaf',
-  verifierParamsHex: '11223344',
-  backupOwnerAddress: '0x13ef519c362973f9a34648a9eac5b71250b2a80a',
-  escapeTimelock: 2592000,
-};
-// Matches the on-chain ComputeRegistrationAccountId display form and the SDK
-// (sdk/js/tests/flow.unit.test.js pins the same value).
-const REGISTRATION_VECTOR_DISPLAY_HEX = '27c01243fca45e1b821dc3bb45267a579762d530';
-// Internal little-endian VM byte order, for raw script pushes only.
-const REGISTRATION_VECTOR_CHAIN_HEX = '30d56297577a2645bbc31d821b5ea4fc4312c027';
-
-test('deriveRegistrationAccountIdHash binds the V3 account id to the registration config', () => {
+test('deriveAccountIdentity hashes the v4 custody+salt preimage', () => {
+  const identity = deriveAccountIdentity({ custodyAddress: CUSTODY, salt: SALT });
+  assert.equal(identity.accountId, EXPECTED_ACCOUNT_ID);
+  assert.equal(identity.identityPreimageHex, `aa524704${reverseHex(CUSTODY)}${SALT}`);
+  // A Neo address names its own custody hash; both spellings derive one identity.
   assert.equal(
-    deriveRegistrationAccountIdHash(REGISTRATION_VECTOR),
-    REGISTRATION_VECTOR_DISPLAY_HEX
+    deriveAccountIdentity({ custodyAddress: getAddressFromScriptHash(CUSTODY), salt: SALT }).accountId,
+    EXPECTED_ACCOUNT_ID,
   );
+  assert.equal(deriveAccountIdentityChainHex({ custodyAddress: CUSTODY, salt: SALT }), reverseHex(EXPECTED_ACCOUNT_ID));
 });
 
-test('registration account id chain hex is the byte-reversed display form', () => {
-  assert.equal(
-    deriveRegistrationAccountIdChainHex(REGISTRATION_VECTOR),
-    REGISTRATION_VECTOR_CHAIN_HEX
+test('the identity derivation binds the salt and refuses inputs it cannot hash', () => {
+  assert.notEqual(
+    deriveAccountIdentity({ custodyAddress: CUSTODY, salt: 'aabb' }).accountId,
+    deriveAccountIdentity({ custodyAddress: CUSTODY, salt: 'aabbcc' }).accountId,
   );
-  assert.equal(
-    deriveRegistrationAccountIdChainHex(REGISTRATION_VECTOR),
-    reverseHex(deriveRegistrationAccountIdHash(REGISTRATION_VECTOR))
-  );
-});
-
-test('frontend and SDK derive byte-identical registration account ids', () => {
-  const client = new SmartAccountClient('https://example.invalid', '0x1234567890123456789012345678901234567890');
-  assert.equal(
-    deriveRegistrationAccountIdHash(REGISTRATION_VECTOR),
-    client.deriveRegistrationAccountIdHash(REGISTRATION_VECTOR)
-  );
-});
-
-test('deriveRegistrationAccountIdHash rejects escape timelocks outside the contract registration bounds', () => {
-  assert.throws(
-    () => deriveRegistrationAccountIdHash({
-      backupOwnerAddress: '0x13ef519c362973f9a34648a9eac5b71250b2a80a',
-      escapeTimelock: 604799,
-    }),
-    /escape timelock/i
-  );
-
-  assert.throws(
-    () => deriveRegistrationAccountIdHash({
-      backupOwnerAddress: '0x13ef519c362973f9a34648a9eac5b71250b2a80a',
-      escapeTimelock: 7776001,
-    }),
-    /escape timelock/i
-  );
-});
-
-test('deriveRegistrationAccountIdHash rejects malformed verifier parameters', () => {
-  for (const verifierParamsHex of ['zz', '0x12zz', 'abc']) {
+  // An empty salt has no uniqueness material and a salt beyond 128 bytes has no protocol form.
+  for (const salt of ['', 'aa'.repeat(REGISTRATION_SALT_MAX_BYTES + 1), 'zz']) {
     assert.throws(
-      () => deriveRegistrationAccountIdHash({
-        backupOwnerAddress: '0x13ef519c362973f9a34648a9eac5b71250b2a80a',
-        verifierParamsHex,
-        escapeTimelock: 604800,
-      }),
-      /verifier parameters hex|invalid hex length/i,
+      () => deriveAccountIdentity({ custodyAddress: CUSTODY, salt }),
+      (error) => error.message === EC.registrationSaltInvalid,
+      `salt ${salt.slice(0, 8)} must be refused`,
+    );
+  }
+  for (const custodyAddress of ['', '0x12', 'zz'.repeat(20)]) {
+    assert.throws(
+      () => deriveAccountIdentity({ custodyAddress, salt: SALT }),
+      (error) => error.message === EC.addressValidationFailed,
     );
   }
 });
 
-test('createVerifyScript matches the V3 verify script encoding', () => {
-  const script = createVerifyScript(
-    '5be915aea3ce85e4752d522632f0a9520e377aaf',
-    REGISTRATION_VECTOR_DISPLAY_HEX
-  );
-
+test('frontend and SDK derive byte-identical account identities', () => {
+  const client = new SmartAccountClient({ rpcUrl: 'https://example.invalid', networkMagic: 894710606, contractHash: CORE_HASH });
   assert.equal(
-    script,
-    '0c1430d56297577a2645bbc31d821b5ea4fc4312c02711c01f0c067665726966790c14af7a370e52a9f03226522d75e485cea3ae15e95b41627d5b52'
+    deriveAccountIdentity({ custodyAddress: CUSTODY, salt: SALT }).accountId,
+    client.deriveIdentity({ custodyAddress: CUSTODY, salt: SALT }).accountId,
   );
 });
 
-test('frontend and SDK derive one canonical virtual account address', () => {
-  const coreHash = '0123456789abcdef0123456789abcdef01234567';
-  const accountId = '89abcdef0123456789abcdef0123456789abcdef';
-  const expectedScript = '0c14efcdab8967452301efcdab8967452301efcdab8911c01f0c067665726966790c1467452301efcdab8967452301efcdab896745230141627d5b52';
-  const expectedScriptHash = 'f2afddbbdae6b710f0c2cdebb8b734e40d4d4fda';
-  const expectedAddress = 'NfpHVWDgSaedTHuk183urAp9FDBS4i4VYB';
-  const client = new SmartAccountClient('https://example.invalid', coreHash);
-  const account = client.deriveVirtualAccount(accountId);
+test('the recovery timelock bounds are the protocol window in milliseconds', () => {
+  assert.equal(MIN_RECOVERY_TIMELOCK_MS, 7 * 86_400_000);
+  assert.equal(MAX_RECOVERY_TIMELOCK_MS, 90 * 86_400_000);
+});
 
-  assert.equal(createVerifyScript(coreHash, accountId), expectedScript);
-  assert.equal(account.verifyScript, expectedScript);
-  assert.equal(account.scriptHash, expectedScriptHash);
-  assert.equal(account.address, expectedAddress);
-  assert.equal(getAddressFromScriptHash(expectedScriptHash), expectedAddress);
+test('createProxyScript emits the §16.1 proxy verification script', () => {
+  const accountId = '89abcdef0123456789abcdef0123456789abcdef';
+  const script = createProxyScript(CORE_HASH, accountId);
+
+  // PUSHDATA1 20 accountId | PUSH1 PACK | PUSH15 | PUSHDATA1 "verify" | PUSHDATA1 20 core | SYSCALL
+  assert.equal(
+    script,
+    `0c14${reverseHex(accountId)}11c01f0c067665726966790c14${reverseHex(CORE_HASH)}41627d5b52`,
+  );
+  // The native kernel pushes CallFlags.ReadOnly (5) and therefore has a different address.
+  assert.equal(
+    createProxyScript(CORE_HASH, accountId, 5),
+    `0c14${reverseHex(accountId)}11c0150c067665726966790c14${reverseHex(CORE_HASH)}41627d5b52`,
+  );
+});
+
+test('frontend and SDK derive one canonical account address', () => {
+  const accountId = EXPECTED_ACCOUNT_ID;
+  const script = createProxyScript(CORE_HASH, accountId);
+  const address = deriveAccountAddress({ accountId, coreContractHash: CORE_HASH });
+  const client = new SmartAccountClient({ rpcUrl: 'https://example.invalid', networkMagic: 894710606, contractHash: CORE_HASH });
+
+  assert.equal(address, reverseHex(hash160Hex(script)));
+  assert.equal(client.proxyAddress(accountId), address);
+  assert.equal(client.deriveIdentity({ custodyAddress: CUSTODY, salt: SALT }).accountAddress, address);
+  assert.notEqual(getScriptHashFromAddress(getAddressFromScriptHash(address)), '');
 });
 
 test('invokeReadFunction posts an invokefunction payload', async () => {

@@ -27,19 +27,32 @@ public class ReimbursementIntegerBoundaryRuntimeTests
     public void ZeroFeePublicReservationClassifiesIntegerBoundary(bool addSecond)
     {
         RuntimeFixture fx = new();
+        using P256SessionKey custodyKey = new();
         UInt160 core = fx.Deploy("SmartAccount");
         UInt160 policy = DeployPolicy(fx, core);
-        UInt160 account = fx.CallUInt160(core, "computeRegistrationAccountId", UInt160.Zero,
-            System.Array.Empty<byte>(), UInt160.Zero, Owner, (uint)2_592_000);
-        fx.SetSigners(Owner);
-        fx.CallVoid(core, "registerAccount", account, UInt160.Zero, System.Array.Empty<byte>(),
-            UInt160.Zero, Owner, (uint)2_592_000);
+        UInt160 custody = RuntimeFixture.CustodyOf(custodyKey);
+
+        // v4 identity is custody‖salt and the account is created directly.
+        // Registration seeds the message subject set with the custody address at
+        // subjectRevision 1 (§8), so the owner-only built-in route authorizes
+        // exactly one custody subject without installing a validator; adding a
+        // setMessageSubjects action here would advance that revision and invalidate
+        // the §8 signature envelope.
+        UInt160 account = fx.CreateAccount(core, custody, "reimbursement-boundary");
+
         BigInteger deadline = fx.Now() + 3_600_000;
+        BigInteger configurationNonce = fx.AccountConfigurationNonce(core, account);
+        BigInteger nonce = fx.PackedNonce(core, account, 0);
         using ScriptBuilder script = new();
-        AppendCall(script, core, account, policy, deadline, 0, Maximum);
-        if (addSecond) AppendCall(script, core, account, policy, deadline, 1, BigInteger.One);
+        AppendCall(fx, script, core, account, policy, deadline, nonce, Maximum,
+            custodyKey, configurationNonce);
+        if (addSecond)
+        {
+            AppendCall(fx, script, core, account, policy, deadline, nonce + 1, BigInteger.One,
+                custodyKey, configurationNonce);
+        }
         script.Emit(OpCode.RET);
-        fx.SetSigners(Relay, Owner);
+        fx.SetSigners(Relay, custody);
         fx.Engine.Transaction.SystemFee = 0;
         fx.Engine.Transaction.NetworkFee = 0;
         fx.Engine.Transaction.Script = script.ToArray();
@@ -151,10 +164,13 @@ public class ReimbursementIntegerBoundaryRuntimeTests
         _ => throw new ArgumentException("Unsupported boundary fixture value")
     };
 
-    private static void AppendCall(ScriptBuilder script, UInt160 core, UInt160 account,
-        UInt160 policy, BigInteger deadline, BigInteger nonce, BigInteger amount)
+    private static void AppendCall(RuntimeFixture fx, ScriptBuilder script, UInt160 core, UInt160 account,
+        UInt160 policy, BigInteger deadline, BigInteger nonce, BigInteger amount,
+        P256SessionKey key, BigInteger configurationNonce)
     {
-        object[] op = RuntimeFixture.UserOp(policy, "run", [], nonce, deadline, System.Array.Empty<byte>());
+        object[] op = RuntimeFixture.UserOp(policy, "run", [], nonce, deadline, new byte[] { 0x00 },
+            configurationNonce: configurationNonce);
+        op[11] = fx.SignBuiltIn(core, account, op, key);
         script.EmitPush(Parameter(new object[] { account, op, policy, Owner, amount }));
         script.EmitPush((BigInteger)(int)CallFlags.All);
         script.EmitPush("executeSponsoredUserOp"); script.EmitPush(core.ToArray());
