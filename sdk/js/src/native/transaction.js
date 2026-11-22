@@ -145,23 +145,19 @@ function createNativeTransactionTools(c) {
 
   /**
    * The witnesses the core will check for this plan. v4 has no authority list
-   * in the plan: the account state is the authority, and `executeRecovery` is
-   * permissionless by design.
+   * in the plan: the account state is the authority. The minimal core
+   * administers an account through its custody witness or through the witness
+   * of an installed validator, so an account action is custody-gated here.
+   * Recovery and configuration transitions are user-space module concerns, so
+   * there is no permissionless native action.
    */
   async function requiredWitnesses(client, plan) {
     if (plan.kind === "registration")
       return { all: [c.hex(required(plan.custodyAddress, "registration custody"), 20)], any: [] };
     if (plan.kind === "execution") return { all: [], any: [] };
-    if (plan.method === "executeRecovery") return { all: [], any: [] };
     const state = await client.getAccount(plan.accountId);
     if (!state) fail("account does not exist on this core");
-    const custody = c.hex(state.custodyAddress, 20);
-    const recovery = state.recoveryAuthority && !/^0+$/.test(state.recoveryAuthority)
-      ? c.hex(state.recoveryAuthority, 20)
-      : null;
-    if (plan.method === "beginRecovery" || plan.method === "cancelRecovery")
-      return { all: [], any: [custody, ...(recovery ? [recovery] : [])] };
-    return { all: [custody], any: [] };
+    return { all: [c.hex(state.custodyAddress, 20)], any: [] };
   }
 
   /** Rebuild the plan from the review recipe so an archived review stays checkable. */
@@ -170,25 +166,10 @@ function createNativeTransactionTools(c) {
       fail("a review requires the recipe that built its plan");
     if (recipe.method === "buildCreateAccountScript")
       return client.buildCreateAccountScript(recipe.input);
-    if (recipe.method === "buildCreateAccountsScript") {
-      if (typeof client.buildCreateAccountsScript !== "function")
-        fail("this kernel has no batch registration");
-      return client.buildCreateAccountsScript(recipe.input);
-    }
     if (recipe.method === "buildExecutionScript")
       return client.buildExecutionScript(recipe.input);
-    if (recipe.method === "buildConfigurationScript")
-      return client.buildConfigurationScript(recipe.input);
     if (recipe.method === "buildAccountActionScript")
       return client.buildAccountActionScript(recipe.input);
-    // The custom kernel's custody-gated services (metadata, escrow) are core
-    // calls too; a review of one must be rebuildable by the same method that
-    // produced it, or its bytes are not the reviewed intent.
-    if (recipe.method === "buildCustomActionScript") {
-      if (typeof client.buildCustomActionScript !== "function")
-        fail("this kernel has no custom account actions");
-      return client.buildCustomActionScript(recipe.input);
-    }
     fail(`unsupported review recipe ${String(recipe.method)}`);
   }
 

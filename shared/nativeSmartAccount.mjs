@@ -1,8 +1,8 @@
 /**
  * Exact SA module protocol v4 codec (docs/SA-MODULE-PROTOCOL.md).
  *
- * One implementation of the wire format shared by the native and custom
- * kernels: the 13-field operation envelope (§4), the canonical unsigned
+ * One implementation of the wire format of the native kernel: the 13-field
+ * operation envelope (§4), the canonical unsigned
  * serialization (§4.2), the §4.3 operation digest, the §6 nonce channel
  * derivation, the §8 message digest, the §16.1 identity domain and the
  * script builders. Every helper is pure: no RPC, no ambient state, hashing is
@@ -20,6 +20,8 @@ export const ARGS_ENTRIES_MAX = 64;
 export const ARGS_BYTES_MAX = 4096;
 export const ARGS_DEPTH_MAX = 8;
 export const OPERATIONS_PER_ENVELOPE_MAX = 32;
+export const OPERATION_ENCODED_SIZE_MAX = 16384;
+export const ENVELOPE_ENCODED_SIZE_MAX = 65536;
 export const HOOK_PROOFS_ENTRIES_MAX = 8;
 export const HOOK_PROOFS_BYTES_MAX = 4096;
 const ACCOUNT_IDENTITY_DOMAIN = "aa524704";
@@ -234,7 +236,10 @@ function hookProofsValue(proofs) {
   if (!Array.isArray(proofs) || proofs.length > HOOK_PROOFS_ENTRIES_MAX)
     fail(`hook proofs require 0..${HOOK_PROOFS_ENTRIES_MAX} entries`);
   let total = 0;
-  let previous = -1n;
+  // §4.1 [12]: hook ids are module ids, so 0 is not a hook. Seeding the cursor
+  // with 0 makes the strictly-ascending check reject a zero id as well; a -1
+  // cursor silently accepted it.
+  let previous = 0n;
   const entries = proofs.map((entry) => {
     const pair = Array.isArray(entry)
       ? { hookId: entry[0], proof: entry[1] }
@@ -258,7 +263,9 @@ function operationValue(op, emptySignature = false) {
   if (/^0+$/.test(target)) fail("zero target");
   if (!Array.isArray(op.args) || op.args.length > ARGS_ENTRIES_MAX)
     fail(`operation args must be an Array with at most ${ARGS_ENTRIES_MAX} values`);
-  const args = canonicalValue({ type: "Array", value: op.args });
+  // §4.1: the args vector is the first of the eight permitted levels, so the
+  // root is seeded at depth 1 — seven nested Arrays fit, an eighth does not.
+  const args = canonicalValue({ type: "Array", value: op.args }, new Set(), 1);
   if (serialize(args).length / 2 > ARGS_BYTES_MAX)
     fail(`serialized arguments exceed ${ARGS_BYTES_MAX} bytes`);
   const signature = op.signature === undefined || op.signature === null
@@ -272,34 +279,48 @@ function operationValue(op, emptySignature = false) {
   const deadline = unsigned(op.deadline, 255, "deadline");
   const validatorId = unsigned(op.validatorId, 64, "validator id");
   const credentialGeneration = unsigned(
-    op.credentialGeneration,
+    requireGeneration(op.credentialGeneration),
     64,
     "credential generation",
   );
+  // §4.1 [8]: the generation is 1-based and the core faults a zero with
+  // SA_OPERATION_MALFORMED, so the codec refuses to encode one.
+  if (credentialGeneration < 1n) fail("credentialGeneration must be >= 1");
   const authorityEpoch = unsigned(op.authorityEpoch, 64, "authority epoch");
   const configurationNonce = unsigned(
     op.configurationNonce,
     64,
     "configuration nonce",
   );
-  return {
-    type: "Array",
-    value: [
-      integerValue(PROTOCOL_VERSION),
-      hashValue(target),
-      byteStringValue(methodBytes(op.method)),
-      args,
-      integerValue(nonce),
-      byteStringValue(nativeHex(op.nonceSubkey, NONCE_SUBKEY_BYTES)),
-      integerValue(deadline),
-      integerValue(validatorId),
-      integerValue(credentialGeneration),
-      integerValue(authorityEpoch),
-      integerValue(configurationNonce),
-      byteStringValue(emptySignature ? "" : signature),
-      hookProofsValue(op.hookProofs),
-    ],
-  };
+  const fields = [
+    integerValue(PROTOCOL_VERSION),
+    hashValue(target),
+    byteStringValue(methodBytes(op.method)),
+    args,
+    integerValue(nonce),
+    byteStringValue(nativeHex(op.nonceSubkey, NONCE_SUBKEY_BYTES)),
+    integerValue(deadline),
+    integerValue(validatorId),
+    integerValue(credentialGeneration),
+    integerValue(authorityEpoch),
+    integerValue(configurationNonce),
+    byteStringValue(signature),
+    hookProofsValue(op.hookProofs),
+  ];
+  // §4.1 envelope cap: one operation encodes to at most 16 KiB. The signed form
+  // is measured even on the digest path, because the core validates the
+  // broadcast operation, not its signature-free preimage.
+  const signed = { type: "Array", value: fields };
+  if (serialize(signed).length / 2 > OPERATION_ENCODED_SIZE_MAX)
+    fail(`serialized operation exceeds ${OPERATION_ENCODED_SIZE_MAX} bytes`);
+  return emptySignature
+    ? {
+        type: "Array",
+        value: fields.map((field, index) =>
+          index === 11 ? byteStringValue("") : field,
+        ),
+      }
+    : signed;
 }
 function dynamicCall(contract, method, args, flags = 15) {
   const values = canonicalValue(
@@ -321,6 +342,24 @@ function operationSetting(op, name) {
   return be(value, 8);
 }
 
+/// §4.3/§6/§8 generation word. There is no protocol default: the built-in
+/// validator's generation is the account's 0x57 SubjectRevision and an
+/// installed validator's is its CredentialGeneration, so a rule that silently
+/// substituted 1 (or 0) would bind every such digest to a namespace the core
+/// never validates. Only the caller -- or the chain, for the read paths --
+/// knows the value, so a missing one is a hard error here.
+const GENERATION_REQUIRED =
+  "credential generation is required: pass the routing generation read from " +
+  "the chain (SubjectRevision for the built-in validator, CredentialGeneration " +
+  "for an installed validator or threshold policy), never an assumed default";
+function requireGeneration(value) {
+  if (value === undefined || value === null) fail(GENERATION_REQUIRED);
+  return value;
+}
+function generationSetting(value) {
+  return be(unsigned(requireGeneration(value), 64, "credential generation"), 8);
+}
+
 // ---------------------------------------------------------------------------
 // Standalone VM encoders for modules that only build scripts or parameters and
 // never hash (the proxy-witness builder, the transaction artifact, the relay
@@ -336,8 +375,8 @@ export const serializeUserOperation = (op, emptySignature = false) =>
   serialize(operationValue(op, emptySignature));
 export const encodeUserOperation = (op) => encode(operationValue(op));
 export const encodeDynamicCall = (contract, method, flagsOrArgs, maybeFlags) =>
-  // Callers pass (contract, method, args, flags); direct (contract, method, args)
-  // keeps the CallFlags.All default of the custom kernel.
+  // Callers pass (contract, method, args, flags); a direct call without flags
+  // keeps the native kernel's CallFlags.All default.
   dynamicCall(contract, method, flagsOrArgs, maybeFlags);
 export function createProtocolCodec({ sha256, hash160 }) {
   if (typeof sha256 !== "function" || typeof hash160 !== "function")
@@ -347,14 +386,13 @@ export function createProtocolCodec({ sha256, hash160 }) {
 
   /// The account-bound proxy verification script: PUSHDATA1 20 accountId,
   /// PUSH1 PACK <flags>, PUSHDATA1 6 "verify", PUSHDATA1 20 core,
-  /// SYSCALL System.Contract.Call. The two kernels push different call flags
-  /// (the custom kernel builds PUSH15 = CallFlags.All, the native kernel
-  /// pushes PUSH5 = CallFlags.ReadOnly), so the numeric flag is an explicit
-  /// parameter and never inferred: the proxy address must be the one the
-  /// submitting kernel derives.
+  /// SYSCALL System.Contract.Call. The native kernel builds PUSH5 =
+  /// CallFlags.ReadOnly, so 5 is the default here as well; the numeric flag is
+  /// still an explicit parameter, because the proxy address must be the one the
+  /// submitting core derives (spec §16.1).
   const verificationScript = (
     accountId,
-    { coreContractHash = NATIVE_SMART_ACCOUNT_CONTRACT, callFlags = 15 } = {},
+    { coreContractHash = NATIVE_SMART_ACCOUNT_CONTRACT, callFlags = 5 } = {},
   ) => dynamicCall(coreContractHash, "verify", [hashValue(accountId)], callFlags);
 
   /// §16.1 identity: Hash160(0xAA524704 ‖ custody ‖ salt), raw UInt160 storage
@@ -384,7 +422,8 @@ export function createProtocolCodec({ sha256, hash160 }) {
   /// §4.3 domain: UTF8("NeoSmartAccount/UserOperation") ‖ U1(4) ‖
   /// U32LE(network) ‖ coreHash ‖ accountId ‖ U64BE(validatorId) ‖
   /// U64BE(credentialGeneration) ‖ U64BE(authorityEpoch) ‖
-  /// U64BE(configurationNonce).
+  /// U64BE(configurationNonce). The validator id defaults to 0 because that is
+  /// the built-in route itself; the generation never defaults.
   const operationDomain = (context, op) =>
     join(
       strictText(USER_OPERATION_DOMAIN),
@@ -393,7 +432,7 @@ export function createProtocolCodec({ sha256, hash160 }) {
       reverse(nativeHex(context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT, 20)),
       reverse(nativeHex(context?.accountId, 20)),
       operationSetting(op, "validatorId"),
-      operationSetting(op, "credentialGeneration"),
+      generationSetting(op?.credentialGeneration),
       operationSetting(op, "authorityEpoch"),
       operationSetting(op, "configurationNonce"),
     );
@@ -401,7 +440,8 @@ export function createProtocolCodec({ sha256, hash160 }) {
   /// §8 message digest: UTF8("NeoSmartAccount/Message") ‖ U1(4) ‖
   /// U32LE(network) ‖ coreHash ‖ accountId ‖ originalSender ‖
   /// U64BE(validatorId) ‖ U64BE(credentialGeneration) ‖ U64BE(authorityEpoch)
-  /// ‖ hash.
+  /// ‖ hash. `validatorId` defaults to the built-in route 0; the generation
+  /// does not default (§8 binds it to SubjectRevision or CredentialGeneration).
   const messageDigest = (context, message) =>
     sha(
       join(
@@ -412,14 +452,15 @@ export function createProtocolCodec({ sha256, hash160 }) {
         reverse(nativeHex(context?.accountId, 20)),
         reverse(nativeHex(message?.originalSender, 20)),
         be(unsigned(message?.validatorId ?? 0, 64, "validator id"), 8),
-        be(unsigned(message?.credentialGeneration ?? 0, 64, "credential generation"), 8),
+        generationSetting(message?.credentialGeneration),
         be(unsigned(context?.authorityEpoch, 64, "authority epoch"), 8),
         nativeHex(message?.hash, MESSAGE_HASH_BYTES),
       ),
     );
 
   /// §6 nonce namespace digest (the full 256-bit derivation), and the derived
-  /// 191-bit channel taken from its low bits.
+  /// 191-bit channel taken from its low bits. The generation is part of the
+  /// namespace, so it is supplied, never assumed.
   const nonceNamespaceDigest = (context, { validatorId, credentialGeneration, nonceSubkey }) =>
     sha(
       join(
@@ -428,7 +469,7 @@ export function createProtocolCodec({ sha256, hash160 }) {
         reverse(nativeHex(context?.accountId, 20)),
         be(unsigned(context?.authorityEpoch, 64, "authority epoch"), 8),
         be(unsigned(validatorId ?? 0, 64, "validator id"), 8),
-        be(unsigned(credentialGeneration ?? 1, 64, "credential generation"), 8),
+        generationSetting(credentialGeneration),
         nativeHex(nonceSubkey, NONCE_SUBKEY_BYTES),
       ),
     );
@@ -465,7 +506,10 @@ export function createProtocolCodec({ sha256, hash160 }) {
   /// Threshold route signature field: serialized [[memberModuleId, signature]].
   const thresholdSignature = (members) => {
     if (!Array.isArray(members) || members.length < 1) fail("at least one member signature required");
-    let previous = -1n;
+    // §5: members are module ids, so 0 is not a member. Seeding the cursor
+    // with 0 makes the strictly-ascending check reject a zero id as well; a -1
+    // cursor silently accepted it (ModuleOperation.cs seeds BigInteger.Zero).
+    let previous = 0n;
     const value = members.map((member) => {
       const moduleId = unsigned(member.moduleId, 64, "member module id");
       if (moduleId <= previous) fail("threshold members must be strictly ascending");
@@ -510,13 +554,14 @@ export function createProtocolCodec({ sha256, hash160 }) {
       nativeHex(context.accountId, 20) === nativeHex(accountId, 20);
     if (!sameAccount) fail("execution context account mismatch");
     const ops = operations.map((op) => operationValue(op));
+    const envelope = batch ? { type: "Array", value: ops } : ops[0];
+    // §4.1 envelope cap: a batch of at most 32 operations encodes to 64 KiB.
+    if (batch && serialize(envelope).length / 2 > ENVELOPE_ENCODED_SIZE_MAX)
+      fail(`serialized batch envelope exceeds ${ENVELOPE_ENCODED_SIZE_MAX} bytes`);
     return dynamicCall(
       context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT,
       batch ? "executeUserOps" : "executeUserOp",
-      [
-        hashValue(accountId),
-        batch ? { type: "Array", value: ops } : ops[0],
-      ],
+      [hashValue(accountId), envelope],
     );
   };
 

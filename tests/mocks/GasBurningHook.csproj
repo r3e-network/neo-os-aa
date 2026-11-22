@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RunNccsAfterBuild>false</RunNccsAfterBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      One self-contained source file per mock: nccs compiles every source under tests/mocks as
+      its own contract (compile.sh drives the whole directory from MockVerifierCore.csproj), so a
+      mock may not link plugin helper sources — the authority and instance-key helpers are
+      inlined in the contract file itself.
+    -->
+    <Compile Include="GasBurningHook.cs" />
+  </ItemGroup>
+
+  <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
+    <Message Text="Compiling Neo smart contract: GasBurningHook.cs" Importance="high" />
+    <Exec Command="nccs ./GasBurningHook.csproj -o ../../contracts/bin/public" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+
+</Project>

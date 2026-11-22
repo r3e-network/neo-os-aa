@@ -2,16 +2,16 @@
 
 `neo-os-sa` is the NeoOS account-abstraction project. It contains the smart contracts, frontend tooling, and SDK for creating and using Smart Accounts on Neo N3.
 
-The project keeps two implementation tracks for one smart-account protocol.
-The custom `SmartAccount` contract is the current user-contract delivery path for NeoOS;
-the protocol's native `SmartAccount` service is developed in parallel for
-the standard submission path. Start with the [implementation strategy](docs/SA-IMPLEMENTATION-STRATEGY.md)
-and [capability boundaries](docs/SA-SYSTEM-STATUS.md). For the native track,
-see the [native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md),
-[native SDK](docs/NATIVE_SDK.md), and [native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md).
-The service uses stable account identity, explicitly scoped
-authorization, bounded module callbacks, independent fee payment, and recovery
-that revokes old modules without calling them.
+The protocol is implemented once on this branch, as the
+[native `SmartAccount` profile](contracts/native/README.md) in `contracts/native/`. The former C#
+user-contract delivery path and its paymaster, address-market and platform-registrar services were
+removed when the repository went native-only. Start with the
+[implementation strategy](docs/SA-IMPLEMENTATION-STRATEGY.md) and
+[capability boundaries](docs/SA-SYSTEM-STATUS.md), then the
+[native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md), [native SDK](docs/NATIVE_SDK.md) and
+[native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md). The service uses stable account
+identity, explicitly scoped authorization, bounded module callbacks, independent fee payment, and
+recovery that revokes old modules without calling them.
 
 The native track implements the unactivated ABI 2 draft associated with
 [proposal #243](https://github.com/neo-project/proposals/pull/243) and
@@ -41,12 +41,10 @@ Runtime and deployment boundaries:
 - The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
 - The canonical shared testnet SA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
-The two implementation versions live on this branch, each in its own directory
-under `contracts/`: the [custom user-contract](contracts/custom/README.md) in
-`contracts/custom/` and the [native SmartAccount profile](contracts/native/README.md)
-in `contracts/native/`. The validator, hook and recovery modules that both
-implementations install live in `contracts/plugins/`. Each `profile.json` maps its
-implementation's canonical source roots, compatibility paths, artifacts and
+The canonical source root is the
+[native SmartAccount profile](contracts/native/README.md) in `contracts/native/`. The validator,
+hook and recovery modules the native core installs live in `contracts/plugins/`;
+`contracts/native/profile.json` maps the canonical source roots, compatibility paths, artifacts and
 profile-specific verification commands.
 
 ## Architecture authority
@@ -92,7 +90,7 @@ For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VIT
 If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `SA_RELAY_WIF` on the server, prefer `SA_RELAY_RPC_URL` for the relay backend, pin `SA_RELAY_ALLOWED_HASH` to the intended SA contract, and leave `SA_RELAY_ALLOW_RAW_FORWARD=0` unless you explicitly want raw passthrough in `frontend/api/relay-transaction.js`.
 For local setup, start from `frontend/.env.example` and copy the values you need into `frontend/.env.local` or your hosting provider's environment-variable dashboard.
 
-For on-chain sponsored transactions via the `SAPaymaster` contract, set `VITE_SA_PAYMASTER_HASH` to the deployed Paymaster contract hash. Sponsors deposit GAS into the Paymaster, create sponsorship policies via `setPolicy`, and relays call `executeSponsoredUserOp` on the SA core. The core validates the policy, executes the UserOp, then settles the reimbursement atomically. See the SDK's `buildSponsoredExecutionScript` and the paymaster's `validatePaymasterOp`.
+The chain-side paymaster contract was removed with the custom track, so this repository no longer ships a sponsorship policy engine. Deployment configuration now comes from `contracts/native/profile.json` and `contracts/plugins/native-profile/profiles.json`: they name the canonical source roots, the six native-profile modules, the ABI 2 authority and the artifacts each verification command consumes. Native activation remains a runtime property that selecting an RPC endpoint cannot enable.
 
 Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/SA-PROXY-TRANSFERS.md).
 
@@ -227,13 +225,13 @@ If you want the clearest end-to-end explanation, read these docs in order:
 - access to nuget.org. The custom contract and test projects use published packages pinned
   by `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
   `node scripts/check_neo_platform_packages.mjs` checks the pins and
-  `docs/SA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. `public`
-  validator and hook callbacks execute on the published TestEngine. Only the separate `PLATFORM` artifact
-  requires the private `System.Contract.CallWithGasLimit` extension; its budget guarantees must
-  not be attributed to the public build (`docs/NEO-PLATFORM-PACKAGES.md`).
-
-The [native VM CI lane](.github/workflows/native-profile.yml) separately builds an immutable
-Neo core commit with .NET `10.0.400`, verifies its locked dependency archives (including the
+- access to nuget.org. Every contract and test project restores published packages pinned by
+  `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
+  `node scripts/check_neo_platform_packages.mjs` checks the pins and
+  `docs/SA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. The native
+  kernel and its six modules compile against the pinned core checkout and run in the public VM
+  through the epoch probe; the retired `public`/`PLATFORM` artifacts are archival only
+  (`docs/NEO-PLATFORM-PACKAGES.md`).
 pinned MyGet Neo.VM package), builds native modules twice, and executes the measured composite
 matrix. This is host-VM evidence; the [native SDK integration](docs/NATIVE_SDK.md#browser-and-validation-boundaries)
 is the separate full-node gate. Neither lane activates a public network.
@@ -270,15 +268,13 @@ when requested, a missing tool fails the gate rather than producing a pass:
 ./scripts/verify_repo.sh --contracts-only --formal --neoexpress
 ```
 
-For `custom` or `all`, `--neoexpress` uses published NeoExpress for the public
-source suite. Its nine deployed modules are linked to the rebuild certificate
-through exact artifact hashes and full RPC readback. It writes distinct
-`sa-custom-source-chain-*` and `sa-custom-runtime-provenance-*` receipts.
-The private PLATFORM full-module matrix and native-chain validators have
-separate entrypoints; this source suite does not establish public deployment.
+./scripts/verify_repo.sh --contracts-only --formal
+```
 
-### Restoring with an isolated package cache (NU1403)
-
+The public source suite that `--neoexpress` used to run was retired with the custom track. Native
+chain-side validation runs through its separate documented validators
+(`scripts/neoexpress_native_*_validate.py`), and this source suite does not establish public
+deployment.
 `restore` runs in locked mode, so it fails with `NU1403` ("package content hash validation
 failed") when the machine's global NuGet cache holds bytes that differ from the audited
 `packages.lock.json` content hashes. Do not delete or edit the lock files. Restore into a fresh,
@@ -344,9 +340,13 @@ npm run testnet:validate:report
 
 The suite writes JSON artifacts under `docs/reports/`.
 
-### Platform Registrar Service
+### Platform Registrar Pointer
 
-The platform services are extracted from the core: the registrar ships as the standalone `SAPlatformRegistrar` (`contracts/custom/registrar/`), configured through the core's timelocked `proposePlatformRegistrar` / `confirmPlatformRegistrar` admin path. Once the pointer is set, the registrar owns platform-account owner-rotation proposals and the core re-validates every state write it drives.
+The registrar pointer is configured through the core's timelocked
+`proposePlatformRegistrar` / `confirmPlatformRegistrar` admin path. The standalone
+`SAPlatformRegistrar` service contract that consumed the pointer was removed with
+the retired custom implementation, so the core now records and re-validates the
+pointer without an in-repository registrar to call it.
 
 ### Build
 
@@ -386,18 +386,14 @@ verbatim in
 [`docs/reports/testnet-validation-v1v2-2026-03.md`](docs/reports/testnet-validation-v1v2-2026-03.md).
 
 ## Structure
-- `contracts/custom/`: C# Smart Contract implementation of the Master Entry Contract (the user-contract `SmartAccount` core) and its service contracts.
 - `contracts/native/`: True source of the native consensus `SmartAccount` service and the overlay Neo core project that compiles it.
-- `contracts/plugins/`: Module contracts shared by both implementations.
+- `contracts/plugins/`: Module contracts the native core installs.
 - `contracts/plugins/validators/`: Validator modules (Web3Auth, NeoWitness, P256, TeeKey, SessionKey, Subscription, DelegatedIdentity, MultiSig, and the disabled ZKEmail template).
 - `contracts/plugins/hooks/`: Hook modules (DailyLimit, Whitelist, TokenRestricted, NeoDIDCredential; MultiHook is retired).
 - `contracts/plugins/recovery/`: The optional social-recovery service and the action-session validator that delegates to it.
 - `contracts/plugins/templates/`: Starting points for third-party validator and hook modules.
 - `contracts/plugins/native-profile/`: Native-profile builds of the shared modules.
-- `contracts/custom/paymaster/`: On-chain Paymaster contract for sponsored/gasless transactions.
-- `contracts/custom/market/`: Standalone `SAAddressMarket` escrow contract.
-- `contracts/custom/registrar/`: Standalone `SAPlatformRegistrar` service contract for platform-account registration and owner-rotation timelocks, extracted from the core.
-- `contracts/build/`: Pinned artifacts of the public deployments; `contracts/compile.sh` writes the current source candidate to `contracts/bin/`.
+- `contracts/build/`: Pinned artifacts of the public deployments.
 - `tests/`: Contract, native and local-chain test suites, with the mock contracts they deploy in `tests/mocks/`.
 - `frontend/`: Vue components demonstrating Account creation and signature workflows.
 - `sdk/js/`: JavaScript/TypeScript SDK for dApp integration.

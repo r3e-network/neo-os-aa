@@ -20,7 +20,7 @@ const {
   nativeCodec: c,
   NATIVE_SMART_ACCOUNT_CONTRACT: CORE,
 } = require("../src/native");
-const { NATIVE_REQUIRED_ABI, NATIVE_REQUIRED_EVENTS } = require("../src/native/client");
+const { NATIVE_ACCOUNT_ADDRESS_ABI, NATIVE_REQUIRED_ABI, NATIVE_REQUIRED_EVENTS } = require("../src/native/client");
 
 const NETWORK = 12345;
 const ACCOUNT = "11".repeat(20);
@@ -56,12 +56,14 @@ function manifest() {
   return {
     name: "SmartAccount",
     abi: {
-      methods: Object.entries(NATIVE_REQUIRED_ABI).map(([name, [types, returntype, safe, names]]) => ({
-        name,
-        parameters: names.map((parameter, index) => ({ name: parameter, type: types[index] })),
-        returntype,
-        safe,
-      })),
+      methods: Object.entries({ ...NATIVE_REQUIRED_ABI, ...NATIVE_ACCOUNT_ADDRESS_ABI }).map(
+        ([name, [types, returntype, safe, names]]) => ({
+          name,
+          parameters: names.map((parameter, index) => ({ name: parameter, type: types[index] })),
+          returntype,
+          safe,
+        }),
+      ),
       events: NATIVE_REQUIRED_EVENTS.map((name) => ({ name, parameters: [] })),
     },
   };
@@ -195,6 +197,14 @@ test("discovery refuses every identity that is not this kernel build", async () 
       (f) => (f.state.abi.abi.methods = f.state.abi.abi.methods.filter((method) => method.name !== "getModules")),
       /ABI mismatch: getModules/,
     ],
+    [
+      "missing native account address",
+      (f) =>
+        (f.state.abi.abi.methods = f.state.abi.abi.methods.filter(
+          (method) => method.name !== "getAccountAddress",
+        )),
+      /ABI mismatch: getAccountAddress/,
+    ],
     ["missing event", (f) => (f.state.abi.abi.events = []), /event mismatch: AccountRegistered/],
     [
       "parameter type",
@@ -214,28 +224,25 @@ test("discovery refuses every identity that is not this kernel build", async () 
   }
 });
 
-test("the operation parameter tolerance is one-way: Array may read as Any, nothing else", async () => {
-  // The custom kernel's compiler infers `Any` for `object operation`; the native
-  // kernel declares `Array`. Both receive the serialized Array the client
-  // builds, so that one substitution is accepted (see declaredType).
-  const tolerant = fixture();
-  tolerant.patchMethod("executeUserOp", {
-    parameters: [{ name: "accountId", type: "Hash160" }, { name: "operation", type: "Any" }],
-  });
-  await assert.doesNotReject(() => tolerant.client.discover());
+test("the operation parameter is Array, never a substituted type", async () => {
+  // The shared codec always serializes the 13-field operation as an Array, so
+  // the declaration must be exactly Array. `Any` was the custom kernel
+  // compiler's inference: there is no kernel left that declares it, and a type
+  // the client never sends is a mismatch, not a tolerance.
+  for (const type of ["Any", "ByteArray", "Integer"]) {
+    const f = fixture();
+    f.patchMethod("executeUserOp", {
+      parameters: [{ name: "accountId", type: "Hash160" }, { name: "operation", type }],
+    });
+    await assert.rejects(() => f.client.discover(), /ABI mismatch: executeUserOp/, type);
+  }
 
-  // The account id is never substitutable, and neither is the operation itself.
+  // The account id is never substitutable either.
   const accountId = fixture();
   accountId.patchMethod("executeUserOp", {
     parameters: [{ name: "accountId", type: "ByteArray" }, { name: "operation", type: "Array" }],
   });
   await assert.rejects(() => accountId.client.discover(), /ABI mismatch: executeUserOp/);
-
-  const operationType = fixture();
-  operationType.patchMethod("executeUserOp", {
-    parameters: [{ name: "accountId", type: "Hash160" }, { name: "operation", type: "Integer" }],
-  });
-  await assert.rejects(() => operationType.client.discover(), /ABI mismatch: executeUserOp/);
 });
 
 test("identity derivation is custody plus salt, at this kernel's call flags", async () => {
@@ -290,6 +297,33 @@ test("the account descriptor is decoded exactly and refuses impossible state", a
   const missing = fixture();
   missing.setAccount({ exists: false, custody: ZERO, recovery: ZERO });
   assert.equal(await missing.client.getAccount(ACCOUNT), null);
+});
+
+test("the account address read is the derived proxy, and any other answer is refused", async () => {
+  const f = fixture();
+  const address = f.client.proxyAddress(ACCOUNT);
+  f.answer("getAccountAddress", [ARG_HASH(ACCOUNT)], H(address));
+  assert.equal(await f.client.getAccountAddress(ACCOUNT), address);
+
+  // The core derives the address from the same verification script this client
+  // builds; an answer for another account (or another kernel's call flags)
+  // means the deployment is not the one the client gated against.
+  const other = fixture();
+  other.answer("getAccountAddress", [ARG_HASH(ACCOUNT)], H("99".repeat(20)));
+  await assert.rejects(
+    () => other.client.getAccountAddress(ACCOUNT),
+    /derived proxy address/,
+  );
+
+  // A zero answer is not an address, and no answer is an RPC failure rather
+  // than a silently accepted zero.
+  const zero = fixture();
+  zero.answer("getAccountAddress", [ARG_HASH(ACCOUNT)], H(ZERO));
+  await assert.rejects(() => zero.client.getAccountAddress(ACCOUNT), /no proxy address/);
+  await assert.rejects(
+    () => fixture().client.getAccountAddress(ACCOUNT),
+    /script failed|unregistered script/,
+  );
 });
 
 test("the module descriptor is decoded exactly and refuses a core or zero contract", async () => {
@@ -351,6 +385,33 @@ test("the nonce is read as a packed channel cursor and checked against the deriv
     () => g.client.getNonce(ACCOUNT, { authorityEpoch: 7, validatorId: 2, credentialGeneration: 4, nonceSubkey: "00" }),
     /invalid hex/,
   );
+
+  // The kernel resolves the generation itself, so a caller without one is not
+  // given a guessed default: only the channel the contract returned is used.
+  const h = fixture();
+  h.answer("getNonce", [ARG_HASH(ACCOUNT), I(2), ARG_BYTES(ZERO_SUBKEY)], I(packed));
+  assert.deepEqual(
+    await h.client.getNonce(ACCOUNT, { validatorId: 2, nonceSubkey: ZERO_SUBKEY }),
+    { packed: packed.toString(), channel: routing, sequence: "9" },
+  );
+  // A caller whose generation has since advanced is refused, not silently
+  // moved to the next channel: this is the ErrorCredentialStale case.
+  const advanced = (BigInt(
+    c.deriveNonceChannel(
+      { networkMagic: NETWORK, coreContractHash: CORE, accountId: ACCOUNT, authorityEpoch: 7 },
+      { validatorId: 2, credentialGeneration: 5, nonceSubkey: ZERO_SUBKEY },
+    ),
+  ) << 64n) | 3n;
+  const k = fixture();
+  k.answer("getNonce", [ARG_HASH(ACCOUNT), I(2), ARG_BYTES(ZERO_SUBKEY)], I(advanced));
+  await assert.rejects(
+    () => k.client.getNonce(ACCOUNT, { authorityEpoch: 7, validatorId: 2, credentialGeneration: 4, nonceSubkey: ZERO_SUBKEY }),
+    /credential generation or authority epoch is stale/,
+  );
+  assert.equal(
+    (await k.client.getNonce(ACCOUNT, { authorityEpoch: 7, validatorId: 2, credentialGeneration: 5, nonceSubkey: ZERO_SUBKEY })).sequence,
+    "3",
+  );
 });
 
 test("the operation digest is compared with the local codec, and drift is refused", async () => {
@@ -396,7 +457,7 @@ test("plans are the exact scripts the core answers, one shape per kind", async (
       nonceSubkey: ZERO_SUBKEY,
       deadline: "9999999999999",
       validatorId: "0",
-      credentialGeneration: "0",
+      credentialGeneration: "1",
       authorityEpoch: "1",
       configurationNonce: "1",
       signature: "01".repeat(64),
@@ -419,19 +480,34 @@ test("plans are the exact scripts the core answers, one shape per kind", async (
   assert.equal(batch.batch, true);
   assert.throws(() => f.client.buildExecutionScript({ accountId: ACCOUNT, operations: [] }), /at least one operation/);
 
-  const propose = f.client.buildConfigurationScript({ kind: "propose", accountId: ACCOUNT, actions: [], readSet: [] });
-  const confirm = f.client.buildConfigurationScript({ kind: "confirm", accountId: ACCOUNT, intentId: 3, actions: [] });
-  const cancel = f.client.buildConfigurationScript({ kind: "cancel", accountId: ACCOUNT, intentId: 3 });
-  assert.deepEqual([propose.method, confirm.method, cancel.method], [
-    "proposeConfiguration",
-    "confirmConfiguration",
-    "cancelConfiguration",
-  ]);
-  assert.throws(() => f.client.buildConfigurationScript({ kind: "expire", accountId: ACCOUNT }), /unknown configuration intent/);
+  // Module administration is an account action: the core takes the module type,
+  // the contract hash and the initData, and hands back the module id it
+  // allocated. Nothing above the core assigns ids.
+  const install = f.client.buildAccountActionScript({
+    method: "installModule",
+    accountId: ACCOUNT,
+    args: [I(1), ARG_HASH(MODULE_CONTRACT), A([])],
+  });
+  assert.equal(install.kind, "account");
+  assert.equal(install.script, c.dynamicCall(CORE, "installModule", [
+    c.hashValue(ACCOUNT),
+    I(1),
+    c.hashValue(MODULE_CONTRACT),
+    A([]),
+  ]));
+  const remove = f.client.buildAccountActionScript({
+    method: "removeModule",
+    accountId: ACCOUNT,
+    args: [I(3), A([])],
+  });
+  assert.equal(remove.script, c.dynamicCall(CORE, "removeModule", [c.hashValue(ACCOUNT), I(3), A([])]));
 
   const frozen = f.client.buildAccountActionScript({ method: "freezeAccount", accountId: ACCOUNT });
   assert.equal(frozen.script, c.dynamicCall(CORE, "freezeAccount", [c.hashValue(ACCOUNT)]));
   assert.throws(() => f.client.buildAccountActionScript({ method: "setAdmin", accountId: ACCOUNT }), /unknown account action/);
+  // The removed native surfaces are not account actions either.
+  for (const retired of ["beginRecovery", "executeRecovery", "proposeConfiguration", "isValidSignature"])
+    assert.throws(() => f.client.buildAccountActionScript({ method: retired, accountId: ACCOUNT }), /unknown account action/);
 });
 
 test("registration derives the id it registers and refuses a caller-supplied one", async () => {

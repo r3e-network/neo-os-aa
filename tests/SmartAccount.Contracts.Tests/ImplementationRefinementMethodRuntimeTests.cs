@@ -28,9 +28,12 @@ public class ImplementationRefinementMethodRuntimeTests
 
     private sealed class Harness
     {
-        private const int MethodPc = 36048;
-        private const string NefHash = "2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb";
-        private const string ManifestHash = "f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f";
+        // Reviewed 2026-11-21: the helper body is byte-identical (281 bytes,
+        // 116 instructions) and moved by 272 from 36314; every internal PC it
+        // touches shifts with it because no instruction in the body changed size.
+        private const int MethodPc = 36586;
+        private const string NefHash = "397f96ab1997dcd8aad6455a797a569dfff2789c4ffff4dbfcab4ff590d553bf";
+        private const string ManifestHash = "4939cf01fb812fff5fb83fc4edd71205041d9a91201390ff9f21716692c23470";
         private readonly RuntimeFixture fx = new();
         private readonly ContractState core;
         private readonly StorageKey key;

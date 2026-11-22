@@ -17,7 +17,13 @@
  * with a generic message rather than silently accepted.
  */
 
-/** Contract abort codes, v4 (identical in the native and custom kernels). */
+/** Contract abort codes, v4 (the vocabulary the native core raises).
+ *
+ * The minimal core raises exactly these: the intent, recovery, message,
+ * hook-order and market-escrow transitions moved to user-space modules, so
+ * their codes are gone rather than aliased. A module that raises its own code
+ * does so through its own profile, not through this catalog.
+ */
 const SA_ERRORS = {
   SA_PROTOCOL_VERSION: 'The operation or module protocol version is not 4',
   SA_OPERATION_MALFORMED: 'The operation envelope is structurally invalid',
@@ -25,21 +31,18 @@ const SA_ERRORS = {
   SA_MODULE_TYPE_UNSUPPORTED: 'The module type is not supported by this core',
   SA_MODULE_LIMIT_VALIDATOR: 'The account already holds the maximum number of validators',
   SA_MODULE_LIMIT_HOOK: 'The account already holds the maximum number of hooks',
-  SA_MODULE_LIMIT_THRESHOLD: 'The threshold module holds the maximum number of members',
-  SA_MODULE_LIMIT_MEMBERS: 'A threshold signature carries too many members',
-  SA_MODULE_LIMIT_ACTIONS: 'A configuration intent carries too many actions',
-  SA_MODULE_LIMIT_INTENTS: 'The account holds the maximum number of pending intents',
+  SA_MODULE_LIMIT_RECOVERY: 'The account already holds its one recovery seat',
+  SA_MODULE_LIMIT_ACTIONS: 'A registration action list exceeds the per-call limit',
   SA_MODULE_LIMIT_BATCH: 'The operation batch exceeds the per-envelope limit',
   SA_MODULE_NOT_INSTALLED: 'The referenced module is not installed on the account',
   SA_MODULE_ID_INVALID: 'The module id is malformed or names the wrong instance',
   SA_MODULE_INSTANCE_ISOLATION_REQUIRED: 'The module must be installed per account instance',
   SA_MODULE_CODE_BINDING_MISMATCH: 'The module code no longer matches its pinned identity',
   SA_MODULE_NOT_ROUTABLE: 'The module cannot route this phase or operation',
-  SA_MODULE_MESSAGE_CAPABILITY_ABSENT: 'The module does not support message authorization',
+  SA_BUILTIN_ROUTE_REQUIRED: 'The built-in operation route cannot close while no validator instance is installed',
+  SA_CALLBACK_RETURN_TYPE: 'A module callback replied outside its declared return domain',
   SA_VALIDATION_REJECTED: 'The validator rejected the operation',
   SA_VALIDATOR_NOT_FOUND: 'The operation names a validator that is not installed',
-  SA_HOOK_REJECTED: 'A hook rejected the operation',
-  SA_HOOK_DATA_TOO_LARGE: 'Hook proofs exceed the aggregate size limit',
   SA_PROOF_INVALID: 'A hook proof or signature envelope is invalid',
   SA_NONCE_INVALID: 'The operation nonce is invalid, already used or out of range',
   SA_NONCE_EXHAUSTED: 'The nonce channel is exhausted and must be rekeyed',
@@ -48,22 +51,12 @@ const SA_ERRORS = {
   SA_EPOCH_STALE: 'The operation authority epoch is not the account authority epoch',
   SA_CONFIGURATION_NONCE_STALE: 'The operation configuration nonce is not current',
   SA_CREDENTIAL_STALE: 'The credential generation is stale for this module',
-  SA_INTENT_IMMATURE: 'The configuration intent is not mature yet',
-  SA_INTENT_EXPIRED: 'The configuration intent has expired',
-  SA_INTENT_CONFLICT: 'A conflicting configuration intent is pending',
-  SA_INTENT_NOT_FOUND: 'The configuration intent does not exist for this account',
-  SA_INTENT_LIMIT: 'The configuration intent limit is reached',
   SA_ACCOUNT_NOT_FOUND: 'The account does not exist on this core',
   SA_ACCOUNT_FROZEN: 'The account is frozen',
   SA_ACCOUNT_STATUS: 'The account status does not permit this action',
-  SA_RECOVERY_PENDING: 'A recovery is already pending for this account',
-  SA_RECOVERY_LOCKED: 'Recovery is not available in the current account state',
   SA_REENTRANCY_FORBIDDEN: 'The call re-enters the core in a forbidden phase',
-  SA_PHASE_VIOLATION: 'The call is not allowed in the current verification phase',
   SA_GAS_BUDGET_EXCEEDED: 'The bounded execution gas budget was exhausted',
-  SA_MESSAGE_INVALID: 'The message envelope or signature envelope is invalid',
   SA_MIGRATION_REQUIRED: 'The account must complete migration before this action',
-  SA_MARKET_LOCKED: 'The account is locked by an active market escrow',
   SA_UNAUTHORIZED: 'The caller is not authorized for this action',
 };
 

@@ -53,9 +53,9 @@ installed modules and the pending configuration intent.
 **Via SDK:**
 
 ```javascript
-const { createSmartAccountClient } = require('./sdk/js/src');
+const { createNativeSmartAccountClient } = require('./sdk/js/src');
 
-const client = await createSmartAccountClient({ rpcUrl, contractHash, networkMagic });
+const client = await createNativeSmartAccountClient({ rpcUrl, contractHash, networkMagic });
 await client.discover();
 
 const identity = client.deriveIdentity({ custodyAddress: custody, salt });
@@ -74,16 +74,19 @@ const validators = await client.getModules(identity.accountId, 'validator');
 ### Creating multiple accounts in one transaction
 
 `createAccounts(Hash160[] accountIds, Hash160 custody, ByteArray[] salts, Integer recoveryTimelockMs)`
-creates up to 64 accounts in one transaction; the JS client's `buildCreateAccountsScript` takes 1..32
-salts per call. Every account shares the custody address and the recovery timelock; the recovery
-authority itself is set afterwards by a `setRecoveryPolicy` configuration intent.
+creates 1..64 accounts in one transaction. The JS client builds one registration script at a time with
+`buildCreateAccountScript`; a batch is the same call repeated per id/salt pair, submitted either as
+the contract's own `createAccounts` invocation or as one transaction per account. Every account
+shares the custody address and the recovery timelock; the call carries no recovery authority, because
+the core has no action that sets one — naming another recovery authority is a governance module's
+change, not the core's.
 
 **Via SDK:**
 
 ```javascript
-const plan = client.buildCreateAccountsScript({
+const plan = client.buildCreateAccountScript({
   custodyAddress: custody,
-  salts: [saltA, saltB],
+  salt: saltA,
   recoveryTimelockMs: 30 * 86_400_000,
 });
 ```
@@ -93,7 +96,7 @@ const plan = client.buildCreateAccountsScript({
 - The custody address must witness the transaction; each account id must equal
   `hash160('aa524704' || custody || salt)` or the call faults
 - A timelock of `0` selects the 7-day minimum; the accepted range is 7..90 days, in milliseconds
-- The batch is atomic: every account is created or none is
+- A `createAccounts` batch is atomic: every account is created or none is
 - No verifier or hook is chosen at creation. Modules are installed afterwards by configuration
   intents, which mature for 24 hours; only the single-account `createAccount` call can carry
   initial install actions atomically

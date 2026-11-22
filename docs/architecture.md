@@ -94,7 +94,7 @@ The v4 core is intentionally small: authorization is delegated to validator modu
 
 | File | Responsibility |
 | --- | --- |
-| `contracts/custom/SmartAccount.cs` | v4 account control record, `verify`, `executeUserOp`, nonce channels, callback-free recovery, module configuration intents |
+| `contracts/native/SmartAccount/SmartAccount.cs` | v4 account control record, `verify`, `executeUserOp`, nonce channels, callback-free recovery, module configuration intents |
 | `contracts/plugins/validators/Web3AuthValidator.cs` | EIP-712 `UserOperation` verification |
 | `contracts/plugins/validators/TeeKeyValidator.cs` | TEE-signed authorization |
 | `contracts/plugins/validators/P256Validator.cs` | Passkey / P-256 authorization |
@@ -104,8 +104,6 @@ The v4 core is intentionally small: authorization is delegated to validator modu
 | `contracts/plugins/validators/DelegatedIdentityValidator.cs` | Delegated (zkLogin) identity authorization |
 | `contracts/plugins/validators/SubscriptionValidator.cs` | Bounded recurring charges; the core nonce is the only sequence |
 | `contracts/plugins/hooks/*.cs` | Optional policies such as daily limits, token restrictions, and credential gating |
-| `contracts/custom/paymaster/Paymaster.cs` | On-chain Paymaster for sponsored/gasless transactions (GAS deposits, policies, settlement) |
-| `contracts/custom/paymaster/PaymasterAuthority.cs` | Paymaster admin + authorized core validation |
 
 ## 7. Module Lifecycle
 
@@ -113,7 +111,7 @@ Every module change travels the configuration-intent path and emits the generic 
 
 - **install**: `proposeConfiguration` -> 24 h -> `confirmConfiguration` installs a validator or hook instance and emits `ModuleInstanceInstalled`
 - **configure**: re-configuring an installed instance emits `ModuleInstanceConfigured` through the same intent path
-- **remove**: an intent action, market settlement or a recovery sweep removes the instance and emits `ModuleInstanceRemoved`
+- **remove**: an intent action or a recovery sweep removes the instance and emits `ModuleInstanceRemoved`
 - **cancel / expire**: `cancelConfiguration` emits `ConfigurationIntentCancelled`; an intent whose window closes emits `ConfigurationIntentExpired`
 - **policy**: `HookOrderSet` and `ThresholdPolicySet` record the ordered hook chain and the core threshold policy
 

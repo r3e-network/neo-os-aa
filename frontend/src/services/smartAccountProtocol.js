@@ -1,7 +1,7 @@
 /**
  * Neo Smart Account v4 protocol vocabulary for the frontend.
  *
- * The contracts decide the grammar (contracts/custom/SmartAccount.*.cs); this
+ * The contracts decide the grammar (contracts/native/SmartAccount/*.cs); this
  * module is the one place the frontend spells it, so a screen never hand-rolls
  * an action array or invents an RPC method name. Every builder below mirrors a
  * documented in-VM layout:
@@ -12,7 +12,7 @@
  *                      confirmConfiguration(accountId, intentId, actions[]),
  *                      cancelConfiguration(accountId, intentId)
  * - module actions:    every action is a positional array whose first element
- *                      is an ACTION_* code (spec §9 / SmartAccount.Models.cs).
+ *                      is an ACTION_* code (spec §9 / SmartAccountModuleProtocol.cs).
  *
  * Read descriptors decode the documented array layouts (getAccount,
  * getModules, getModule, getHookOrder, getPendingConfiguration,
@@ -26,11 +26,22 @@ import {
   decodeStackByteStringHex,
   decodeStackHash160,
   hash160Param,
-} from '../features/studio/helpers.js';
+} from '../utils/stack.js';
 
-/** Module type codes and their on-chain names (SmartAccount.ModuleProtocol.cs). */
-export const MODULE_TYPE = Object.freeze({ validator: 1, hook: 2 });
-export const MODULE_TYPE_NAME = Object.freeze({ 1: 'validator', 2: 'hook' });
+/**
+ * Module type codes and their on-chain names (SmartAccount.ModuleProtocol.cs:
+ * ModuleTypeCodeValidator = 1, ModuleTypeCodeHook = 4; only these two are
+ * accepted by the core, so only they are ever encoded into an action).
+ * The name map also names a 2-labelled descriptor as a hook: 2 is a legacy
+ * alias, not a valid v4 installation code. The label predates the ERC-7579
+ * numbering this frontend once wrote, and a live descriptor must never render
+ * as 'unknown' just because it was read back from old state. Never encode 2
+ * into an action or an installation request.
+ */
+export const MODULE_TYPE = Object.freeze({ validator: 1, hook: 4 });
+/** @deprecated 2 is a legacy display-only alias; install with MODULE_TYPE. */
+export const MODULE_TYPE_LEGACY_HOOK = 2;
+export const MODULE_TYPE_NAME = Object.freeze({ 1: 'validator', 2: 'hook', 4: 'hook', 5: 'recovery' });
 
 /** Configuration action codes (SmartAccount.Models.cs, spec §9). */
 export const ACTION = Object.freeze({

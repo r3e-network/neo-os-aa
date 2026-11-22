@@ -50,9 +50,9 @@ v4 不保留反向索引，也没有角色状态：不存在管理员、经理�
 **通过 SDK：**
 
 ```javascript
-const { createSmartAccountClient } = require('./sdk/js/src');
+const { createNativeSmartAccountClient } = require('./sdk/js/src');
 
-const client = await createSmartAccountClient({ rpcUrl, contractHash, networkMagic });
+const client = await createNativeSmartAccountClient({ rpcUrl, contractHash, networkMagic });
 await client.discover();
 
 const identity = client.deriveIdentity({ custodyAddress: custody, salt });
@@ -69,14 +69,14 @@ const validators = await client.getModules(identity.accountId, 'validator');
 
 ### 在一笔交易中创建多个账户
 
-`createAccounts(Hash160[] accountIds, Hash160 custody, ByteArray[] salts, Integer recoveryTimelockMs)` 在一笔交易中最多创建 64 个账户；JS 客户端的 `buildCreateAccountsScript` 每次调用接受 1..32 个盐。所有账户共享托管地址与恢复时间锁；恢复权限方本身是在之后通过 `setRecoveryPolicy` 配置意图设定的。
+`createAccounts(Hash160[] accountIds, Hash160 custody, ByteArray[] salts, Integer recoveryTimelockMs)` 在一笔交易中创建 1..64 个账户。JS 客户端每次只构造一笔注册脚本 `buildCreateAccountScript`；批量就是对每个 id/盐对重复调用，既可以作为合约自身的 `createAccounts` 调用提交，也可以每个账户一笔交易。所有账户共享托管地址与恢复时间锁；该调用不携带恢复权限方，因为核心没有任何设置它的动作——另行指定恢复权限方属于治理模块的变更，而不是核心的。
 
 **通过 SDK：**
 
 ```javascript
-const plan = client.buildCreateAccountsScript({
+const plan = client.buildCreateAccountScript({
   custodyAddress: custody,
-  salts: [saltA, saltB],
+  salt: saltA,
   recoveryTimelockMs: 30 * 86_400_000,
 });
 ```
@@ -85,7 +85,7 @@ const plan = client.buildCreateAccountsScript({
 
 - 托管地址必须见证该交易；每个 account id 必须等于 `hash160('aa524704' || custody || salt)`，否则调用会故障
 - 时间锁为 `0` 时选择 7 天下限；接受的范围是 7..90 天，以毫秒计
-- 批量是原子的：要么全部账户创建成功，要么全部失败
+- `createAccounts` 批量是原子的：要么全部账户创建成功，要么全部失败
 - 创建时不选择任何验证器或钩子。模块在之后通过配置意图安装，并且有 24 小时成熟期；只有单账户的 `createAccount` 调用可以原子地携带初始安装动作
 
 **适用场景：**

@@ -178,10 +178,7 @@ export default {
       entryAppTitle: '创建和操作 SA 账户',
       entryAppBody: '加载账户、组合交易、收集签名、执行 relay 预检并广播，每一步都有清晰状态。',
       entryAppAction: '打开应用工作台',
-      entryMarketLabel: '地址市场',
-      entryMarketTitle: '挂牌和购买 SA 地址',
-      entryMarketBody: '把 SA 地址放入链上 trustless escrow，在出售期间冻结控制权，并在买家结算时只转移 SA 壳子和 backup-owner 治理控制。',
-      entryMarketAction: '进入市场',
+      entryNativeAction: '打开原生账户',
       entryDocsLabel: '验证器与钩子',
       entryDocsTitle: '用正确的模块模型上线',
       entryDocsBody: '在部署或购买 SA 地址前，先用模块指南选对验证器、钩子顺序和恢复方案。',
@@ -345,7 +342,7 @@ export default {
       step3Title: '安装模块',
       step3Body: '安装验证器和钩子以实现访问控制和策略',
       servicesHeading: '服务',
-      serviceWorkspaceTitle: '账户工作台',
+      serviceWorkspaceTitle: '原生账户',
       serviceWorkspaceBody: '创建账户、构建交易、收集签名并广播操作',
       serviceIdentityTitle: '身份与 DID',
       serviceIdentityBody: '管理 Web3Auth、NeoDID 和社交恢复',
@@ -1002,7 +999,7 @@ export default {
       validatorModules: '验证器模块',
       hookModules: '钩子模块',
       hookOrderRevision: '执行顺序版本',
-      
+
       activePrivateSession: '活跃私密会话',
       newOwner: '新 owner',
       approved: '已批准',
@@ -1761,6 +1758,8 @@ export default {
       metaTxModuleFailed: '读取模块实例失败。',
       metaTxValidationFailed: '账户拒绝预览该操作。',
       accountIdRequired: '需要一个 20 字节的账户 ID。',
+      credentialGenerationRequired:
+        '需要提供凭证代际：请从链上读取（内置验证器为 SubjectRevision，已安装验证器或生效中的阈值策略为 CredentialGeneration）。',
     },
     draftSummary: {
       notStaged: '未暂存',

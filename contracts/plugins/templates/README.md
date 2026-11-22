@@ -27,7 +27,7 @@ nccs ./MyValidator.csproj -o build              # or compile standalone
 
 - **Exact v4 binding ABI** — `getModuleProfile`, `onInstall` / `onUninstall` /
   `configure`, and the callback pair the core checks at install
-  (`AssertModuleCallbackAbi` in `contracts/custom/SmartAccount.Modules.cs`).
+  (`AssertCallbackAbi` in `contracts/native/SmartAccount/SmartAccountModulePolicy.cs`).
 - **Instance identity** — every key starts from
   `InstanceKey(prefix, accountId, moduleId)`; the instance is resolved from the
   core's writer phase (`RequireLifecycle` / `RequirePreCheck` / `RequirePostCheck` /
@@ -62,6 +62,6 @@ nccs ./MyValidator.csproj -o build              # or compile standalone
    `MultiHook` rejects new installs.
 
 The full security checklist, digest format and testing guidance live in
-[`docs/PLUGIN_DEVELOPER_GUIDE.md`](../../docs/PLUGIN_DEVELOPER_GUIDE.md) and
-[`docs/SA-MODULE-PROTOCOL.md`](../../docs/SA-MODULE-PROTOCOL.md). Manifests carry
+[`docs/PLUGIN_DEVELOPER_GUIDE.md`](../../../docs/PLUGIN_DEVELOPER_GUIDE.md) and
+[`docs/SA-MODULE-PROTOCOL.md`](../../../docs/SA-MODULE-PROTOCOL.md). Manifests carry
 camelCase method names; the templates already compile to that.

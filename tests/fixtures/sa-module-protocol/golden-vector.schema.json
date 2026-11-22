@@ -30,14 +30,9 @@
       "type": "object",
       "description": "Git blob sha of each shared constants file the vector was generated against.",
       "required": [
-        "custom",
         "native"
       ],
       "properties": {
-        "custom": {
-          "type": "string",
-          "description": "Blob sha of contracts/custom/SmartAccount.ModuleProtocol.cs."
-        },
         "native": {
           "type": "string",
           "description": "Blob sha of contracts/native/SmartAccount/SmartAccountModuleProtocol.cs."
@@ -52,10 +47,6 @@
       "type": "object",
       "description": "Expected byte-level outputs. Kernel-independent values (identity, canonical operation bytes, key table) sit at the top level; digests that mix in a kernel's core hash or chain magic are pinned per kernel.",
       "properties": {
-        "custom": {
-          "type": "object",
-          "description": "Values for kernel #39, including its own coreHash and network magic."
-        },
         "native": {
           "type": "object",
           "description": "Values for kernel #40, including its own coreHash and network magic."

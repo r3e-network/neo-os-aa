@@ -12,6 +12,7 @@ import {
   NATIVE_SMART_ACCOUNT_CONTRACT as CORE,
 } from "../../src/features/native/nativeWorkspace.js";
 import {
+  NATIVE_ACCOUNT_ADDRESS_ABI,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
 } from "../../src/shared/nativeSmartAccountClient.mjs";
@@ -72,18 +73,26 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     calls: [],
     time: Date.now(),
   };
+  // Extra answers the test layers on top of the descriptor surface. The key is
+  // the same canonical `dynamicCall(core, method, args, 5)` script the client
+  // builds for a read, so an override is byte exact and takes precedence over
+  // the state-derived answer of the same call.
+  const extras = new Map();
+  const add = (method, args, value) =>
+    extras.set(c.dynamicCall(CORE, method, args, 5), value);
   const manifest = () => ({
     name: "SmartAccount",
     extra: {},
     abi: {
-      methods: Object.entries(NATIVE_REQUIRED_ABI).map(
-        ([name, [types, returntype, safe, names]]) => ({
-          name,
-          parameters: types.map((type, index) => ({ name: names[index], type })),
-          returntype,
-          safe,
-        }),
-      ),
+      methods: Object.entries({
+        ...NATIVE_REQUIRED_ABI,
+        ...NATIVE_ACCOUNT_ADDRESS_ABI,
+      }).map(([name, [types, returntype, safe, names]]) => ({
+        name,
+        parameters: types.map((type, index) => ({ name: names[index], type })),
+        returntype,
+        safe,
+      })),
       // The event gate is presence-only: the client never decodes a payload,
       // so the fixture declares the names with no parameters on purpose.
       events: NATIVE_REQUIRED_EVENTS.map((name) => ({ name, parameters: [] })),
@@ -138,6 +147,17 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       intent.actionDigest,
       A((intent.actions ?? []).map(RPC)),
     ]);
+  // The chain publishes each module instance's CredentialGeneration (field 8 of
+  // the 12-field descriptor), so the fixture requires the test to declare it.
+  // Inventing 1 here would hide exactly the stale-generation bug the routing
+  // generation exists to expose.
+  const generation = (module) => {
+    if (module.credentialGeneration === undefined || module.credentialGeneration === null)
+      throw Error(
+        "nativeRpcFixture: module " + module.moduleId + " must declare credentialGeneration",
+      );
+    return module.credentialGeneration;
+  };
   const moduleRecord = (module) =>
     A([
       I(module.moduleId),
@@ -148,7 +168,7 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       B(module.nefSha256 ?? "aa".repeat(32)),
       B(module.profileSha256 ?? "bb".repeat(32)),
       I(module.moduleRevision ?? 1),
-      I(module.credentialGeneration ?? 1),
+      I(generation(module)),
       BOOL(module.instanceIsolation === true),
       BOOL(module.messageCapability === true),
       BOOL(module.thresholdMemberEligible !== false),
@@ -237,6 +257,7 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     if (method !== "invokescript") throw Error("Unsupported fixture RPC");
     const script = Buffer.from(params[0], "base64").toString("hex");
     const known = answers();
+    for (const [registered, value] of extras) known.set(registered, value);
     return {
       state: "HALT",
       stack: [known.has(script) ? known.get(script) : N],
@@ -244,5 +265,5 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       minimumrequiredfee: "100000",
     };
   }
-  return { state, send, answers, manifest, record };
+  return { state, send, answers, add, manifest, record };
 }

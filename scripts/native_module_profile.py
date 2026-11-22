@@ -80,7 +80,10 @@ LIFECYCLE = (
     ("onUninstall", ["Hash160", "Integer", "Integer", "Array"], False),
 )
 ROLE_CALLBACKS = {
-    "verifier": (("validateUserOp", "Boolean", ["Hash160", "ByteString", "Array"], False),
+    # `validateUserOp` is the read-only preview the core calls before executing an
+    # operation, so it must be published as a safe method; the state-changing role
+    # callbacks stay non-safe.
+    "verifier": (("validateUserOp", "Boolean", ["Hash160", "ByteString", "Array"], True),
                  ("onUserOpComplete", "Void", ["Hash160", "Array", "Any"], False),
                  ("getSignerDomains", "Array", ["Hash160", "Integer"], True)),
     "hook": (("preCheck", "ByteString", ["Hash160", "Array"], False),

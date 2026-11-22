@@ -85,15 +85,18 @@ test("the scratch copy carries the sources, the lock files and the restore polic
   const scratch = prepareScratch();
   try {
     for (const file of RESTORE_POLICY_FILES) assert.ok(fs.existsSync(path.join(scratch, file)), `${file} is missing from the scratch copy`);
-    assert.ok(fs.existsSync(path.join(scratch, "contracts", "custom", "SmartAccount.Execution.cs")));
-    assert.ok(fs.existsSync(path.join(scratch, "contracts", "custom", "packages.lock.json")));
-    assert.ok(fs.existsSync(path.join(scratch, "contracts", "plugins", "validators", "packages.SessionKeyValidator.lock.json")));
-    assert.ok(fs.existsSync(path.join(scratch, "tests", "mocks", "MockTransferTarget.csproj")), "compile.sh builds the mocks from tests/mocks");
+    // The retired contract track took its compile recipe with it (Task #43), so the
+    // native kernel is the source tree the scratch copy must carry.
+    assert.ok(fs.existsSync(path.join(scratch, "contracts", "native", "SmartAccount", "SmartAccount.Execution.cs")));
+    assert.ok(fs.existsSync(path.join(scratch, "contracts", "native", "packages.lock.json")));
+    assert.ok(fs.existsSync(path.join(scratch, "contracts", "plugins", "native-profile", "packages.SessionKeyValidator.Native.lock.json")));
+    assert.ok(fs.existsSync(path.join(scratch, "tests", "mocks", "MockTransferTarget.csproj")), "the mocks under tests/mocks are build inputs");
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "dotnet_env.sh")));
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "check_neo_platform_packages.mjs")));
     assert.ok(fs.existsSync(path.join(scratch, "scripts", "sync-module-profiles.mjs")),
-      "compile.sh runs the module profile gate, so the scratch copy must carry it");
-    assert.equal(fs.readFileSync(path.join(scratch, "contracts", "compile.sh"), "utf8"), fs.readFileSync(new URL("../contracts/compile.sh", import.meta.url), "utf8"));
+      "the module profile gate is part of the v4 recipe, so the scratch copy must carry it");
+    assert.ok(!fs.existsSync(path.join(scratch, "contracts", "compile.sh")),
+      "the retired custom compile recipe must not be copied");
     for (const output of ["bin", "obj", "build"]) assert.ok(!fs.existsSync(path.join(scratch, "contracts", output)), `contracts/${output} must not be copied`);
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
@@ -129,9 +132,15 @@ test("source snapshot excludes generated trees and uses repository-relative name
   assert.equal(Object.values(snapshot).every((value) => /^[0-9a-f]{64}$/.test(value)), true);
 });
 
- test("repository entrypoint runs reproducibility regression tests", () => {
-  const script = fs.readFileSync(new URL("./verify_repo.sh", import.meta.url), "utf8");
-  assert.match(script, /node --test[^]*scripts\/check-artifact-reproducibility\.test\.mjs/);
+ test("the retired custom replay fails closed instead of invoking a deleted recipe", () => {
+  const replay = fs.readFileSync(new URL("./check-artifact-reproducibility.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(replay, /bash contracts\/compile\.sh/,
+    "the repository recipe was deleted with the custom track");
+  assert.match(replay, /process\.exitCode = 2/,
+    "the CLI must report the retirement instead of printing a certificate");
+  const gate = fs.readFileSync(new URL("./verify_repo.sh", import.meta.url), "utf8");
+  assert.doesNotMatch(gate, /check-artifact-reproducibility/,
+    "a retired custom replay is not part of the native gate");
 });
 
 

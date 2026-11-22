@@ -307,10 +307,8 @@
       "error": "SA_NONCE_CHANNEL_COLLISION",
       "input": "second derivation truncating to an already-open 191-bit channel",
       "observable": "throw",
-      "status": "covered",
-      "coveringTestFiles": [
-        "SourceInvariantTests.cs"
-      ]
+      "status": "uncovered",
+      "coveringTestFiles": []
     },
     {
       "error": "SA_NONCE_EXHAUSTED",

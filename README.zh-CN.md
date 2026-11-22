@@ -10,7 +10,6 @@
 - **配置意图**：安装、卸载、重新绑定或重新配置模块都暂存为意图，24 小时后成熟、七天后过期；`proposeConfiguration`、`confirmConfiguration`、`cancelConfiguration` 是唯一的写入路径。
 - **备份所有者恢复**：每个账户可定义原生 Neo 备份所有者，恢复由已安装的恢复服务代理执行。
 - **跨链 EVM 兼容**：v4 通过委托身份验证器路径支持 secp256k1 / Keccak256 EIP-712 签名。
-- **链上 Paymaster（赞助交易）**：`SAPaymaster` 为支持的普通 UserOperation 提供无需信任的 GAS 赞助 —— 赞助商存入 GAS，创建每账户或全局策略，中继在成功执行后自动获得报销。代理地址转账仍要求独立见证，赞助代理转账明确拒绝；具体可用性还取决于已部署 Paymaster、策略、费用上限和链上回读。
 - **策略门控执行**：新集成应通过 `executeUserOp(accountId, op)` 执行，nonce 处理、验证、钩子和目标执行保持集中化。
 
 ## 项目内容
@@ -31,16 +30,15 @@
 4. [docs/DATA_FLOW.zh-CN.md](docs/DATA_FLOW.zh-CN.md) —— 浏览器 / Supabase / 中继 / 链 的边界
 5. [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) —— 技术架构
 6. [docs/SA-SYSTEM-STATUS.zh-CN.md](docs/SA-SYSTEM-STATUS.zh-CN.md) —— 已建成、已部署、已验证，以及尚未成立的部分
-7. [docs/CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md](docs/CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md) —— custom 账户工作区
-8. [docs/SECURITY_MODEL.zh-CN.md](docs/SECURITY_MODEL.zh-CN.md) —— 威胁模型与信任假设
-9. [docs/SA-SPEC.zh-CN.md](docs/SA-SPEC.zh-CN.md) —— 仅有英文的规范与形式化章节导读
+7. [docs/SECURITY_MODEL.zh-CN.md](docs/SECURITY_MODEL.zh-CN.md) —— 威胁模型与信任假设
+8. [docs/SA-SPEC.zh-CN.md](docs/SA-SPEC.zh-CN.md) —— 仅有英文的规范与形式化章节导读
 
-同一主分支保留两个实现，各自位于 `contracts/` 下的独立目录：
-[用户合约实现](contracts/custom/README.md)（`contracts/custom/`）和
-[原生 SmartAccount 提交实现](contracts/native/README.md)（`contracts/native/`）。
-两个实现共用的验证器、钩子与恢复模块位于 `contracts/plugins/`。
-两个目录中的 `profile.json` 记录各自的源码根、兼容路径、构建产物和
-验证命令；原生 SmartAccount 共识执行仍属于对应的 Neo core 仓库。
+同一主分支只保留一个实现：[原生 SmartAccount 提交实现](contracts/native/README.md)
+（`contracts/native/`）。原 C# 用户合约实现及其 paymaster、地址市场与
+平台注册服务已在仓库转为 native-only 时移除。原生核心安装的验证器、钩子与
+恢复模块位于 `contracts/plugins/`。`contracts/native/profile.json` 记录源码根、
+兼容路径、构建产物与验证命令；原生 SmartAccount 共识执行仍属于对应的
+Neo core 仓库。
 
 ## 说明
 
@@ -48,18 +46,14 @@
 
 ## 项目结构
 
-- `contracts/custom/`：当前可用的 `SmartAccount` 用户合约实现（C# 主入口合约）及其服务合约。
 - `contracts/native/`：原生 ABI 2 标准提交实现，包含原生共识 `SmartAccount` 服务的真源与编译它的 Neo core 叠加工程，当前为 draft/unactivated。
-- `contracts/plugins/`：两个实现共用的模块合约。
+- `contracts/plugins/`：原生核心安装的模块合约。
 - `contracts/plugins/validators/`：验证器模块（Web3Auth、NeoWitness、P256、TeeKey、SessionKey、Subscription、DelegatedIdentity、MultiSig，以及被禁用的 ZKEmail 模板）。
 - `contracts/plugins/hooks/`：钩子模块（DailyLimit、Whitelist、TokenRestricted、NeoDIDCredential；MultiHook 已退役）。
 - `contracts/plugins/recovery/`：可选的社交恢复服务，以及委托给它的 action-session 验证器。
 - `contracts/plugins/templates/`：第三方验证器与钩子模块的起点模板。
 - `contracts/plugins/native-profile/`：共用模块的 native 配置构建。
-- `contracts/custom/paymaster/`：链上 Paymaster 合约，用于赞助/无 GAS 交易。
-- `contracts/custom/registrar/`：独立的 `SAPlatformRegistrar` 服务合约，负责平台账户注册与所有者轮换时间锁。
-- `contracts/custom/market/`：独立的 `SAAddressMarket` 托管合约。
-- `contracts/build/`：公开部署的固定工件；`contracts/compile.sh` 把当前源码候选写入 `contracts/bin/`。
+- `contracts/build/`：公开部署的固定工件。
 - `tests/`：合约、native 与本地链测试套件，其部署的 mock 合约位于 `tests/mocks/`。
 - `frontend/`：Vue 前端组件，演示账户创建与签名工作流。
 - `sdk/js/`：JavaScript/TypeScript SDK，用于 dApp 集成。
@@ -67,7 +61,7 @@
 
 ## 部署配置
 
-对于通过 `SAPaymaster` 合约的链上赞助交易，将 `VITE_SA_PAYMASTER_HASH` 设置为已部署的 Paymaster 合约哈希。赞助商通过 `setPolicy` 将 GAS 存入 Paymaster 并创建赞助策略，中继调用 SA 核心的 `executeSponsoredUserOp`。核心验证策略、执行 UserOp，然后原子性结算报销。参见 SDK 的 `buildSponsoredExecutionScript` 与 Paymaster 的 `validatePaymasterOp`。
+链上 Paymaster 合约已随 custom 实现移除，本仓库不再提供赞助策略引擎。部署配置现由 `contracts/native/profile.json` 与 `contracts/plugins/native-profile/profiles.json` 描述：它们给出规范源码根、六个 native-profile 模块、ABI 2 权威与各验证命令消费的产物。原生激活仍属于运行时属性，选择某个 RPC 端点无法将其开启。
 
 当前状态补充：
 

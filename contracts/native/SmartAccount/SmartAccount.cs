@@ -33,9 +33,9 @@ namespace Neo.SmartContract.Native
     /// <summary>
     /// Hardfork-gated native SmartAccount service implementing the SA module
     /// protocol v4 (docs/SA-MODULE-PROTOCOL.md). The exported method names,
-    /// argument positions and return layouts are identical to the custom
-    /// kernel: only the execution substrate (native storage and the
-    /// engine-local invocation context) differs.
+    /// argument positions and return layouts are the protocol surface; only the
+    /// execution substrate (native storage and the engine-local invocation
+    /// context) is specific to this build.
     /// </summary>
     public sealed partial class SmartAccount : NativeContract
     {
@@ -54,37 +54,25 @@ namespace Neo.SmartContract.Native
 
         public override ImmutableHashSet<Hardfork?> Activations => [Hardfork.HF_SmartAccountV1];
 
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 0, "AccountRegistered", "accountId", ContractParameterType.Hash160, "backupOwner", ContractParameterType.Hash160, "verifier", ContractParameterType.Hash160, "hookId", ContractParameterType.Hash160)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 0, "AccountRegistered", "accountId", ContractParameterType.Hash160, "custody", ContractParameterType.Hash160)]
         [ContractEvent(Hardfork.HF_SmartAccountV1, 1, "ModuleInstalled", "accountId", ContractParameterType.Hash160, "moduleType", ContractParameterType.String, "moduleHash", ContractParameterType.Hash160)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 2, "ModuleUpdateInitiated", "accountId", ContractParameterType.Hash160, "moduleType", ContractParameterType.String, "moduleHash", ContractParameterType.Hash160)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 3, "ModuleUpdateConfirmed", "accountId", ContractParameterType.Hash160, "moduleType", ContractParameterType.String, "moduleHash", ContractParameterType.Hash160)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 4, "ModuleRemoved", "accountId", ContractParameterType.Hash160, "moduleType", ContractParameterType.String, "moduleHash", ContractParameterType.Hash160)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 5, "ModuleUpdateCancelled", "accountId", ContractParameterType.Hash160, "moduleType", ContractParameterType.String, "moduleHash", ContractParameterType.Hash160)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 6, "UserOpExecuted", "accountId", ContractParameterType.Hash160, "targetContract", ContractParameterType.Hash160, "method", ContractParameterType.String, "nonce", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 7, "ModuleInstanceInstalled", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer, "moduleType", ContractParameterType.Integer, "contractHash", ContractParameterType.Hash160, "credentialGeneration", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 8, "ModuleInstanceConfigured", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer, "credentialGeneration", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 9, "ModuleInstanceRemoved", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 10, "ModuleCodeRebound", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer, "bindingDigest", ContractParameterType.ByteArray)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 11, "HookOrderSet", "accountId", ContractParameterType.Hash160, "hookOrderRevision", ContractParameterType.Integer, "hookIds", ContractParameterType.Array)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 12, "ThresholdPolicySet", "accountId", ContractParameterType.Hash160, "policyId", ContractParameterType.Integer, "threshold", ContractParameterType.Integer, "memberIds", ContractParameterType.Array)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 13, "CredentialRevoked", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer, "credentialGeneration", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 14, "ConfigurationIntentProposed", "accountId", ContractParameterType.Hash160, "intentId", ContractParameterType.Integer, "actionCount", ContractParameterType.Integer, "actionDigest", ContractParameterType.ByteArray)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 15, "ConfigurationIntentConfirmed", "accountId", ContractParameterType.Hash160, "intentId", ContractParameterType.Integer, "configurationNonce", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 16, "ConfigurationIntentCancelled", "accountId", ContractParameterType.Hash160, "intentId", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 17, "ConfigurationIntentExpired", "accountId", ContractParameterType.Hash160, "intentId", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 18, "NonceChannelOpened", "accountId", ContractParameterType.Hash160, "channelDigest", ContractParameterType.ByteArray)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 19, "NonceChannelExhausted", "accountId", ContractParameterType.Hash160, "channelDigest", ContractParameterType.ByteArray)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 20, "AccountFrozen", "accountId", ContractParameterType.Hash160, "authorityEpoch", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 21, "AccountUnfrozen", "accountId", ContractParameterType.Hash160, "authorityEpoch", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 22, "RecoveryInitiated", "accountId", ContractParameterType.Hash160, "newCustody", ContractParameterType.Hash160, "matureAt", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 23, "RecoveryCancelled", "accountId", ContractParameterType.Hash160)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 24, "RecoveryExecuted", "accountId", ContractParameterType.Hash160, "authorityEpoch", ContractParameterType.Integer, "configurationNonce", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 25, "CoreRecoveryRecorded", "accountId", ContractParameterType.Hash160, "matureAt", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 26, "MessageSubjectUpdated", "accountId", ContractParameterType.Hash160, "subjectCount", ContractParameterType.Integer, "threshold", ContractParameterType.Integer, "subjectRevision", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 27, "MigrationRequired", "accountId", ContractParameterType.Hash160, "legacyModuleCount", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 28, "MigrationImported", "accountId", ContractParameterType.Hash160, "manifestDigest", ContractParameterType.ByteArray, "classification", ContractParameterType.String)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 29, "MarketControlEpochBound", "accountId", ContractParameterType.Hash160, "listingId", ContractParameterType.Integer, "controlEpoch", ContractParameterType.Integer)]
-        [ContractEvent(Hardfork.HF_SmartAccountV1, 30, "MarketLockInvalidated", "accountId", ContractParameterType.Hash160, "controlEpoch", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 2, "ModuleRemoved", "accountId", ContractParameterType.Hash160, "moduleType", ContractParameterType.String, "moduleHash", ContractParameterType.Hash160)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 3, "UserOpExecuted", "accountId", ContractParameterType.Hash160, "targetContract", ContractParameterType.Hash160, "method", ContractParameterType.String, "nonce", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 4, "ModuleInstanceInstalled", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer, "moduleType", ContractParameterType.Integer, "contractHash", ContractParameterType.Hash160, "credentialGeneration", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 5, "ModuleInstanceRemoved", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 6, "NonceChannelOpened", "accountId", ContractParameterType.Hash160, "channelDigest", ContractParameterType.ByteArray)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 7, "NonceChannelExhausted", "accountId", ContractParameterType.Hash160, "channelDigest", ContractParameterType.ByteArray)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 8, "AccountFrozen", "accountId", ContractParameterType.Hash160, "authorityEpoch", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 9, "AccountUnfrozen", "accountId", ContractParameterType.Hash160, "authorityEpoch", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 10, "ModuleCredentialsRevoked", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer, "credentialGeneration", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 11, "RecoveryPolicySet", "accountId", ContractParameterType.Hash160, "recoveryAuthority", ContractParameterType.Hash160, "recoveryTimelockMs", ContractParameterType.Integer, "ownerOnlyRecovery", ContractParameterType.Boolean)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 12, "AccountReset", "accountId", ContractParameterType.Hash160, "custody", ContractParameterType.Hash160, "authorityEpoch", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 13, "BuiltinAuthorizationSet", "accountId", ContractParameterType.Hash160, "defaultOperationAuthorization", ContractParameterType.Boolean, "defaultMessageAuthorization", ContractParameterType.Boolean)]
+        // Intent and message-signature lifecycle events are gone with their
+        // features: those transitions are user-space module concerns and this
+        // core can no longer reach them. The four landing-path events above
+        // are different: the state they report is core-owned (0x51/0x52), so
+        // only the core can emit them (spec §7.1/§12.5/§14.2, R-07-14).
         internal SmartAccount() { }
 
         protected override void OnManifestCompose(IsHardforkEnabledDelegate checker, uint height, ContractManifest manifest)
@@ -198,9 +186,6 @@ namespace Neo.SmartContract.Native
             Require(Witness(engine, control.Custody), SmartAccountModuleProtocol.ErrorUnauthorized);
         }
 
-        private static bool AuthorityWitness(ApplicationEngine engine, AccountControl control) =>
-            Witness(engine, control.Custody) || Witness(engine, control.RecoveryAuthority);
-
         private static SmartAccountStatus RequireActive(AccountControl control)
         {
             switch (control.Status)
@@ -220,14 +205,14 @@ namespace Neo.SmartContract.Native
         // 3. Registration (spec §10 exception list: atomic initial install)
         // ========================================================================
 
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private async ContractTask CreateAccount(ApplicationEngine engine, UInt160 accountId, UInt160 custody,
             byte[] salt, BigInteger recoveryTimelockMs, Array actions)
         {
             await CreateAccountCoreAsync(engine, accountId, custody, salt, recoveryTimelockMs, actions);
         }
 
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private async ContractTask CreateAccounts(ApplicationEngine engine, UInt160[] accountIds, UInt160 custody,
             byte[][] salts, BigInteger recoveryTimelockMs)
         {
@@ -263,18 +248,17 @@ namespace Neo.SmartContract.Native
                 SmartAccountModuleProtocol.ErrorOperationMalformed);
 
             actions ??= new Array();
-            Require(actions.Count <= SmartAccountModuleProtocol.MaxActionsPerConfigurationIntent,
+            Require(actions.Count <= SmartAccountModuleProtocol.MaxActionsPerRegistration,
                 SmartAccountModuleProtocol.ErrorModuleLimitActions);
             foreach (StackItem action in actions)
                 ValidateActionShape(action);
 
             AccountControl control = AccountControl.Create(custody, timelock);
             SaveControl(engine, accountId, control);
-            InitializeDefaultMessageSubjects(engine, accountId, custody);
 
             if (actions.Count > 0)
             {
-                await ExecuteConfigurationActionsAsync(engine, accountId, control, actions);
+                await ExecuteRegistrationActionsAsync(engine, accountId, control, actions);
                 if (CountModulesOfType(engine.SnapshotCache, accountId,
                         SmartAccountModuleProtocol.ModuleTypeCodeValidator) == 0)
                     Require(control.DefaultOperationAuthorization, SmartAccountModuleProtocol.ErrorOperationMalformed);
@@ -282,15 +266,14 @@ namespace Neo.SmartContract.Native
                 SaveControl(engine, accountId, control);
             }
 
-            Notify(engine, "AccountRegistered", accountId.ToArray(), custody.ToArray(),
-                UInt160.Zero.ToArray(), UInt160.Zero.ToArray());
+            Notify(engine, "AccountRegistered", accountId.ToArray(), custody.ToArray());
         }
 
         // ========================================================================
-        // 4. Freeze and callback-free recovery (spec §7.5/§10)
+        // 4. Freeze and unfreeze (spec §7.5/§10)
         // ========================================================================
 
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private void FreezeAccount(ApplicationEngine engine, UInt160 accountId)
         {
             RequireApplication(engine);
@@ -309,153 +292,56 @@ namespace Neo.SmartContract.Native
             Notify(engine, "AccountFrozen", accountId.ToArray(), new BigInteger(control.AuthorityEpoch));
         }
 
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
+        /// <summary>
+        /// Ends a freeze (spec §10). Authorized by the custody witness or by the
+        /// witness of an already installed module contract — the governance shape
+        /// a user-space governance module uses. The core holds no thaw timelock:
+        /// delaying a thaw is the responsibility of the governance module that
+        /// gated the call. The transition advances the authority epoch, the
+        /// configuration nonce and the control revision, which kills every
+        /// signature, configuration and nonce channel that predates the thaw.
+        /// </summary>
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private void UnfreezeAccount(ApplicationEngine engine, UInt160 accountId)
         {
             RequireApplication(engine);
             RequireAccountId(accountId);
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
-            RequireCustody(engine, control);
             AssertAccountIdle(engine, accountId);
+            Require(control.Status != SmartAccountStatus.MigrationRequired,
+                SmartAccountModuleProtocol.ErrorMigrationRequired);
             Require(control.Status == SmartAccountStatus.Frozen, SmartAccountModuleProtocol.ErrorAccountStatus);
+            RequireModuleAdministration(engine, accountId, control);
 
             control.Status = SmartAccountStatus.Active;
+            // §8: a thaw advances the authority epoch and the configuration
+            // nonce, so every operation and configuration signed before the
+            // freeze is stale — and it advances the control revision because
+            // the control record changed. The core holds no thaw delay of its
+            // own; a user-space governance module owns that policy.
             control.AuthorityEpoch += 1;
             control.ConfigurationNonce += 1;
             control.ControlRevision += 1;
             SaveControl(engine, accountId, control);
-            Notify(engine, "AccountUnfrozen", accountId.ToArray(), new BigInteger(control.AuthorityEpoch));
-        }
-
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
-        private void BeginRecovery(ApplicationEngine engine, UInt160 accountId, UInt160 newCustody)
-        {
-            RequireApplication(engine);
-            RequireAccountId(accountId);
-            using var locked = Context(engine).EnterAccount(accountId);
-            AccountControl control = RequireControl(engine.SnapshotCache, accountId);
-            AssertAccountIdle(engine, accountId);
-            Require(AuthorityWitness(engine, control), SmartAccountModuleProtocol.ErrorUnauthorized);
-            if (newCustody is not null && newCustody != UInt160.Zero)
-                Require(Witness(engine, newCustody), SmartAccountModuleProtocol.ErrorUnauthorized);
-            Require(!TryRead(engine.SnapshotCache, SmartAccountProtocol.GetCoreRecoveryKey(accountId), out _),
-                SmartAccountModuleProtocol.ErrorRecoveryPending);
-
-            ulong now = Now(engine);
-            ulong mature = checked(now + control.RecoveryTimelockMs);
-            CoreRecoveryRecord record = new()
-            {
-                InitiatedAt = now,
-                MatureAt = mature,
-                AuthorityEpochAtInit = control.AuthorityEpoch,
-                NewCustody = newCustody ?? UInt160.Zero,
-            };
-            Write(engine, SmartAccountProtocol.GetCoreRecoveryKey(accountId), record.Serialize());
-            Notify(engine, "RecoveryInitiated", accountId.ToArray(), record.NewCustody.ToArray(),
-                new BigInteger(mature));
-        }
-
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
-        private void CancelRecovery(ApplicationEngine engine, UInt160 accountId)
-        {
-            RequireApplication(engine);
-            RequireAccountId(accountId);
-            using var locked = Context(engine).EnterAccount(accountId);
-            AccountControl control = RequireControl(engine.SnapshotCache, accountId);
-            Require(AuthorityWitness(engine, control), SmartAccountModuleProtocol.ErrorUnauthorized);
-            Require(TryRead(engine.SnapshotCache, SmartAccountProtocol.GetCoreRecoveryKey(accountId), out _),
-                SmartAccountModuleProtocol.ErrorRecoveryPending);
-            Delete(engine, SmartAccountProtocol.GetCoreRecoveryKey(accountId));
-            Notify(engine, "RecoveryCancelled", accountId.ToArray());
-        }
-
-        /// <summary>
-        /// Permissionless execution of a matured recovery. Callback-free: no
-        /// module, hook or market contract is called; every module-model row of
-        /// the account is deleted and the built-in routes are re-enabled.
-        /// </summary>
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
-        private void ExecuteRecovery(ApplicationEngine engine, UInt160 accountId)
-        {
-            RequireApplication(engine);
-            RequireAccountId(accountId);
-            using var locked = Context(engine).EnterAccount(accountId);
-            AccountControl control = RequireControl(engine.SnapshotCache, accountId);
-            AssertAccountIdle(engine, accountId);
-            byte[] key = SmartAccountProtocol.GetCoreRecoveryKey(accountId);
-            Require(TryRead(engine.SnapshotCache, key, out var pendingBytes),
-                SmartAccountModuleProtocol.ErrorRecoveryPending);
-            CoreRecoveryRecord pending = CoreRecoveryRecord.Decode(pendingBytes);
-            Require(Now(engine) >= (ulong)pending.MatureAt, SmartAccountModuleProtocol.ErrorRecoveryLocked);
-            Require(pending.AuthorityEpochAtInit == control.AuthorityEpoch, SmartAccountModuleProtocol.ErrorEpochStale);
-
-            SweepAccountRows(engine, accountId);
-            Delete(engine, key);
-
-            if (pending.NewCustody != UInt160.Zero) control.Custody = pending.NewCustody;
-            control.RecoveryAuthority = UInt160.Zero;
-            control.Status = SmartAccountStatus.Active;
-            control.AuthorityEpoch += 1;
-            control.ConfigurationNonce += 1;
-            control.ControlRevision += 1;
-            control.DefaultOperationAuthorization = true;
-            control.DefaultMessageAuthorization = true;
-            SaveControl(engine, accountId, control);
-            InitializeDefaultMessageSubjects(engine, accountId, control.Custody);
-            Notify(engine, "RecoveryExecuted", accountId.ToArray(),
-                new BigInteger(control.AuthorityEpoch), new BigInteger(control.ConfigurationNonce));
-        }
-
-        /// <summary>
-        /// Callback-free deletion of every v4 module-model row of an account.
-        /// The module-id allocator in 0x51 is preserved: ids are never reused.
-        /// </summary>
-        private void SweepAccountRows(ApplicationEngine engine, UInt160 accountId)
-        {
-            foreach (BigInteger moduleId in EnumerateModuleIds(engine.SnapshotCache, accountId,
-                         SmartAccountModuleProtocol.ModuleTypeCodeValidator, BigInteger.Zero, int.MaxValue))
-                Delete(engine, SmartAccountProtocol.GetModuleInstanceKey(accountId, moduleId));
-            foreach (BigInteger moduleId in EnumerateModuleIds(engine.SnapshotCache, accountId,
-                         SmartAccountModuleProtocol.ModuleTypeCodeHook, BigInteger.Zero, int.MaxValue))
-                Delete(engine, SmartAccountProtocol.GetModuleInstanceKey(accountId, moduleId));
-            DeletePrefix(engine, SmartAccountModuleProtocol.PrefixModuleIndex, accountId);
-            DeletePrefix(engine, SmartAccountModuleProtocol.PrefixConfigIntent, accountId);
-            DeletePrefix(engine, SmartAccountModuleProtocol.PrefixThresholdPolicy, accountId);
-            DeletePrefix(engine, SmartAccountModuleProtocol.PrefixNonceCursor, accountId);
-            DeletePrefix(engine, SmartAccountModuleProtocol.PrefixNonceNamespace, accountId);
-            Delete(engine, SmartAccountProtocol.GetHookOrderKey(accountId));
-            Delete(engine, SmartAccountProtocol.GetMessageSubjectKey(accountId));
-            Delete(engine, SmartAccountProtocol.GetConfigIntentIndexKey(accountId));
-            Delete(engine, SmartAccountProtocol.GetMigrationStateKey(accountId));
-        }
-
-        private void DeletePrefix(ApplicationEngine engine, byte prefix, UInt160 accountId)
-        {
-            byte[] match = SmartAccountProtocol.Concat(new[] { prefix }, accountId.ToArray());
-            List<byte[]> keys = new();
-            foreach (var (key, _) in engine.SnapshotCache.Find(new StorageKey { Id = Id, Key = match }))
-            {
-                if (!key.Key.Span.StartsWith(match)) break;
-                keys.Add(key.Key.ToArray());
-            }
-            foreach (byte[] key in keys) engine.SnapshotCache.Delete(Key(key));
+            Notify(engine, SmartAccountModuleProtocol.EventNameAccountUnfrozen, accountId.ToArray(),
+                new BigInteger(control.AuthorityEpoch));
         }
 
         // ========================================================================
         // 5. Protocol and account queries (spec §3.3/§9)
         // ========================================================================
 
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.None)]
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.None)]
         private static string GetAccountImplementationId() => AccountImplementationId;
 
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
         private Array GetProtocolInfo(IReadOnlyStore snapshot)
         {
-            // [version, migrationModeOpen] — identical to the custom kernel.
-            // A core that has not opened its migration mode yet (or a snapshot
-            // that was never initialized with the hardfork) answers the default
-            // instead of faulting a read-only query.
+            // [version, migrationModeOpen]. A core that has not opened its
+            // migration mode yet (or a snapshot that was never initialized with
+            // the hardfork) answers the default instead of faulting a read-only
+            // query.
             if (!TryRead(snapshot, SmartAccountProtocol.GetProtocolKey(), out var value))
                 return new Array([(BigInteger)SmartAccountProtocol.Version, false]);
             Array record = SmartAccountRecordCodec.Decode(value);
@@ -468,9 +354,11 @@ namespace Neo.SmartContract.Native
         /// configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
         /// defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
         /// controlRevision, recoveryPending, recoveryMatureAt,
-        /// marketEscrowActive, legacyRow].
+        /// marketEscrowActive, legacyRow]. The recovery, message and hook slots
+        /// are retained for ABI stability and report their inactive value: those
+        /// transitions are user-space module concerns.
         /// </summary>
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
         private Array GetAccount(IReadOnlyStore snapshot, UInt160 accountId)
         {
             RequireAccountId(accountId);
@@ -479,10 +367,6 @@ namespace Neo.SmartContract.Native
                 return new Array([false, (BigInteger)0, UInt160.Zero.ToArray(), UInt160.Zero.ToArray(),
                     (BigInteger)0, (BigInteger)0, (BigInteger)0, false, false, false,
                     (BigInteger)0, (BigInteger)0, false, (BigInteger)0, false, false]);
-            CoreRecoveryRecord? recovery = TryRead(snapshot,
-                SmartAccountProtocol.GetCoreRecoveryKey(accountId), out var pendingBytes)
-                ? CoreRecoveryRecord.Decode(pendingBytes)
-                : null;
             return new Array([
                 true,
                 (int)control.Status,
@@ -496,42 +380,23 @@ namespace Neo.SmartContract.Native
                 control.OwnerOnlyRecovery,
                 new BigInteger(control.HookOrderRevision),
                 new BigInteger(control.ControlRevision),
-                recovery is not null,
-                recovery is null ? BigInteger.Zero : recovery.MatureAt,
+                false,
+                (BigInteger)0,
                 false,
                 false]);
         }
 
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
-        private Array GetRecoveryStatus(IReadOnlyStore snapshot, UInt160 accountId)
+        /// <summary>
+        /// The deterministic external address of an account: the script hash of
+        /// its fixed proxy verification script (spec §3.6/§9). Read-only and
+        /// permissionless, it is how a module resolves the asset-holding address
+        /// of the account instance it serves.
+        /// </summary>
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
+        public UInt160 GetAccountAddress(UInt160 accountId)
         {
             RequireAccountId(accountId);
-            _ = RequireControl(snapshot, accountId);
-            if (!TryRead(snapshot, SmartAccountProtocol.GetCoreRecoveryKey(accountId), out var pendingBytes))
-                return new Array();
-            CoreRecoveryRecord record = CoreRecoveryRecord.Decode(pendingBytes);
-            return new Array([true, record.InitiatedAt, record.MatureAt, record.AuthorityEpochAtInit,
-                record.NewCustody.ToArray()]);
-        }
-
-        [ContractMethod(Hardfork.HF_SmartAccountV1, CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.None)]
-        private static byte[] CanonicalP256PublicKey([P256PublicKey] byte[] publicKey)
-        {
-            byte[] compressed;
-            if (publicKey.Length == 33 && publicKey[0] is 2 or 3)
-                compressed = publicKey;
-            else if (publicKey.Length == 65 && publicKey[0] == 4)
-            {
-                compressed = new byte[33];
-                compressed[0] = (byte)(2 | (publicKey[64] & 1));
-                publicKey.AsSpan(1, 32).CopyTo(compressed.AsSpan(1));
-            }
-            else throw new FormatException("A canonical P-256 public key requires a 33-byte compressed or 65-byte uncompressed encoding.");
-
-            var point = Neo.Cryptography.ECC.ECPoint.DecodePoint(compressed, Neo.Cryptography.ECC.ECCurve.Secp256r1);
-            if (publicKey.Length == 65 && !publicKey.AsSpan().SequenceEqual(point.EncodePoint(false)))
-                throw new FormatException("The uncompressed P-256 public key is not a point on the curve.");
-            return point.EncodePoint(true).AsSpan().ToArray();
+            return SmartAccountProtocol.GetAccountAddress(accountId);
         }
     }
 }

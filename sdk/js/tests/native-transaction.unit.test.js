@@ -4,12 +4,13 @@
  *
  * v4 collapsed the v3 authority machinery: there is no authority list, no
  * verifier roster and no cancellation policy in a plan. The account state is
- * the authority, the custody witness (or, for the two recovery entry points,
- * custody-or-recovery) is the only witness a configuration or account action
- * asks for, and an execution is authorized by the signature inside the
- * operation. What this suite pins is that the lifecycle cannot be talked out of
- * any of those gates, and that no wallet is called before the fees, the block
- * window and the simulation have all been checked.
+ * the authority, and the custody witness (or the witness of an installed
+ * validator) is the only witness a native account action asks for: the minimal
+ * core has no permissionless action left, so recovery and configuration
+ * transitions cannot be signed here at all. An execution is authorized by the
+ * signature inside the operation. What this suite pins is that the lifecycle
+ * cannot be talked out of any of those gates, and that no wallet is called
+ * before the fees, the block window and the simulation have all been checked.
  */
 
 const test = require("node:test");
@@ -21,6 +22,7 @@ const {
   A,
   BOOL,
   CAPS,
+  I,
   build,
   c,
   clone,
@@ -30,6 +32,9 @@ const {
   registrationReview,
   wallet,
 } = require("./helpers/nativeTransactionNode");
+
+/** A module contract hash: an install names it, a removal names the id instead. */
+const MODULE = "44".repeat(20);
 
 /** A wallet that records every call, so "no wallet was touched" is provable. */
 function spyWallet() {
@@ -159,42 +164,32 @@ test("registration asks for the custody witness and refuses any other", async ()
   );
 });
 
-test("account actions need custody, recovery actions accept custody or recovery, executeRecovery is permissionless", async () => {
-  const node = createNode();
-  const custody = wallet();
-  const recovery = wallet();
-  node.setAccount({ custody: custody.account, recovery: recovery.account });
-  const freeze = build.account(node, { method: "freezeAccount" });
-  await assert.rejects(prepare(node, freeze.plan, options(wallet(), { recipe: freeze.recipe })), /missing authority witness/);
-
-  const begin = build.account(node, {
-    method: "beginRecovery",
-    args: [c.hashValue(recovery.account)],
-  });
-  await assert.rejects(
-    prepare(node, begin.plan, options(wallet(), { recipe: begin.recipe })),
-    /missing custody or recovery authority witness/,
-  );
-  await assert.doesNotReject(prepare(node, begin.plan, options(wallet(), { recipe: begin.recipe, authorizers: [recovery] })));
-
-  const execute = build.account(node, { method: "executeRecovery" });
-  const prepared = await prepare(node, execute.plan, options(wallet(), { recipe: execute.recipe }));
-  assert.equal(descriptors(prepared).length, 1);
-});
-
-test("configuration intents are custody-gated and keep their kind", async () => {
+test("account actions are custody-gated and carry their operands verbatim", async () => {
   const node = createNode();
   const custody = wallet();
   node.setAccount({ custody: custody.account });
-  for (const kind of ["propose", "confirm", "cancel"]) {
-    const { plan, recipe } = build.configuration(node, { kind });
-    assert.equal(plan.kind, "configuration");
-    await assert.rejects(prepare(node, plan, options(wallet(), { recipe })), /missing authority witness/);
-    const prepared = await prepare(node, plan, options(wallet(), { recipe, authorizers: [custody] }));
-    assert.equal(prepared.review.plan.method, plan.method);
-    assert.equal(descriptors(prepared).length, 2);
-  }
-  assert.throws(() => build.configuration(node, { kind: "apply" }), /unknown configuration intent kind/);
+  const freeze = build.account(node, { method: "freezeAccount" });
+  await assert.rejects(prepare(node, freeze.plan, options(wallet(), { recipe: freeze.recipe })), /missing authority witness/);
+  await assert.doesNotReject(prepare(node, freeze.plan, options(wallet(), { recipe: freeze.recipe, authorizers: [custody] })));
+
+  // Module administration is the same gate, and its operands are protocol
+  // values: the module type, the module contract and the initData array.
+  const install = build.account(node, {
+    method: "installModule",
+    args: [I(1), c.hashValue(MODULE), A([])],
+  });
+  await assert.rejects(
+    prepare(node, install.plan, options(wallet(), { recipe: install.recipe })),
+    /missing authority witness/,
+  );
+  const prepared = await prepare(node, install.plan, options(wallet(), { recipe: install.recipe, authorizers: [custody] }));
+  assert.equal(prepared.review.plan.method, "installModule");
+  assert.equal(descriptors(prepared).length, 2);
+
+  // Removing a module names the id the core allocated, never the contract.
+  const remove = build.account(node, { method: "removeModule", args: [I(3), A([])] });
+  const removed = await prepare(node, remove.plan, options(wallet(), { recipe: remove.recipe, authorizers: [custody] }));
+  assert.equal(removed.review.plan.method, "removeModule");
 });
 
 test("the review recipe must rebuild the plan byte for byte", async () => {

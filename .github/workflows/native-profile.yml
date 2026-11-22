@@ -131,12 +131,17 @@ jobs:
           # verify_repo.sh below; keep this step as the cheap fail-fast ABI guard.
       - name: Restore audited packages and compiler
         run: |
-          node scripts/check_neo_platform_packages.mjs --include-native
+          # Native is the default package scope: six modules, the epoch probe and its fixture,
+          # and the two source-runtime probe hosts. No custom project is restored.
+          node scripts/check_neo_platform_packages.mjs
           dotnet tool install neo.compiler.csharp --version 3.9.1 --tool-path "$RUNNER_TEMP/native-profile-tools" --configfile nuget.config
           node scripts/check_neo_platform_packages.mjs --compiler-only
       - name: Verify native module isolation
         env:
           NEOOS_NATIVE_EPOCH_RECEIPT: ${{ runner.temp }}/native-profile-receipts/native-epoch.json
+          # SmartAccount.sln is native-only and builds against this checkout, so point the
+          # solution build and native unit-test gate at it instead of the default sibling.
+          NEOOS_NATIVE_CORE_SOURCE: ${{ github.workspace }}/native-core
         run: ./scripts/verify_repo.sh --profile native --contracts-only
       - name: Build pinned core and two module copies, then execute native VM matrix
         run: |

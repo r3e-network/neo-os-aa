@@ -219,7 +219,7 @@ Session keys, proxy witnesses, hooks, recovery and paymaster scenarios retain
 the assessor's assertions. These are regression expectations, not a claim that
 the deployed contract has self-service proxy setup or a complete WebAuthn flow.
 
-`.github/workflows/localchain.yml` installs dependencies and runs both suites and
+Hosted CI used to install dependencies and run both suites through a dedicated workflow,
 the negative control. Hosted CI is billing-blocked; local exact-commit workflow
 replay is the acceptance evidence. Hosted Linux execution and the
 checkout/setup/upload actions are not verified by local replay. The jobs use no

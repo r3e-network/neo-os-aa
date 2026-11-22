@@ -204,8 +204,13 @@ Definition vm_step instruction width s : Outcome :=
       match put_storage s context key v with Some written => Continue (with_stack written next rest) | None => Fault s end
     | _ => Fault s end
   | Syscall _ => Fault s
+  (* Codec token indices are a compiler decision, so this table is pinned to the
+     reviewed NEF rather than to the first build that used it: the v3 artifact
+     numbered serialize(3)/deserialize(4), the v4 artifact numbers
+     deserialize(2)/serialize(3). Re-deriving the table is what keeps the model
+     talking about the bytes the chain runs. *)
   | CallToken index => match stack s with value::rest =>
-      let applied := match index with 3%nat => serialize s value | 4%nat => deserialize s value | _ => None end in
+      let applied := match index with 2%nat => deserialize s value | 3%nat => serialize s value | _ => None end in
       match applied with Some (v,changed) => Continue (with_stack changed next (v::rest)) | None => Fault s end
     | _ => Fault s end
   | AbortMessage => match stack s with VBytes message::rest => Aborted message (with_stack s next rest) | _ => Fault s end

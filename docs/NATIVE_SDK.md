@@ -108,11 +108,18 @@ and `executeUserOps(accountId, ops)` for a batch. An operation is the 13-field v
 target, method, args, nonce, nonce subkey, deadline, validator id, credential generation, authority
 epoch, configuration nonce, signature and hook proofs.
 
-`deriveNonceRouting(accountId, routing)` and `getNonce(accountId, {authorityEpoch, validatorId,
-credentialGeneration, nonceSubkey})` read the routing the operation must carry; `getNonceSequence`
-reads a channel cursor. `getOperationDigest` and `validateUserOp` read the digest and the core's
-verdict before anything is signed. `isValidSignature` checks a message signature against the account's
-default message authorization.
+`deriveNonceRouting(accountId, routing)` and `getNonce(accountId, lookup)` read the routing the
+operation must carry; `getNonceSequence` reads a channel cursor. `getOperationDigest` and
+`validateUserOp` read the digest and the core's verdict before anything is signed. The core has no
+message entry: a message signature is checked against the account's default message authorization by
+the signing module, which is the contract that owns the subject records.
+
+`getNonce` takes `{validatorId, nonceSubkey}` and optionally the pair `{credentialGeneration,
+authorityEpoch}`. With the pair supplied the read is a cross-check: the channel the core returned must
+equal the one this client derives, otherwise the call fails before anything is signed. With neither
+supplied only the channel the contract returned is used, because the core resolves the generation
+itself (see *Credential generations*). `resolveCredentialGeneration` answers that value for an installed
+validator; the built-in route's is not published by the ABI, and it reports that rather than guessing.
 
 ```js
 const plan = client.buildExecutionScript({ accountId: state.accountId, operations: [operation] });
@@ -131,59 +138,87 @@ authorize submission. Other target methods keep their native return semantics, i
 `false` and Null. Lifecycle calls may legitimately return an empty stack, but a missing or malformed
 stack is rejected. Faulted simulations stay available for diagnosis and never supply a fee approval.
 
-## Modules and configuration intents
+## Credential generations
 
-Nothing is chosen at creation. `proposeConfiguration(accountId, actions, readSet)` stages a
-configuration intent, `confirmConfiguration(accountId, intentId, actions)` applies it after the
-24-hour maturity, and `cancelConfiguration(accountId, intentId)` drops it. Before confirmation the
-account does not change at all.
+Three different generations reach the §4.3 domain and the §6 channel, and they are never
+interchangeable:
+
+| Route | Generation the core binds | Where it lives |
+| --- | --- | --- |
+| built-in validator (`validatorId` 0) | the account's `SubjectRevision` | 0x57 subject record |
+| installed validator | that instance's `CredentialGeneration` | 0x52 instance record, published by `getModule` |
+| active threshold policy | the policy's `CredentialGeneration` | 0x5B policy record |
+
+The core resolves the generation internally on every operation and on every `getNonce` read, so the
+channel an accepted operation lands on is the one the core derived, never a client-side guess. An
+operation that carries a generation the account has left behind fails with `SA_CREDENTIAL_STALE`, and a
+reshaped threshold policy kills the channels of its previous generation the same way.
+
+There is no default anywhere in the client stack. An offline builder has no RPC and `getAccount` does
+not carry the revision, so `UserOperationBuilder` refuses to build without an explicit
+`credentialGeneration` (`SDK_011`) and the frontend operation factory raises
+`EC_credential_generation_required`; neither substitutes 1 for the built-in route nor 2 for anything
+else. A reviewed fixture may state a generation explicitly, which is a declaration about that fixture
+and not a fallback. The digest and the channel both bind the value, so a stale generation does not
+silently move to the next channel: it is a refusal.
+
+## Modules
+
+Registration may carry installs atomically: the core executes at most 16 actions at registration, and
+the only actions it still runs are `installModule` and `uninstallModule`. Everything afterwards goes
+through two public methods.
+
+`installModule(accountId, moduleType, moduleContractHash, initData)` and
+`removeModule(accountId, moduleId, deInitData)` take the v4 install code — validator (1) or hook (4) —
+and no profile digest, because the core reads the module's own profile; a registration action carries
+one and the shared core compares it. Either call accepts the custody witness or the witness of an
+already installed validator instance (the governance shape a user-space governance module uses to
+administer itself), and either advances the configuration nonce.
 
 ```js
-const propose = client.buildConfigurationScript({
-  kind: 'propose',
+const install = client.buildAccountActionScript({
+  method: 'installModule',
   accountId: state.accountId,
-  actions: [installAction],   // [1, moduleType, moduleHash, profileDigest, initData]
-  readSet: [],
-});
-const confirm = client.buildConfigurationScript({
-  kind: 'confirm',
-  accountId: state.accountId,
-  intentId,
-  actions: proposed.actions,  // the identical action bytes the intent carries
+  args: [moduleTypeCode, moduleContractHash, initData],
 });
 ```
 
-Actions are `installModule`, `uninstallModule`, `configureModule`, `setHookOrder`, `setDefaultPolicy`,
-`rebindModuleCode`, `setThresholdPolicy`, `setRecoveryPolicy`, `setMessageSubjects` and
-`migrateAccount`. `getPendingConfiguration(accountId, intentId)` returns the intent with its maturity
-and action digest, and `getPendingConfigurationIntentIds(accountId)` lists the outstanding ids.
-Compare the digest against the intent you proposed before confirming; a pending record alone does not
-prove it carries your change.
+The core keeps no configuration intent: a change that matures for 24 hours and is then confirmed or
+cancelled belongs to a governance module, which submits the matured call through those two methods. A
+client that expects a proposal window is targeting a different contract. `getAccount` still publishes
+`configurationNonce` and `hookOrderRevision` so a reader can order changes, and it keeps the recovery
+slots in the descriptor for ABI stability, reporting their inactive value.
 
 `getModules(accountId, 'validator'|'hook', {cursor, limit})` pages installed instances;
-`getModule(accountId, moduleId)` reads one 12-field descriptor (type, contract hash and id, update
-counter, NEF and profile digests, module revision, credential generation, instance isolation, message
-capability, threshold eligibility); `getHookOrder` returns the core-owned hook order. A module can
-only read its own state — lifecycle callbacks belong to the core.
+`getModule(accountId, moduleId)` reads one descriptor (type, contract hash and id, update counter,
+NEF and profile digests, module revision, credential generation, instance isolation, message
+capability, threshold eligibility). `isModuleInstalled` answers the admission question without paging
+and `getAuthorizedModuleId` reports the instance the core routed a phase to. A module can only read
+its own state — lifecycle callbacks belong to the core.
 
-`revokeCredentials(accountId, moduleId)` is the exception to the delay: it is a custody-authorized
-action that bumps the instance credential generation immediately, so signatures bound to the old
-generation stop validating at once.
+Hook ordering is derived from the installed hook instances and the `hookOrderRevision` the descriptor
+publishes; the orchestrator that calls them is a module, so the core has no order to read and none to
+change. Credential generations are advanced by removing and reinstalling an instance, which is the
+custody-authorized `removeModule`/`installModule` pair — there is no separate revoke entry on the
+core.
 
-## Recovery and account actions
+## Account actions
 
-`beginRecovery(accountId, newCustody)`, `cancelRecovery(accountId)` and `executeRecovery(accountId)`
-are built with `buildAccountActionScript`, together with `freezeAccount`, `unfreezeAccount` and
-`revokeCredentials`. The SDK derives the authority set from the plan kind and the account state:
-`beginRecovery` and `cancelRecovery` accept either the custody or the configured recovery authority;
-`executeRecovery` is permissionless after maturity; every other action requires custody.
-`getRecoveryStatus(accountId)` reads the pending recovery and its maturity.
+`freezeAccount(accountId)` and `unfreezeAccount(accountId)` are the two immediate transitions the core
+owns, both built with `buildAccountActionScript` and both custody-only. Freezing advances the
+authority epoch, so every signature produced before it stops validating; unfreezing is refused unless
+the account is frozen. Both are refused while the account awaits migration.
 
-Freeze advances the configuration nonce and clears pending intents and pending recovery. Recovery
-preserves the identity, assets, nonce channels and the Frozen status, and revokes installed modules
-without calling them. Recovery and configuration both invalidate old signatures through the authority
-epoch and configuration nonce, and the SDK re-reads state, digest and nonce before signing and before
-broadcast.
+Recovery is a module. `beginRecovery`, `cancelRecovery`, `executeRecovery` and `getRecoveryStatus`
+are the recovery module's own methods: the handover delay and its maturity live in that module's
+storage, so the core neither plans nor validates them, and the SDK does not derive a recovery
+authority set from a core plan. A client that needs recovery targets the recovery module's script
+hash.
+
+Freeze advances the configuration nonce and clears the core's recovery slots. Both transitions
+invalidate old signatures through the authority epoch, and the SDK re-reads state, digest and nonce
+before signing and before broadcast.
+
 
 ## Fees and final preflight
 

@@ -52,7 +52,7 @@ one account at a time.
   creates several accounts for one custody in a single transaction (1-64 entries, all or nothing);
   a batch entry installs no modules, so configuration afterwards travels the 24-hour intent path.
 - **Creation authority:** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)`
-  requires the `custody` witness (`contracts/custom/SmartAccount.Accounts.cs`). The initial
+  requires the `custody` witness (`contracts/native/SmartAccount/SmartAccount.cs`). The initial
   configuration actions install atomically for a fresh account; every later change is a
   `proposeConfiguration` → 24 h → `confirmConfiguration` intent.
 

@@ -82,18 +82,19 @@ const invocation = (op = operation(), entry = 'executeUserOp') => ({
 });
 
 test('the proxy verification script is the exact core derivation, at the kernel call flags', () => {
-  const custom = createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT });
+  const native = createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT });
   assert.equal(
-    custom,
-    `0c14${Buffer.from(ACCOUNT, 'hex').reverse().toString('hex')}11c01f0c06` +
+    native,
+    `0c14${Buffer.from(ACCOUNT, 'hex').reverse().toString('hex')}11c0150c06` +
       `${Buffer.from('verify', 'utf8').toString('hex')}0c14${Buffer.from(CORE, 'hex').reverse().toString('hex')}41627d5b52`,
   );
-  assert.equal(DEFAULT_CALL_FLAGS, 15);
-  // The native kernel's proxy pushes CallFlags.ReadOnly; the same account id at
-  // a different kernel is a different address, so the flag is never assumed.
-  const native = createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT, callFlags: 5 });
-  assert.equal(native, custom.replace('11c01f', '11c015'));
-  assert.notEqual(addressOf(native), addressOf(custom));
+  // The native core pushes CallFlags.ReadOnly (5), so that is the default.
+  assert.equal(DEFAULT_CALL_FLAGS, 5);
+  // The same account id at a different flag is a different address, so the flag
+  // is never assumed: a caller that changes it gets the address it asked for.
+  const readStates = createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT, callFlags: 1 });
+  assert.equal(readStates, native.replace('11c015', '11c011'));
+  assert.notEqual(addressOf(readStates), addressOf(native));
   assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT, callFlags: 17 }), /flags/);
   assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: '0'.repeat(40) }), /accountId/);
   assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: '11zz' }), /accountId/);

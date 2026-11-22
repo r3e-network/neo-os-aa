@@ -599,7 +599,7 @@ For official plugin listing, provide:
 - **Protocol Coverage:** `docs/PROTOCOL_COMPLETENESS_AUDIT.md`
 - **Module Protocol:** [`docs/SA-MODULE-PROTOCOL.md`](SA-MODULE-PROTOCOL.md)
 - **Templates:** [`contracts/plugins/templates/README.md`](../contracts/plugins/templates/README.md)
-- **Core Contract:** `contracts/custom/SmartAccount.cs`
+- **Core Contract:** `contracts/native/SmartAccount/SmartAccount.cs`
 - **Validator Examples:**
   - `contracts/plugins/validators/NeoWitnessValidator.cs`
   - `contracts/plugins/validators/MultiSigValidator.cs`

@@ -85,12 +85,11 @@ the network's global Verification budget.
 
 ## Validation and release
 
-Run `scripts/verify_repo.sh --profile custom` for public contracts, frontend,
-browser, SDK consumers and dependency audits. Use `--profile native` for native
-profile/module checks or `--profile all` for both lanes. Run the formal and
-private-chain gates with their required
-tools, and inspect their recorded scope and skipped checks. The build comparison
-must cover both `contracts/bin/public` and `contracts/bin/platform`.
+Run `scripts/verify_repo.sh --profile native` for the native contracts build, frontend,
+browser, SDK consumers and dependency audits; native is the default and the only
+implementation profile. Run the formal and private-chain gates with their required
+tools, and inspect their recorded scope and skipped checks. The native kernel builds into each
+project's `bin/Release/net10.0/`; the module and epoch-probe receipts land wherever `--output` points.
 
 The separate [native VM workflow](../.github/workflows/native-profile.yml) builds a
 reviewed immutable core commit and two identical native module copies, then checks
@@ -136,7 +135,7 @@ The committed custom source candidate extracts the platform services out of
 the core: market escrow settlement (`abandonListing`) lives on `SAAddressMarket`,
 paymaster reimbursement (`settleReimbursement`) on `SAPaymaster`, and
 platform-account registration plus the owner-rotation timelocks on the
-standalone `SAPlatformRegistrar` (`contracts/custom/registrar/`). On top of the
+standalone `SAPlatformRegistrar` (the retired custom treeregistrar/`). On top of the
 2026-11-13 security remediation, the candidate adds the backup-owner-gated freeze
 surface (`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`), not part of
 the pinned public artifact.

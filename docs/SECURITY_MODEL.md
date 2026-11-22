@@ -352,6 +352,116 @@ back target writes and nonce state on that fault; transaction fees remain charge
    fault and the successful pull with a reaching scope. A merchant scopes its signer to the
    verifier with `CustomContracts` rather than signing `Global`.
 
+### 5.3 Credential-generation channels
+
+Three records carry a generation and they are not one counter. A signature binds
+whichever record its route names, so collapsing them into a single default is a
+security defect rather than a convenience:
+
+| Route | Bound generation | Record |
+| --- | --- | --- |
+| built-in message signer (`validatorId` 0) | the account's `SubjectRevision` | 0x57 |
+| installed validator instance | that instance's `CredentialGeneration` | 0x52 |
+| active threshold policy | the policy's `CredentialGeneration` | 0x5B |
+
+- **The built-in generation is not the constant 1.** Every committed security
+  configuration, credential revocation, freeze/unfreeze, recovery and custody
+  change advances `SubjectRevision`; an account with no 0x57 subject record is at
+  revision 1 only until the first such change. A client that substitutes 1 for a
+  moved account derives a domain and a nonce channel the core never produced, so
+  the built-in route rejects the message with its invalid-signature result while
+  an installed-validator or policy route faults with `SA_CREDENTIAL_STALE` — a
+  rejected operation either way, not a retryable nonce mismatch that a relayer
+  could paper over.
+- **Code and credentials advance different counters.** Rebinding a module's code
+  advances `moduleRevision`. Only `revokeCredentials` (custody-authorized,
+  callback-free) retires an installed instance's credential generation, and only
+  a policy rewrite advances a threshold policy's generation, carrying the
+  previous value forward and bumping it so a reshape never resets to 1.
+- **The core resolves the generation, not the caller.** `getNonce` reads the
+  route's generation internally and answers with the channel the core would
+  actually use; a client may cross-check its own derivation against that answer
+  but must not re-derive a substitute.
+- **Offline builders must be told.** A digest or nonce builder that runs without
+  chain access cannot read `SubjectRevision` by construction. It therefore
+  requires an explicit `credentialGeneration` and raises when it is absent.
+  Defaulting to 1, defaulting to 2, or assuming `getAccount` publishes a revision
+  are all unsound: each produces a well-formed signature over a namespace the
+  account does not use. A hard-coded 1 is acceptable only in a reviewed
+  fresh-account fixture that states the account has never advanced.
+
+### 5.4 Subject keys, subject matching and custody provenance
+
+- **Two 0x57 keys, two widths.** `0x57 ‖ accountId` (21 bytes) is the canonical
+  `MessageSubjectRecord`: up to 16 subjects, a threshold and `SubjectRevision`.
+  `0x57 ‖ accountId ‖ 0x01` (22 bytes) is an internal provenance marker written
+  and deleted only by the core; it is never a second subject row. The canonical
+  key stays 21 bytes — widening it to 22 would relocate every existing account's
+  record and silently change a reviewed key.
+- **Subject matching accepts exactly two widths.** A 32-byte subject must equal
+  the raw `SHA256` of the signer's verification script; a 20-byte subject must
+  equal the signer's account address (`RIPEMD160(SHA256(script))`, the N3 script
+  hash). Any other width matches nothing. Both forms verify the same ECDSA check
+  over `messageDigest`, so mixing them is permitted and neither is a weaker
+  identity claim.
+- **Custody-derived provenance is recorded, never inferred.** Registration
+  writes `Subjects = [custody]`, threshold 1, `SubjectRevision` 1 and the 22-byte
+  marker. A custody rotation rewrites the subject set and advances the revision
+  **only while that marker is present**. A missing marker means the provenance is
+  unknown: the subject set may have been configured deliberately through the
+  subject intent, or the account may predate the marker and still carry its
+  historical default subject state. The runtime makes no inference in either
+  direction — it simply does not rotate — and a subject that happens to equal
+  the old custody address is never read as evidence of explicit delegation:
+  address equality is never used to infer provenance. A present marker with an
+  unexpected value is an integrity fault, not a rotation signal. Escape and
+  account teardown delete both keys.
+
+### 5.5 Reviewed artifact identity, and what a re-pin is not
+
+The reviewed 2026-11-21 rebuild of the custom `public` artifact is NEF
+`397f96ab…` with manifest `4939cf01…`; the separate `PLATFORM` build is
+`7d5fad65…` / `296a3ad4…` and is not the artifact these pins describe. The
+refreshed evidence is enumerated, not blanket: the refinement suites' NEF,
+manifest and offset pins, the golden vectors, the gas receipts, the initializer
+source inventory, the source-lock and the reproducibility reports were
+re-anchored to those bytes, and the renumbering they exposed was fixed in the
+model rather than in the observation: slot 58 (not 38) carries
+`Prefix_TransactionReimbursement`, and the codec tokens are `deserialize` 2 /
+`serialize` 3 (not 3 / 4).
+
+The composition helper certificate was re-issued on Rocq 9.0.1 against the
+current artifact, and the dependent composition proofs were regenerated with it.
+The receipt `formal/refinement/fixtures/current-method-proof/method-proof.json`
+(digest `a4bd1854…`) binds NEF `397f96ab…`, the complete helper `[36586,36867)`
+(281 bytes, 116 instructions), method digest `9aec81b7…`, certificate digest
+`f339b6ec…` and the `CapMethodVm` model `5ac5fa2c…`. It records
+`kernelChecked: true`, `referenceRefinementVerified: true` and
+`fullImplementationVerified: false`: `coqc` and `coqchk -silent` are clean, all
+111 closed assumptions are enumerated, the six semantic controls are rejected,
+and the composition, context, public-purity and gas lane suites
+(`test_composition_proofs.py`, `test_context_proofs.py`,
+`test_public_pure_proofs.py`, `test_gas_proofs.py`) pass 28/28. That result certifies the bounded helper and its reference refinement
+only. It does not prove the whole implementation, ApplicationEngine composition,
+native binary codecs or gas accounting, caller reachability, the 81 public ABI
+entrypoints, or initializer execution. The initializer `CapContext` still does
+not cover the `PUSHINT8`/`SHL`/`SUB` writes that establish the v4 `UInt64Mask`
+statics; that lane is being handled under Task 26 and is not closed here.
+
+Nothing in that refresh changes the proxy-transfer boundary. The current custom
+Verification kernel accepts exactly four precise transaction shapes: the
+two-argument `executeUserOp`/`executeUserOps` calls and the five-argument
+`executeSponsoredUserOp`/`executeSponsoredUserOps` wrappers, each in single and
+batch form, and the runtime suite drives a real proxy witness through the exact
+five-argument sponsored GAS-transfer envelope while rejecting an appended
+trailing call, a shaped call for another account or core, and a non-proxy fee
+payer. That is kernel acceptance, not relay or deployment support: the relay
+route has not been migrated to v4, the historical deployment receipts describe
+earlier deployments and are not a proof of this v4 source, and no current-source
+on-chain receipt asserts a real sponsored proxy-transfer settlement. A refreshed
+hash never converts kernel acceptance or those historical receipts into an
+accepted deployment capability.
+
 ---
 
 ## 6. Attack Surface Analysis
@@ -588,7 +698,7 @@ stateDiagram-v2
 The entrypoints take the account id; `beginRecovery` also takes the custody it rotates
 to, and `getRecoveryStatus` reads the pending record back as
 `[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]`
-(`contracts/custom/SmartAccount.Escape.cs`; the pinned `contracts/build/` artifact is the
+(`contracts/native/SmartAccount/SmartAccount.cs`; the pinned `contracts/build/` artifact is the
 older two-entrypoint shape).
 
 ### 9.2 Security Properties

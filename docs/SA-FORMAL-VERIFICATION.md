@@ -2,6 +2,37 @@
 
 ## Status
 
+### Fixture refresh (2026-11-21)
+
+The 2026-11-21 v4 protocol-conformance rebuild changed the custom core again
+(credential generation is 1-based, one core-wide reentrancy exclusion, code
+binding continuity after every writable callback and at commit, and `NefSha256`
+as `SHA256(NEF)`), so the artifact identity moved to NEF `397f96ab…` / manifest
+`4939cf01…` with a 44,833-byte script. Every lane constant, fixture and receipt
+in `formal/refinement/` was re-derived from those bytes: the helper is still the
+byte-identical 281-byte / 116-instruction / 52-opcode program and moved by +272
+to `[36586,36867)`; the initializer is `[44047,44833)` at 786 bytes / 245
+instructions; the charge region is `[36696,36718)`; the reimbursement
+`Storage.Put` is `36858`; the initializer static controls are the `PUSHDATA1`
+data byte `44605` and the `STSFLD` slot operand `44609`. The five-shape
+helper-gas runtime capture was re-captured with its producer test rather than
+edited. One lane control needed re-anchoring instead of shifting:
+`gas_trace_proofs`' hash-equal-branch mutant named PC 36126, which after the
+move named no instruction inside the bound helper at all — a latent bug that
+raised instead of rejecting — and now names the reviewed branch at `36664` with
+edges `36666` / `36680`. The refreshed receipt
+(`formal/refinement/fixtures/current-method-proof/method-proof.json`, SHA-256
+`a4bd1854…`) records `kernelChecked: true`, `referenceRefinementVerified: true`
+and `fullImplementationVerified: false` over `[36586,36867)`, with method
+`9aec81b7…`, certificate `f339b6ec…` and `CapMethodVm` model `5ac5fa2c…`; all
+111 closed assumptions are enumerated and 6/6 semantic controls are rejected on
+Rocq 9.0.1. Suite results for the re-anchored lane: `test_gas_trace` 22/22,
+`test_method_proofs` + `test_initializer_proofs` 32/32, and
+`test_composition_proofs` + `test_context_proofs` + `test_public_pure_proofs` +
+`test_gas_proofs` 28/28. That scope stays a bounded helper/reference refinement,
+not a proof of the whole implementation; the initializer `CapContext` gap for
+the `UInt64Mask` statics remains open under Task 26.
+
 ### Fixture refresh (2026-11-16)
 
 The 2026-11-16 design-phase legacy-compatibility sweep changed the custom
@@ -20,6 +51,26 @@ manifest `f44cddeb…`; every lane constant, fixture and receipt listed in this
 document was re-pinned or re-distilled against that artifact, except the archived
 helper-gas runtime capture, which still pins `9f714866…` and therefore fails
 closed until a new capture is produced.
+The 2026-11-20 rebuild moved it once more, to NEF `27e28aa0…` / manifest
+`f0c6467b…`. That pin was re-anchored from the live bytes, and the five-shape
+helper-gas runtime capture was re-captured with its producer test rather than
+edited, so the lane constants in the archived method-refinement record (removed from the tree) and the receipts under
+`formal/refinement/fixtures/` name this artifact. Two model bindings did not
+survive the move: the reimbursement key is static slot 58 (slot 38 is now
+`UInt64Mask`) and the codec tokens are `deserialize` 2 / `serialize` 3 (not 3 /
+4). Both were corrected in `formal/refinement/` and re-checked on a Coq 8.18 host
+against this artifact. The refreshed receipt
+(`formal/refinement/fixtures/current-method-proof/method-proof.json`, SHA-256
+`98711714…`) records `kernelChecked: true`, `referenceRefinementVerified: true`
+and `fullImplementationVerified: false` over the helper `[36314,36595)` at 281
+bytes / 116 instructions, with method `9aec81b7…`, certificate `f339b6ec…` and
+`CapMethodVm` model `5ac5fa2c…`; `coqc` and `coqchk -silent` are clean, all 111
+closed assumptions are enumerated, and the 5/5 composition tests pass. That
+scope stays a bounded helper/reference refinement, not a proof of the whole
+implementation. The initializer `CapContext` still does not cover the
+`PUSHINT8`/`SHL`/`SUB` writes that establish the v4 `UInt64Mask` statics and
+remains open under Task 26. The archived pre-rename capture continues to fail
+closed by design.
 The retired pre-sweep getter shapes are gone: `storage_getter_source.py` no
 longer carries the `legacy_symbol` / `inline-fallback` forms, the lane's
 source-level semantic controls are now the prefix/default binding mutants, and
@@ -134,12 +185,12 @@ boundaries described below. No public network was used by this refresh.
 
 The [implementation gate](SA-IMPLEMENTATION-REFINEMENT.md) now requests four
 proof lanes by default: the original arithmetic region,
-[numeric coercions](SA-METHOD-REFINEMENT.md#numeric-coercion-refinement),
-[reservation arithmetic](SA-METHOD-REFINEMENT.md#reservation-arithmetic-refinement), and
-[complete reimbursement-helper reference refinement](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-reference-refinement).
-The last lane uses a [typed source projection](SA-METHOD-REFINEMENT.md#full-helper-source-projection)
-and the [complete instruction inventory](SA-METHOD-REFINEMENT.md#whole-helper-refinement-inventory).
-[Pinned-engine runtime checks](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-runtime-checks) provide separate,
+`numeric coercions`,
+`reservation arithmetic`, and
+`complete reimbursement-helper reference refinement`.
+The last lane uses a `typed source projection`
+and the `complete instruction inventory`.
+`Pinned-engine runtime checks` provide separate,
 finite evidence, including storage and fault behavior. None of these lanes alone
 verifies the whole contract or public protocol activation.
 
@@ -337,7 +388,7 @@ are outside that claim.
 The active native target is SmartAccount ABI 2, with identity derivation
 version 1, authorization/account-record version 2, and separate authority epoch
 and configuration nonce. Native recovery revokes old module generations without
-external cleanup. The six native modules use epoch-scoped state. Custom 
+external cleanup. The six native modules use epoch-scoped state. Custom
 `public` and private `PLATFORM` sources are retained as separate profiles; native
 claims must bind the external Neo core sources, not the old deployed-core prototype.
 
@@ -922,7 +973,7 @@ models under `verified/` for its own `verify.sh`.
 
 ### Source-pin refresh after the rename and the headroom assertion
 
-`formal/source-lock.json` currently pins 61 source files. The historical
+`formal/source-lock.json` currently pins 56 source files. The historical
 rename refresh below pinned 59 source files. Thirty-five of those pins were
 stale against the working tree and `formal/verify.py` failed closed at
 `Source drift: Directory.Build.props` before running any Coq or TLC lane. The
@@ -932,13 +983,13 @@ pins were refreshed only after classifying every one of the 35:
   `UnifiedSmartWallet` / `abstract-account` with `SmartAccount` /
   `smart-account` in the previously pinned content reproduces the current file
   byte for byte, so the correspondence statements are unchanged.
-- **`contracts/custom/SmartAccount.Paymaster.cs`** gains the 73-byte VM-integer
+- **`SmartAccount.Paymaster.cs` (retired custom kernel)** gains the 73-byte VM-integer
   headroom assertion (`vmMax` plus `budget.Reserved <= vmMax - settled`). That
   assertion is inside the helper the complete-context certificate models; the
   refinement lanes prove the guard succeeds on the legal domain
   (`legal_update_fits`, `vm_leb_margin_of_fits`), so the pinned correspondence
   still holds for the new text.
-- **`contracts/custom/SmartAccount.State.cs`** changes only the
+- **`SmartAccount.State.cs` (retired custom kernel)** changes only the
   `AccountImplementationId` string constant, no executable logic.
 - **`formal/verify.py` and `scripts/verify_repo.sh`** carry the same rename plus
   mutation-table entries for the renamed models; the diff adds and removes no
@@ -1019,6 +1070,13 @@ bounded VM evidence rather than a complete NeoVM or cryptographic proof. The
 policy model also proves that its abstract post-callback roster is unique,
 configured, and threshold-supported; this remains separate from concrete
 callback refinement.
+The native-side threshold-policy source guards and their bounded config/acceptance
+model retired from the local gate on 2026-11-22: threshold policy ownership moved
+out of the native kernel into the user-space `contracts/modules/ThresholdPolicyModule`,
+so the native core no longer declares, stores or executes a threshold, a member set
+or an approval count. The abstract `MultiSigPolicy.v` Coq model stays as
+public/platform compile-and-mutation evidence only; the gate no longer asserts a
+live native threshold-policy source link.
 
 For the custom deployed public/PLATFORM profiles:
 

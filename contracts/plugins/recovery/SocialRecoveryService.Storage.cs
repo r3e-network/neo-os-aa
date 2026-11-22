@@ -55,6 +55,66 @@ namespace Neo.SmartContract.Examples
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_PENDING_INITIATED, accountId));
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_PENDING_EXECUTABLE, accountId));
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_PENDING_ACTIVE, accountId));
+            // The core-recovery binding belongs to exactly one service pending. Clearing it
+            // here keeps both ledgers in lockstep: a cancelled, settled or reconciled
+            // recovery can never leave a stale generation that a later reconciliation
+            // would mistake for the current one.
+            ClearRecoveryBinding(accountId);
+        }
+
+        /// <summary>
+        /// Records which core recovery generation this service approved: the core's
+        /// <c>authorityEpoch</c> at <c>beginRecovery</c> time and the custody it targets.
+        /// </summary>
+        private static void SaveRecoveryBinding(UInt160 accountId, BigInteger authorityEpoch, UInt160 target)
+        {
+            Storage.Put(Storage.CurrentContext, Key(PREFIX_RECOVERY_BINDING_EPOCH, accountId), authorityEpoch);
+            Storage.Put(Storage.CurrentContext, Key(PREFIX_RECOVERY_BINDING_TARGET, accountId), target);
+        }
+
+        private static bool HasRecoveryBinding(UInt160 accountId)
+        {
+            return Storage.Get(Storage.CurrentContext, Key(PREFIX_RECOVERY_BINDING_EPOCH, accountId)) != null;
+        }
+
+        private static BigInteger GetRecoveryBindingEpoch(UInt160 accountId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_RECOVERY_BINDING_EPOCH, accountId));
+            return data == null ? 0 : (BigInteger)data;
+        }
+
+        private static UInt160 GetRecoveryBindingTarget(UInt160 accountId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_RECOVERY_BINDING_TARGET, accountId));
+            return data == null ? UInt160.Zero : (UInt160)data;
+        }
+
+        private static void ClearRecoveryBinding(UInt160 accountId)
+        {
+            Storage.Delete(Storage.CurrentContext, Key(PREFIX_RECOVERY_BINDING_EPOCH, accountId));
+            Storage.Delete(Storage.CurrentContext, Key(PREFIX_RECOVERY_BINDING_TARGET, accountId));
+        }
+
+        /// <summary>
+        /// Records the owner this service adopted when a core recovery completed. Durable: it
+        /// survives the pending record that the adoption consumes, which is what lets a
+        /// repeated settlement recognise "already done" instead of faulting on the empty
+        /// pending. Only the adopt path writes it.
+        /// </summary>
+        private static void SaveRecoveryCompletion(UInt160 accountId, UInt160 target)
+        {
+            Storage.Put(Storage.CurrentContext, Key(PREFIX_RECOVERY_COMPLETION, accountId), target);
+        }
+
+        private static UInt160 GetRecoveryCompletionTarget(UInt160 accountId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, Key(PREFIX_RECOVERY_COMPLETION, accountId));
+            return data == null ? UInt160.Zero : (UInt160)data;
+        }
+
+        private static void ClearRecoveryCompletion(UInt160 accountId)
+        {
+            Storage.Delete(Storage.CurrentContext, Key(PREFIX_RECOVERY_COMPLETION, accountId));
         }
 
         private static void SaveActiveSession(UInt160 accountId, ActiveSession session)

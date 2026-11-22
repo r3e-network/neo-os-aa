@@ -9,9 +9,15 @@ Record InitState := init_state {
   init_pc : nat; init_stack : list Value; init_heap : list Object;
   init_slots : option (list Value)
 }.
+(* PUSHINT8 carries one signed byte. SUB is the VM's checked binary form, so it
+   reuses `checked_binary`: the top of the stack is the right operand, a
+   non-integer operand faults, and a result outside the signed 256-bit range
+   faults instead of wrapping. SHL needs one extra check, see `checked_shift`. *)
 Inductive InitInstruction :=
 | InitStatics : nat -> InitInstruction
 | InitPush : Value -> InitInstruction
+| InitPushInt8 : Z -> InitInstruction
+| InitBinary : BinaryOp -> InitInstruction
 | InitStore : nat -> InitInstruction
 | InitConvertBuffer | InitPack | InitReturn.
 Fixpoint little_unsigned (bs : list nat) : Z :=
@@ -27,6 +33,9 @@ Definition init_decode (code : list nat) (p : nat) : option (InitInstruction * n
   | 219%nat::48%nat::_ => Some (InitConvertBuffer,2%nat)
   | 12%nat::n::rest => if (n <=? length rest)%nat
       then Some (InitPush (VBytes (firstn n rest)),(n+2)%nat) else None
+  (* PUSHINT8 immediate is one signed byte; `signed_byte` is the same
+     interpreter `CapMethodVm.decode` applies to its signed operands. *)
+  | 0%nat::immediate::_ => Some (InitPushInt8 (signed_byte immediate),2%nat)
   | 1%nat::a::b::_ => Some (InitPush (VInt (little_signed [a;b])),3%nat)
   | 2%nat::a::b::c::d::_ => Some (InitPush (VInt (little_signed [a;b;c;d])),5%nat)
   | byte::_ =>
@@ -35,10 +44,42 @@ Definition init_decode (code : list nat) (p : nat) : option (InitInstruction * n
       else if (96 <=? byte)%nat && (byte <=? 102)%nat
       then Some (InitStore (byte-96)%nat,1%nat)
       else match byte with
+      | 159%nat => Some (InitBinary Sub,1%nat)
+      | 168%nat => Some (InitBinary Shl,1%nat)
       | 192%nat => Some (InitPack,1%nat)
       | 64%nat => Some (InitReturn,1%nat)
       | _ => None end
   | _ => None end.
+(* Decoder pins for the three added opcodes: PUSHINT8 consumes its one signed
+   byte, SHL and SUB are one byte wide, and the neighbouring ADD stays outside
+   the model so the extension did not widen the decoder by accident. *)
+Example initializer_decodes_push_int8 :
+  init_decode [0%nat;64%nat] 0 = Some (InitPushInt8 64,2%nat).
+Proof. reflexivity. Qed.
+Example initializer_decodes_shift :
+  init_decode [168%nat] 0 = Some (InitBinary Shl,1%nat).
+Proof. reflexivity. Qed.
+Example initializer_decodes_subtract :
+  init_decode [159%nat] 0 = Some (InitBinary Sub,1%nat).
+Proof. reflexivity. Qed.
+Example initializer_decode_rejects_add :
+  init_decode [158%nat] 0 = None.
+Proof. reflexivity. Qed.
+(* NeoVM inspects the shift count before it shifts: SHL faults unless
+   0 <= count <= 256, whatever the value being shifted. `checked_binary Shl`
+   cannot express that on its own, because `binary_value Shl` is the
+   mathematical exponent and `Z.pow` maps a negative exponent to 0, so a
+   negative count would push 0 instead of faulting and `0 << 300` would push 0
+   instead of faulting. The initializer therefore performs the VM's count check
+   first and then reuses the same representability test as every other binary
+   form. This is local to the initialization model: `CapMethodVm` keeps its
+   frozen `Binary Shl` semantics, whose helper shifts by the constant 254. *)
+Definition shift_limit : Z := 256.
+Definition checked_shift (value count : Z) : option Z :=
+  if (0 <=? count) && (count <=? shift_limit)
+  then checked_integer (binary_value Shl value count) else None.
+Definition checked_init_binary (op : BinaryOp) (left right : Z) : option Z :=
+  match op with Shl => checked_shift left right | _ => checked_binary op left right end.
 Inductive InitStep := InitNext : InitState -> InitStep
 | InitHalt : InitState -> InitStep | InitFault.
 Definition init_step (instruction : InitInstruction) (size : nat) (s : InitState) : InitStep :=
@@ -50,6 +91,14 @@ Definition init_step (instruction : InitInstruction) (size : nat) (s : InitState
           else InitFault
       | Some _ => InitFault end
   | InitPush value => next (value::init_stack s) (init_heap s) (init_slots s)
+  | InitPushInt8 value => match checked_integer value with
+      | Some checked => next (VInt checked::init_stack s) (init_heap s) (init_slots s)
+      | None => InitFault end
+  | InitBinary op => match init_stack s with
+      | VInt rhs::VInt lhs::rest => match checked_init_binary op lhs rhs with
+          | Some value => next (VInt value::rest) (init_heap s) (init_slots s)
+          | None => InitFault end
+      | _ => InitFault end
   | InitStore index => match init_stack s, init_slots s with
       | value::rest, Some slots => if (index <? length slots)%nat
           then next rest (init_heap s) (Some (firstn index slots ++ value::skipn (S index) slots))
@@ -67,6 +116,37 @@ Definition init_step (instruction : InitInstruction) (size : nat) (s : InitState
       | _ => InitFault end
   | InitReturn => InitHalt s
   end.
+(* The three opcodes this task added, pinned to their VM behaviour. SHL is the
+   only one whose fault condition goes beyond representability, so its boundary
+   is recorded on the semantic function itself: the count check runs before the
+   value matters, 256 is still accepted, and anything wider than the signed
+   256-bit range faults instead of wrapping. Stating these on `checked_shift`
+   rather than on one `init_step` run keeps them independent of operand order,
+   which the `SwapBinaryOperands` control mutates on purpose. *)
+Example initializer_shift_negative_count_faults : checked_shift 1 (-1) = None.
+Proof. reflexivity. Qed.
+Example initializer_shift_count_above_limit_faults : checked_shift 0 257 = None.
+Proof. reflexivity. Qed.
+Example initializer_shift_at_limit_is_accepted : checked_shift 0 256 = Some 0.
+Proof. reflexivity. Qed.
+Example initializer_shift_by_64 : checked_shift 1 64 = Some (2 ^ 64).
+Proof. reflexivity. Qed.
+Example initializer_shift_beyond_256_bits_faults : checked_shift 1 255 = None.
+Proof. reflexivity. Qed.
+Example initializer_subtracts_the_top_operand :
+  checked_init_binary Sub (2 ^ 64) 1 = Some (2 ^ 64 - 1).
+Proof. reflexivity. Qed.
+Example initializer_push_int8_is_signed :
+  init_step (InitPushInt8 (-1)) 2%nat (init_state 0 [] [] None) =
+  InitNext (init_state 2 [VInt (-1)] [] None).
+Proof. reflexivity. Qed.
+Print Assumptions initializer_shift_negative_count_faults.
+Print Assumptions initializer_shift_count_above_limit_faults.
+Print Assumptions initializer_shift_at_limit_is_accepted.
+Print Assumptions initializer_shift_by_64.
+Print Assumptions initializer_shift_beyond_256_bits_faults.
+Print Assumptions initializer_subtracts_the_top_operand.
+Print Assumptions initializer_push_int8_is_signed.
 Inductive InitOutcome := InitReturned : InitState -> InitOutcome
 | InitFaulted | InitTimedOut.
 Fixpoint run_init (fuel : nat) (code : list nat) (s : InitState) : InitOutcome :=

@@ -17,13 +17,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 
 SA = Path(__file__).resolve().parents[2]
-DEFAULT_PROJECT = SA / "contracts/custom/SmartAccount.csproj"
+# The public-profile contract track this module compiled was retired with its sources, so there is
+# no default project: a caller must name the project it wants built.
+DEFAULT_PROJECT = None
 
 GAS_BOUNDED_SYSCALL = "System.Contract.CallWithGasLimit"
 FAULT_MARKER = "The given key '1371299780' was not present in the dictionary."
@@ -205,7 +208,15 @@ def profile_of(nef_path):
     }
 
 
+# `dotnet --list-runtimes` prints one bracketed path per runtime in the platform's own
+# spelling: /usr/local/share/dotnet/shared/<framework> on Unix, C:\Program Files\dotnet\shared\<framework>
+# on Windows. The segment separator must therefore match either slash, or the whole
+# framework path would be kept and nccs could not find its runtime.
+_SHARED_SEGMENT = re.compile(r"[\\/]shared[\\/]", re.IGNORECASE)
+
+
 def dotnet_root():
+    """The dotnet installation root that a framework-dependent app host needs in DOTNET_ROOT."""
     root = os.environ.get("DOTNET_ROOT")
     if root:
         return root
@@ -213,11 +224,21 @@ def dotnet_root():
         done = subprocess.run(["dotnet", "--list-runtimes"], capture_output=True, text=True, timeout=120)
     except OSError:
         return None
+    fallback = None
     for line in done.stdout.splitlines():
-        if "[" in line and "]" in line:
-            runtime = line.split("[", 1)[1].split("]", 1)[0]
-            return runtime.split("/shared/", 1)[0]
-    return None
+        if "[" not in line or "]" not in line:
+            continue
+        runtime = line[line.index("[") + 1:line.rindex("]")].strip()
+        if not runtime:
+            continue
+        shared = _SHARED_SEGMENT.search(runtime)
+        # Without a shared segment the bracketed path already is an installation root.
+        candidate = runtime[:shared.start()] if shared else runtime
+        if line.startswith("Microsoft.NETCore.App "):
+            return candidate
+        if fallback is None:
+            fallback = candidate
+    return fallback
 
 
 def find_nccs():
@@ -281,27 +302,43 @@ def artifact_snapshot(directory):
 
 def build_source_contracts(out_dir, project=None, nccs=None, timeout=1800):
     """Compile the current checkout with the pinned compiler into out_dir."""
-    project = Path(project or DEFAULT_PROJECT)
-    if not project.is_file():
-        raise BuildError("contract project not found: %s" % project)
+    if project is None:
+        project = DEFAULT_PROJECT
+    if project is None:
+        raise BuildError("build_source_contracts needs an explicit --project; the public-profile track has no default")
+    project = Path(project)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
     root = dotnet_root()
     if root:
         env["DOTNET_ROOT"] = root
-    command = [nccs or find_nccs(), str(project), "-o", str(out_dir)]
-    done = subprocess.run(command, cwd=str(project.parent), capture_output=True, text=True, env=env, timeout=timeout)
-    if done.returncode != 0:
-        tail = (done.stdout + done.stderr).strip().splitlines()[-12:]
-        raise BuildError("nccs exited %d: %s" % (done.returncode, " | ".join(tail)))
+    compiler = nccs or find_nccs()
+    # nccs compiles every project in the directory of the project it is given, so one invocation
+    # per source directory yields that directory's artifact set. The roster spans four of them:
+    # the core plus its service contracts, the validators and hooks (addressed through the same
+    # nested paths MODULE_FILES names), and the test-support mocks (MockTransferTarget).
+    units = [(project, out_dir),
+             (SA / "contracts/plugins/validators/P256Validator.csproj", out_dir / "validators"),
+             (SA / "contracts/plugins/hooks/DailyLimitHook.csproj", out_dir / "hooks"),
+             (SA / "tests/mocks/MockVerifierCore.csproj", out_dir)]
+    for unit_project, unit_out in units:
+        if not unit_project.is_file():
+            raise BuildError("contract project not found: %s" % unit_project)
+        unit_out.mkdir(parents=True, exist_ok=True)
+        command = [compiler, str(unit_project), "-o", str(unit_out)]
+        done = subprocess.run(command, cwd=str(unit_project.parent), capture_output=True, text=True,
+                              env=env, timeout=timeout)
+        if done.returncode != 0:
+            tail = (done.stdout + done.stderr).strip().splitlines()[-12:]
+            raise BuildError("nccs exited %d: %s" % (done.returncode, " | ".join(tail)))
     return require_artifacts(out_dir)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, help="output directory (default: a fresh temporary directory)")
-    parser.add_argument("--project", type=Path, default=DEFAULT_PROJECT)
+    parser.add_argument("--project", type=Path, help="contract project to compile (the retired public-profile track has no default)")
     parser.add_argument("--source-dir", type=Path, help="report the profile of an existing build instead of compiling")
     args = parser.parse_args()
     try:

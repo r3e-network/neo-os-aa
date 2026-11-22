@@ -180,27 +180,34 @@ class VerificationGateTests(unittest.TestCase):
             'OG_018_delay_is_seven_days_in_milliseconds'):
             self.assertIn(theorem, verify.coq_declarations(model))
         self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/CustomGovernance.v'])
-        self.assertIn('contracts/custom/SmartAccount.PlatformRegistrar.cs', verify.SOURCE_FILES)
+        # Archived model: registered and scoped as compile-and-mutation evidence
+        # only; the custom kernel it modelled was retired in Phase 3, so it no
+        # longer claims any live source link.
         self.assertEqual(14, len(verify.COQ_MODULES['CustomGovernance.v']))
-        for path in ('contracts/custom/SmartAccount.Admin.cs', 'contracts/custom/SmartAccount.MarketEscrow.cs'):
-            self.assertIn(path, verify.SOURCE_FILES)
 
-    def test_custom_governance_millisecond_and_cleanup_correspondence(self):
-        self.assertEqual(604800000, verify.check_custom_governance_correspondence()['delayMilliseconds'])
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            for name in ('formal/coq/CustomGovernance.v', 'contracts/custom/SmartAccount.Admin.cs',
-                         'contracts/custom/SmartAccount.PlatformRegistrar.cs', 'contracts/custom/registrar/PlatformRegistrar.cs',
-                         'contracts/custom/SmartAccount.Escape.cs',
-                         'contracts/custom/SmartAccount.MarketEscrow.cs'):
-                destination = root / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(verify.ROOT.parent / name, destination)
-            verify.check_custom_governance_correspondence(root)
-            source = root / 'contracts/custom/SmartAccount.Admin.cs'
-            source.write_text(source.read_text().replace('7L * 24 * 60 * 60 * 1000', '6L * 24 * 60 * 60 * 1000'))
-            with self.assertRaisesRegex(ValueError, 'millisecond delay'):
-                verify.check_custom_governance_correspondence(root)
+    def test_source_roster_is_native_only_and_pinned(self):
+        self.assertFalse([path for path in verify.SOURCE_FILES if 'custom' in path])
+        self.assertIn('contracts/native/SmartAccount/SmartAccount.Modules.cs', verify.SOURCE_FILES)
+        for path in verify.SOURCE_FILES:
+            self.assertTrue((verify.ROOT.parent / path).is_file(), path)
+        lock = json.loads((verify.ROOT / 'source-lock.json').read_text())
+        self.assertEqual(set(lock['sources']), verify.SOURCE_FILES)
+        verify.check_inventory()
+
+    def test_native_threshold_policy_guards_are_retired(self):
+        # Threshold policy ownership moved to the user-space ThresholdPolicyModule,
+        # so the native-side correspondence guards and their bounded config/acceptance
+        # model retired from the gate. None of those symbols may linger.
+        for name in ('THRESHOLD_POLICY_GUARDS', 'THRESHOLD_POLICY_MUTATIONS',
+                     'THRESHOLD_POLICY_CONFIG_SOURCE', 'THRESHOLD_POLICY_ROUTING_SOURCE',
+                     'THRESHOLD_POLICY_BOUNDS_SOURCE', 'check_multisig_bounded',
+                     'threshold_policy_bounds', 'multisig_config_valid', 'multisig_accepts'):
+            self.assertFalse(hasattr(verify, name), name)
+        # The abstract public/platform MultiSigPolicy.v Coq model stays registered as
+        # compile-and-mutation evidence; only the native source link retired.
+        self.assertIn('coq/MultiSigPolicy.v', verify.ARTIFACTS)
+        self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/MultiSigPolicy.v'])
+        self.assertIn('MultiSigPolicy.v', verify.COQ_MODULES)
 
     def test_custom_sponsorship_is_transaction_wide_and_scoped(self):
         self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/CustomSponsorship.v'])
@@ -213,17 +220,6 @@ class VerificationGateTests(unittest.TestCase):
                      'OS_015_branch_free_cap_matches_abstract_charge'):
             self.assertIn(name, verify.coq_declarations(model))
         self.assertEqual(10, len(verify.COQ_MODULES['CustomSponsorship.v']))
-
-    def test_custom_sponsorship_source_reserves_before_each_callback(self):
-        self.assertTrue(verify.check_custom_sponsorship_correspondence()['reservationBeforeCallbacks'])
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            target = root / 'contracts/custom/SmartAccount.Paymaster.cs'
-            target.parent.mkdir(parents=True)
-            source = (verify.ROOT.parent / 'contracts/custom/SmartAccount.Paymaster.cs').read_text()
-            target.write_text(source.replace('BigInteger.Max(actualCost - budget.Reserved, 0)', 'actualCost'))
-            with self.assertRaisesRegex(ValueError, 'reservation source guard'):
-                verify.check_custom_sponsorship_correspondence(root)
 
     def test_custom_recovery_is_callback_free_and_irreversible(self):
         self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/CustomRecovery.v'])
@@ -328,7 +324,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("| VerifierPost", model)
         self.assertIn("PostHook; VerifierPost; Emit", model)
 
-    def test_custom_execution_scopes_optional_callbacks(self):
+    def test_legacy_execution_model_scopes_optional_callbacks(self):
         model = (verify.ROOT / "coq" / "SmartAccountSA.v").read_text()
         declarations = verify.coq_declarations(model)
         self.assertIn("SA_020_disabled_callbacks_do_not_gate_execution", declarations)
@@ -665,20 +661,6 @@ class VerificationGateTests(unittest.TestCase):
                     self.assertNotEqual(source, verify.replace_once(source, old, new))
                     self.assertIn(old, prefix)
 
-    def test_multisig_bounded_model_and_source_mutations(self):
-        result = verify.check_multisig_bounded()
-        self.assertEqual(len(verify.THRESHOLD_POLICY_GUARDS), result["sourceGuards"])
-        self.assertEqual(len(verify.THRESHOLD_POLICY_MUTATIONS), len(result["sourceMutationsRejected"]))
-        self.assertEqual({"minThreshold": 1, "maxThreshold": 10, "maxMembers": 10}, result["bounds"])
-        self.assertGreater(result["configCases"], 100)
-        self.assertGreater(result["acceptanceCases"], 10_000)
-
-    def test_multisig_model_rejects_duplicate_zero_and_oversized_sets(self):
-        self.assertFalse(verify.multisig_config_valid([1, 1], 1))
-        self.assertFalse(verify.multisig_config_valid([0, 1], 1))
-        self.assertFalse(verify.multisig_config_valid(list(range(1, 12)), 1))
-        self.assertTrue(verify.multisig_config_valid([1, 2, 3], 2))
-
     def test_missing_or_duplicate_mutation_match_fails(self):
         for source in ["", "aa"]:
             with self.assertRaises(ValueError):
@@ -700,7 +682,7 @@ class VerificationGateTests(unittest.TestCase):
                     "sources": {name: verify.content_digest(repo / name) for name in verify.SOURCE_FILES}}
             (formal / "source-lock.json").write_text(json.dumps(lock))
             verify.check_inventory(formal)
-            (repo / "contracts/custom/SmartAccount.Execution.cs").write_text("// drift\n")
+            (repo / "contracts/native/SmartAccount/SmartAccount.Execution.cs").write_text("// drift\n")
             with self.assertRaisesRegex(ValueError, "Source drift"):
                 verify.check_inventory(formal)
 

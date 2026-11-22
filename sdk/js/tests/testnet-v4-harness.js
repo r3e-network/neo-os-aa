@@ -44,7 +44,7 @@ const { rpc, sc, wallet, experimental, tx, u } = require("@cityofzion/neon-js");
 const { ethers } = require("ethers");
 
 const {
-  SmartAccountClient,
+  NativeSmartAccountClient,
   codec,
   buildUserOperationTypedData,
 } = require("../src/index");
@@ -145,9 +145,9 @@ async function connect({ env = process.env, wif = env.TEST_WIF, rpcUrl } = {}) {
   };
 }
 
-/** The SDK client for one deployed custom kernel. */
+/** The SDK client for the native kernel deployed by this harness. */
 function clientFor(chain, coreHash) {
-  return new SmartAccountClient({
+  return new NativeSmartAccountClient({
     rpcUrl: chain.rpcUrl,
     networkMagic: chain.networkMagic,
     contractHash: coreHash,

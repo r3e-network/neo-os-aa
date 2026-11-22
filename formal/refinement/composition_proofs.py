@@ -189,7 +189,7 @@ def proof_receipt(bundle):
       'toolVersion':version.splitlines()[0],
       'preconditions':['the supplied helper certificate has fresh source/NEF provenance from the aggregate gate',
           'Integer-typed request and fee fields, valid 32-byte hash and Array/Struct ledger',
-          'static slot 38 is Buffer[0x21], with the helper native environment contracts',
+          'static slot 58 is Buffer[0x21] (the v4 slot for Prefix_TransactionReimbursement), with the helper native environment contracts',
           'each invocation satisfies legal_inputs; zero-fee updated sum must fit signed256',
           'paid final ledger bound requires initial effective reserved <= transaction fee',
           'callbacks only affect this ledger through successful helper calls or an uncaught outer fault'],

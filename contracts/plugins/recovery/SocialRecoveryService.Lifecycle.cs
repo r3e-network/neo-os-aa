@@ -73,6 +73,12 @@ namespace Neo.SmartContract.Examples
             ExecutionEngine.Assert(oracle != UInt160.Zero, "Morpheus oracle not configured");
             ExecutionEngine.Assert(amount > 0, "invalid amount");
 
+            // Idempotent reconciliation first: if the core recovery this service approved has
+            // already completed, the row owner is already the approved custody. A superseded
+            // owner must not be able to spend (or later have refunded to it) this account's
+            // earmarked GAS merely because the service had not settled yet.
+            ReconcileAuthoritativeRecovery(accountId);
+
             // Only the account owner may spend that account's earmarked credits, and only up to
             // the balance funded for it. This closes the cross-account pool-drain.
             ExecutionEngine.Assert(Runtime.CheckWitness(GetOwner(accountId)), "Not owner");
@@ -266,9 +272,16 @@ namespace Neo.SmartContract.Examples
         /// recovery-authority witness without any additional proof. The core then
         /// enforces its own account recovery timelock before the custody rotates.
         /// </summary>
+        /// <remarks>
+        /// Idempotent: a recovery this service already started is never restarted, and a
+        /// recovery the core already completed (its <c>executeRecovery</c> is permissionless)
+        /// is reconciled instead of being started a second time, which the core would reject.
+        /// </remarks>
         public static void FinalizeRecovery(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
+
+            if (ReconcileAuthoritativeRecovery(accountId)) return;
 
             PendingRecovery pending = GetPendingRecovery(accountId);
             ExecutionEngine.Assert(pending.Active, "No pending recovery");
@@ -277,34 +290,191 @@ namespace Neo.SmartContract.Examples
 
             UInt160 core = GetSAContract(accountId);
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
+
+            if (HasRecoveryBinding(accountId))
+            {
+                ExecutionEngine.Assert(GetRecoveryBindingTarget(accountId) == pending.NewOwner,
+                    "Recovery binding targets a different owner");
+                object[] existing = GetCoreRecoveryStatus(core, accountId);
+                // The core still holds exactly the recovery this service approved: there is
+                // nothing to start, and the binding keeps its original generation.
+                if (existing.Length != 0 && (bool)existing[0] && (UInt160)existing[4] == pending.NewOwner)
+                {
+                    return;
+                }
+                // The core record is gone (canceled, or superseded by a custody-side
+                // beginRecovery): drop the stale binding and start a fresh, correct one.
+                ClearRecoveryBinding(accountId);
+            }
+
             Contract.Call(core, "beginRecovery", CallFlags.All, new object[] { accountId, pending.NewOwner });
+
+            // Bind this approval to the core generation it belongs to. The core's own record
+            // is the authority; a mismatch here means the core did not record the recovery
+            // this service just asked for, so refuse to leave a half-set state.
+            object[] status = GetCoreRecoveryStatus(core, accountId);
+            ExecutionEngine.Assert(status.Length >= 5 && (bool)status[0], "Core recovery was not started");
+            ExecutionEngine.Assert((UInt160)status[4] == pending.NewOwner, "Core recovery targets a different owner");
+            SaveRecoveryBinding(accountId, (BigInteger)status[3], pending.NewOwner);
         }
 
         /// <summary>
-        /// Settles a matured core recovery. Permissionless: the core's own
-        /// <c>executeRecovery</c> enforces the account recovery timelock and performs the
+        /// Settles a matured core recovery this service approved. Permissionless: the core's
+        /// own <c>executeRecovery</c> enforces the account recovery timelock and performs the
         /// callback-free sweep. Only after it succeeds does this service advance its own
         /// record to the new owner.
         /// </summary>
+        /// <remarks>
+        /// The core entry point is permissionless, so a third party may already have executed
+        /// the approved recovery. That authoritative completion is reconciled — service owner,
+        /// pending record, action authorization and session all advanced — without a second
+        /// <c>executeRecovery</c>, which the core would reject because its pending record is gone.
+        /// Settlement is therefore idempotent: once the service has adopted a completion, a
+        /// repeated call is a safe no-op, while an account that never had an approved recovery
+        /// still faults.
+        /// </remarks>
         public static void SettleRecovery(UInt160 accountId)
         {
             ValidateAccountId(accountId, "accountId");
 
+            if (ReconcileAuthoritativeRecovery(accountId)) return;
+
             PendingRecovery pending = GetPendingRecovery(accountId);
+
+            // Idempotency. Adopting a recovery consumes the pending record together with its
+            // binding, so settling again afterwards would otherwise fault on the empty pending.
+            // Only the durable completion marker the adopt path writes proves "already done":
+            // an account that was never approved has none and falls through to the fault below,
+            // so repeated settlement can never disguise a missing approval.
+            if (!pending.Active && !HasRecoveryBinding(accountId) && IsRecoveryCompletionConfirmed(accountId))
+            {
+                return;
+            }
+
             ExecutionEngine.Assert(pending.Active, "No pending recovery");
+
+            // Only a recovery this service approved at the core may be settled. Without the
+            // binding, executeRecovery would be a service-driven custody rotation that no
+            // recovery threshold ever approved.
+            ExecutionEngine.Assert(HasRecoveryBinding(accountId), "Recovery not finalized");
 
             UInt160 core = GetSAContract(accountId);
             ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
             Contract.Call(core, "executeRecovery", CallFlags.All, new object[] { accountId });
 
+            // The core is the authority on who controls the account. If it did not land on the
+            // approved custody, the service must not claim the recovery happened.
+            ExecutionEngine.Assert(GetCoreCustody(core, accountId) == pending.NewOwner,
+                "Core recovery was superseded");
+
+            ApplyRecoveredOwner(accountId, pending);
+        }
+
+        /// <summary>
+        /// Adopts the authoritative core outcome when the recovery this service approved has
+        /// already been executed by someone else. Returns false — changing nothing — while the
+        /// approved recovery has not been completed at the core.
+        /// </summary>
+        /// <remarks>
+        /// The core keeps <c>executeRecovery</c> permissionless and callback-free, so this
+        /// service can never be the only party that moves its own record. Acceptance needs all
+        /// of: a live service pending, the persisted approval binding, a core that now holds the
+        /// approved custody, an authority generation at or after the approved one, and a
+        /// consumed core recovery record (both a successful executeRecovery and a
+        /// cancelRecovery delete it).
+        /// </remarks>
+        private static bool ReconcileAuthoritativeRecovery(UInt160 accountId)
+        {
+            PendingRecovery pending = GetPendingRecovery(accountId);
+            if (!pending.Active) return false;
+            if (!HasRecoveryBinding(accountId)) return false;
+
+            UInt160 target = GetRecoveryBindingTarget(accountId);
+            if (target == UInt160.Zero || target != pending.NewOwner) return false;
+
+            UInt160 core = GetSAContract(accountId);
+            if (core == UInt160.Zero || !core.IsValid) return false;
+
+            object[] account = (object[])Contract.Call(core, "getAccount", CallFlags.ReadOnly,
+                new object[] { accountId });
+            if (account.Length <= 4 || !(bool)account[0]) return false;
+            if ((UInt160)account[2] != target) return false;
+
+            // The epoch is a lower bound only. Freezing, unfreezing and core custody rotation
+            // also advance authorityEpoch, and a superseded owner must not be able to wedge
+            // reconciliation by forcing an advance; only a lower epoch would indicate that the
+            // account is at a different, older generation than the approval.
+            if ((BigInteger)account[4] < GetRecoveryBindingEpoch(accountId)) return false;
+
+            // Both a successful executeRecovery and a cancelRecovery delete the core record,
+            // so an empty status alone does not distinguish settlement from cancellation;
+            // the custody and authority-generation checks above carry that weight.
+            if (GetCoreRecoveryStatus(core, accountId).Length != 0) return false;
+
+            ApplyRecoveredOwner(accountId, pending);
+            return true;
+        }
+
+        /// <summary>
+        /// Moves every service-side record to the recovered owner: owner row, recovery nonce,
+        /// pending recovery (with its binding) and the action session and authorization epoch.
+        /// </summary>
+        private static void ApplyRecoveredOwner(UInt160 accountId, PendingRecovery pending)
+        {
             UInt160 oldOwner = GetOwner(accountId);
             ResetActionAuthorization(accountId);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_OWNER, accountId), pending.NewOwner);
             Storage.Put(Storage.CurrentContext, Key(PREFIX_RECOVERY_NONCE, accountId), pending.RecoveryNonce + 1);
+            // Remember the adoption: DeletePendingRecovery below removes every trace of the
+            // approval, and without this marker a repeated settleRecovery could not tell a
+            // completed recovery from one that was never approved.
+            SaveRecoveryCompletion(accountId, pending.NewOwner);
             DeletePendingRecovery(accountId);
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_ACTIVE_SESSION, accountId));
 
             OnRecoveryFinalized(accountId, oldOwner, pending.NewOwner, pending.RecoveryNonce + 1);
+        }
+
+        private static object[] GetCoreRecoveryStatus(UInt160 core, UInt160 accountId)
+        {
+            return (object[])Contract.Call(core, "getRecoveryStatus", CallFlags.ReadOnly,
+                new object[] { accountId });
+        }
+
+        /// <summary>The core control record's custody (spec §9 index 2), or Zero when unknown.</summary>
+        private static UInt160 GetCoreCustody(UInt160 core, UInt160 accountId)
+        {
+            object[] account = (object[])Contract.Call(core, "getAccount", CallFlags.ReadOnly,
+                new object[] { accountId });
+            if (account.Length <= 2 || !(bool)account[0]) return UInt160.Zero;
+            return (UInt160)account[2];
+        }
+
+        /// <summary>
+        /// True when this service already adopted a completed recovery for the account and the
+        /// adopted owner is still the authoritative custody.
+        /// </summary>
+        /// <remarks>
+        /// The completion marker is written only by <see cref="ApplyRecoveredOwner"/>, i.e. only
+        /// after the core actually rotated custody. The remaining guards keep a silent no-op
+        /// from masking a divergent state: the service row must still name the adopted owner,
+        /// the core must still hold it, and the core must have no recovery in flight.
+        /// </remarks>
+        private static bool IsRecoveryCompletionConfirmed(UInt160 accountId)
+        {
+            UInt160 completed = GetRecoveryCompletionTarget(accountId);
+            if (completed == UInt160.Zero) return false;
+            if (GetOwner(accountId) != completed) return false;
+
+            UInt160 core = GetSAContract(accountId);
+            if (core == UInt160.Zero || !core.IsValid) return false;
+
+            object[] account = (object[])Contract.Call(core, "getAccount", CallFlags.ReadOnly,
+                new object[] { accountId });
+            if (account.Length <= 2 || !(bool)account[0]) return false;
+            if ((UInt160)account[2] != completed) return false;
+
+            return GetCoreRecoveryStatus(core, accountId).Length == 0;
         }
 
         public static void CancelRecovery(UInt160 accountId)
@@ -383,6 +553,7 @@ namespace Neo.SmartContract.Examples
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_SESSION_NONCE, accountId));
             Storage.Delete(Storage.CurrentContext, Key(PREFIX_ACTIVE_SESSION, accountId));
             DeletePendingRecovery(accountId);
+            ClearRecoveryCompletion(accountId);
             DeleteAccountPrefixFamily(Key(PREFIX_APPROVAL, accountId));
 
             OnRecoveryCleared(accountId, previousOwner, refundedCredit);
@@ -392,8 +563,7 @@ namespace Neo.SmartContract.Examples
         {
             UInt160 core = GetSAContract(accountId);
             if (core == UInt160.Zero || !core.IsValid) return;
-            object[] status = (object[])Contract.Call(core, "getRecoveryStatus", CallFlags.ReadOnly,
-                new object[] { accountId });
+            object[] status = GetCoreRecoveryStatus(core, accountId);
             if (status.Length == 0 || !(bool)status[0]) return;
             Contract.Call(core, "cancelRecovery", CallFlags.All, new object[] { accountId });
         }

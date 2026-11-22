@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
-import paymasterRuntimeConfig from "./paymaster-runtime-config.js";
 import testnetRpcHelpers from "./testnet-rpc.js";
-import localPaymasterHandlerHelpers from "./local-paymaster-handler.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
@@ -23,20 +21,12 @@ const SUITE_RUN_ID = (
 if (!process.env.SA_VALIDATION_RUN_ID) {
   process.env.SA_VALIDATION_RUN_ID = SUITE_RUN_ID;
 }
-const { shouldSkipPaymasterRelayValidation } = paymasterRuntimeConfig;
 const { DEFAULT_TESTNET_RPC_URLS, resolveTestnetRpcCandidates } = testnetRpcHelpers;
-const { resolveLocalPaymasterHandlerPath } = localPaymasterHandlerHelpers;
-
-const LOCAL_PAYMASTER_HANDLER_PATH = resolveLocalPaymasterHandlerPath();
-if (!process.env.MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH && LOCAL_PAYMASTER_HANDLER_PATH) {
-  process.env.MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH = LOCAL_PAYMASTER_HANDLER_PATH;
-}
 
 // Every runbook reads the paying wallet as `TEST_WIF || NEO_TESTNET_WIF`, so a
 // stage is ready when either one is set; requiring `TEST_WIF` alone would skip
 // a suite whose operator only exported the v4-era name.
 const WIF_ENV = ["TEST_WIF", "NEO_TESTNET_WIF"];
-const RUNTIME_TOKEN_ENV = ["MORPHEUS_RUNTIME_TOKEN", "PHALA_API_TOKEN", "PHALA_SHARED_SECRET"];
 
 const STAGES = [
   {
@@ -50,38 +40,6 @@ const STAGES = [
     title: "V4 Plugin Matrix",
     command: ["node", "tests/testnet_plugin_matrix.js"],
     requiredEnvAny: [WIF_ENV],
-  },
-  {
-    id: "market_escrow",
-    title: "V4 Market Escrow",
-    command: ["node", "tests/testnet_market_escrow.js"],
-    requiredEnvAny: [WIF_ENV],
-  },
-  {
-    id: "paymaster_onchain",
-    title: "V4 Paymaster On-Chain",
-    command: ["node", "tests/testnet_paymaster_onchain.mjs"],
-    requiredEnvAny: [WIF_ENV],
-  },
-  {
-    // An off-chain allowlist probe: it needs the deployed core hash and the
-    // account that core derived, but never a wallet.
-    id: "paymaster_policy",
-    title: "V4 Paymaster Policy",
-    command: ["node", "tests/testnet_paymaster_policy.mjs"],
-    requiredEnv: ["PAYMASTER_ACCOUNT_ID", "SA_CORE_HASH_TESTNET"],
-    requiredEnvAny: [RUNTIME_TOKEN_ENV],
-    optional: true,
-  },
-  {
-    id: "paymaster",
-    title: "V4 Paymaster Relay",
-    command: ["node", "tests/testnet_paymaster_relay.mjs"],
-    requiredEnvAny: [WIF_ENV, RUNTIME_TOKEN_ENV],
-    optional: true,
-    envOverrides: {
-      TEST_WIF: process.env.NEO_TESTNET_WIF || process.env.PAYMASTER_TEST_WIF || process.env.TEST_WIF || "",
-    },
   },
 ];
 
@@ -113,10 +71,6 @@ function envSnapshot() {
       maxTotalFee: process.env.SA_MAX_TOTAL_FEE || "55000000",
     },
     hasMorpheusRuntimeToken: Boolean(process.env.MORPHEUS_RUNTIME_TOKEN || process.env.PHALA_API_TOKEN || process.env.PHALA_SHARED_SECRET),
-    morpheusPaymasterAppId: process.env.MORPHEUS_PAYMASTER_APP_ID || "ddff154546fe22d15b65667156dd4b7c611e6093",
-    paymasterAccountId: process.env.PAYMASTER_ACCOUNT_ID || null,
-    skipPaymasterAllowlistUpdate: process.env.SKIP_PAYMASTER_ALLOWLIST_UPDATE === "1",
-    localPaymasterHandlerPath: process.env.MORPHEUS_LOCAL_PAYMASTER_HANDLER_PATH || null,
   };
 }
 
@@ -216,97 +170,12 @@ async function summarizePluginMatrix(stdout = "") {
   };
 }
 
-async function summarizePaymasterPolicy(stdout = "") {
-  const summary = latestJsonObject(stdout) || {};
-  const reportPathAbsolute = typeof summary.reportPath === "string" ? summary.reportPath : null;
-  const reportPath = reportPathAbsolute ? path.relative(REPO_ROOT, reportPathAbsolute) : null;
-  let report = null;
-  if (reportPathAbsolute) {
-    try {
-      report = JSON.parse(await readFile(reportPathAbsolute, "utf8"));
-    } catch {
-      report = null;
-    }
-  }
-
-  return {
-    reportPath,
-    policyId: summary.policyId || report?.policyId || null,
-    accountId: summary.accountId || report?.accountId || null,
-    approvalDigest: summary.approvalDigest || report?.approved?.approvalDigest || null,
-    attestationHash: report?.approved?.attestationHash || null,
-    deniedCases: Array.isArray(summary.deniedCases)
-      ? summary.deniedCases
-      : report?.deniedCases
-        ? Object.keys(report.deniedCases)
-        : [],
-  };
-}
-
-function summarizePaymaster(stdout = "") {
-  const summary = latestJsonObject(stdout) || {};
-  return {
-    txid: summary.relayTxid || null,
-    coreHash: summary.coreHash || null,
-    verifierHash: summary.verifierHash || null,
-    accountId: summary.accountId || null,
-    validatorId: summary.validatorId ?? null,
-    policyId: summary.paymaster?.policyId ?? null,
-    approvalDigest: summary.paymaster?.approvalDigest || null,
-    vmstate: summary.execution?.vmstate || null,
-    result: summary.execution?.result || null,
-    refusedOperation: summary.refusal?.operation || null,
-  };
-}
-
-function summarizeMarketEscrow(stdout = "") {
-  const summary = latestJsonObject(stdout) || {};
-  return {
-    core: summary.core?.hash || null,
-    market: summary.market?.hash || null,
-    verifier: summary.teeVerifier?.hash || null,
-    hook: summary.whitelistHook?.hash || null,
-    listingId: summary.listingId ?? null,
-    accountId: summary.accountId || null,
-    buyerRecorded: summary.buyerRecorded ?? null,
-    buyer: summary.buyer || null,
-    custodyAfterSale: summary.custodyAfterSale || null,
-    status: summary.status ?? null,
-  };
-}
-
-function summarizePaymasterOnchain(stdout = "") {
-  const summary = latestJsonObject(stdout) || {};
-  return {
-    core: summary.deployments?.core || null,
-    verifier: summary.deployments?.verifier || null,
-    paymaster: summary.deployments?.paymaster || null,
-    accountId: summary.account?.id || null,
-    sponsoredTxid: summary.sponsoredExec?.txid || null,
-    sponsoredResult: summary.sponsoredExec?.result || null,
-    depositBefore: summary.sponsoredExec?.depositBefore || null,
-    depositAfter: summary.sponsoredExec?.depositAfter || null,
-    reimbursement: summary.sponsoredExec?.reimbursement || null,
-    overLimitRejected: summary.negativeOverLimit?.rejected ?? null,
-    revokedRejected: summary.negativeRevoked?.rejected ?? null,
-    withdrawSuccess: summary.withdraw?.success ?? null,
-  };
-}
-
 async function summarizeStage(stageId, stdout) {
   switch (stageId) {
     case "smoke":
       return summarizeSmoke(stdout);
     case "plugin_matrix":
       return summarizePluginMatrix(stdout);
-    case "market_escrow":
-      return summarizeMarketEscrow(stdout);
-    case "paymaster_onchain":
-      return summarizePaymasterOnchain(stdout);
-    case "paymaster_policy":
-      return summarizePaymasterPolicy(stdout);
-    case "paymaster":
-      return summarizePaymaster(stdout);
     default:
       return {};
   }
@@ -375,19 +244,12 @@ function markdownList(items = []) {
 }
 
 function optionalSkipReason(stage) {
-  if (stage.id === "paymaster") {
-    return shouldSkipPaymasterRelayValidation(process.env);
-  }
   return "";
 }
 
 function buildMarkdownReport(report) {
   const smoke = report.stages.find((stage) => stage.id === "smoke");
   const pluginMatrix = report.stages.find((stage) => stage.id === "plugin_matrix");
-  const marketEscrow = report.stages.find((stage) => stage.id === "market_escrow");
-  const paymasterOnchain = report.stages.find((stage) => stage.id === "paymaster_onchain");
-  const paymasterPolicy = report.stages.find((stage) => stage.id === "paymaster_policy");
-  const paymaster = report.stages.find((stage) => stage.id === "paymaster");
 
   const smokeTxLines = Object.entries(smoke?.summary?.txids || {}).map(([key, value]) => `${key}: \`${value}\``);
   const pluginScenarioLines = (pluginMatrix?.summary?.scenarios || []).map(
@@ -410,9 +272,6 @@ function buildMarkdownReport(report) {
       `Core under test: \`${report.environment.coreHashTestnet || "deployed by the smoke stage"}\``,
       `Matrix scenarios: \`${report.environment.matrixScenarios || "all"}\``,
       `Has Morpheus runtime token: \`${report.environment.hasMorpheusRuntimeToken}\``,
-      `Paymaster app id: \`${report.environment.morpheusPaymasterAppId}\``,
-      `Paymaster account override: \`${report.environment.paymasterAccountId || "none"}\``,
-      `Skip allowlist update: \`${report.environment.skipPaymasterAllowlistUpdate}\``,
     ]),
     "",
     "## Stages",
@@ -443,86 +302,6 @@ function buildMarkdownReport(report) {
     "",
     ...(pluginScenarioLines.length > 0 ? ["Scenario results:", "", markdownList(pluginScenarioLines), ""] : []),
   ];
-
-  if (marketEscrow) {
-    lines.push(
-      "## Market Escrow Summary",
-      "",
-      markdownList([
-        `Core hash: \`${marketEscrow.summary.core || "n/a"}\``,
-        `Market hash: \`${marketEscrow.summary.market || "n/a"}\``,
-        `TEE verifier: \`${marketEscrow.summary.verifier || "n/a"}\``,
-        `Whitelist hook: \`${marketEscrow.summary.hook || "n/a"}\``,
-        `Listing ID: \`${marketEscrow.summary.listingId ?? "n/a"}\``,
-        `Account ID: \`${marketEscrow.summary.accountId || "n/a"}\``,
-        `Buyer recorded: \`${marketEscrow.summary.buyerRecorded ?? "n/a"}\``,
-        `Buyer: \`${marketEscrow.summary.buyer || "n/a"}\``,
-        `Custody after sale: \`${marketEscrow.summary.custodyAfterSale || "n/a"}\``,
-        `Listing status: \`${marketEscrow.summary.status ?? "n/a"}\``,
-      ]),
-      "",
-    );
-  }
-
-  if (paymasterOnchain) {
-    lines.push(
-      "## Paymaster On-Chain Summary",
-      "",
-      markdownList([
-        `Core hash: \`${paymasterOnchain.summary.core || "n/a"}\``,
-        `Verifier hash: \`${paymasterOnchain.summary.verifier || "n/a"}\``,
-        `Paymaster hash: \`${paymasterOnchain.summary.paymaster || "n/a"}\``,
-        `Account ID: \`${paymasterOnchain.summary.accountId || "n/a"}\``,
-        `Sponsored txid: \`${paymasterOnchain.summary.sponsoredTxid || "n/a"}\``,
-        `Sponsored result: \`${paymasterOnchain.summary.sponsoredResult || "n/a"}\``,
-        `Deposit before: \`${paymasterOnchain.summary.depositBefore || "n/a"}\``,
-        `Deposit after: \`${paymasterOnchain.summary.depositAfter || "n/a"}\``,
-        `Reimbursement: \`${paymasterOnchain.summary.reimbursement || "n/a"}\``,
-        `Over-limit rejected: \`${paymasterOnchain.summary.overLimitRejected}\``,
-        `Revoked rejected: \`${paymasterOnchain.summary.revokedRejected}\``,
-        `Withdraw success: \`${paymasterOnchain.summary.withdrawSuccess}\``,
-      ]),
-      "",
-    );
-  }
-
-  if (paymasterPolicy) {
-    lines.push(
-      "## Paymaster Policy Summary",
-      "",
-      ...[
-        `- Report path: \`${paymasterPolicy.summary.reportPath || "n/a"}\``,
-        `- Policy ID: \`${paymasterPolicy.summary.policyId || "n/a"}\``,
-        `- Account ID: \`${paymasterPolicy.summary.accountId || "n/a"}\``,
-        `- Approval digest: \`${paymasterPolicy.summary.approvalDigest || "n/a"}\``,
-        `- Attestation hash: \`${paymasterPolicy.summary.attestationHash || "n/a"}\``,
-      ],
-      "",
-      "Denied cases:",
-      "",
-      ...((paymasterPolicy.summary.deniedCases || []).map((name) => `- ${name}`)),
-      "",
-    );
-  }
-
-  if (paymaster) {
-    lines.push(
-      "## Paymaster Relay Summary",
-      "",
-      markdownList([
-        `Relay txid: \`${paymaster.summary.txid || "n/a"}\``,
-        `Core hash: \`${paymaster.summary.coreHash || "n/a"}\``,
-        `Account ID: \`${paymaster.summary.accountId || "n/a"}\``,
-        `Validator id: \`${paymaster.summary.validatorId ?? "n/a"}\``,
-        `Policy ID: \`${paymaster.summary.policyId ?? "n/a"}\``,
-        `Approval digest: \`${paymaster.summary.approvalDigest || "n/a"}\``,
-        `VM state: \`${paymaster.summary.vmstate || "n/a"}\``,
-        `Result: \`${paymaster.summary.result || "n/a"}\``,
-        `Refused operation: \`${paymaster.summary.refusedOperation || "n/a"}\``,
-      ]),
-      "",
-    );
-  }
 
   if (report.skippedStages.length > 0) {
     lines.push(

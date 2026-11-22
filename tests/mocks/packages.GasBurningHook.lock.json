@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "Neo.SmartContract.Framework": {
+        "type": "Direct",
+        "requested": "[3.10.1, )",
+        "resolved": "3.10.1",
+        "contentHash": "5Pa/qy80dNgNH+T9Wfl4sfvdeFsdqj/Hbu9IN8idsE8DdeBXMs8iLaZJRBsTmOJmZCBhnFaniDw/GgXV0H/iQw=="
+      }
+    }
+  }
+}

@@ -23,34 +23,35 @@ import {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 const manifest = parseManifest(read(PATHS.manifest));
+// Native is the only package scope: there is no second inventory to opt into.
 const projects = listProjects(repoRoot);
 
-// Captured from `dotnet restore --force` of contracts/custom/SmartAccount.csproj against a lock file
+// Captured from `dotnet restore --force` of the native overlay core project against a lock file
 // that was edited by hand (2026-10-04, paths shortened).
 const STALE_LOCK_RESTORE = `
   Determining projects to restore...
-/w/contracts/custom/SmartAccount.csproj : error NU1004: The package reference Neo.SmartContract.Framework version has changed from [3.10.0, ) to [3.10.1, ).The packages lock file is inconsistent with the project dependencies so restore can't be run in locked mode. Disable the RestoreLockedMode MSBuild property or pass an explicit --force-evaluate option to run restore to update the lock file.
-  Failed to restore /w/contracts/custom/SmartAccount.csproj (in 72 ms).
+/w/contracts/native/Neo.csproj : error NU1004: The package reference Neo.SmartContract.Framework version has changed from [3.10.0, ) to [3.10.1, ).The packages lock file is inconsistent with the project dependencies so restore can't be run in locked mode. Disable the RestoreLockedMode MSBuild property or pass an explicit --force-evaluate option to run restore to update the lock file.
+  Failed to restore /w/contracts/native/Neo.csproj (in 72 ms).
 `;
 
 const FORGED_LOCK_RESTORE = `
   Determining projects to restore...
-/w/contracts/custom/SmartAccount.csproj : error NU1403: Package content hash validation failed for Neo.SmartContract.Framework.3.10.1. The package is different than the last restore.
-/w/contracts/custom/SmartAccount.csproj : error NU1403:
-  Failed to restore /w/contracts/custom/SmartAccount.csproj (in 487 ms).
+/w/contracts/native/Neo.csproj : error NU1403: Package content hash validation failed for Neo.SmartContract.Framework.3.10.1. The package is different than the last restore.
+/w/contracts/native/Neo.csproj : error NU1403:
+  Failed to restore /w/contracts/native/Neo.csproj (in 487 ms).
 `;
 
 // Captured from `dotnet restore` of a project that pins a version nuget.org does not have.
 const MISSING_VERSION_RESTORE = `
   Determining projects to restore...
-/w/contracts/custom/SmartAccount.csproj : error NU1102: Unable to find package Neo.SmartContract.Framework with version (>= 3.10.2-CI00384)
-/w/contracts/custom/SmartAccount.csproj : error NU1102:   - Found 35 version(s) in nuget.org [ Nearest version: 3.10.1 ]
-  Failed to restore /w/contracts/custom/SmartAccount.csproj (in 5.54 sec).
+/w/contracts/native/Neo.csproj : error NU1102: Unable to find package Neo.SmartContract.Framework with version (>= 3.10.2-CI00384)
+/w/contracts/native/Neo.csproj : error NU1102:   - Found 35 version(s) in nuget.org [ Nearest version: 3.10.1 ]
+  Failed to restore /w/contracts/native/Neo.csproj (in 5.54 sec).
 `;
 
-function locksFromRepository() {
-  return projects.map((project) => {
-    const file = lockFileFor(project, projects);
+function locksFromRepository(list = projects) {
+  return list.map((project) => {
+    const file = lockFileFor(project, list);
     const absolute = path.join(repoRoot, file);
     return { project, file, lock: fs.existsSync(absolute) ? JSON.parse(fs.readFileSync(absolute, "utf8")) : null };
   });
@@ -64,10 +65,8 @@ function librariesFromManifest(overrides = {}) {
 
 test("the pin in Directory.Build.props and the audited manifest agree, and no project declares another", () => {
   const propsVersion = readPinnedVersion(read(PATHS.props), PATHS.props);
-  const testsVersion = readOptionalPinnedVersion(read(PATHS.testsProject), PATHS.testsProject);
-  assert.equal(testsVersion, null, "the tests project takes the pin from Directory.Build.props");
-  assert.deepEqual(pinConsistencyProblems({ propsVersion, testsVersion, manifest }), []);
-  for (const project of projects.filter((candidate) => candidate !== PATHS.testsProject)) {
+  assert.deepEqual(pinConsistencyProblems({ propsVersion, manifest }), []);
+  for (const project of projects) {
     assert.equal(readOptionalPinnedVersion(read(project), project), null, `${project} must not declare its own pin`);
   }
 });
@@ -96,13 +95,12 @@ test("the manifest lists the framework, the test engine, their Neo closure and t
   for (const pkg of [...manifest.packages, manifest.compiler]) assert.equal(pkg.availableOn, "nuget.org");
 });
 
-test("pin drift between the props file, the tests project and the manifest is reported", () => {
-  const problems = pinConsistencyProblems({ propsVersion: "3.10.2", testsVersion: "3.10.1", manifest });
-  assert.equal(problems.length, 4);
-  assert.match(problems[0], /SmartAccount\.Contracts\.Tests\.csproj pins 3\.10\.1 but Directory\.Build\.props pins 3\.10\.2/);
-  assert.match(problems[1], /neo-platform-packages\.json records 3\.10\.1 but Directory\.Build\.props pins 3\.10\.2/);
-  assert.match(problems[2], /lists Neo\.SmartContract\.Framework 3\.10\.1, expected 3\.10\.2/);
-  assert.match(problems[3], /lists Neo\.SmartContract\.Testing 3\.10\.1, expected 3\.10\.2/);
+test("pin drift between the props file and the manifest is reported", () => {
+  const problems = pinConsistencyProblems({ propsVersion: "3.10.2", manifest });
+  assert.equal(problems.length, 3);
+  assert.match(problems[0], /neo-platform-packages\.json records 3\.10\.1 but Directory\.Build\.props pins 3\.10\.2/);
+  assert.match(problems[1], /lists Neo\.SmartContract\.Framework 3\.10\.1, expected 3\.10\.2/);
+  assert.match(problems[2], /lists Neo\.SmartContract\.Testing 3\.10\.1, expected 3\.10\.2/);
 });
 
 test("a manifest without the compiler is reported", () => {
@@ -112,24 +110,31 @@ test("a manifest without the compiler is reported", () => {
 });
 
 test("every project that restores Neo packages has a committed lock file that agrees with the audit", () => {
-  assert.equal(projects.length, 29, "28 contract projects (incl. 2 plugin templates) and the tests project");
+  // Native default scope: the six SMARTACCOUNT_NATIVE modules, the five standard user-space
+  // modules of contracts/modules, the epoch probe host and its ABI
+  // fixture, and the two hosts that reference a validated source runtime instead of Neo NuGet
+  // assemblies. No custom contract project is part of it.
+  assert.equal(projects.length, 15, "six native modules, five standard modules and four probe projects");
   const locks = locksFromRepository();
   assert.deepEqual(lockFileProblems(locks, manifest), []);
   assert.ok(locks.every(({ lock }) => lock !== null));
 });
 
-test("public restore gate excludes native projects while explicit native scope includes six modules and the epoch probe", () => {
-  const all = listProjects(repoRoot, { includeNative: true });
-  const native = all.filter((project) => project.startsWith("contracts/plugins/native-profile/"));
-  assert.equal(projects.length, 29);
-  assert.equal(all.length, 39);
-  assert.ok(all.includes("tests/NativeEpochProbe/NativeEpochProbe.csproj"));
-  assert.ok(all.includes("tests/NativeEpochProbe/contracts/NativeEpochCore.csproj"));
-  assert.ok(projects.every((project) => !project.startsWith("tests/NativeEpochProbe/")));
-  assert.equal(native.length, 6);
-  assert.ok(projects.every((project) => !native.includes(project)));
-  assert.ok(native.every((project) => lockFileFor(project, all).endsWith(`packages.${path.basename(project, ".csproj")}.lock.json`)));
-  const missing = native.map((project) => ({ project, file: lockFileFor(project, all), lock: null }));
+test("the package scope is native-only", () => {
+  for (const foreign of ["tests/mocks/", "contracts/plugins/hooks/", "contracts/plugins/validators/"]) {
+    assert.ok(projects.every((project) => !project.startsWith(foreign)), `${foreign} must not be in the scope`);
+  }
+  assert.equal(projects.filter((project) => project.startsWith("contracts/plugins/native-profile/")).length, 6);
+  assert.equal(projects.filter((project) => project.startsWith("contracts/modules/")).length, 5);
+  assert.ok(projects.includes(PATHS.nativeProbeProject));
+  assert.ok(projects.includes(PATHS.nativeProbeContractProject));
+  for (const probe of [PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject]) {
+    assert.ok(projects.includes(probe), `${probe} must be in the scope`);
+  }
+  // A directory that holds several native modules gives each project its own lock file.
+  const native = projects.filter((project) => project.startsWith("contracts/plugins/native-profile/"));
+  assert.ok(native.every((project) => lockFileFor(project, projects).endsWith(`packages.${path.basename(project, ".csproj")}.lock.json`)));
+  const missing = native.map((project) => ({ project, file: lockFileFor(project, projects), lock: null }));
   assert.equal(lockFileProblems(missing, manifest).length, 6);
 });
 
@@ -139,11 +144,9 @@ test("runtime probe project inventory is explicit in the audited manifest", () =
 });
 
 test("source-runtime probe hosts lock no NuGet dependency graph", () => {
-  const all = listProjects(repoRoot, { includeNative: true });
-  for (const project of ["tests/NativeModuleProbe/NativeModuleProbe.csproj", "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj"]) {
-    assert.ok(all.includes(project));
-    assert.ok(!projects.includes(project));
-    const file = lockFileFor(project, all);
+  for (const project of [PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject]) {
+    assert.ok(projects.includes(project));
+    const file = lockFileFor(project, projects);
     const empty = { version: 1, dependencies: { "net10.0": {} } };
     assert.deepEqual(lockFileProblems([{ project, file, lock: empty }], manifest), []);
     for (const lock of [{}, { version: 1, dependencies: {} }, { version: 1, dependencies: { "net10.0": { Neo: { type: "Direct", resolved: "3.10.1" } } } }]) {
@@ -153,11 +156,10 @@ test("source-runtime probe hosts lock no NuGet dependency graph", () => {
 });
 
 test("epoch probe locks the actual Testing and Framework dependencies independently", () => {
-  const all = listProjects(repoRoot, { includeNative: true });
-  const host = "tests/NativeEpochProbe/NativeEpochProbe.csproj";
-  const fixture = "tests/NativeEpochProbe/contracts/NativeEpochCore.csproj";
+  const host = PATHS.nativeProbeProject;
+  const fixture = PATHS.nativeProbeContractProject;
   const entries = [host, fixture].map((project) => {
-    const file = lockFileFor(project, all);
+    const file = lockFileFor(project, projects);
     return { project, file, lock: JSON.parse(read(file)) };
   });
   assert.deepEqual(lockFileProblems(entries, manifest), []);
@@ -171,18 +173,25 @@ test("epoch probe locks the actual Testing and Framework dependencies independen
 test("projects that share a directory get their own lock file, the others use packages.lock.json", () => {
   const files = projects.map((project) => lockFileFor(project, projects));
   assert.equal(new Set(files).size, projects.length, "no two projects may share a lock file");
-  assert.equal(lockFileFor("contracts/custom/SmartAccount.csproj", projects), "contracts/custom/packages.lock.json");
-  assert.equal(lockFileFor(PATHS.testsProject, projects), "tests/SmartAccount.Contracts.Tests/packages.lock.json");
-  assert.equal(lockFileFor("contracts/plugins/hooks/MultiHook.csproj", projects), "contracts/plugins/hooks/packages.MultiHook.lock.json");
-  assert.equal(lockFileFor("contracts/plugins/validators/DelegatedIdentityValidator.csproj", projects), "contracts/plugins/validators/packages.DelegatedIdentityValidator.lock.json");
+  assert.equal(
+    lockFileFor("contracts/plugins/native-profile/DailyLimitHook.Native.csproj", projects),
+    "contracts/plugins/native-profile/packages.DailyLimitHook.Native.lock.json",
+  );
+  assert.equal(lockFileFor(PATHS.nativeProbeProject, projects), "tests/NativeEpochProbe/packages.lock.json");
+  assert.equal(lockFileFor(PATHS.nativeProbeContractProject, projects), "tests/NativeEpochProbe/contracts/packages.lock.json");
+  // The retired hooks/validators projects are outside the native package scope, so a
+  // single-project directory such as the runtime probe shares one packages.lock.json.
+  assert.equal(lockFileFor(PATHS.nativeRuntimeProbeProject, projects), "tests/NativeModuleProbe/packages.lock.json");
+  assert.equal(lockFileFor(PATHS.nativeMultiSigProbeProject, projects), "tests/NativeMultiSigProbe/packages.lock.json");
+  assert.equal(lockFileFor("contracts/plugins/hooks/MultiHook.csproj", projects), "contracts/plugins/hooks/packages.lock.json");
 });
 
 test("a missing lock file, a different version and different bytes in a lock file are reported", () => {
   const framework = manifest.packages.find((pkg) => pkg.id === "Neo.SmartContract.Framework");
   const lockWith = (entry) => ({ version: 1, dependencies: { "net10.0": { "Neo.SmartContract.Framework": entry } } });
   const good = { type: "Direct", requested: `[${framework.version}, )`, resolved: framework.version, contentHash: framework.sha512 };
-  const project = "contracts/custom/market/SAAddressMarket.csproj";
-  const file = "contracts/custom/market/packages.lock.json";
+  const project = "contracts/plugins/native-profile/DailyLimitHook.Native.csproj";
+  const file = "contracts/plugins/native-profile/packages.DailyLimitHook.Native.lock.json";
   assert.deepEqual(lockFileProblems([{ project, file, lock: lockWith(good) }], manifest), []);
   assert.deepEqual(lockFileProblems([{ project, file, lock: null }], manifest), [
     `${file} is missing; every project that restores Neo packages commits its lock file`,
@@ -194,10 +203,10 @@ test("a missing lock file, a different version and different bytes in a lock fil
   assert.match(forged[0], /locks Neo\.SmartContract\.Framework 3\.10\.1 with content hash A+==, audited /);
 });
 
-test("a lock file must lock the framework, the tests lock must lock the test engine, and no unlisted Neo package may appear", () => {
+test("a lock file must lock the framework, the probe lock must lock the test engine, and no unlisted Neo package may appear", () => {
   const framework = manifest.packages.find((pkg) => pkg.id === "Neo.SmartContract.Framework");
   const empty = { version: 1, dependencies: { "net10.0": {} } };
-  assert.deepEqual(lockFileProblems([{ project: "contracts/custom/market/SAAddressMarket.csproj", file: "m.lock.json", lock: empty }], manifest), [
+  assert.deepEqual(lockFileProblems([{ project: "contracts/plugins/native-profile/DailyLimitHook.Native.csproj", file: "m.lock.json", lock: empty }], manifest), [
     "m.lock.json does not lock Neo.SmartContract.Framework",
   ]);
   const frameworkOnly = {
@@ -208,12 +217,12 @@ test("a lock file must lock the framework, the tests lock must lock the test eng
       },
     },
   };
-  assert.deepEqual(lockFileProblems([{ project: PATHS.testsProject, file: "t.lock.json", lock: frameworkOnly }], manifest), [
+  assert.deepEqual(lockFileProblems([{ project: PATHS.nativeProbeProject, file: "t.lock.json", lock: frameworkOnly }], manifest), [
     "t.lock.json does not lock Neo.SmartContract.Testing",
   ]);
   const extra = structuredClone(frameworkOnly);
   extra.dependencies["net10.0"]["Neo.Plugins.Example"] = { type: "Transitive", resolved: "1.0.0", contentHash: "x" };
-  assert.deepEqual(lockFileProblems([{ project: "contracts/custom/market/SAAddressMarket.csproj", file: "m.lock.json", lock: extra }], manifest), [
+  assert.deepEqual(lockFileProblems([{ project: "contracts/plugins/native-profile/DailyLimitHook.Native.csproj", file: "m.lock.json", lock: extra }], manifest), [
     `m.lock.json locks Neo.Plugins.Example 1.0.0, which is not in ${PATHS.manifest}`,
   ]);
 });
@@ -357,30 +366,41 @@ test("CI installs exactly the pinned compiler and names the pinned versions", ()
   assert.ok(ci.includes(manifest.frameworkVersion), "the gate step must name the pinned framework version");
 });
 
-test("verify_repo.sh runs the package and compiler gates before the first contract build", () => {
-  // Windows checkouts (core.autocrlf) hand us CRLF and the gate calls are nested inside the
-  // native/custom if/else, so match the invocation itself on a line, not a whole bare line.
+test("verify_repo.sh runs the package and compiler gates before the native build", () => {
+  // Windows checkouts (core.autocrlf) hand us CRLF and the gate calls precede the native
+  // lane, so match the invocation itself on a line, not a whole bare line.
   const script = read("scripts/verify_repo.sh").replace(/\r\n?/g, "\n");
   const gate = script.search(/^.*node scripts\/check_neo_platform_packages\.mjs[ \t]*$/m);
   const compiler = script.search(/^.*node scripts\/check_neo_platform_packages\.mjs --compiler-only[ \t]*$/m);
   assert.notEqual(gate, -1);
   assert.notEqual(compiler, -1);
-  for (const first of ["dotnet build contracts/custom/SmartAccount.csproj", "bash contracts/compile.sh", "dotnet test SmartAccount.sln"]) {
+  for (const first of [
+    "dotnet build SmartAccount.sln",
+    "dotnet test tests/SmartAccount.Native.Tests/SmartAccount.Tests.csproj",
+  ]) {
+    assert.notEqual(script.indexOf(first), -1, `verify_repo.sh no longer runs ${first}`);
     assert.ok(gate < script.indexOf(first), `the package gate must run before ${first}`);
     assert.ok(compiler < script.indexOf(first), `the compiler gate must run before ${first}`);
   }
-  // Both suites belong to the contract gate's `node --test` invocation.
-  const nodeTest = script.indexOf("node --test scripts/lib/deploy-helpers.test.mjs");
-  const format = script.indexOf("dotnet format SmartAccount.sln");
-  for (const suite of ["scripts/check_neo_platform_packages.test.mjs", "scripts/repo_hygiene.test.mjs"]) {
+  // Native is the only profile: neither a retired contract build nor its test project may return.
+  assert.doesNotMatch(script, /contracts\/custom|contracts\/compile\.sh|SmartAccount\.Contracts\.Tests/);
+  assert.match(script, /^verification_profile=native$/m, "native is the default verification profile");
+  // The script suites are part of the gate's `node --test` invocation, before any build.
+  const nodeTest = script.search(/^.*node --test scripts\/implementation_profiles\.test\.mjs/m);
+  assert.notEqual(nodeTest, -1, "verify_repo.sh no longer runs the profile script suites");
+  for (const suite of ["scripts/implementation_profiles.test.mjs", "scripts/check_neo_platform_packages.test.mjs", "scripts/verify_repo.test.mjs"]) {
     const at = script.indexOf(suite, nodeTest);
-    assert.ok(nodeTest !== -1 && at > nodeTest && at < format, `${suite} is not in the contract gate's node --test run`);
+    assert.ok(at > nodeTest && at < script.indexOf("dotnet build SmartAccount.sln"), `${suite} is not in the contract gate's node --test run`);
   }
 });
 
-test("compile.sh refuses to compile with an unpinned compiler", () => {
-  const script = read("contracts/compile.sh");
-  const gate = script.indexOf("node \"$ROOT_DIR/scripts/check_neo_platform_packages.mjs\" --compiler-only");
+test("the retired custom compile recipe is gone and the native build owns the compiler gate", () => {
+  // contracts/compile.sh built the custom user-contract track and was deleted with it (Task #43).
+  // The compiler pin is still enforced: verify_repo.sh runs --compiler-only before every build.
+  assert.equal(fs.existsSync(path.join(repoRoot, "contracts", "compile.sh")), false,
+    "contracts/compile.sh belonged to the retired custom track");
+  const script = read("scripts/verify_repo.sh");
+  const gate = script.indexOf("node scripts/check_neo_platform_packages.mjs --compiler-only");
   assert.notEqual(gate, -1);
-  assert.ok(gate < script.indexOf('"$NCCS_BIN" SmartAccount.csproj'));
+  assert.ok(gate < script.indexOf("dotnet build SmartAccount.sln"));
 });

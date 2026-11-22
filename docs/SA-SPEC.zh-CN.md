@@ -9,7 +9,7 @@
 | 类型 | 代表文件 | 它回答什么 | 不能当作什么 |
 | --- | --- | --- | --- |
 | 规范 / 约定 | `SA-EIP-712-SPEC.md`、`SA-CONTRACT-HANDOFF.md`、`SA-FRONTEND-CORRESPONDENCE.md` | 链上哈希的字节布局、合约与 SDK / 前端的接口约定 | 不是部署证明，也不认证任意第三方实现 |
-| 精化与证明 | `SA-FORMAL-VERIFICATION.md`、`SA-METHOD-REFINEMENT.md`（方法级精化全集） | 某一段 C# 源码在多大范围内被参考模型覆盖 | 不是完整 NeoVM / 编译器精化，也不是密码学可靠性证明 |
+| 精化与证明 | `SA-FORMAL-VERIFICATION.md` | 某一段 C# 源码在多大范围内被参考模型覆盖 | 不是完整 NeoVM / 编译器精化，也不是密码学可靠性证明 |
 | 门禁与回执 | `SA-CLOSURE-GATE.md`、`SA-ENTRYPOINT-CLOSURE.md`、`docs/reports/*.json` | 当前哪些入口点算"已闭合"、依据是哪份回执 | 不是对当前 `HEAD` 的陈述；回执只对其记录的提交与字节有效 |
 
 ## 2. 建议阅读顺序
@@ -18,7 +18,7 @@
 
 想判断"今天能不能上线"：`SA-CLOSURE-GATE.md` → `docs/reports/sa-closure-gate-20261117.json` → `SA-SYSTEM-STATUS.md`（有中文版）。
 
-想改合约或写集成：`SA-EIP-712-SPEC.md` → `SA-CONTRACT-HANDOFF.md` → `SA-FRONTEND-CORRESPONDENCE.md` → `SA-METHOD-REFINEMENT.md` 第 1 节（工件清单）。
+想改合约或写集成：`SA-EIP-712-SPEC.md` → `SA-CONTRACT-HANDOFF.md` → `SA-FRONTEND-CORRESPONDENCE.md`；原生 ABI 2 的整份规范见 `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`。
 
 想评估证明边界：`SA-FORMAL-VERIFICATION.md` 的 Status 与 open boundaries 章节 → `docs/reports/sa-native-open-boundaries-20261008.json` → 再按需读单条精化文档。
 
@@ -30,19 +30,13 @@
 
 - `SA-CLOSURE-GATE.md`：把各条已限定作用域的证明按入口点做一次新的编排与身份连接。它不重新证明任何一条既有结论，只决定这些结论能否合成为一个"该入口点已闭合"的判断。
 - `SA-ENTRYPOINT-CLOSURE.md`：逐入口点的结构清单。它是独立的结构检查，不是语义定理。
-- `SA-CONTRACT-HANDOFF.md`（第十八号闭合作用域）：合约内部交接的内核检查结论。第十九至二十一号作用域在 `SA-METHOD-REFINEMENT.md` 内，分别见 interop 参数转换、interop 描述符计费窗口效应与异常身份三节。
+- `SA-CONTRACT-HANDOFF.md`（第十八号闭合作用域）：合约内部交接的内核检查结论。第十九至二十一号作用域的方法级记录曾收录于已移除的方法级精化文档，其反射产物仍归档在 `formal/refinement/fixtures/current-method-proof/`。
 
 **精化与证明**
 
 - `SA-FORMAL-VERIFICATION.md`：总入口。给出 Coq 模型范围、运行时对应关系与**未覆盖边界**。任何"已形式化验证"的说法都必须能在这篇里定位到具体作用域。
-- `SA-IMPLEMENTATION-REFINEMENT.md`：custom 合约实现的精化目标与验收条件。
-- `SA-METHOD-REFINEMENT.md`：方法级精化的单一文档，13 节各自独立、互不叠加：
-  - 第 1 节 工件清单与完整指令表——只做结构对账，明确声明不证明 VM、ApplicationEngine、编译器、存储或整方法语义；
-  - 第 2–4 节 报销 helper 的源码投影、参考 VM 证书与固定引擎运行时检查；
-  - 第 5–7 节 预留算术、数值强制转换与 `AddFee` 费用语义；
-  - 第 8–9 节 三个公开纯方法体的参考精化，以及受赞助入口的端到端运行时检查；
-  - 第 10–12 节 `System.Contract.Call` / `CALLT` 准入、interop 参数转换（第十九号）与描述符计费窗口效应（第二十号）；
-  - 第 13 节 异常身份与可捕获性（第二十一号）。
+- `SA-IMPLEMENTATION-REFINEMENT.md`：原生 profile 实现的精化目标与验收条件。
+- 方法级精化的逐方法记录（工件清单、报销 helper、预留算术、公开纯方法体、`System.Contract.Call`／`CALLT` 准入、interop 参数转换、描述符计费窗口效应与异常身份）曾作为单篇文档存在。它描述的是已退役 custom 合约的方法体，因此随 custom 实现一并移除；可核对的反射产物仍归档在 `formal/refinement/fixtures/current-method-proof/`，并由 `formal/refinement/method_proofs.py` 复算。
 
 **协议设计规范（原生 ABI 2，`docs/proposals/`）**
 

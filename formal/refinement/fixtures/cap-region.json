@@ -1,8 +1,8 @@
 {
   "source": "actual exporter /tmp/aa-refinement-inventory-final.json; fixture for proof mutation tests only",
-  "nefSha256": "4e5c8ae0c4b9722ae19e099303b6a61786de97cc4844abbc1ad458c3a76ce198",
-  "start": 13667,
-  "endExclusive": 13689,
+  "nefSha256": "397f96ab1997dcd8aad6455a797a569dfff2789c4ffff4dbfcab4ff590d553bf",
+  "start": 36696,
+  "endExclusive": 36718,
   "hex": "11116bb99f74106b6a11ce9fba6c78a09e756d78b976",
   "operations": [
     [

@@ -1,7 +1,7 @@
 """The neo-native-core SmartAccount copies are generated, not forked.
 
 The SA checkout owns the true source in contracts/native/SmartAccount/
-and scripts/sync_native_smartaccount.py regenerates the eleven copies the core
+and scripts/sync_native_smartaccount.py regenerates the copies the core
 needs to build the node standalone. These tests pin the sync contract itself
 on synthetic trees: regeneration must be byte-deterministic and idempotent,
 a failed regeneration must leave the core tree byte-for-byte untouched, and
@@ -20,6 +20,11 @@ import sync_native_smartaccount as sync_mod  # noqa: E402
 
 SA_DIR = sync_mod.SA_TRUE_SOURCE_DIR
 NC_DIR = sync_mod.NC_NATIVE_DIR
+# Independent fixture anchors keep pre-fix runs focused on behavior, not missing symbols.
+SA_RUNTIME = Path("contracts/native/Runtime/ApplicationEngine.Runtime.cs")
+NC_RUNTIME = Path("src/Neo/SmartContract/ApplicationEngine.Runtime.cs")
+RUNTIME_METHOD = "        protected internal bool CheckWitnessInternal(UInt160 hash)"
+RUNTIME_ORDINARY_WITNESS = "            if (hash.Equals(CallingScriptHash)) return true;"
 
 
 def build_tree(root: Path) -> tuple[Path, Path]:
@@ -37,6 +42,15 @@ def build_tree(root: Path) -> tuple[Path, Path]:
             + f"\nclass {name.replace('.', '_')} {{ }}\n"
         )
         (sa_root / SA_DIR / name).write_text(text, encoding="utf-8")
+    runtime = (
+        "// runtime header\n" + RUNTIME_METHOD + "\n        {\n"
+        "            if (context is { } accountContext)\n"
+        "            return accountContext.IsWitnessAuthorized(this, hash);\n"
+        + RUNTIME_ORDINARY_WITNESS + "\n            return false;\n        }\n"
+    )
+    (sa_root / SA_RUNTIME).parent.mkdir(parents=True)
+    (sa_root / SA_RUNTIME).write_text(runtime, encoding="utf-8")
+    (core_root / NC_RUNTIME).write_text(runtime, encoding="utf-8")
     return sa_root, core_root
 
 
@@ -44,7 +58,7 @@ def build_stale_core(root: Path) -> tuple[Path, Path]:
     """A synced tree whose true source then moved on.
 
     Every copy is stale and the first one is gone, so a write-mode sync has
-    all eleven files to write, one of them new.
+    all managed files to write, one of them new.
     """
     sa_root, core_root = build_tree(root)
     sync_mod.sync(sa_root, core_root)
@@ -180,6 +194,55 @@ class NativeSmartAccountSyncTests(unittest.TestCase):
             problems = sync_mod.check(sa_root, core_root)
             self.assertTrue(any("SmartAccountProtocol.cs" in p for p in problems), problems)
 
+    def test_runtime_drift_is_checked_and_only_witness_prelude_is_replaced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sa_root, core_root = build_tree(Path(tmp))
+            self.assertEqual([], sync_mod.sync(sa_root, core_root))
+            runtime = core_root / NC_RUNTIME
+            text = runtime.read_text(encoding="utf-8")
+            text = text.replace("// runtime header", "// user runtime changes")
+            text = text.replace("            return false;", "            return LegacyWitness(hash);")
+            text = text.replace("return accountContext.IsWitnessAuthorized(this, hash);", "return false;")
+            runtime.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
+            before = runtime.read_bytes()
+            self.assertTrue(any("runtime witness prelude" in p for p in sync_mod.check(sa_root, core_root)))
+            self.assertEqual([], sync_mod.sync(sa_root, core_root))
+            expected = before.replace(b"            return false;\r\n",
+                                      b"            return accountContext.IsWitnessAuthorized(this, hash);\r\n", 1)
+            self.assertEqual(expected, runtime.read_bytes())
+            self.assertEqual([], sync_mod.check(sa_root, core_root))
+            self.assertEqual([], sync_mod.sync(sa_root, core_root))
+            self.assertEqual(expected, runtime.read_bytes())
+
+    def test_missing_or_ambiguous_runtime_anchors_prevent_all_writes(self):
+        for malformed in ("// missing runtime", RUNTIME_METHOD + "\n" + RUNTIME_METHOD):
+            with self.subTest(malformed=malformed), tempfile.TemporaryDirectory() as tmp:
+                sa_root, core_root = build_stale_core(Path(tmp))
+                (core_root / NC_RUNTIME).write_text(malformed, encoding="utf-8")
+                before = snapshot(core_root)
+                self.assertTrue(sync_mod.sync(sa_root, core_root))
+                self.assertEqual(before, snapshot(core_root))
+                self.assertTrue(sync_mod.check(sa_root, core_root))
+
+    def test_malformed_runtime_opening_prevents_all_writes(self):
+        for source in (True, False):
+            with self.subTest(source=source), tempfile.TemporaryDirectory() as tmp:
+                sa_root, core_root = build_stale_core(Path(tmp))
+                path = sa_root / SA_RUNTIME if source else core_root / NC_RUNTIME
+                path.write_text(path.read_text(encoding="utf-8").replace("        {\n", "        // missing opening\n"),
+                                encoding="utf-8")
+                before = snapshot(core_root)
+                self.assertTrue(sync_mod.sync(sa_root, core_root))
+                self.assertEqual(before, snapshot(core_root))
+
+    def test_missing_runtime_source_prevents_all_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sa_root, core_root = build_stale_core(Path(tmp))
+            (sa_root / SA_RUNTIME).unlink()
+            before = snapshot(core_root)
+            self.assertTrue(sync_mod.sync(sa_root, core_root))
+            self.assertEqual(before, snapshot(core_root))
+
     def test_true_source_without_marker_block_is_rejected(self):
         with self.assertRaises(ValueError):
             sync_mod.generate_nc_content("// no header block here\nclass X { }\n")
@@ -193,7 +256,7 @@ class NativeSmartAccountSyncTests(unittest.TestCase):
             sa_root, core_root = build_tree(Path(tmp))
             sync_mod.sync(sa_root, core_root)
             self.assertEqual(0, sync_mod.main(["--check", "--source", str(sa_root), "--core", str(core_root)]))
-            drifted = core_root / NC_DIR / "SmartAccount.Keys.cs"
+            drifted = core_root / NC_DIR / sync_mod.SYNCED_FILES[1]
             drifted.write_text("drift", encoding="utf-8")
             self.assertEqual(1, sync_mod.main(["--check", "--source", str(sa_root), "--core", str(core_root)]))
             self.assertEqual(0, sync_mod.main(["--source", str(sa_root), "--core", str(core_root)]))

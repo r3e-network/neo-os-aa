@@ -2,9 +2,9 @@
 ; NeoOS formal verification -- SA core arithmetic obligations
 ;
 ; Source correspondence (read at 2026-09-18):
-;   ../neo-os-sa/contracts/custom/SmartAccount.Execution.cs
-;   ../neo-os-sa/contracts/custom/SmartAccount.Paymaster.cs
-;   ../neo-os-sa/contracts/custom/paymaster/Paymaster.cs
+;   `SmartAccount.Execution.cs` (retired custom kernel)
+;   `SmartAccount.Paymaster.cs` (retired custom kernel)
+;   `paymaster/Paymaster.cs` (retired custom kernel)
 ;
 ; OBL: the negation is unsat, so the arithmetic property holds.
 ; CTRL: an explicit accepted-domain witness or a deliberately unguarded bad

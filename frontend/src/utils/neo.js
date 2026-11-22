@@ -15,8 +15,8 @@ const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
 const BASE58_INDEX = new Map([...BASE58_ALPHABET].map((char, index) => [char, index]));
 
 // Identity, salt and recovery-timelock bounds live in the vendored
-// shared/registrationAccountId.mjs so the frontend, the SDK, the relay route
-// and both kernels cannot drift apart.
+// shared/registrationAccountId.mjs so the frontend, the SDK and the native
+// core cannot drift apart.
 export {
   MAX_RECOVERY_TIMELOCK_MS,
   MIN_RECOVERY_TIMELOCK_MS,
@@ -159,11 +159,11 @@ function requireHash160(value) {
  * v4 account identity (§16.1): accountId = hash160('aa524704' || custody || salt).
  *
  * Single-sourced in shared/registrationAccountId.mjs with the SDK, the relay
- * route and both kernels. `custodyAddress` accepts a Neo N3 address or a
+ * route and the native core. `custodyAddress` accepts a Neo N3 address or a
  * display-form hash160; `salt` is 1..128 hex-encoded bytes. The returned
  * `accountId` is big-endian display hex — exactly what createAccount expects
  * as its {type:'Hash160'} argument. No core hash and no network enter the
- * identity, so one custody+salt pair names the same account on both kernels.
+ * identity, so one custody+salt pair names the same account on every network.
  */
 export function deriveAccountIdentity({ custodyAddress = '', salt = '' } = {}) {
   const custody = requireHash160(custodyAddress);
@@ -188,10 +188,10 @@ export function deriveAccountIdentityChainHex(options = {}) {
 
 /**
  * The account-bound proxy verification script (§16.1): the account address is
- * hash160 of these bytes. `callFlags` defaults to 15 (CallFlags.All, the custom
- * kernel); the native kernel passes 5.
+ * hash160 of these bytes. `callFlags` defaults to 5 (CallFlags.ReadOnly), the
+ * flag the native core pushes.
  */
-export function createProxyScript(coreContractHash, accountId, callFlags = 15) {
+export function createProxyScript(coreContractHash, accountId, callFlags = 5) {
   try {
     return identityDeriver.deriveProxyScript({
       accountId: sanitizeHex(accountId),
@@ -204,7 +204,7 @@ export function createProxyScript(coreContractHash, accountId, callFlags = 15) {
 }
 
 /** The account address: the proxy script's hash160 in chain (display) order. */
-export function deriveAccountAddress({ accountId, coreContractHash, callFlags = 15 } = {}) {
+export function deriveAccountAddress({ accountId, coreContractHash, callFlags = 5 } = {}) {
   return reverseHex(hash160Hex(createProxyScript(coreContractHash, accountId, callFlags)));
 }
 

@@ -56,7 +56,8 @@ namespace Neo.UnitTests.SmartContract.Native
         private static Array Operation(BigInteger nonce = default) => new([
             new Integer(SmartAccountModuleProtocol.ModuleProtocolVersion), Service.ToArray(), "ping", new Array(),
             nonce, NonceSubkey, new BigInteger(1_700_000_000_000),
-            BigInteger.Zero, BigInteger.Zero, BigInteger.One, BigInteger.Zero,
+            // §4.1 [8]: the credential generation is 1-based; 0 is malformed.
+            BigInteger.Zero, BigInteger.One, BigInteger.One, BigInteger.Zero,
             Signature, new Array(),
         ]);
 

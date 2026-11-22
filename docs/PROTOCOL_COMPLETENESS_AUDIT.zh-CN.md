@@ -88,7 +88,7 @@ Huyao 之前的兼容实现不强制这些边界，不得被视为
 
 ### 1. 插件生命周期（安装/更新/移除）✓
 
-**实现位置：** `contracts/custom/SmartAccount.Accounts.cs`
+**实现位置：** `SmartAccount.Accounts.cs` (retired custom kernel)
 
 **特性：**
 - **安装：** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` 通过其 `actions` 列表原子地安装初始 validator 与 hook 实例；批量 `createAccounts` 创建不安装任何模块的账户
@@ -111,7 +111,7 @@ Huyao 之前的兼容实现不强制这些边界，不得被视为
 
 ### 2. Neo 二维 Nonce 管理（191 位通道 + 64 位序列）✓
 
-**实现位置：** `contracts/custom/SmartAccount.Execution.cs`（`IsNonceAcceptable` / `ConsumeNonce`）
+**实现位置：** `SmartAccount.Execution.cs` (retired custom kernel)（`IsNonceAcceptable` / `ConsumeNonce`）
 
 **规范 nonce 域：**
 ```csharp
@@ -144,7 +144,7 @@ BigInteger sequence = nonce & 0xFFFFFFFFFFFFFFFF;
 
 ### 3. 无回调恢复（时间锁、取消、执行）✓
 
-**实现位置：** `contracts/custom/SmartAccount.Escape.cs`
+**实现位置：** `SmartAccount.Escape.cs` (retired custom kernel)
 
 **流程：**
 ```mermaid
@@ -158,7 +158,7 @@ stateDiagram-v2
 
 这些名称携带账户 id：`beginRecovery(accountId, newCustody)`、
 `cancelRecovery(accountId)` 与无需许可的 `executeRecovery(accountId)` 是当前 v4 源码的 ABI 方法
-（`contracts/custom/SmartAccount.Escape.cs`）；`getRecoveryStatus(accountId)` 以
+（`SmartAccount.Escape.cs` (retired custom kernel)）；`getRecoveryStatus(accountId)` 以
 `[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]` 回读待处理记录，
 无待处理记录时返回空数组。
 
@@ -213,7 +213,7 @@ stateDiagram-v2
 
 ### 5. 账户状态管理（原子）✓
 
-**实现位置：** `contracts/custom/SmartAccount.State.cs`
+**实现位置：** `SmartAccount.State.cs` (retired custom kernel)
 
 **状态结构：**
 ```csharp
@@ -254,7 +254,7 @@ ExecutionEngine.Assert(!isExecutionActive(accountId), "Reentrant call rejected")
 
 ### 6. 市场托管（取消、过期、争议）✓
 
-**实现位置：** `contracts/custom/SmartAccount.MarketEscrow.cs`
+**实现位置：** `SmartAccount.MarketEscrow.cs` (retired custom kernel)
 
 **特性：**
 - **进入：** `enterMarketEscrow(accountId, marketContract, listingId)`
@@ -270,7 +270,7 @@ ExecutionEngine.Assert(!isMarketEscrowActive(accountId), "Account locked in mark
 ```
 该调用按部署 ABI 的拼写书写（`isMarketEscrowActive`，位于
 `contracts/build/SmartAccount.manifest.json`）。C# 源码定义时首字母大写
-（IsMarketEscrowActive, contracts/custom/SmartAccount.State.cs:143）；那种写法命名的是
+（IsMarketEscrowActive, `SmartAccount.State.cs` (retired custom kernel):143）；那种写法命名的是
 部署并不导出的方法，因此这里没有按代码格式化。
 - 在挂单激活期间阻止并发操作
 
@@ -337,7 +337,7 @@ ClearVerifyContext(accountId);
 
 ### 8. Paymaster/赞助流程 ✓
 
-**实现位置：** `contracts/custom/SmartAccount.Paymaster.cs`、`contracts/custom/paymaster/Paymaster.cs`，以及可选的 Morpheus 授权服务
+**实现位置：** `SmartAccount.Paymaster.cs` (retired custom kernel)、`paymaster/Paymaster.cs` (retired custom kernel)，以及可选的 Morpheus 授权服务
 
 中继支付外层 N3 交易的系统费用与网络费用。对于链上赞助路径，核心检查所选 paymaster
 是否绑定到它，执行操作，然后在同一交易中调用 `settleReimbursement`。

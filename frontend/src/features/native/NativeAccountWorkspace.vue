@@ -7,7 +7,7 @@
         <p>
           {{
             L(
-              "Stable identity. Delayed configuration. Verifiable recovery.",
+              "Stable identity. Module-level policy. Verifiable recovery.",
               "稳定身份，延迟配置，可验证的恢复路径。",
             )
           }}
@@ -272,8 +272,8 @@
           <p>
             {{
               L(
-                "v4 identity is custody + salt. Registration may install the first validator atomically; every later module change is a 24-hour intent.",
-                "v4 身份由托管地址与随机盐确定。注册可原子安装首个验证模块；之后每次模块变更都是 24 小时意图。",
+                "v4 identity is custody + salt. Registration may install the first validator atomically; every later module change is installModule or removeModule inside a signed script.",
+                "v4 身份由托管地址与随机盐确定。注册可原子安装首个验证模块；之后每次模块变更都是已签名脚本里的 installModule 与 removeModule。",
               )
             }}
           </p>
@@ -297,8 +297,8 @@
           <p class="small">
             {{
               L(
-                "The recovery authority and the timelock are set by a configuration intent, never at creation. Use a separately controlled Neo wallet for recovery; it can start a custody replacement after this delay and can also cancel a pending recovery.",
-                "恢复权限与延迟由配置意图设置，而非创建时确定。请使用独立保管的 Neo 钱包作为恢复权限；它可在此延迟后发起托管更换，也可取消待生效恢复。",
+                "The creation call sets no recovery authority: the core has no action that sets one, so naming another recovery authority is a governance module change. Use a separately controlled Neo wallet for custody and keep the recovery timelock short enough to practise.",
+                "创建调用不设置恢复权限：核心没有设置它的动作，因此另行指定恢复权限属于治理模块的变更。请使用独立保管的 Neo 钱包作为托管，并把恢复延迟设在你能够演练的范围内。",
               )
             }}
           </p><label
@@ -322,7 +322,7 @@
               <option value="validator">{{ L("Validator", "验证模块") }}</option>
               <option value="hook">{{ L("Hook", "策略模块") }}</option>
             </select></label>
-            <p class="small">{{ L("Only a validator can be installed at registration, and the first validator disables the built-in custody route on this account. Hooks and later validators always need a 24-hour intent.", "注册时只能安装验证模块；首个验证模块会关闭该账户的内置托管通道。策略模块及后续验证模块都必须通过 24 小时意图安装。") }}</p>
+            <p class="small">{{ L("Only a validator can be installed at registration, and the first validator disables the built-in custody route on this account. Hooks and later validators are installed with installModule.", "注册时只能安装验证模块；首个验证模块会关闭该账户的内置托管通道。策略模块及后续验证模块都必须通过 installModule 安装。") }}</p>
           </details>
           <div v-if="derived" class="account-summary">
             <dl>
@@ -351,201 +351,113 @@
             </button>
           </div>
         </template>
-        <template v-else-if="tab === 'configuration'">
-          <h2>2. {{ L("Configuration intents", "配置意图") }}</h2>
-          <p>
+        <template v-else-if="tab === 'modules'">
+          <h2>2. {{ L("Modules", "模块") }}</h2>
+          <p v-if="!snapshot?.account">
             {{
               L(
-                "Load an account first. One intent carries up to 16 atomic actions, matures after 24 hours and expires seven days after maturity. Nothing changes until the exact matured intent is confirmed.",
-                "请先加载账户。一个意图最多包含 16 个原子操作，24 小时后成熟，成熟后 7 天过期。在确认完全一致的已成熟意图前，任何变更都不会生效。",
+                "Load an account to read its installed modules.",
+                "请先加载账户以读取已安装模块。",
               )
             }}
           </p>
-          <p class="small" data-testid="native-intent-window">
-            {{
-              L(
-                `Matures after ${MODULE_CHANGE_DELAY_MS / 3600000} hours and expires ${CONFIGURATION_INTENT_EXPIRY_MS / 86400000} days after maturity.`,
-                `在 ${MODULE_CHANGE_DELAY_MS / 3600000} 小时后成熟，成熟后 ${CONFIGURATION_INTENT_EXPIRY_MS / 86400000} 天过期。`,
-              )
-            }}
-          </p>
-          <template v-if="snapshot">
-            <div class="account-summary" data-testid="native-modules">
-              <strong>{{ L("Installed modules", "已安装模块") }}</strong>
-              <dl v-if="modules.length">
-                <template v-for="module in modules" :key="module.moduleId">
-                  <dt>#{{ module.moduleId }} · {{ module.moduleTypeName }}</dt>
-                  <dd class="mono">
-                    0x{{ module.contractHash }} · {{ L("revision", "版本") }}
-                    {{ module.moduleRevision }} ·
-                    {{ L("credential generation", "凭据代际") }}
-                    {{ module.credentialGeneration }}
-                    <template v-if="module.messageCapability">
-                      · {{ L("messages", "消息") }}</template
-                    ><template v-if="module.thresholdMemberEligible">
-                      · {{ L("threshold member", "可作阈值成员") }}</template
-                    >
-                  </dd>
-                </template>
-              </dl>
-              <p v-else class="small">
-                {{
-                  L(
-                    "No module is installed; the built-in custody route is the only authority.",
-                    "未安装任何模块，仅内置托管通道可用。",
-                  )
-                }}
-              </p>
-              <p class="small">
-                {{ L("Hook order", "策略顺序") }}: {{ hookOrderText }} ·
-                {{ L("revision", "版本") }} {{ snapshot.hookOrder.revision }}
-              </p>
-            </div>
-            <h3>{{ L("Pending intents", "待生效意图") }}</h3>
-            <button
-              class="secondary"
-              :disabled=" !profile || !snapshot || busy"
-              @click="refreshConfiguration"
-            >
-              {{ L("Refresh pending intents", "刷新待生效意图") }}
-            </button>
-            <div v-if="inspected" class="callout" data-testid="native-pending-policy">
-              <p class="small">
-                {{ L("Checked at chain time", "核对时的链上时间") }}:
-                {{ time(inspected.chainTime) }}
-              </p>
-              <div
-                v-for="intent in inspected.intents"
-                :key="intent.intentId"
-                class="account-summary"
-              >
-                <strong
-                  >#{{ intent.intentId }} ·
-                  {{
-                    intent.mature ? L("mature", "已成熟") : L("waiting", "等待中")
-                  }}{{ intent.expired ? " · " + L("expired", "已过期") : "" }}</strong
-                >
-                <dl>
-                  <dt>{{ L("Proposed", "提议于") }}</dt>
-                  <dd>{{ time(intent.proposedAt) }}</dd>
-                  <dt>{{ L("Matures", "成熟时间") }}</dt>
-                  <dd>{{ time(intent.matureAt) }}</dd>
-                  <dt>{{ L("Expires", "过期时间") }}</dt>
-                  <dd>{{ time(intent.expiresAt) }}</dd>
-                  <dt>{{ L("Authority epoch", "权限代际") }}</dt>
-                  <dd>{{ intent.authorityEpoch }}</dd>
-                  <dt>{{ L("Actions", "操作") }}</dt>
-                  <dd>
-                    <ul>
-                      <li v-for="(text, index) in intent.descriptions" :key="index">
-                        {{ text }}
-                      </li>
-                    </ul>
-                  </dd>
-                </dl>
-                <div class="actions">
-                  <button
-                    :disabled="busy || !intent.mature || intent.expired"
-                    @click="reviewIntent('confirm', intent)"
-                  >
-                    {{ L("Review confirmation", "审核确认") }}
-                  </button>
-                  <button class="secondary" :disabled="busy" @click="reviewIntent('cancel', intent)">
-                    {{ L("Review cancellation", "审核取消") }}
-                  </button>
-                </div>
-              </div>
-              <p v-if="!inspected.intents.length">
-                {{ L("No configuration intent is pending.", "当前没有待生效配置意图。") }}
-              </p>
-            </div>
-            <h3>{{ L("Build one intent", "构建配置意图") }}</h3>
-            <label>{{ L("Action kind", "操作类型") }}<select v-model="draft.kind" :aria-label="L('Action kind', '操作类型')">
-              <option value="install">{{ L("Install a module", "安装模块") }}</option>
-              <option value="uninstall">{{ L("Uninstall a module", "卸载模块") }}</option>
-              <option value="configure">{{ L("Reconfigure a module", "重配模块") }}</option>
-              <option value="hookOrder">{{ L("Set hook order", "设置策略顺序") }}</option>
-              <option value="defaultPolicy">{{ L("Set the built-in route", "设置内置通道") }}</option>
-              <option value="thresholdPolicy">{{ L("Set a threshold policy", "设置阈值策略") }}</option>
-              <option value="recoveryPolicy">{{ L("Set the recovery policy", "设置恢复策略") }}</option>
-            </select></label>
-            <template v-if="draft.kind === 'install'">
-              <div class="form-row">
-                <label>{{ L("Module type", "模块类型") }}<select v-model="draft.moduleType" :aria-label="L('Module type', '模块类型')">
-                  <option value="validator">{{ L("Validator", "验证模块") }}</option>
-                  <option value="hook">{{ L("Hook", "策略模块") }}</option>
-                </select></label>
-                <label>{{ L("Module contract hash", "模块合约哈希") }}<input v-model.trim="draft.contractHash" spellcheck="false" placeholder="0x…" /></label>
-              </div>
-              <label>{{ L("Module profile digest (32 bytes)", "模块配置摘要（32 字节）") }}<input v-model.trim="draft.profileDigest" spellcheck="false" /></label>
-            </template>
-            <template v-else-if="draft.kind === 'uninstall' || draft.kind === 'configure'">
-              <label>{{ L("Module id", "模块 ID") }}<input v-model.trim="draft.moduleId" inputmode="numeric" /></label>
-            </template>
-            <template v-else-if="draft.kind === 'hookOrder'">
-              <label>{{ L("Hook ids in execution order (comma separated)", "按执行顺序排列的策略模块 ID（逗号分隔）") }}<input v-model.trim="draft.hookIds" spellcheck="false" /></label>
-            </template>
-            <template v-else-if="draft.kind === 'defaultPolicy'">
-              <label class="check"><input v-model="draft.operationAuthorization" type="checkbox" />{{ L("Built-in route authorizes operations", "内置通道可授权操作") }}</label>
-              <label class="check"><input v-model="draft.messageAuthorization" type="checkbox" />{{ L("Built-in route authorizes messages", "内置通道可授权消息") }}</label>
-            </template>
-            <template v-else-if="draft.kind === 'thresholdPolicy'">
-              <div class="form-row">
-                <label>{{ L("Policy id", "策略 ID") }}<input v-model.trim="draft.policyId" inputmode="numeric" /></label>
-                <label>{{ L("Threshold (1–10)", "阈值（1–10）") }}<input v-model.trim="draft.threshold" inputmode="numeric" /></label>
-              </div>
-              <label>{{ L("Member module ids (comma separated, max 10)", "成员模块 ID（逗号分隔，最多 10 个）") }}<input v-model.trim="draft.memberIds" spellcheck="false" /></label>
-              <label class="check"><input v-model="draft.active" type="checkbox" />{{ L("Policy is active", "策略生效") }}</label>
-            </template>
-            <template v-else>
-              <label>{{ L("Recovery authority (zero disables it)", "恢复权限（全零表示不设置）") }}<input v-model.trim="draft.recoveryAuthority" spellcheck="false" placeholder="0x…" /></label>
-              <div class="form-row">
-                <label>{{ L("Recovery timelock (days, 7–90)", "恢复延迟（天，7–90）") }}<input v-model.trim="draft.timelockDays" inputmode="numeric" /></label>
-              </div>
-              <label class="check"><input v-model="draft.ownerOnly" type="checkbox" />{{ L("Only custody may start recovery", "仅托管方可发起恢复") }}</label>
-            </template>
-          </template>
-          <p v-else class="small">
-            {{
-              L(
-                "Load an account to inspect its modules and pending intents.",
-                "加载账户后可查看模块与待生效意图。",
-              )
-            }}
-          </p>
-          <template v-if="snapshot">
-            <ul class="small" data-testid="native-draft-actions">
-              <li v-for="(entry, index) in draftActions" :key="index">
-                {{ describeConfigurationAction(entry) }}
-                <button class="secondary" :disabled="busy" @click="removeDraftAction(index)">
-                  {{ L("Remove", "移除") }}
-                </button>
-              </li>
-            </ul>
-            <div class="actions">
-              <button class="secondary" :disabled="busy" @click="run(addDraftAction)">
-                {{ L("Add to the intent", "加入意图") }}
-              </button>
-              <button
-                :disabled="
-                  busy ||
-                  !draftActions.length ||
-                  draftActions.length > MAX_ACTIONS_PER_INTENT ||
-                  snapshot?.account.statusName !== 'Active'
-                "
-                @click="reviewProposal"
-              >
-                {{ L("Review configuration proposal", "审核配置提议") }}
-              </button>
-            </div>
-            <p class="small">
+          <template v-else>
+            <p class="small" data-testid="native-module-admin">
               {{
                 L(
-                  "A proposal is one atomic intent and never a wallet invoke. It is simulated exactly like any other transaction, and it can only be confirmed after maturity.",
-                  "提议是一个原子意图，不走钱包 invoke。与其它交易一样需要精确模拟，且只能在成熟后确认。",
+                  "The core executes exactly two module actions: installModule and uninstallModule. A change is one action inside a signed script. The core keeps no proposal window — a change that matures for 24 hours belongs to a governance module.",
+                  "核心只执行两个模块动作：installModule 与 uninstallModule。一次变更就是已签名脚本里的一个动作。核心没有提案窗口——需要 24 小时成熟的变更属于治理模块。",
                 )
               }}
             </p>
+            <h3>{{ L("Installed modules", "已安装模块") }}</h3>
+            <p v-if="!installedModules.length" class="small">
+              {{ L("No module is installed on this account.", "该账户没有安装任何模块。") }}
+            </p>
+            <dl v-else data-testid="native-modules">
+              <template v-for="entry in installedModules" :key="entry.moduleId">
+                <dt>{{ L("Module", "模块") }} #{{ entry.moduleId }}</dt>
+                <dd>
+                  {{ entry.typeName ?? entry.moduleType }} ·
+                  {{ entry.contractHash }}
+                </dd>
+              </template>
+            </dl>
+            <h3>{{ L("Build one module action", "构建一个模块动作") }}</h3>
+            <label
+              >{{ L("Action", "动作")
+              }}<select
+                v-model="moduleDraft.kind"
+                :aria-label="L('Action', '动作')"
+              >
+                <option value="install">installModule</option>
+                <option value="uninstall">removeModule</option>
+              </select></label
+            >
+            <template v-if="moduleDraft.kind === 'install'">
+              <label
+                >{{ L("Module type", "模块类型")
+                }}<select
+                  v-model="moduleDraft.moduleType"
+                  :aria-label="L('Module type', '模块类型')"
+                >
+                  <option value="validator">{{ L("validator (1)", "验证器（1）") }}</option>
+                  <option value="hook">{{ L("hook (4)", "钩子（4）") }}</option>
+                </select></label
+              >
+              <label
+                >{{ L("Module contract hash", "模块合约哈希")
+                }}<input
+                  v-model.trim="moduleDraft.contractHash"
+                  spellcheck="false"
+                  placeholder="0x…"
+              /></label>
+              <label
+                >{{ L("Profile digest (32 bytes)", "配置摘要（32 字节）")
+                }}<input
+                  v-model.trim="moduleDraft.profileDigest"
+                  spellcheck="false"
+              /></label>
+              <label
+                >{{ L("Install data (byte list)", "安装数据（字节列表）")
+                }}<input v-model.trim="moduleDraft.initData" spellcheck="false"
+              /></label>
+            </template>
+            <template v-else>
+              <label
+                >{{ L("Module id", "模块 ID")
+                }}<input
+                  v-model.trim="moduleDraft.moduleId"
+                  inputmode="numeric"
+              /></label>
+              <label
+                >{{ L("Uninstall data (byte list)", "卸载数据（字节列表）")
+                }}<input v-model.trim="moduleDraft.deInitData" spellcheck="false"
+              /></label>
+            </template>
+            <button
+              class="secondary"
+              :disabled="busy"
+              data-testid="native-build-module-action"
+              @click="reviewModuleAction"
+            >
+              {{ L("Build the action", "构建动作") }}
+            </button>
+            <div
+              v-if="moduleReview"
+              class="callout"
+              data-testid="native-module-action"
+            >
+              <strong>{{ moduleReview.description }}</strong>
+              <p class="small">
+                {{
+                  L(
+                    "This is one action. The core refuses every other action code with SA_OPERATION_MALFORMED, so it is submitted inside a script the SDK builds.",
+                    "这是一个动作。核心对其他每个动作码都以 SA_OPERATION_MALFORMED 拒绝，因此它被放进由 SDK 构建的脚本里提交。",
+                  )
+                }}
+              </p>
+            </div>
           </template>
         </template>
         <template v-else>
@@ -872,9 +784,6 @@ import {
   ZERO_HASH,
   NATIVE_ACTIONS,
   NATIVE_PROXY_CALL_FLAGS,
-  MODULE_CHANGE_DELAY_MS,
-  CONFIGURATION_INTENT_EXPIRY_MS,
-  MAX_ACTIONS_PER_INTENT,
   MAX_OPERATIONS_PER_ENVELOPE,
   actionBlockReason,
   buildRecoveryDescriptor,
@@ -882,11 +791,6 @@ import {
   describeConfigurationAction,
   installModuleAction,
   uninstallModuleAction,
-  configureModuleAction,
-  setHookOrderAction,
-  setDefaultPolicyAction,
-  setThresholdPolicyAction,
-  setRecoveryPolicyAction,
   jsonText,
 } from "./nativeWorkspace.js";
 const { locale } = useI18n();
@@ -956,18 +860,14 @@ const workspace = createNativeWorkspace({
 const tabs = [
   { id: "account", en: "Account & recovery", zh: "账户与恢复" },
   { id: "create", en: "Create account", zh: "创建账户" },
-  { id: "configuration", en: "Configuration intents", zh: "配置意图" },
+  { id: "modules", en: "Modules", zh: "模块" },
   { id: "operation", en: "Native operation", zh: "原生操作" },
 ];
 const selectedAction = computed(() =>
   NATIVE_ACTIONS.find((a) => a.value === action.value),
 );
 const actionBlocked = computed(() =>
-  actionBlockReason(
-    snapshot.value?.account,
-    action.value,
-    snapshot.value?.chainTime ?? 0,
-  ),
+  actionBlockReason(snapshot.value?.account, action.value),
 );
 const modules = computed(() =>
   snapshot.value
@@ -1224,83 +1124,40 @@ async function reviewAction() {
     ),
   );
 }
-async function refreshConfiguration() {
-  await run(async () => {
-    clearReview();
-    inspected.value = null;
-    inspected.value = await workspace.inspectConfiguration({
-      accountId: accountId.value,
-    });
-  });
-}
-async function reviewIntent(kind, intent) {
-  await run(async () =>
-    setReview(
-      await workspace.configuration({
-        kind,
-        accountId: accountId.value,
-        intentId: intent.intentId,
-        expectedIntent: intent,
-        feePayer: feePayer.value,
-        submission: signingPath.value,
-      }),
-    ),
-  );
-}
+const moduleDraft = reactive({
+  kind: "install",
+  moduleType: "validator",
+  contractHash: "",
+  profileDigest: "",
+  initData: "",
+  moduleId: "",
+  deInitData: "",
+});
+const moduleReview = shallowRef(null);
+const installedModules = computed(() => [
+  ...(snapshot.value?.modules?.validators ?? []),
+  ...(snapshot.value?.modules?.hooks ?? []),
+]);
 const numberList = (text) => String(text).split(/[\s,]+/).filter(Boolean);
-function buildDraftAction() {
-  const days = (value) => String(Math.round(Number(value) * 86400000));
-  switch (draft.kind) {
-    case "install":
-      return installModuleAction({
-        moduleType: draft.moduleType,
-        contractHash: draft.contractHash,
-        profileDigest: draft.profileDigest,
+function buildModuleAction() {
+  return moduleDraft.kind === "install"
+    ? installModuleAction({
+        moduleType: moduleDraft.moduleType,
+        contractHash: moduleDraft.contractHash,
+        profileDigest: moduleDraft.profileDigest,
+        initData: numberList(moduleDraft.initData).map(Number),
+      })
+    : uninstallModuleAction({
+        moduleId: moduleDraft.moduleId,
+        deInitData: numberList(moduleDraft.deInitData).map(Number),
       });
-    case "uninstall":
-      return uninstallModuleAction({ moduleId: draft.moduleId });
-    case "configure":
-      return configureModuleAction({ moduleId: draft.moduleId });
-    case "hookOrder":
-      return setHookOrderAction({ hookIds: numberList(draft.hookIds) });
-    case "defaultPolicy":
-      return setDefaultPolicyAction({
-        operationAuthorization: draft.operationAuthorization,
-        messageAuthorization: draft.messageAuthorization,
-      });
-    case "thresholdPolicy":
-      return setThresholdPolicyAction({
-        policyId: draft.policyId,
-        threshold: draft.threshold,
-        memberIds: numberList(draft.memberIds),
-        active: draft.active,
-      });
-    default:
-      return setRecoveryPolicyAction({
-        recoveryAuthority: draft.recoveryAuthority || ZERO_HASH,
-        recoveryTimelockMs: days(draft.timelockDays),
-        ownerOnlyRecovery: draft.ownerOnly,
-      });
-  }
 }
-function addDraftAction() {
-  draftActions.value = [...draftActions.value, buildDraftAction()];
-}
-function removeDraftAction(index) {
-  draftActions.value = draftActions.value.filter((_, at) => at !== index);
-}
-async function reviewProposal() {
-  await run(async () =>
-    setReview(
-      await workspace.configuration({
-        kind: "propose",
-        accountId: accountId.value,
-        actions: draftActions.value,
-        feePayer: feePayer.value,
-        submission: signingPath.value,
-      }),
-    ),
-  );
+function reviewModuleAction() {
+  const action = buildModuleAction();
+  moduleReview.value = {
+    action,
+    description: describeConfigurationAction(action),
+  };
 }
 async function reviewOperation() {
   await run(async () => {
@@ -1333,6 +1190,13 @@ async function reviewOperation() {
 function fillEnvelope() {
   const account = snapshot.value?.account;
   if (!account) return;
+  // Route the skeleton at a real validator when the account has one: the
+  // instance's CredentialGeneration is published by getModule, so the draft
+  // carries a reviewed value instead of a guess. With no installed validator
+  // the built-in route is in use and its generation is the account's 0x57
+  // SubjectRevision, which the kernel does not publish -- the field stays null
+  // so the builder refuses the envelope until it is filled in.
+  const validator = snapshot.value?.modules?.validators?.[0] ?? null;
   operation.operations = JSON.stringify(
     [
       {
@@ -1342,8 +1206,10 @@ function fillEnvelope() {
         nonce: "1",
         nonceSubkey: "00".repeat(32),
         deadline: String(snapshot.value.chainTime + 3600000),
-        validatorId: "0",
-        credentialGeneration: "1",
+        validatorId: validator ? String(validator.moduleId) : "0",
+        credentialGeneration: validator
+          ? String(validator.credentialGeneration)
+          : null,
         authorityEpoch: account.authorityEpoch,
         configurationNonce: account.configurationNonce,
         signature: "",
@@ -1353,10 +1219,15 @@ function fillEnvelope() {
     null,
     2,
   );
-  notice.value = L(
-    "Skeleton filled with the live epoch and configuration nonce. Replace the target, arguments, nonce and signature.",
-    "已按实时权限代际与配置 nonce 填充骨架。请替换目标、参数、nonce 与签名。",
-  );
+  notice.value = validator
+    ? L(
+        "Skeleton filled with the live epoch, configuration nonce and the installed validator's credential generation. Replace the target, arguments, nonce and signature.",
+        "已按实时权限代际、配置 nonce 与已安装验证器的凭证代际填充骨架。请替换目标、参数、nonce 与签名。",
+      )
+    : L(
+        "Skeleton filled with the live epoch and configuration nonce. The built-in route's credential generation is the account SubjectRevision, which the kernel does not publish: read it from the account's 0x57 subject record and replace the null before signing.",
+        "已按实时权限代际与配置 nonce 填充骨架。内置通道的凭证代际即账户 SubjectRevision，合约并不对外发布该值：请从账户 0x57 subject 记录读取后替换 null，再行签名。",
+      );
 }
 function download(name, value) {
   const url = URL.createObjectURL(

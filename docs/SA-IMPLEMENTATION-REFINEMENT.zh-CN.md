@@ -52,14 +52,14 @@ trace 采样或差分测试，都无法提供这条定理。
 | --- | --- |
 | 协议模型 | `formal/verify.py` 检查所声明的custom / 原生抽象。其模型回执不建立源码到 NEF 的精化。 |
 | 算术区域 | `prove.py` 把原始计费指令绑定到带符号 256 位参考算术与 `CustomSponsorship.charge`。其作用域仍是局部区域。 |
-| [数值强制转换](SA-METHOD-REFINEMENT.md#numeric-coercion-refinement) | 建模 GetInteger 解码及其值关系，包括 Boolean 与 ByteString。这不证明 ABI 准入或实际运行时对应关系。 |
-| [预留算术](SA-METHOD-REFINEMENT.md#reservation-arithmetic-refinement) | 增加正性、可表示的预留更新与协议费用上界。它记录了零费用情形与无界算术之间的溢出分歧。 |
-| [完整 helper 参考精化](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-reference-refinement) | 在声明的输入与环境契约下，把完整类型化源码投影与一个字节解码参考 VM 相比较，对象是 `CapReimbursementToActualCost`。它不认证 ApplicationEngine 或公开入口点。 |
+| `数值强制转换` | 建模 GetInteger 解码及其值关系，包括 Boolean 与 ByteString。这不证明 ABI 准入或实际运行时对应关系。 |
+| `预留算术` | 增加正性、可表示的预留更新与协议费用上界。它记录了零费用情形与无界算术之间的溢出分歧。 |
+| `完整 helper 参考精化` | 在声明的输入与环境契约下，把完整类型化源码投影与一个字节解码参考 VM 相比较，对象是 `CapReimbursementToActualCost`。它不认证 ApplicationEngine 或公开入口点。 |
 
-[源码投影](SA-METHOD-REFINEMENT.md#full-helper-source-projection)记录了哪些类型化操作与语义元数据被解释。
-[方法清单](SA-METHOD-REFINEMENT.md#whole-helper-refinement-inventory)清点了全部 helper
+`源码投影`记录了哪些类型化操作与语义元数据被解释。
+`方法清单`清点了全部 helper
 指令与独立的静态初始化；仅结构覆盖不是语义证明。
-[运行时检查](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-runtime-checks)在固定引擎中执行
+`运行时检查`在固定引擎中执行
 原始 helper，并区分有效输入、畸形记录、待定存储与外层交易回滚。这些检查提供有限的运行时
 证据，独立于通用参考定理。
 

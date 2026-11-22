@@ -82,7 +82,7 @@ namespace Neo.UnitTests.SmartContract.Native
                 .EmitSysCall(ApplicationEngine.System_Contract_Call);
             return builder.ToArray();
         }
-        private static ApplicationEngine Invoke(DataCache snapshot, string method, object[] args, ulong time = 1000,
+        internal static ApplicationEngine Invoke(DataCache snapshot, string method, object[] args, ulong time = 1000,
             UInt160[] signers = null, TriggerType trigger = TriggerType.Application, UInt160 target = null)
         {
             byte[] script = Script(method, args, target);
@@ -106,27 +106,12 @@ namespace Neo.UnitTests.SmartContract.Native
         }
 
         /// <summary>
-        /// A fixed caller contract. The ERC-1271 digest binds the hash of the
-        /// calling script, so a script that carries the signature it is signing
-        /// for would be circular; a deployed forwarder has a stable hash, exactly
-        /// like a real wallet or relayer contract.
+        /// A fixed caller contract used as the invoking script of an operation:
+        /// a deployed contract has a stable identity, unlike an ad-hoc script.
         /// </summary>
-        internal static byte[] ForwarderScript()
-        {
-            using var builder = new ScriptBuilder();
-            // PACK takes the top of the stack as element 0, so the arguments are
-            // read in reverse order to rebuild the positional call array.
-            builder.Emit(OpCode.INITSLOT, new byte[] { 0, 3 })
-                .Emit(OpCode.LDARG2).Emit(OpCode.LDARG1).Emit(OpCode.LDARG0)
-                .EmitPush(3).Emit(OpCode.PACK)
-                .EmitPush(CallFlags.ReadStates).EmitPush("isValidSignature")
-                .EmitPush(NativeContract.SmartAccount.Hash)
-                .EmitSysCall(ApplicationEngine.System_Contract_Call).Emit(OpCode.RET);
-            return builder.ToArray();
-        }
         internal static UInt160 Forwarder(DataCache snapshot)
         {
-            byte[] script = ForwarderScript();
+            byte[] script = new byte[] { (byte)OpCode.RET };
             ContractState contract = TestUtils.GetContract(script,
                 TestUtils.CreateManifest("call", ContractParameterType.Any, ContractParameterType.Hash160,
                     ContractParameterType.ByteArray, ContractParameterType.Array));
@@ -153,15 +138,17 @@ namespace Neo.UnitTests.SmartContract.Native
         /// nonceSubkey, deadline, validatorId, credentialGeneration,
         /// authorityEpoch, configurationNonce, signature, hookProofs].
         /// </summary>
-        private static object[] Operation(DataCache snapshot, UInt160 id, UInt160 target, string method, object[] args,
-            BigInteger? nonce = null, BigInteger? deadline = null, bool sign = true)
+        internal static object[] Operation(DataCache snapshot, UInt160 id, UInt160 target, string method, object[] args,
+            BigInteger? nonce = null, BigInteger? deadline = null, bool sign = true,
+            BigInteger? validatorId = null, BigInteger? credentialGeneration = null)
         {
             Array control = Account(snapshot, id);
             object[] operation =
             [
                 (BigInteger)SmartAccountModuleProtocol.ModuleProtocolVersion, target, method, args,
                 nonce ?? Nonce(snapshot, id), new byte[32], deadline ?? int.MaxValue,
-                BigInteger.Zero, BigInteger.One, control[4].GetInteger(), control[5].GetInteger(),
+                validatorId ?? BigInteger.Zero, credentialGeneration ?? BigInteger.One,
+                control[4].GetInteger(), control[5].GetInteger(),
                 new byte[] { 0x01 }, new object[0],
             ];
             if (sign) operation[SmartAccountModuleProtocol.OpSignature] = Signature(snapshot, id, operation);
@@ -215,22 +202,73 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.AreEqual(SmartAccountProtocol.ServiceHash, native.Hash);
             Assert.AreEqual(NativeContract.TemporaryStorage.Id - 1, native.Id);
             Assert.IsFalse(native.IsActive(TestProtocolSettings.Default, uint.MaxValue));
-            Assert.IsEmpty(native.GetContractState(TestProtocolSettings.Default, 1).Manifest.Abi.Methods);
+            // The ABI carries no method-level hardfork gates: the contract-level
+            // Activations gate (IsActive above) is decisive, so the method surface
+            // is identical whether or not HF_SmartAccountV1 is configured.
+            Assert.AreSequenceEqual(
+                native.GetContractState(Settings, 1).Manifest.Abi.Methods.Select(m => m.Name).ToArray(),
+                native.GetContractState(TestProtocolSettings.Default, 1).Manifest.Abi.Methods.Select(m => m.Name).ToArray());
 
             ContractState state = native.GetContractState(Settings, 1);
             string[] methods = state.Manifest.Abi.Methods.Select(m => m.Name).ToArray();
             foreach (string method in new[]
             {
                 "createAccount", "createAccounts", "executeUserOp", "executeUserOps", "validateUserOp",
-                "getOperationDigest", "isValidSignature", "verify", "getNonce", "getNonceSequence",
-                "getAccount", "getProtocolInfo", "getRecoveryStatus", "getAccountImplementationId",
-                "canonicalP256PublicKey", "proposeConfiguration", "confirmConfiguration",
-                "cancelConfiguration", "getPendingConfiguration", "getPendingConfigurationIntentIds",
-                "getModules", "getModule", "isModuleInstalled", "getHookOrder", "supportsModuleType",
-                "supportsExecutionMode", "getAuthorizedModuleId", "revokeCredentials",
-                "freezeAccount", "unfreezeAccount", "beginRecovery", "cancelRecovery", "executeRecovery",
+                "getOperationDigest", "verify", "getNonce", "getNonceSequence",
+                "getAccount", "getAccountAddress", "getProtocolInfo", "getAccountImplementationId",
+                "getModules", "getModule", "isModuleInstalled", "getAuthorizedModuleId",
+                "freezeAccount", "unfreezeAccount", "installModule", "removeModule",
+                "setRecoveryPolicy", "setBuiltinAuthorization", "revokeModuleCredentials", "resetAccount",
             })
                 Assert.Contains(method, methods, method);
+            // The advanced features live in user-space modules now; their ABI is
+            // gone, not merely unmarked.
+            foreach (string removed in new[]
+            {
+                "isValidSignature", "canonicalP256PublicKey",
+                "proposeConfiguration", "confirmConfiguration", "cancelConfiguration",
+                "getPendingConfiguration", "getPendingConfigurationIntentIds",
+                "getHookOrder", "revokeCredentials", "supportsModuleType", "supportsExecutionMode",
+                "beginRecovery", "cancelRecovery", "executeRecovery", "getRecoveryStatus",
+            })
+                Assert.DoesNotContain(removed, methods, removed);
+
+            // Spec §7.1 pins the two administration signatures: the install type
+            // is an Integer code, and every install/uninstall carries the module
+            // data array.
+            static ContractParameterType[] Signature(ContractState state, string method) =>
+                state.Manifest.Abi.Methods.Single(m => m.Name == method).Parameters
+                    .Select(p => p.Type).ToArray();
+            Assert.IsTrue(Signature(state, "installModule").SequenceEqual(new[]
+            {
+                ContractParameterType.Hash160, ContractParameterType.Integer,
+                ContractParameterType.Hash160, ContractParameterType.Array,
+            }), "installModule(accountId, moduleType, contractHash, initData)");
+            Assert.IsTrue(Signature(state, "removeModule").SequenceEqual(new[]
+            {
+                ContractParameterType.Hash160, ContractParameterType.Integer,
+                ContractParameterType.Array,
+            }), "removeModule(accountId, moduleId, deInitData)");
+            Assert.IsTrue(Signature(state, "setRecoveryPolicy").SequenceEqual(new[]
+            {
+                ContractParameterType.Hash160, ContractParameterType.Hash160,
+                ContractParameterType.Integer, ContractParameterType.Boolean,
+            }), "setRecoveryPolicy(accountId, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery)");
+            Assert.IsTrue(Signature(state, "setBuiltinAuthorization").SequenceEqual(new[]
+            {
+                ContractParameterType.Hash160, ContractParameterType.Boolean,
+                ContractParameterType.Boolean,
+            }), "setBuiltinAuthorization(accountId, defaultOperationAuthorization, defaultMessageAuthorization)");
+            Assert.IsTrue(Signature(state, "revokeModuleCredentials").SequenceEqual(new[]
+            {
+                ContractParameterType.Hash160, ContractParameterType.Integer,
+            }), "revokeModuleCredentials(accountId, moduleId)");
+            Assert.IsTrue(Signature(state, "resetAccount").SequenceEqual(new[]
+            {
+                ContractParameterType.Hash160, ContractParameterType.Hash160,
+            }), "resetAccount(accountId, newCustody)");
+            Assert.IsTrue(Signature(state, "unfreezeAccount")
+                .SequenceEqual(new[] { ContractParameterType.Hash160 }));
             Assert.AreEqual(SmartAccountModuleProtocol.ModuleProtocolVersion,
                 state.Manifest.Extra["smartAccount"]["abiVersion"].GetInt32());
             Assert.AreEqual(SmartAccount.ParameterDigest,
@@ -267,9 +305,15 @@ namespace Neo.UnitTests.SmartContract.Native
                 Assert.AreEqual(VMState.FAULT, mismatched.State, "The account id must equal the derived id of its own salt.");
 
             Assert.AreEqual(BigInteger.Zero, Sequence(Nonce(snapshot, id)));
+            // §9: the account address is the script hash of the fixed proxy
+            // verification script, exposed as a read-only query for modules.
+            Assert.AreEqual(SmartAccountProtocol.GetAccountAddress(id),
+                new UInt160(Success(snapshot, "getAccountAddress", [id]).GetSpan()),
+                "getAccountAddress exposes the deterministic proxy address.");
+            using (var zero = Invoke(snapshot, "getAccountAddress", [UInt160.Zero]))
+                Assert.AreEqual(VMState.FAULT, zero.State, "A zero account id has no account address.");
             var unknown = (Array)Success(snapshot, "getAccount", [NextCustody]);
             Assert.IsFalse(unknown[0].GetBoolean());
-            Assert.HasCount(0, (Array)Success(snapshot, "getRecoveryStatus", [id]));
         }
 
         [TestMethod]
@@ -302,6 +346,45 @@ namespace Neo.UnitTests.SmartContract.Native
             using (var stale = Invoke(snapshot, "executeUserOp", [id, staleEpoch]))
                 Assert.AreEqual(VMState.FAULT, stale.State, "A stale authority epoch can never authorize.");
             Assert.AreEqual(BigInteger.One, Sequence(Nonce(snapshot, id)), "No rejected operation may move the cursor.");
+        }
+
+        /// <summary>
+        /// R-06-04: a channel that reached the 2^64 sentinel is dead. The
+        /// sentinel must not be packed into the nonce reply, because packing it
+        /// would alias <c>(channel + 1) &lt;&lt; 64</c> — the exact start value of
+        /// the next channel. GetNonce answers with the raw sentinel instead,
+        /// and consumption of the dead channel keeps refusing on its own path.
+        /// </summary>
+        [TestMethod]
+        public void AnExhaustedNonceChannelNeverAliasesIntoTheNextChannel()
+        {
+            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
+            BigInteger packed = Nonce(snapshot, id);
+            BigInteger channel = packed >> 64;
+
+            // Plant the exhaustion sentinel as the channel cursor — exactly the
+            // record ConsumeOperationNonce would have written after consuming
+            // sequence 2^64 - 1.
+            snapshot.Add(new StorageKey { Id = NativeContract.SmartAccount.Id,
+                    Key = SmartAccountProtocol.GetNonceCursorKey(id,
+                        SmartAccountProtocol.ChannelFromNonce(packed)) },
+                new StorageItem(BinarySerializer.Serialize(
+                    new Integer(BigInteger.One << 64), 32, 8)));
+
+            BigInteger exhausted = Nonce(snapshot, id);
+            Assert.AreEqual(BigInteger.One << 64, exhausted,
+                "the dead channel answers with the raw exhaustion sentinel");
+            Assert.AreNotEqual((channel + 1) << 64, exhausted,
+                "the sentinel must never alias the start value of the next channel");
+
+            using (var dead = Invoke(snapshot, "executeUserOp",
+                [id, Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7],
+                    nonce: channel << 64)]))
+            {
+                Assert.AreEqual(VMState.FAULT, dead.State, "An exhausted channel never executes again.");
+                Assert.Contains(SmartAccountModuleProtocol.ErrorNonceExhausted,
+                    dead.FaultException!.Message);
+            }
         }
 
         [TestMethod]
@@ -402,55 +485,7 @@ namespace Neo.UnitTests.SmartContract.Native
         }
 
         [TestMethod]
-        public void MessageSignaturesReturnTheStrictEr1271Magic()
-        {
-            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
-            UInt160 forwarder = Forwarder(snapshot);
-            byte[] script = Contract.CreateSignatureRedeemScript(CustodyKey.PublicKey).ToArray();
-            byte[] message = Enumerable.Repeat((byte)0x5A, 32).ToArray();
-            byte[] digest = MessageDigest(id, forwarder, message);
-            object[] envelope =
-            [
-                (BigInteger)SmartAccountModuleProtocol.ModuleProtocolVersion, BigInteger.Zero, (BigInteger)SubjectRevision(id),
-                new object[] { new object[] { script, Neo.Cryptography.Crypto.Sign(digest, CustodyKey, Neo.Cryptography.HashAlgorithm.SHA256) } },
-            ];
-
-            byte[] magic = Success(snapshot, "call", [id, message, envelope], target: forwarder).GetSpan().ToArray();
-            Assert.AreSequenceEqual(new byte[] { 0x16, 0x26, 0xba, 0x7e }, magic);
-
-            byte[] wrong = Success(snapshot, "call", [id, Enumerable.Repeat((byte)0x6B, 32).ToArray(), envelope],
-                target: forwarder).GetSpan().ToArray();
-            Assert.AreSequenceEqual(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }, wrong, "A bad message digest never throws its way to success.");
-
-            object[] stale = [envelope[0], envelope[1], new BigInteger(7), envelope[3]];
-            Assert.AreSequenceEqual(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF },
-                Success(snapshot, "call", [id, message, stale], target: forwarder).GetSpan().ToArray(),
-                "A stale message credential generation fails closed.");
-
-            Assert.AreSequenceEqual(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF },
-                Success(snapshot, "call", [NextCustody, message, envelope], target: forwarder).GetSpan().ToArray());
-            var shortHash = Invoke(snapshot, "call", [id, new byte[31], envelope], target: forwarder);
-            Assert.AreEqual(VMState.HALT, shortHash.State, "Message validation never faults on malformed input.");
-            Assert.AreSequenceEqual(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF },
-                shortHash.ResultStack.Pop().GetSpan().ToArray());
-            shortHash.Dispose();
-        }
-
-        private static byte[] MessageDigest(UInt160 id, UInt160 sender, byte[] message,
-            BigInteger credentialGeneration = default) =>
-            SHA256.HashData(SmartAccountProtocol.Concat(
-                "NeoSmartAccount/Message"u8.ToArray(),
-                [SmartAccountModuleProtocol.ModuleProtocolVersion],
-                SmartAccountProtocol.UInt32Le(Settings.Network),
-                NativeContract.SmartAccount.Hash.ToArray(),
-                id.ToArray(), sender.ToArray(),
-                SmartAccountProtocol.UInt64Be(BigInteger.Zero),
-                SmartAccountProtocol.UInt64Be(credentialGeneration == default ? BigInteger.One : credentialGeneration),
-                SmartAccountProtocol.UInt64Be(BigInteger.One),
-                message));
-
-        [TestMethod]
-        public void FreezeUnfreezeAndRecoveryFailClosedWithoutAuthority()
+        public void FreezeAndUnfreezeAreCustodyGatedAndAdvanceTheEpoch()
         {
             var snapshot = Snapshot(); UInt160 id = Register(snapshot);
 
@@ -458,65 +493,36 @@ namespace Neo.UnitTests.SmartContract.Native
                 Assert.AreEqual(VMState.FAULT, foreign.State, "Only the custody key can freeze the account.");
             Success(snapshot, "freezeAccount", [id], signers: [Custody]);
             Assert.AreEqual((int)SmartAccountStatus.Frozen, Account(snapshot, id)[1].GetInteger());
+            Assert.AreEqual(new BigInteger(2), Account(snapshot, id)[4].GetInteger(), "authorityEpoch");
             using (var frozen = Invoke(snapshot, "executeUserOp",
                 [id, Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7])]))
                 Assert.AreEqual(VMState.FAULT, frozen.State, "A frozen account executes nothing.");
+
+            // The minimal core holds no thaw timelock: a custody witness ends the
+            // freeze directly. A user-space governance module owns any delay.
+            using (var foreignThaw = Invoke(snapshot, "unfreezeAccount", [id], signers: [NextCustody]))
+                Assert.AreEqual(VMState.FAULT, foreignThaw.State, "Only the custody key can thaw the account.");
+            Assert.AreEqual((int)SmartAccountStatus.Frozen, Account(snapshot, id)[1].GetInteger(),
+                "A refused thaw never moves the account.");
+
             Success(snapshot, "unfreezeAccount", [id], signers: [Custody]);
             Assert.AreEqual((int)SmartAccountStatus.Active, Account(snapshot, id)[1].GetInteger());
+            Assert.AreEqual(new BigInteger(3), Account(snapshot, id)[4].GetInteger(),
+                "The thaw advances the authority epoch, killing pre-freeze signatures.");
+            Assert.AreEqual(new BigInteger(3), Account(snapshot, id)[11].GetInteger(),
+                "The freeze and the thaw each advance the control revision once.");
+            Assert.AreEqual(new BigInteger(2), Account(snapshot, id)[5].GetInteger(),
+                "Freeze and thaw each advance the configuration nonce, so pre-freeze configurations are stale.");
+            Assert.IsFalse(Account(snapshot, id)[12].GetBoolean(), "the recovery slot stays inactive");
 
-            using (var noAuthority = Invoke(snapshot, "beginRecovery", [id, NextCustody], signers: [NextCustody]))
-                Assert.AreEqual(VMState.FAULT, noAuthority.State, "There is no recovery authority fallback.");
-            Assert.IsFalse(Account(snapshot, id)[12].GetBoolean());
-            using (var unknown = Invoke(snapshot, "beginRecovery", [NextCustody, NextCustody]))
-                Assert.AreEqual(VMState.FAULT, unknown.State);
-        }
+            // The thawed account executes again under the new authority epoch.
+            Assert.IsInstanceOfType<ByteString>(Success(snapshot, "executeUserOp",
+                [id, Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7])]));
 
-        [TestMethod]
-        public void ConfigurationIntentsAreTimelockedAndCustodyGated()
-        {
-            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
-            byte[] script = Contract.CreateSignatureRedeemScript(CustodyKey.PublicKey).ToArray();
-            // The rewritten subject set names the custody script by its 32-byte
-            // SHA256 instead of the 20-byte registration address.
-            object[] actions = [new object[] { SmartAccountModuleProtocol.ActionSetMessageSubjects, new object[] { SHA256.HashData(script) }, 1 }];
-
-            using (var foreign = Invoke(snapshot, "proposeConfiguration", [id, actions, new object[0]], signers: [NextCustody]))
-                Assert.AreEqual(VMState.FAULT, foreign.State, "Only custody may propose a configuration change.");
-
-            BigInteger intentId = Success(snapshot, "proposeConfiguration", [id, actions, new object[0]]).GetInteger();
-            Assert.Contains(intentId, ((Array)Success(snapshot, "getPendingConfigurationIntentIds", [id]))
-                .Select(item => item.GetInteger()).ToArray());
-            Assert.IsTrue(((Array)Success(snapshot, "getPendingConfiguration", [id, intentId]))[0].GetBoolean());
-
-            using (var early = Invoke(snapshot, "confirmConfiguration", [id, intentId, actions], time: 1000))
-                Assert.AreEqual(VMState.FAULT, early.State, "A configuration intent never executes before it matures.");
-
-            Success(snapshot, "confirmConfiguration", [id, intentId, actions], time: 1000 + SmartAccountModuleProtocol.ModuleChangeDelayMs);
-            Assert.AreEqual(BigInteger.One, Account(snapshot, id)[5].GetInteger(), "A confirmed intent advances the configuration nonce.");
-            Assert.HasCount(0, (Array)Success(snapshot, "getPendingConfigurationIntentIds", [id]));
-            // The message-subject executor advanced the built-in credential generation.
-            UInt160 forwarder = Forwarder(snapshot);
-            byte[] message = Enumerable.Repeat((byte)0x5A, 32).ToArray();
-            byte[] digest = MessageDigest(id, forwarder, message, new BigInteger(2));
-            object[] envelope =
-            [
-                (BigInteger)SmartAccountModuleProtocol.ModuleProtocolVersion, BigInteger.Zero, (BigInteger)2,
-                new object[] { new object[] { script, Neo.Cryptography.Crypto.Sign(digest, CustodyKey, Neo.Cryptography.HashAlgorithm.SHA256) } },
-            ];
-            Assert.AreSequenceEqual(new byte[] { 0x16, 0x26, 0xba, 0x7e },
-                Success(snapshot, "call", [id, message, envelope], target: forwarder).GetSpan().ToArray(),
-                "The rewritten subject set bumps the built-in message generation.");
-
-            // The pre-change generation can never be replayed against the new set.
-            byte[] staleDigest = MessageDigest(id, forwarder, message);
-            object[] stale =
-            [
-                (BigInteger)SmartAccountModuleProtocol.ModuleProtocolVersion, BigInteger.Zero, (BigInteger)SubjectRevision(id),
-                new object[] { new object[] { script, Neo.Cryptography.Crypto.Sign(staleDigest, CustodyKey, Neo.Cryptography.HashAlgorithm.SHA256) } },
-            ];
-            Assert.AreSequenceEqual(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF },
-                Success(snapshot, "call", [id, message, stale], target: forwarder).GetSpan().ToArray(),
-                "A superseded message generation fails closed even with a valid signature.");
+            using (var secondThaw = Invoke(snapshot, "unfreezeAccount", [id], signers: [Custody]))
+                Assert.AreEqual(VMState.FAULT, secondThaw.State, "Only a frozen account can be thawed.");
+            using (var unknown = Invoke(snapshot, "unfreezeAccount", [NextCustody], signers: [Custody]))
+                Assert.AreEqual(VMState.FAULT, unknown.State, "An unregistered account has nothing to thaw.");
         }
     }
 }

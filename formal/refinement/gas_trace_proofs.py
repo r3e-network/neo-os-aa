@@ -63,14 +63,17 @@ def certificate(model, mutation=None):
         nodes[pc] = dict(nodes[pc], storage=False)
     if mutation == 'omit-hash-equal-branch':
         # The branch under mutation is the recorded-vs-current transaction hash
-        # test (JMPIFNOT at the second of the helper's four conditional sites)
+        # test (JMPIFNOT, the second of the helper's four conditional sites)
         # whose taken edge enters the reservation reset block; dropping that edge
         # must make CFG enumeration incomplete. The artifact is hash-pinned in
         # bind_artifact, so the site cannot move silently — and this guard keeps
         # the control from degrading into a no-op if the CFG shape ever changes.
-        site = 36126
-        trace.require(sorted(cfg.get(site, [])) == [36128, 36142], 'Hash-equal branch site changed')
-        cfg[site] = [36128]
+        # The 2026-11-21 re-anchor moved it from a pre-sweep 36126 that no longer
+        # named an instruction inside the bound helper at all, which raised here
+        # instead of rejecting in the kernel.
+        site = 36664
+        trace.require(sorted(cfg.get(site, [])) == [36666, 36680], 'Hash-equal branch site changed')
+        cfg[site] = [36666]
     if mutation == 'lower-storage-bound': storage = 70
     actual_cfg = '[' + ';'.join('(gas_node %s [%s])' % (event(nodes[pc]), ';'.join(map(str,cfg[pc]))) for pc in sorted(nodes)) + ']'
     paths = '[' + ';'.join(events(p['events']) for p in model['paths']) + ']'
@@ -99,7 +102,7 @@ Theorem actual_cfg_prices_agree_with_extracted_source :
  map node_event actual_cfg = actual_source_prices.
 Proof. vm_compute. reflexivity. Qed.
 Theorem actual_cfg_enumeration_complete :
- enumerate_cfg %d actual_cfg 36048 = Some actual_paths.
+ enumerate_cfg %d actual_cfg %d = Some actual_paths.
 Proof. vm_compute. reflexivity. Qed.
 Theorem actual_path_price_checks : forallb (safe_path actual_maximum) actual_paths = true.
 Proof. vm_compute. reflexivity. Qed.
@@ -146,7 +149,11 @@ Proof. intros. apply (sufficient_helper_budget_erases_metering Store effects (ac
    apply in_map. exact A.
 Qed.
 ''' % (actual_cfg,prices,paths,successes,events(init),maximum,model['initializerCoefficient'],
-        storage,storage,max(len(path['pcs']) for path in model['paths']) + 4)
+        storage,storage,max(len(path['pcs']) for path in model['paths']) + 4,
+        # The CFG entry is taken from the bound artifact instead of a literal, so a
+        # rebuild that moves the helper cannot leave a certificate proving a
+        # different program from the one it was generated for.
+        trace.START)
 
 def declarations(source):
     return re.findall(r'^(?:Definition|Fixpoint|Record|Inductive|Lemma|Theorem)\s+(\w+)', source, re.M)

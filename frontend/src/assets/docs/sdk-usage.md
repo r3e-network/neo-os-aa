@@ -1,8 +1,8 @@
 # Smart Account SDK Integration
 
 The JavaScript SDK drives the v4 protocol: one 13-field operation, one derivation for the account
-identity, and the same `SA_*` vocabulary on the custom and the native kernel. A v3 surface
-(`registerAccount`, `createAccountPayload`, `getVerifier`) does not resolve.
+identity, and the `SA_*` vocabulary the native kernel raises. The v3 surface
+(`registerAccount`, `createAccountPayload`, `getVerifier`) was removed: there is no alias.
 
 ## Installation
 
@@ -106,81 +106,19 @@ const signature = await signer.signTypedData(
 );
 ```
 
-## 5. Paymaster / Sponsored Execution
+Operation argument DTOs: their `ByteArray` values are explicit `0x` hex, including the signature.
+They are not direct Neo RPC JSON (which uses base64). The operation builder and `computeArgsHash`
+accept typed argument DTOs or Neon `ContractParam` instances and preserve nested arrays/maps,
+hashes, and public keys. For plain `ByteArray` input, use `0x` hex or unambiguous canonical base64;
+ambiguous bare hex such as `aabb` is rejected, so migrate it to `0xaabb`. Numeric enum types require
+a real `ContractParam` instance; do not JSON-stringify the instance first. Unknown types, non-null
+`Any`, coerced booleans and unsafe numeric integers are rejected. Map entry order is preserved across
+RPC hashing and relay execution; duplicate VM keys (including String/ByteArray aliases) are rejected
+before signing. Use decimal strings for large integers. Argument nesting must fit the relay's
+depth-eight limit, including the surrounding operation/batch arrays. Use `computeArgsHash` with the
+same arguments before signing.
 
-The SDK provides helpers for building sponsored (gasless) transactions that settle relay fees through the on-chain `SAPaymaster` contract (`contracts/custom/paymaster/Paymaster.cs`). Sponsors deposit GAS into the Paymaster via NEP-17 transfer, then create policies that define which accounts, contracts, and methods they are willing to fund.
-
-### Read a Sponsor Deposit
-
-The deposit is contract state, so it is read from the paymaster rather than through a client helper:
-`getSponsorDeposit(sponsor)` returns the sponsor's remaining GAS. `getPolicy(sponsor, accountId)`,
-`getDailySpent` and `getTotalSpent` read the policy and its counters the same way.
-
-### Build a Sponsored Execution
-
-`buildSponsoredExecutionScript` wraps the v4 operation so the relay is reimbursed from the
-sponsor's Paymaster deposit instead of the account holder. The account still authorises the
-operation with its own validator signature; the sponsor only pays.
-
-```javascript
-const plan = client.buildSponsoredExecutionScript({
-  accountId: identity.accountId,
-  operations: [operation],
-  paymaster: paymasterHash,
-  sponsor: sponsorAddress,
-  reimbursementAmount: 5_000_000,
-});
-```
-
-The core method is `executeSponsoredUserOp(accountId, op, paymaster, sponsor, reimbursementAmount)`
-for one operation and `executeSponsoredUserOps` for a batch; `plan.method` says which one this plan
-builds. A batch must share one target contract and method, because the core settles a single
-reimbursement for the whole envelope and the client refuses a mixed batch.
-
-These plans are relay DTOs: their `ByteArray` values are explicit `0x` hex,
-including the signature. They are not direct Neo RPC JSON (which uses base64).
-The operation builder and `computeArgsHash` accept typed argument DTOs or Neon
-`ContractParam` instances and preserve nested arrays/maps, hashes, and public keys.
-For plain `ByteArray` input, use `0x` hex or unambiguous canonical base64; ambiguous
-bare hex such as `aabb` is rejected, so migrate it to `0xaabb`. Numeric enum types
-require a real `ContractParam` instance; do not JSON-stringify the instance first.
-Unknown types, non-null `Any`, coerced booleans and unsafe numeric integers are
-rejected. Map entry order is preserved across RPC hashing and relay execution;
-duplicate VM keys (including String/ByteArray aliases) are rejected before signing.
-Use decimal strings for large integers. Argument nesting must fit the
-relay's depth-eight limit, including the surrounding operation/batch arrays.
-Use `computeArgsHash` with the same arguments before signing; the sponsored builder
-does not recompute or verify a signature supplied by its caller.
-
-
-### Validate Before Submission
-
-The preflight is a read on the paymaster, not an SDK wrapper:
-`validatePaymasterOp(sponsor, accountId, targetContract, method, reimbursementAmount)` returns a
-Boolean against the policy and the deposit balance. Invoke it through the RPC's `invokeScript`
-before broadcasting so the relay can reject an infeasible sponsorship:
-
-```javascript
-// validatePaymasterOp(sponsor, accountId, target, method, reimbursementAmount)
-const { stack } = await rpcClient.invokeScript(script, [sponsorAddress], true);
-const ok = stack[0]?.value === true;
-```
-
-### Settlement Model
-
-Settlement is atomic: the Paymaster validates the sponsor's policy (`setPolicy(accountId, targetContract, method, maxPerOp, dailyBudget, totalBudget, validUntil)`), deducts the reimbursement from the sponsor's deposit, and transfers GAS to the relay, all inside the same contract call. Use `accountId = UInt160.Zero` when creating a global policy that sponsors any account.
-
-For fee-bearing transactions, the core settles
-`min(reimbursementAmount, transaction.SystemFee + transaction.NetworkFee)`.
-The policy's `maxPerOp` and daily/total budgets bound that settlement. Fees above
-`maxPerOp` can still be accepted if the requested reimbursement is within the policy;
-the relay pays the remainder. Zero-fee estimation uses the requested amount as its
-conservative cap, and relays should keep a system-fee margin. Global policies share
-one spending scope across accounts.
-
-The Paymaster never authorizes execution. Validator and hook modules must approve the operation independently; the Paymaster only funds the relay after those checks pass.
-
-## 6. App Workspace Runtime Setup
+## 5. App Workspace Runtime Setup
 
 The app workspace accepts both direct browser-wallet broadcast and optional relay broadcast. For a Vercel deployment, wire these environment variables into the frontend:
 Start from `frontend/.env.example` when creating a local `frontend/.env.local` file or mirroring the same keys into your deployment provider.

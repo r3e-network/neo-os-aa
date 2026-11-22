@@ -108,14 +108,12 @@ public class ImplementationRefinementPublicRuntimeTests
         UInt160 second = h.SecondAccount();
         UInt160 callback = h.Callback(second, h.Transfer(0, second), 3 * Gas);
         RunResult r = h.Run([(false, h.Account, h.CallbackOp(callback), 3 * Gas)]);
-        // Audit Low 6 (depth-counted in-flight marker): the nested sponsored
-        // execution unwinds to depth 1, not to an absent marker, so its settlement
-        // is invoked while the outer execution frame is still in flight and the
-        // paymaster's deputy guard refuses it instead of reimbursing a fee from
-        // inside another account's operation. The whole transaction faults and
-        // no nested reimbursement is committed anywhere.
+        // §3.6: the nested sponsored execution targets a second account while the
+        // outer account lease is open, so it is cross-account recursion and faults
+        // with SA_REENTRANCY_FORBIDDEN before discovery or settlement. The whole
+        // transaction faults and no nested reimbursement is committed anywhere.
         Assert.IsTrue(r.Fault);
-        StringAssert.Contains(r.Error!, "Settlement must follow a completed sponsored execution");
+        StringAssert.Contains(r.Error!, "SA_REENTRANCY_FORBIDDEN");
         h.CheckUnchanged(r);
         Assert.AreEqual(BigInteger.Zero, h.Nonce(second),
             "The faulted nested execution must not consume the second account's nonce");
@@ -337,8 +335,10 @@ public class ImplementationRefinementPublicRuntimeTests
         public UInt160 Account { get; }
         public Harness()
         {
-            VerifyArtifact("SmartAccount", "2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb",
-                "f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f");
+            VerifyArtifact("SmartAccount", "397f96ab1997dcd8aad6455a797a569dfff2789c4ffff4dbfcab4ff590d553bf",
+                "4939cf01fb812fff5fb83fc4edd71205041d9a91201390ff9f21716692c23470");
+            // Reviewed 2026-11-20: these two independent artifacts were rebuilt
+            // and are byte-identical to their existing pins, so they are untouched.
             VerifyArtifact("SAPaymaster", "4cb6706137667d22f446d5cb127d115bede5b86e21d31e08eee4477ebb37898e",
                 "d7d40ee1855f086958e0f0883c6d5fec7783a9bc236bc74d12f69fdb69406e53");
             VerifyArtifact("MockTransferTarget", "97d853d1f076abda4a1d6e44aa88ebdca01d390594a77ae03df2e164a7e181c0",

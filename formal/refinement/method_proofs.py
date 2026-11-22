@@ -22,8 +22,18 @@ from method_source import project_method, render_program
 
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parent.parent
-# v4 artifact: the helper body is byte-identical and moved by 17148 bytes.
-START, END = 36048, 36329
+# Reviewed 2026-11-21 against the live rebuild: the helper keeps its 281-byte /
+# 116-instruction / 52-opcode shape, so the Coq `artifact` list (which is the
+# region bytes, never the absolute position) is derived from the region itself.
+# Only the envelope moved, from [36314,36595) to [36586,36867). The initializer
+# moved by the same delta, so its offset is never derived from this one.
+#
+# Two model bindings had to follow the v4 bytes rather than the previous build:
+# `Prefix_TransactionReimbursement` is static slot 58 here (v3 used 38, which v4
+# reuses for `UInt64Mask`, so the old hypothesis named a different variable) and
+# the codec tokens are deserialize(2)/serialize(3) (v3 used 3/4). Both are read
+# from the reviewed NEF; see `codec_token_indices` and `bind_method`.
+START, END = 36586, 36867
 METHOD = "SmartAccount.SmartAccount.CapReimbursementToActualCost(System.Numerics.BigInteger)"
 LIMIT = 1 << 255
 ERROR = b"Reimbursement exceeds actual gas cost"
@@ -433,7 +443,7 @@ Ltac drive sf nf q r Heq Hstatic := repeat (first [ progress norm
    end
  ]).
 Theorem vm_same_hash_classified : forall hash old sf nf q r kind static_values,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q r ->
  integer_fits (r + charge_expression (sf+nf) q r) ->
  bytes_eqb old hash = true ->
@@ -456,7 +466,7 @@ Proof.
 Qed.
 Print Assumptions vm_same_hash_classified.
 Theorem vm_different_hash_classified : forall hash old sf nf q r kind static_values,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  bytes_eqb old hash = false ->
@@ -485,7 +495,7 @@ Print Assumptions vm_different_hash_classified.
 
 VM_PROOFS += r"""
 Theorem vm_absent_classified : forall hash sf nf q static_values,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q VNull static_values)) =
@@ -536,7 +546,7 @@ Qed.
 Print Assumptions source_method_classified.
 Theorem vm_method_classified : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  contract_observation hash sf nf q input.
 Proof.
@@ -559,7 +569,7 @@ Proof.
 Qed.
 Theorem complete_helper_reference_refinement : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  observe (run_source 48 source (initial_source hash sf nf q (stored_value input))).
 Proof. intros. rewrite vm_method_classified by assumption.
@@ -567,7 +577,7 @@ Proof. intros. rewrite vm_method_classified by assumption.
 
 Theorem complete_helper_no_fault_or_timeout : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  exists s, (exists result, run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Halt result s)
         \/ (exists message, run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Aborted message s).
 Proof.
@@ -581,7 +591,7 @@ Proof.
 Qed.
 Theorem complete_helper_paid_exhaustion_aborts : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  0 < sf+nf -> sf+nf <= effective_reserved hash input ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  Rejected method_error (stored_value input) (input_trace input).
@@ -594,7 +604,7 @@ Proof.
  rewrite E, Z.max_r by lia. rewrite Z.min_r by lia. reflexivity.
 Qed.
 
-Definition reviewed_statics (slot : nat) := if Nat.eqb slot 38 then Some (VBuffer [33%nat]) else None.
+Definition reviewed_statics (slot : nat) := if Nat.eqb slot 58 then Some (VBuffer [33%nat]) else None.
 Example actual_nonempty_success :
  observe (run_vm 130 artifact (initial_vm (repeat 1%nat 32) 50 10 90 VNull reviewed_statics)) =
  Returned (VInt 60) (VWire ArrayKind [VBytes (repeat 1%nat 32);VInt 60])
@@ -654,12 +664,22 @@ def semantic_controls(program, projection, work):
     """
     import copy
     mutants = []
-    for name, offset, opcode in [("MinToMax", 19030, 0xba),
-                                 ("ReverseAssertBranch", 19035, 0x26),
-                                 # The drop after the reservation write: replacing it with a
-                                 # duplicate leaves the written value on the stack, so the
-                                 # helper no longer halts with a single result.
-                                 ("DropReservationWrite", 19160, 0x4a)]:
+    # Reviewed 2026-11-21 against the live helper: the three sites are the `MIN`
+    # that clamps the settled cost (36716), the `JMPIF` that selects the charge
+    # arm over the abort arm (36721), and the `DROP` that discards the ledger
+    # reference after its `SETITEM` write (36846). They previously carried the
+    # pre-sweep pcs 19030/19035/19160, which fell outside the helper and indexed
+    # the byte list backwards, and then the 2026-11-20 pcs 36444/36449/36574.
+    # Each site is now also checked against the bound instruction, so a later
+    # layout change cannot turn a control into a silent no-op.
+    controls = [("MinToMax", 36716, "MIN", 0xba),
+                ("ReverseAssertBranch", 36721, "JMPIF", 0x26),
+                ("DropReservationWrite", 36846, "DROP", 0x4a)]
+    for name, offset, instruction, opcode in controls:
+        require(START <= offset < END, "Semantic control outside the bound helper: " + name)
+        site = next((item for item in program["instructions"] if item["offset"] == offset), None)
+        require(site is not None and site["name"] == instruction,
+                "Semantic control site changed: " + name)
         mutated = copy.deepcopy(program)
         mutated["bytes"][offset-START] = opcode
         mutants.append((name, mutated, projection))
@@ -765,7 +785,7 @@ def run_proofs(inventory, output_dir, controls=False):
                 traceProjection=["Storage.Get", "StdLib.Deserialize", "StdLib.Serialize(snapshot)", "Storage.Put(snapshot)"],
                 pureStableNonfaultingGetters=["GetScriptContainer", "GetContext"],
                 sourceDialect=projection["dialect"], environmentContracts=projection["frameworkContracts"],
-                staticEntryInvariant="Static slot 38 is Buffer[0x21]; _initialize is outside this theorem",
+                staticEntryInvariant="Static slot 58 is Buffer[0x21]; _initialize is outside this theorem",
                 excludedCorrespondence=["actual ApplicationEngine and resource/gas behavior", "native binary codec",
                                         "Roslyn/compiler/source frontend correctness", "arbitrary CLR reference equality",
                                         "caller reachability and typed persisted-storage invariant", "all 109 public ABI entrypoints"],

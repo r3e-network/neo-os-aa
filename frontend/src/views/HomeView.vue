@@ -54,11 +54,8 @@
             </span>
           </div>
 
-          <router-link to="/app" class="btn-primary mt-5 w-full">
-            {{ t("home.entryAppAction", "Open App Workspace") }}
-          </router-link>
-          <router-link to="/market" class="btn-secondary mt-3 w-full">
-            {{ t("home.entryMarketAction", "Browse Address Market") }}
+          <router-link to="/native" class="btn-primary mt-5 w-full">
+            {{ t("home.entryNativeAction", "Open Native Accounts") }}
           </router-link>
 
           <details class="sa-home-reference mt-5">
@@ -151,12 +148,12 @@ const statusCards = computed(() => [
 const primarySteps = computed(() => [
   {
     index: "01",
-    title: t("console.serviceWorkspaceTitle", "Account Workspace"),
+    title: t("console.serviceWorkspaceTitle", "Native Accounts"),
     body: t(
-      "console.serviceWorkspaceBody",
-      "Create accounts, build transactions, collect signatures, and broadcast operations",
+      "native.workspaceLead",
+      "Create and operate v4 native accounts on a pinned core",
     ),
-    to: "/app",
+    to: "/native",
   },
   {
     index: "02",
@@ -169,12 +166,12 @@ const primarySteps = computed(() => [
   },
   {
     index: "03",
-    title: t("console.serviceMarketTitle", "Address Market"),
+    title: t("console.servicePluginsTitle", "Plugins & Hooks"),
     body: t(
-      "console.serviceMarketBody",
-      "Browse, buy, and sell vanity SA addresses with on-chain escrow",
+      "console.servicePluginsBody",
+      "Configure validators and hooks for access control and policies",
     ),
-    to: "/market",
+    to: { path: "/docs", query: { doc: "pluginGuide" } },
   },
 ]);
 

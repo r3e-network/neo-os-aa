@@ -10,7 +10,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { SmartAccountClient } = require('../src/index');
+const { NativeSmartAccountClient } = require('../src/index');
 const { withRetry, isRetryableError } = require('../src/retry');
 
 const CORE = '1234567890123456789012345678901234567890';
@@ -23,7 +23,7 @@ const halt = (stack = []) => ({ state: 'HALT', stack });
 
 /** A client whose transport answers from a scripted list of behaviours. */
 function scripted(behaviours, options = {}) {
-  const client = new SmartAccountClient({
+  const client = new NativeSmartAccountClient({
     rpcClient: {
       async send(method, params) {
         const behaviour = behaviours[method];

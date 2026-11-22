@@ -12,31 +12,33 @@ import {
   nativeTestRecovery,
   nativeTestIdentity,
 } from "./fixtures/nativeRpcFixture.js";
-import {
-  nativeCodec as c,
-  NATIVE_SMART_ACCOUNT_CONTRACT as CORE,
-} from "../src/features/native/nativeWorkspace.js";
+import { getAddressFromScriptHash } from "../src/utils/neo.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const payer = "66".repeat(20);
-const evidenceDir = process.env.NATIVE_CANCELLATION_EVIDENCE_DIR ||
+const PROFILE_READY =
+  "Node answered the v4 native profile, ABI and implementation id.";
+const evidenceDir =
+  process.env.NATIVE_CANCELLATION_EVIDENCE_DIR ||
   join(tmpdir(), "sa-native-recovery-cancellation");
 const evidenceStage = process.env.NATIVE_CANCELLATION_EVIDENCE_STAGE || "current";
 
 test("recovery cancellation separates its payer and authority and invalidates stale UI", {
-  timeout: 90000,
+  timeout: 120000,
 }, async () => {
   const fixture = createNativeRpcFixture();
   fixture.state.registered = true;
+  // v4 keeps the recovery authority in the account descriptor; a zero address
+  // disables it, so the fixture must declare the separately controlled wallet.
+  fixture.state.recovery = nativeTestRecovery;
   fixture.state.time = 1900000000000;
   const maturity = fixture.state.time + 60000;
-  const integer = (value) => ({ type: "Integer", value: String(value) });
-  const hash = (value) => ({
-    type: "ByteString",
-    value: Buffer.from(value, "hex").reverse().toString("base64"),
-  });
-  const accountRead = c.dynamicCall(CORE, "getAccount", [c.hashValue(nativeTestIdentity.accountId)], 5);
-  const cancellationScript = c.dynamicCall(CORE, "cancelRecovery", [c.hashValue(nativeTestIdentity.accountId)]);
+  fixture.state.pendingRecovery = {
+    newCustody: "55".repeat(20),
+    initiatedAt: fixture.state.time - 60000,
+    matureAt: maturity,
+    authorityEpochAtInit: 0,
+  };
   const errors = [], simulations = [];
   await mkdir(evidenceDir, { recursive: true });
   const server = await createServer({
@@ -46,8 +48,11 @@ test("recovery cancellation separates its payer and authority and invalidates st
   });
   await server.listen();
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1100 }, acceptDownloads: true });
-  page.setDefaultTimeout(10000);
+  const page = await browser.newPage({
+    viewport: { width: 1440, height: 1100 },
+    acceptDownloads: true,
+  });
+  page.setDefaultTimeout(15000);
   try {
     page.on("pageerror", (error) => errors.push(error.message));
     page.on("console", (message) => {
@@ -56,29 +61,33 @@ test("recovery cancellation separates its payer and authority and invalidates st
     await page.addInitScript(() => localStorage.setItem("sa_locale", "en"));
     await page.route("https://native.fixture.test/rpc", async (route) => {
       const { id, method, params } = route.request().postDataJSON();
-      let result = await fixture.send(method, params);
+      const result = await fixture.send(method, params);
       if (method === "invokescript") {
+        // A plan the read surface does not answer is a reviewed account action.
         const script = Buffer.from(params[0], "base64").toString("hex");
-        if (script === accountRead) {
-          result = structuredClone(result);
-          result.stack[0].value[12] = {
-            type: "Array",
-            value: [hash("55".repeat(20)), integer(maturity - 604800000), integer(maturity), integer(fixture.state.config)],
-          };
-        }
-        if (script === cancellationScript) {
-          const signers = params[1] || [];
-          simulations.push(structuredClone(signers));
-          const authorized = signers.some((signer) =>
-            (signer.account.replace(/^0x/, "") === nativeTestRecovery ||
-              (signer.account.replace(/^0x/, "") === nativeTestCustody && fixture.state.time < maturity)) &&
-            (signer.scopes === "CalledByEntry" ||
-              (signer.scopes === "CustomContracts" && signer.allowedcontracts?.includes("0x" + CORE))));
-          if (!authorized) result = { state: "FAULT", stack: [], exception: "Missing recovery cancellation authority", gasconsumed: "100000" };
-        }
+        if (!fixture.answers().has(script))
+          simulations.push({ script, signers: structuredClone(params[1] ?? []) });
       }
-      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id, result }) });
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ jsonrpc: "2.0", id, result }),
+      });
     });
+    await page.exposeFunction("nativeWalletInvoke", async (request) => {
+      simulations.push({ invoked: request });
+      return { txid: "aa".repeat(32) };
+    });
+    await page.addInitScript(
+      ({ address, hash }) => {
+        window.__nativeWalletAccount = { address, hash };
+        window.neo3Dapi = {
+          getAccount: async () => window.__nativeWalletAccount,
+          getNetwork: async () => ({ magic: 123 }),
+          invoke: (request) => window.nativeWalletInvoke(request),
+        };
+      },
+      { address: getAddressFromScriptHash(nativeTestCustody), hash: nativeTestCustody },
+    );
     const url = `http://127.0.0.1:${server.httpServer.address().port}/native`;
     await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90000 });
     await page.getByRole("heading", { name: "Native accounts", exact: true }).waitFor();
@@ -87,80 +96,213 @@ test("recovery cancellation separates its payer and authority and invalidates st
     await page.getByTestId("native-endpoint").fill("https://native.fixture.test/rpc");
     await page.getByTestId("native-network").fill("123");
     await page.getByRole("button", { name: "Verify node", exact: true }).click();
-    await page.getByRole("status").filter({ hasText: "Node ABI 2/profile matched. Standard implementation remains pending protocol activation." }).waitFor();
+    await page.getByRole("status").filter({ hasText: PROFILE_READY }).waitFor();
     await page.getByRole("button", { name: "Account & recovery", exact: true }).click();
     await page.getByTestId("native-account-id").fill(nativeTestIdentity.accountId);
     await page.getByRole("button", { name: "Load account", exact: true }).click();
     await page.getByTestId("native-account-summary").waitFor();
+    const summary = (await page.getByTestId("native-account-summary").innerText())
+      .replace(/\s+/g, " ")
+      .trim();
+    assert.ok(summary.includes("0x" + nativeTestRecovery), summary);
+    assert.ok(summary.includes("Pending recovery"), summary);
+    await page
+      .getByRole("button", { name: "Use connected Neo wallet", exact: true })
+      .click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "Live wallet identity checked. No transaction was signed." })
+      .waitFor();
     await page.getByLabel("Action", { exact: true }).selectOption("cancelRecovery");
-    await page.getByLabel("Fee payer Neo address / script hash", { exact: true }).fill(payer);
-    await page.getByRole("button", { name: "Review management action", exact: true }).click();
-    await page.getByRole("alert").filter({ hasText: /Only recovery, or custody before maturity/ }).waitFor();
-    await page.screenshot({ path: join(evidenceDir, `${evidenceStage}-independent-payer.png`), fullPage: true });
-    await writeFile(join(evidenceDir, `${evidenceStage}-independent-payer.txt`), await page.locator("body").innerText());
+    await page
+      .getByLabel("Fee payer Neo address / script hash", { exact: true })
+      .fill(payer);
+    await page.getByRole("button", { name: "Review account action", exact: true }).click();
+    await page
+      .getByRole("alert")
+      .filter({ hasText: "Only custody or the recovery authority can start or cancel recovery." })
+      .waitFor();
+    await page.screenshot({
+      path: join(evidenceDir, `${evidenceStage}-independent-payer.png`),
+      fullPage: true,
+    });
+    await writeFile(
+      join(evidenceDir, `${evidenceStage}-independent-payer.txt`),
+      await page.locator("body").innerText(),
+    );
+    assert.equal(simulations.length, 0, "an unauthorized payer never reaches simulation");
 
-    const authority = page.getByTestId("native-cancellation-authority");
-    assert.equal(await authority.count(), 1, "Recovery cancellation must expose an authority independent from the fee payer");
-    assert.equal(await page.getByLabel("Cancellation authority", { exact: true }).count(), 1);
-    assert.equal(await authority.inputValue(), "", "the existing same-wallet flow remains the default");
-    for (const selected of [nativeTestRecovery, nativeTestCustody]) {
-      await authority.selectOption(selected);
-      await page.getByRole("button", { name: "Review management action", exact: true }).click();
-      await page.getByTestId("native-required-authorities").getByText("0x" + selected, { exact: true }).waitFor();
-      await page.getByTestId("native-signed-import").waitFor();
-      assert.equal(await page.getByRole("button", { name: "Send to wallet for approval", exact: true }).isDisabled(), true);
-      await page.getByLabel("I reviewed the network, authority, target, scope and fee payer.", { exact: true }).check();
-      const downloaded = page.waitForEvent("download");
-      await page.getByRole("button", { name: "Export reviewed request", exact: true }).click();
-      const exported = JSON.parse(await readFile(await (await downloaded).path(), "utf8"));
-      assert.equal(exported.submission, "native-sdk");
-      assert.equal(exported.feePayer, payer);
-      assert.equal(exported.cancellationAuthority, selected);
-      assert.deepEqual(exported.requiredAuthorities, [selected]);
-      assert.deepEqual(exported.signers, [
-        { account: "0x" + payer, scopes: "None" },
-        { account: "0x" + selected, scopes: "CustomContracts", allowedcontracts: ["0x" + CORE] },
-      ]);
-      assert.equal(exported.request, null);
-      assert.equal(exported.simulation.state, "HALT");
-      await writeFile(join(evidenceDir, `${evidenceStage}-${selected === nativeTestRecovery ? "recovery" : "custody"}-review.json`), JSON.stringify(exported, null, 2));
-      await page.screenshot({ path: join(evidenceDir, `${evidenceStage}-${selected === nativeTestRecovery ? "recovery" : "custody"}-review.png`), fullPage: true });
-      await authority.selectOption("");
-      await page.getByRole("heading", { name: "Your review appears here", exact: true }).waitFor();
-      assert.equal(await page.getByTestId("native-signed-import").count(), 0, "changing authority removes the previous signed-import flow");
-      assert.equal(await page.getByRole("button", { name: "Export reviewed request", exact: true }).count(), 0, "changing authority removes the previous export");
-    }
-    await page.screenshot({ path: join(evidenceDir, `${evidenceStage}-invalidated-review.png`), fullPage: true });
-    await authority.selectOption(nativeTestRecovery);
-    await page.getByRole("button", { name: "Review management action", exact: true }).click();
-    await page.getByTestId("native-signed-import").waitFor();
-    await page.getByLabel("Fee payer Neo address / script hash", { exact: true }).fill("77".repeat(20));
-    await page.getByRole("heading", { name: "Your review appears here", exact: true }).waitFor();
-    assert.equal(await page.getByTestId("native-signed-import").count(), 0, "changing payer clears the previous signed-import flow");
-    assert.equal(await page.getByRole("button", { name: "Export reviewed request", exact: true }).count(), 0, "changing payer clears the previous export");
-    await page.getByLabel("Fee payer Neo address / script hash", { exact: true }).fill(payer);
+    await page
+      .getByLabel("Fee payer Neo address / script hash", { exact: true })
+      .fill(nativeTestRecovery);
+    await page.getByRole("button", { name: "Review account action", exact: true }).click();
+    await page
+      .locator(".review-heading")
+      .getByText("cancelRecovery", { exact: true })
+      .waitFor();
+    assert.equal(
+      (await page.getByTestId("native-required-authorities").innerText()).trim(),
+      "0x" + nativeTestRecovery,
+    );
+    assert.equal(
+      (await page.getByTestId("native-reviewed-authority").innerText()).trim(),
+      "0x" + nativeTestRecovery,
+    );
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Send to wallet for approval", exact: true })
+        .isDisabled(),
+      true,
+      "the acknowledgement gates the wallet handoff",
+    );
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Export reviewed request", exact: true })
+        .isDisabled(),
+      true,
+    );
+    await page
+      .getByLabel("I reviewed the network, authority, target, scope and fee payer.", {
+        exact: true,
+      })
+      .check();
+    const recoveryDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export reviewed request", exact: true }).click();
+    const recoveryReview = JSON.parse(
+      await readFile(await (await recoveryDownload).path()),
+    );
+    assert.equal(recoveryReview.submission, "wallet-invoke");
+    assert.equal(recoveryReview.feePayer, nativeTestRecovery);
+    assert.equal(recoveryReview.authority, nativeTestRecovery);
+    assert.deepEqual(recoveryReview.requiredAuthorities, [nativeTestRecovery]);
+    assert.deepEqual(recoveryReview.signers, [
+      { account: "0x" + nativeTestRecovery, scopes: "CalledByEntry" },
+    ]);
+    assert.equal(recoveryReview.request.operation, "cancelRecovery");
+    assert.equal(recoveryReview.request.scriptHash, "0x" + recoveryReview.profile.contract);
+    assert.equal(recoveryReview.simulation.state, "HALT");
+    await writeFile(
+      join(evidenceDir, `${evidenceStage}-recovery-authority-review.json`),
+      JSON.stringify(recoveryReview, null, 2),
+    );
+    await page.screenshot({
+      path: join(evidenceDir, `${evidenceStage}-recovery-authority.png`),
+      fullPage: true,
+    });
 
+    await page
+      .getByLabel("Fee payer Neo address / script hash", { exact: true })
+      .fill(payer);
+    await page
+      .getByRole("heading", { name: "Your review appears here", exact: true })
+      .waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "Export reviewed request", exact: true }).count(),
+      0,
+      "changing the payer clears the previous export",
+    );
+    assert.equal(
+      await page.getByRole("button", { name: "Send to wallet for approval", exact: true }).count(),
+      0,
+    );
+
+    // Exactly at maturity a permissionless completion becomes available while
+    // the current custody keeps the right to cancel the pending recovery.
     fixture.state.time = maturity;
-    await page.getByRole("button", { name: "Refresh account and chain time", exact: true }).click();
-    await page.getByRole("button", { name: "Review management action", exact: true }).waitFor({ state: "visible" });
-    await authority.locator(`option[value="${nativeTestCustody}"]`).waitFor({ state: "attached" });
-    await page.waitForFunction((custody) =>
-      document.querySelector(`[data-testid="native-cancellation-authority"] option[value="${custody}"]`)?.disabled,
-    nativeTestCustody);
-    assert.equal(await authority.locator(`option[value="${nativeTestRecovery}"]`).isDisabled(), false);
-    await authority.selectOption(nativeTestRecovery);
-    await page.getByRole("button", { name: "Review management action", exact: true }).click();
-    await page.getByTestId("native-required-authorities").getByText("0x" + nativeTestRecovery, { exact: true }).waitFor();
-    await page.getByTestId("native-signed-import").waitFor();
-    assert.equal(await page.getByRole("alert").count(), 0, "recovery authority still reviews successfully exactly at maturity");
-    await page.screenshot({ path: join(evidenceDir, `${evidenceStage}-mature-recovery.png`), fullPage: true });
+    await page
+      .getByRole("button", { name: "Refresh account and chain time", exact: true })
+      .click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "Account loaded from the selected node." })
+      .waitFor();
+    await page
+      .getByLabel("Fee payer Neo address / script hash", { exact: true })
+      .fill(nativeTestCustody);
+    await page.getByRole("button", { name: "Review account action", exact: true }).click();
+    await page
+      .locator(".review-heading")
+      .getByText("cancelRecovery", { exact: true })
+      .waitFor();
+    assert.equal(
+      (await page.getByTestId("native-required-authorities").innerText()).trim(),
+      "0x" + nativeTestCustody,
+      "custody still controls a recovery it has not completed",
+    );
+    assert.equal(await page.getByRole("alert").count(), 0);
+
+    await page.evaluate(
+      ({ address, hash }) => {
+        window.__nativeWalletAccount = { address, hash };
+      },
+      { address: getAddressFromScriptHash(payer), hash: payer },
+    );
+    await page
+      .getByRole("button", { name: "Use connected Neo wallet", exact: true })
+      .click();
+    await page
+      .getByRole("status")
+      .filter({ hasText: "Live wallet identity checked. No transaction was signed." })
+      .waitFor();
+    await page.getByLabel("Action", { exact: true }).selectOption("executeRecovery");
+    await page.getByRole("button", { name: "Review account action", exact: true }).click();
+    await page
+      .locator(".review-heading")
+      .getByText("executeRecovery", { exact: true })
+      .waitFor();
+    assert.match(
+      (await page.getByTestId("native-required-authorities").innerText()).trim(),
+      /Permissionless executor \/ hook proof/,
+    );
+    await page
+      .getByLabel("I reviewed the network, authority, target, scope and fee payer.", {
+        exact: true,
+      })
+      .check();
+    const executeDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Export reviewed request", exact: true }).click();
+    const completion = JSON.parse(
+      await readFile(await (await executeDownload).path()),
+    );
+    assert.deepEqual(completion.requiredAuthorities, []);
+    assert.equal(completion.submission, "wallet-invoke");
+    assert.deepEqual(completion.signers, [
+      { account: "0x" + payer, scopes: "CalledByEntry" },
+    ]);
+    assert.equal(completion.request.operation, "executeRecovery");
+    await page.getByRole("button", { name: "Send to wallet for approval", exact: true }).click();
+    await page.getByRole("status").filter({ hasText: "Sent to wallet." }).waitFor();
+    const invoked = simulations.filter((entry) => entry.invoked);
+    assert.equal(invoked.length, 1);
+    assert.equal(invoked[0].invoked.operation, "executeRecovery");
+    assert.deepEqual(invoked[0].invoked.signers, [
+      { account: "0x" + payer, scopes: "CalledByEntry" },
+    ]);
+    await page.screenshot({
+      path: join(evidenceDir, `${evidenceStage}-mature-permissionless.png`),
+      fullPage: true,
+    });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({ path: join(evidenceDir, `${evidenceStage}-mobile.png`), fullPage: true });
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1), false, "the authority and signer scopes do not overflow mobile width");
+    await page.screenshot({
+      path: join(evidenceDir, `${evidenceStage}-mobile.png`),
+      fullPage: true,
+    });
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1),
+      false,
+      "the authority and signer scopes do not overflow mobile width",
+    );
     assert.equal(await page.locator("vite-error-overlay").count(), 0);
     assert.deepEqual(errors, []);
-    assert.equal(simulations.length >= 2, true, "both selected authorities reached application simulation");
-    assert.equal(fixture.state.calls.some(({ method }) => method === "sendrawtransaction"), false);
+    assert.equal(
+      simulations.filter((entry) => entry.script).length >= 2,
+      true,
+      "both the cancellation review and the permissionless completion were simulated",
+    );
+    assert.equal(
+      fixture.state.calls.some(({ method }) => method === "sendrawtransaction"),
+      false,
+    );
   } finally {
     await writeFile(join(evidenceDir, `${evidenceStage}-console.json`), JSON.stringify(errors, null, 2));
     await browser.close();

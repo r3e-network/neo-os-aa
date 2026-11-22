@@ -1,10 +1,12 @@
 {
   "id": "native-smart-account",
-  "version": 1,
+  "version": 4,
   "kind": "native-protocol-submission",
   "status": "draft-unactivated",
   "implementationVerified": false,
-  "description": "The native SmartAccount ABI 2 profile, modules, SDK and UI prepared for standard submission.",
+  "protocolVersion": 4,
+  "protocolParameters": "docs/proposals/smartaccount-native-profile-v4-parameters.json",
+  "description": "The native SmartAccount native-v4 profile (ABI 4), its modules, SDK and UI prepared for standard submission.",
   "canonicalSourceRoots": [
     "contracts/native",
     "contracts/plugins/native-profile",
@@ -20,14 +22,7 @@
     "shared/nativeWalletWitness.mjs"
   ],
   "excludedSourceRoots": [
-    "contracts/custom/SmartAccount.cs",
-    "contracts/plugins/validators",
-    "contracts/plugins/hooks",
-    "contracts/custom/paymaster",
-    "contracts/custom/market",
-    "frontend/src/features/studio",
-    "frontend/src/features/operations",
-    "sdk/js/src/custom"
+    "frontend/src/features/operations"
   ],
   "compatibilityPaths": [
     "contracts/native",
@@ -38,14 +33,15 @@
     "shared"
   ],
   "entrypoints": [
+    "SmartAccount.sln",
     "contracts/native/Neo.csproj",
     "contracts/plugins/native-profile/profiles.json",
+    "tests/SmartAccount.Native.Tests/SmartAccount.Tests.csproj",
     "frontend/src/features/native/NativeAccountWorkspace.vue",
     "sdk/js/src/native/client.js",
     "shared/nativeSmartAccountClient.mjs"
   ],
   "artifactRoots": [
-    "contracts/build",
     "docs/reports"
   ],
   "verification": {

@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Independent (non-C#, non-C++/native) derivation of the SA module-protocol v4
-golden vectors consumed by BOTH kernels.
+golden vectors consumed by the native kernel.
 
 Everything here is written from docs/SA-MODULE-PROTOCOL.md only: the §16.1
 account identity, the §4.2 thirteen-field operation envelope and its NeoVM
 binary serialisation, the §4.3 operation digest domain, the §6 nonce channel
-derivation, and the §7.1 storage-key table. If a kernel and this script
+derivation, and the §7.1 storage-key table. If the kernel and this script
 disagree, one of them is wrong.
 
-The two kernels mix their own core hash and network magic into every digest
-(§4.3, §8, §6), so those digests are pinned per kernel under `expected.custom`
-and `expected.native`; the kernel-independent parts (account identity, the
-canonical operation bytes, the key table) are pinned once.
+The kernel mixes its own core hash and network magic into every digest
+(§4.3, §8, §6), so those digests are pinned under `expected.native`; the
+kernel-independent parts (account identity, the canonical operation bytes, the
+key table) are pinned once. Pre-consolidation copies of these files also carry
+an `expected.custom` lane for the retired custom kernel; that lane is gone with
+the kernel, and nothing in this repository produces or checks it.
 
 Run with:
     python tests/fixtures/sa-module-protocol/generate-vectors.py
@@ -25,19 +27,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 
 # ---------------------------------------------------------------------------
-# Pinned environment of the two kernels under test.
+# Pinned environment of the kernel under test.
 #
-#   custom — SmartAccount.nef deployed through ContractManagement in the C#
-#            runtime fixture; the hash is Helper.GetDeployHash(nef, manifest),
-#            a deterministic function of the released artifact.
 #   native — SmartAccountProtocol.ServiceHash, a compile-time constant of the
-#            native runtime.
+#            native runtime. The retired custom kernel's core hash and magic
+#            (#39 / 0x334F454E) are no longer pinned: that user-contract tree was
+#            removed when the repository went native-only, so a "custom" lane
+#            would attest a kernel nothing in the tree can still execute.
 # ---------------------------------------------------------------------------
 KERNELS = {
-    "custom": {
-        "coreHash": "0xbcc99b511b9126f16bc0e0f33ef5a935486dafc0",
-        "network": 0x334F454E,  # TestEngine private-net magic
-    },
     "native": {
         "coreHash": "0x398dc3f0227d7efac5533ed5ce9937390c158084",
         "network": 0x12345678,  # UT_SmartAccountProtocol.Network
@@ -57,11 +55,6 @@ SIGNATURE = bytes.fromhex("11" * 64)
 
 ACCOUNT_IDENTITY_DOMAIN = bytes.fromhex("aa524704")
 USER_OPERATION_DOMAIN = b"NeoSmartAccount/UserOperation"
-
-CONSTANTS_REVISION = {
-    "custom": "SmartAccount.ModuleProtocol.cs",
-    "native": "SmartAccountModuleProtocol.cs",
-}
 
 DEADLINE = 1_700_000_000_000
 
@@ -181,7 +174,7 @@ def nonce_channel(account, authority_epoch, validator_id, credential_generation,
         + nonce_subkey
     )
     digest = hashlib.sha256(preimage).digest()
-    channel = bytes([digest[8] & 0x01]) + digest[9:32]
+    channel = bytes([digest[8] & 0x7F]) + digest[9:32]
     return preimage, digest, channel
 
 
@@ -236,7 +229,7 @@ def build_operation_envelope(custody_raw, account):
             "nativeBinarySerializerHex": canonical_integer.hex(),
         },
     }
-    for kernel in ("custom", "native"):
+    for kernel in ("native",):
         domain, digest = operation_digest(canonical_integer, account, kernel)
         expected[kernel] = {
             "coreHash": KERNELS[kernel]["coreHash"],
@@ -248,7 +241,6 @@ def build_operation_envelope(custody_raw, account):
         "vectorId": "sa4-operation-envelope",
         "kind": "operation-envelope",
         "constantsRevision": {
-            "custom": read_blob_sha("contracts/custom/SmartAccount.ModuleProtocol.cs"),
             "native": read_blob_sha("contracts/native/SmartAccount/SmartAccountModuleProtocol.cs"),
         },
         "input": {
@@ -283,7 +275,7 @@ def build_operation_envelope(custody_raw, account):
 
 def build_nonce_channel(account):
     expected = {}
-    for kernel in ("custom", "native"):
+    for kernel in ("native",):
         preimage, digest, channel = nonce_channel(account, 1, 0, 1, NONCE_SUBKEY, kernel)
         expected[kernel] = {
             "coreHash": KERNELS[kernel]["coreHash"],
@@ -299,7 +291,6 @@ def build_nonce_channel(account):
         "vectorId": "sa4-nonce-channel",
         "kind": "nonce-channel",
         "constantsRevision": {
-            "custom": read_blob_sha("contracts/custom/SmartAccount.ModuleProtocol.cs"),
             "native": read_blob_sha("contracts/native/SmartAccount/SmartAccountModuleProtocol.cs"),
         },
         "input": {
@@ -317,7 +308,8 @@ def build_nonce_channel(account):
         "notes": (
             "Channel := low 191 bits of SHA256(U1(4) || coreHash || accountId || "
             "U64BE(authorityEpoch) || U64BE(validatorId) || U64BE(credentialGeneration) || "
-            "nonceSubkey), 24 bytes right-aligned big-endian with the top 7 bits zero. "
+            "nonceSubkey), 24 bytes right-aligned big-endian with the top bit of the first "
+            "byte clear (191 bits). "
             "getNonce returns (channel << 64) | sequence; the vector pins sequence 0."
         ),
     }
@@ -325,12 +317,11 @@ def build_nonce_channel(account):
 
 
 def build_storage_keys(account):
-    _, _, channel = nonce_channel(account, 1, 0, 1, NONCE_SUBKEY, "custom")
+    _, _, channel = nonce_channel(account, 1, 0, 1, NONCE_SUBKEY, "native")
     payload = {
         "vectorId": "sa4-storage-keys",
         "kind": "storage-key",
         "constantsRevision": {
-            "custom": read_blob_sha("contracts/custom/SmartAccount.ModuleProtocol.cs"),
             "native": read_blob_sha("contracts/native/SmartAccount/SmartAccountModuleProtocol.cs"),
         },
         "input": {
@@ -389,7 +380,6 @@ FAILURE_MAGIC = "ffffffff"
 # pin, and a harness change therefore fails loudly instead of silently
 # re-pinning the domain.
 MESSAGE_SENDER = {
-    "custom": "0xb71bfb20b8c2365e6d7e1e3bd0910dd89546edb2",
     "native": "0x53773c391326e97bab5daae2764e0739e083eaf1",
 }
 
@@ -529,7 +519,7 @@ def build_message_envelope(account):
         "successMagicHex": SUCCESS_MAGIC,
         "failureMagicHex": FAILURE_MAGIC,
     }
-    for kernel in ("custom", "native"):
+    for kernel in ("native",):
         sender = MESSAGE_SENDER[kernel]
         domain = message_domain(account, sender, kernel)
         digest = hashlib.sha256(domain + MESSAGE_HASH).digest()
@@ -554,7 +544,6 @@ def build_message_envelope(account):
         "vectorId": "sa4-message-envelope",
         "kind": "message-envelope",
         "constantsRevision": {
-            "custom": read_blob_sha("contracts/custom/SmartAccount.ModuleProtocol.cs"),
             "native": read_blob_sha("contracts/native/SmartAccount/SmartAccountModuleProtocol.cs"),
         },
         "input": {
@@ -624,7 +613,6 @@ def build_migration():
         "vectorId": "sa4-migration",
         "kind": "migration",
         "constantsRevision": {
-            "custom": read_blob_sha("contracts/custom/SmartAccount.ModuleProtocol.cs"),
             "native": read_blob_sha("contracts/native/SmartAccount/SmartAccountModuleProtocol.cs"),
         },
         "input": {

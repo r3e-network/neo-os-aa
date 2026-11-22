@@ -44,7 +44,7 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.ThrowsExactly<FormatException>(() => decode(Encode(record)));
 
         private static AccountControl Control() =>
-            AccountControl.Create(Address(1), SmartAccountModuleProtocol.RecoveryTimelockMinMs);
+            AccountControl.Create(Address(1), AccountControl.RecoveryTimelockMinMs);
 
         private static ModuleInstance Module(byte type = (byte)SmartAccountModuleProtocol.ModuleTypeCodeValidator) => new()
         {
@@ -65,7 +65,6 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.AreEqual(SmartAccountStatus.Active, control.Status);
             Assert.AreEqual(BigInteger.One, control.AllocateModuleId());
             Assert.AreEqual(new BigInteger(2), control.AllocateModuleId());
-            Assert.AreEqual(BigInteger.One, control.AllocateIntentId());
             control.Advance();
             control.HookOrderRevision += 1;
             control.OwnerOnlyRecovery = true;
@@ -118,10 +117,12 @@ namespace Neo.UnitTests.SmartContract.Native
             var control = Control();
             control.NextModuleId = ulong.MaxValue;
             Assert.ThrowsExactly<InvalidOperationException>(() => control.AllocateModuleId());
-            control.NextIntentId = ulong.MaxValue;
-            Assert.ThrowsExactly<InvalidOperationException>(() => control.AllocateIntentId());
-            control.ConfigurationNonce = ulong.MaxValue;
-            Assert.ThrowsExactly<InvalidOperationException>(() => control.Advance());
+            // A configuration transition advances both counters by exactly one;
+            // intent ids are user-space now, so the intent allocator is inert.
+            control.Advance();
+            Assert.AreEqual(1UL, control.ConfigurationNonce);
+            Assert.AreEqual(2UL, control.ControlRevision);
+            Assert.AreEqual(1UL, control.NextIntentId, "the reserved intent slot is never advanced");
         }
 
         [TestMethod]
@@ -173,140 +174,48 @@ namespace Neo.UnitTests.SmartContract.Native
             Malformed(shortNef, ModuleInstance.Decode);
         }
 
+        /// <summary>
+        /// H-3 internal readiness (R-11-13/R-14-11): an immediate credential
+        /// revocation advances the instance's CredentialGeneration in place —
+        /// the instance record, its storage and its hook order all survive, so
+        /// the record codec must round-trip every incremented generation the
+        /// native advancement path (whose authorized entry is still to be
+        /// defined by the spec) will ever write.
+        /// </summary>
         [TestMethod]
-        public void HookOrderThresholdPolicyAndMessageSubjectsRoundTrip()
+        public void ModuleInstanceCarriesEveryIncrementedCredentialGeneration()
         {
-            var order = new HookOrderRecord { HookIds = [new BigInteger(4), new BigInteger(2)], Revision = 3 };
-            var decodedOrder = HookOrderRecord.Decode(order.Serialize());
-            Assert.AreEqual(2, SmartAccountRecordCodec.Decode(order.Serialize()).Count);
-            Assert.AreSequenceEqual([new BigInteger(4), new BigInteger(2)], decodedOrder.HookIds);
-            Assert.AreEqual(3UL, decodedOrder.Revision);
-
-            var policy = new ThresholdPolicyRecord { Threshold = 2, MemberIds = [BigInteger.One, new BigInteger(2)], Active = true, CredentialGeneration = 5 };
-            var decodedPolicy = ThresholdPolicyRecord.Decode(policy.Serialize());
-            Assert.AreEqual(4, SmartAccountRecordCodec.Decode(policy.Serialize()).Count);
-            Assert.AreEqual(2UL, decodedPolicy.Threshold);
-            Assert.AreSequenceEqual(policy.MemberIds, decodedPolicy.MemberIds);
-            Assert.IsTrue(decodedPolicy.Active);
-            Assert.AreEqual(5UL, decodedPolicy.CredentialGeneration);
-
-            var subjects = new MessageSubjectRecord { Subjects = [Address(1).ToArray(), Bytes(6)], Threshold = 1, SubjectRevision = 4 };
-            var decodedSubjects = MessageSubjectRecord.Decode(subjects.Serialize());
-            Assert.AreEqual(3, SmartAccountRecordCodec.Decode(subjects.Serialize()).Count);
-            Assert.HasCount(2, decodedSubjects.Subjects);
-            Assert.AreEqual(1UL, decodedSubjects.Threshold);
-            Assert.AreEqual(4UL, decodedSubjects.SubjectRevision);
+            foreach (ulong generation in new ulong[] { 2, 3, ulong.MaxValue })
+            {
+                var module = Module();
+                module.CredentialGeneration = generation;
+                var decoded = ModuleInstance.Decode(module.Serialize());
+                Assert.AreEqual(generation, decoded.CredentialGeneration);
+                Assert.AreSequenceEqual(module.Serialize(), decoded.Serialize());
+            }
         }
 
+        /// <summary>
+        /// H-4 internal readiness (§12.1/R-12-02): the recovery model needs the
+        /// account control record to carry a non-zero recovery authority (set
+        /// by a governance action-8 restricted write whose native entry is
+        /// still to be defined by the spec) alongside the 7—90 day timelock
+        /// domain the decoder already enforces on both ends.
+        /// </summary>
         [TestMethod]
-        public void ThresholdPolicyAndHookOrderRejectOutOfDomainValues()
+        public void AccountControlCarriesARecoveryAuthorityAndTheFullTimelockDomain()
         {
-            var policy = new ThresholdPolicyRecord { Threshold = 2, MemberIds = [BigInteger.One, new BigInteger(2)], Active = true, CredentialGeneration = 1 };
-            var shortMembers = policy.ToStackItem();
-            shortMembers[1] = SmartAccountRecordCodec.IntegerArray([BigInteger.One]);
-            Malformed(shortMembers, ThresholdPolicyRecord.Decode);
+            var control = Control();
+            control.RecoveryAuthority = Address(9);
+            control.RecoveryTimelockMs = AccountControl.RecoveryTimelockMaxMs;
+            var decoded = AccountControl.Decode(control.Serialize());
+            Assert.AreEqual(Address(9), decoded.RecoveryAuthority);
+            Assert.AreEqual(AccountControl.RecoveryTimelockMaxMs, decoded.RecoveryTimelockMs);
+            Assert.AreSequenceEqual(control.Serialize(), decoded.Serialize());
 
-            var repeatedMembers = policy.ToStackItem();
-            repeatedMembers[1] = SmartAccountRecordCodec.IntegerArray([BigInteger.One, BigInteger.One]);
-            Malformed(repeatedMembers, ThresholdPolicyRecord.Decode);
-
-            // An active policy is routable, so a zero threshold never decodes.
-            var zeroThreshold = policy.ToStackItem();
-            zeroThreshold[0] = new Integer(0);
-            Malformed(zeroThreshold, ThresholdPolicyRecord.Decode);
-
-            // Deactivation clears the member set (both kernels write it that way).
-            var inactiveWithMembers = policy.ToStackItem();
-            inactiveWithMembers[2] = StackItem.False;
-            Malformed(inactiveWithMembers, ThresholdPolicyRecord.Decode);
-
-            var repeatedHooks = new HookOrderRecord { HookIds = [BigInteger.One, BigInteger.One], Revision = 1 };
-            Malformed(repeatedHooks.ToStackItem(), HookOrderRecord.Decode);
-
-            var zeroHook = new HookOrderRecord { HookIds = [BigInteger.Zero], Revision = 1 };
-            Malformed(zeroHook.ToStackItem(), HookOrderRecord.Decode);
-        }
-
-        [TestMethod]
-        public void ConfigurationRecoveryAndMigrationRecordsRoundTrip()
-        {
-            var proposed = (BigInteger)1000;
-            var intent = new ConfigurationIntentRecord
-            {
-                IntentId = new BigInteger(3),
-                ProposedAt = proposed,
-                MatureAt = proposed + SmartAccountModuleProtocol.ModuleChangeDelayMs,
-                ExpiresAt = proposed + SmartAccountModuleProtocol.ModuleChangeDelayMs
-                    + SmartAccountModuleProtocol.ConfigurationIntentExpiryMs,
-                AuthorityEpoch = new BigInteger(2),
-                ActionDigest = Bytes(7),
-                Actions = new Array([new Integer(SmartAccountModuleProtocol.ActionInstallModule)]),
-                Resources = [new byte[] { 1, 2 }, new byte[] { 3 }],
-            };
-            var decodedIntent = ConfigurationIntentRecord.Decode(intent.Serialize());
-            Assert.AreEqual(8, SmartAccountRecordCodec.Decode(intent.Serialize()).Count);
-            Assert.AreEqual(intent.ProposedAt, decodedIntent.ProposedAt);
-            Assert.AreEqual(intent.MatureAt, decodedIntent.MatureAt);
-            Assert.AreEqual(intent.ExpiresAt, decodedIntent.ExpiresAt);
-            Assert.AreEqual(intent.AuthorityEpoch, decodedIntent.AuthorityEpoch);
-            Assert.AreEqual(intent.IntentId, decodedIntent.IntentId);
-            Assert.AreSequenceEqual(intent.ActionDigest, decodedIntent.ActionDigest);
-            Assert.AreEqual(1, decodedIntent.Actions.Count);
-            Assert.HasCount(2, decodedIntent.Resources);
-
-            // The timelock window is part of the record domain: a manually
-            // shortened maturity or expiry never decodes.
-            var earlyMaturity = intent.ToStackItem();
-            earlyMaturity[2] = proposed + 1;
-            Malformed(earlyMaturity, ConfigurationIntentRecord.Decode);
-            var shortWindow = intent.ToStackItem();
-            shortWindow[3] = proposed + SmartAccountModuleProtocol.ModuleChangeDelayMs + 1;
-            Malformed(shortWindow, ConfigurationIntentRecord.Decode);
-            var emptyActions = intent.ToStackItem();
-            emptyActions[6] = new Array();
-            Malformed(emptyActions, ConfigurationIntentRecord.Decode);
-            var zeroIntent = intent.ToStackItem();
-            zeroIntent[0] = new Integer(0);
-            Malformed(zeroIntent, ConfigurationIntentRecord.Decode);
-
-            var recovery = new CoreRecoveryRecord
-            {
-                NewCustody = Address(8),
-                InitiatedAt = new BigInteger(10),
-                MatureAt = new BigInteger(20),
-                AuthorityEpochAtInit = new BigInteger(1),
-            };
-            var decodedRecovery = CoreRecoveryRecord.Decode(recovery.Serialize());
-            Assert.AreEqual(4, SmartAccountRecordCodec.Decode(recovery.Serialize()).Count);
-            Assert.AreEqual(recovery.NewCustody, decodedRecovery.NewCustody);
-            Assert.AreEqual(recovery.MatureAt, decodedRecovery.MatureAt);
-
-            var migration = new MigrationStateRecord
-            {
-                Status = (byte)SmartAccountStatus.MigrationRequired,
-                ManifestDigest = Bytes(9),
-                Classification = "legacy-v3",
-                LegacyModuleCount = 4,
-                ImportedAt = 1_700_000_000_000,
-            };
-            var decodedMigration = MigrationStateRecord.Decode(migration.Serialize());
-            Assert.AreEqual(5, SmartAccountRecordCodec.Decode(migration.Serialize()).Count);
-            Assert.AreEqual(migration.Status, decodedMigration.Status);
-            Assert.AreSequenceEqual(migration.ManifestDigest, decodedMigration.ManifestDigest);
-            Assert.AreEqual(migration.Classification, decodedMigration.Classification);
-            Assert.AreEqual(migration.LegacyModuleCount, decodedMigration.LegacyModuleCount);
-            Assert.AreEqual(migration.ImportedAt, decodedMigration.ImportedAt);
-
-            var undefinedStatus = migration.ToStackItem();
-            undefinedStatus[0] = new Integer(3);
-            Malformed(undefinedStatus, MigrationStateRecord.Decode);
-            var longClassification = migration.ToStackItem();
-            longClassification[2] = new ByteString(new byte[65]);
-            Malformed(longClassification, MigrationStateRecord.Decode);
-            // Record strings are canonical UTF-8, not replacement-decoded bytes.
-            var invalidUtf8 = migration.ToStackItem();
-            invalidUtf8[2] = new ByteString(new byte[] { 0xC3, 0x28 });
-            Malformed(invalidUtf8, MigrationStateRecord.Decode);
+            var aboveMax = Control().ToStackItem();
+            aboveMax[9] = new Integer(new BigInteger(AccountControl.RecoveryTimelockMaxMs) + 1);
+            Malformed(aboveMax, AccountControl.Decode);
         }
 
         [TestMethod]
@@ -350,7 +259,6 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Text(new ByteString(new byte[] { 0xFF }), 8));
             Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Exact(new Array([new Integer(1)]), 2));
             Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Integers(new Array([new ByteString(new byte[1])]), 4));
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.BytesArray(new Array([new Integer(1)]), 4, 8));
         }
     }
 }

@@ -1,9 +1,16 @@
 #!/usr/bin/env node
 
-// Reproducibility gate for the artifacts every deploy/upgrade script reads
-// (contracts/bin/public) and the isolated private core (contracts/bin/platform).
-// Replays compile.sh itself in a scratch directory and compares each profile
-// byte-for-byte with the generated local artifact directory.
+// Helper library for the retired custom-artifact reproducibility certificate
+// (contracts/bin/public and contracts/bin/platform, both built by the deleted
+// contracts/compile.sh). The comparison, snapshot and scratch helpers stay
+// exported because the archived-receipt joiner
+// (scripts/verify-private-artifact-provenance.mjs) and their unit tests still
+// use them.
+//
+// The CLI itself is retired: replaying a recipe the repository no longer
+// contains would fabricate evidence. Native rebuild evidence now comes from
+// scripts/build_native_modules.py, scripts/native_epoch_probe.py and the
+// scripts/neoexpress_native_*_validate.py suites.
 //
 // contracts/build is tracked in git and is deliberately not treated as build
 // output: its SmartAccount.nef is byte-identical to the deployed mainnet
@@ -17,8 +24,6 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const releaseDir = path.join(repoRoot, "contracts", "bin", "public");
-const trackedDir = path.join(repoRoot, "contracts", "build");
 const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
 // Source inputs are TEXT, and the certificate they go into must hold the same digests on an LF
 // checkout and on a Windows core.autocrlf=true checkout, which materialises CRLF worktree bytes
@@ -94,33 +99,6 @@ export function buildInputSnapshot(root = repoRoot) {
     inputs[file] = sha256Text(path.join(root, file));
   }
   return Object.fromEntries(Object.entries(inputs).sort(([a], [b]) => a.localeCompare(b, "en")));
-}
-
-function compileSteps() {
-  return ["bash contracts/compile.sh"];
-}
-
-function compilerVersion() {
-  const compiler = process.env.NCCS_BIN || path.join(os.homedir(), ".dotnet", "tools", "nccs");
-  let dotnetRoot = process.env.DOTNET_ROOT;
-  if (!dotnetRoot) {
-    try {
-      const runtimes = execFileSync("dotnet", ["--list-runtimes"], { encoding: "utf8" });
-      const match = runtimes.match(/\[(.+?)\/shared\//);
-      if (match) dotnetRoot = match[1];
-    } catch {
-      // The compile replay remains authoritative if metadata probing is unavailable.
-    }
-  }
-  try {
-    const output = execFileSync(compiler, ["--version"], {
-      encoding: "utf8",
-      env: { ...process.env, ...(dotnetRoot ? { DOTNET_ROOT: dotnetRoot } : {}) },
-    }).trim();
-    return output.split(/\r?\n/).find((line) => line.trim()) || "unknown";
-  } catch {
-    return "unavailable";
-  }
 }
 
 export function compareTrees(expectedDir, actualDir) {
@@ -199,87 +177,18 @@ export function compileScratch(scratch) {
 }
 
 async function main() {
-  const json = process.argv.includes("--json");
-  const scratch = prepareScratch();
-  try {
-    const sourceInputs = buildInputSnapshot(scratch);
-    const freshBin = compileScratch(scratch);
-    if (JSON.stringify(sourceInputs) !== JSON.stringify(buildInputSnapshot(scratch))
-      || JSON.stringify(sourceInputs) !== JSON.stringify(buildInputSnapshot(repoRoot))) {
-      throw new Error("Build inputs changed during the reproducibility replay");
-    }
-    const freshDir = path.join(freshBin, "public");
-    const profiles = compareProfiles(freshBin, path.dirname(releaseDir));
-    const rows = Object.entries(profiles).flatMap(([profile, result]) => result.artifacts.map((row) => ({
-      ...row, artifact: `${profile}/${row.artifact}`,
-    })));
-    const drifted = rows.filter((row) => !row.match && row.expected_sha256 && row.actual_sha256);
-    const missing = rows.filter((row) => !row.expected_sha256 || !row.actual_sha256);
-    const anchor = compareTrees(freshDir, path.join(trackedDir, "..", "build"))
-      .filter((row) => row.artifact === "SmartAccount.nef")
-      .map((row) => ({ ...row, provenance: "tracked contracts/build; deployed-mainnet bytecode anchor" }));
-    // The comparison above only ever looked at one file, so drift in the rest of the
-    // tracked release tree was invisible: 23 same-relative-path files differed while
-    // this gate reported success. Report the whole tree now. It is not folded into
-    // `release_matches_fresh_build` because SmartAccount is deliberately pinned
-    // to the deployed mainnet bytecode and that exception has to be decided first.
-    const trackedRows = compareTrees(freshDir, path.join(trackedDir, "..", "build"));
-    const trackedDrift = trackedRows
-      .filter((row) => !row.match && row.expected_sha256 && row.actual_sha256)
-      .map((row) => row.artifact)
-      .sort();
-    const compileRecipe = compileSteps();
-    const recipeSources = Object.fromEntries(["contracts/compile.sh", ...RECIPE_SUPPORT_FILES]
-      .map((file) => [file, sourceInputs[file]]));
-    const profilesMatch = Object.values(profiles).every((profile) => profile.matches_fresh_build);
-    const certificate = {
-      schema: "neoos-sa-source-to-artifact-certificate/v1",
-      source_root: "repository",
-      source_files: sourceInputs,
-      source_snapshot_sha256: sha256(Buffer.from(JSON.stringify(sourceInputs))),
-      compiler: { tool: "nccs", version: compilerVersion() },
-      compile_recipe: compileRecipe,
-      compile_recipe_sources: recipeSources,
-      compile_recipe_sha256: sha256(Buffer.from(JSON.stringify(recipeSources))),
-      ...artifactCertificateHashes(rows),
-      byte_equal_release: profilesMatch,
-      semantic_scope: "Rebuild and byte comparison; not a mechanized C# to NEF or full NeoVM refinement proof",
-    };
-    const report = {
-      schema: "neoos-sa-artifact-reproducibility/v2",
-      generated_at: new Date().toISOString(),
-      release_dir: path.relative(repoRoot, releaseDir).replaceAll(path.sep, "/"),
-      profiles,
-      artifacts_compared: rows.length,
-      release_matches_fresh_build: profilesMatch,
-      drifted: drifted.map((row) => row.artifact),
-      missing: missing.map((row) => row.artifact),
-      tracked_anchor: anchor,
-      tracked_tree_drift: trackedDrift,
-      tracked_tree_note:
-        "Files under contracts/build whose bytes differ from a fresh build. Reported, " +
-        "not failing: SmartAccount is intentionally pinned to the deployed " +
-        "mainnet bytecode and that exception must be decided before this becomes a gate.",
-      certificate,
-      chain_writes_performed: false,
-    };
-    if (json) console.log(JSON.stringify(report, null, 2));
-    else {
-      console.log(`artifacts compared: ${report.artifacts_compared}`);
-      console.log(`release matches fresh build: ${report.release_matches_fresh_build ? "YES" : "NO"}`);
-      for (const [name, profile] of Object.entries(profiles)) {
-        console.log(`${name}: ${profile.matches_fresh_build ? "MATCH" : "FAIL"} (${profile.artifacts_compared} artifacts)`);
-      }
-      if (report.drifted.length) console.log(`drifted: ${report.drifted.join(", ")}`);
-      if (report.missing.length) console.log(`missing: ${report.missing.join(", ")}`);
-      for (const row of report.tracked_anchor) {
-        console.log(`tracked anchor ${row.artifact}: ${row.match ? "matches source" : "differs from source (expected; provenance anchor)"}`);
-      }
-    }
-    if (!report.release_matches_fresh_build) process.exitCode = 1;
-  } finally {
-    fs.rmSync(scratch, { recursive: true, force: true });
-  }
+  // contracts/compile.sh and the custom artifact profiles it produced were
+  // retired with the custom track. Exit before touching the tree: the archived
+  // receipts under docs/reports keep their recorded digests, and new native
+  // rebuild evidence is produced by the native lanes named above.
+  console.error(
+    "check-artifact-reproducibility: the custom artifact replay is retired "
+    + "(contracts/compile.sh was deleted with the custom track). Use "
+    + "scripts/build_native_modules.py, scripts/native_epoch_probe.py and the "
+    + "scripts/neoexpress_native_*_validate.py suites for native rebuild "
+    + "evidence; archived receipts under docs/reports stay as recorded.",
+  );
+  process.exitCode = 2;
 }
 
 // argv[1] arrives in native form; the template-literal file:// URL mis-parses

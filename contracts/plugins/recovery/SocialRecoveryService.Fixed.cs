@@ -58,6 +58,20 @@ namespace Neo.SmartContract.Examples
         private const byte PREFIX_PENDING_INITIATED = 0x16;
         private const byte PREFIX_PENDING_EXECUTABLE = 0x17;
         private const byte PREFIX_PENDING_ACTIVE = 0x18;
+        // Audit fix (recovery reconciliation): the core recovery generation this service
+        // approved when FinalizeRecovery started the core-side recovery. The core keeps
+        // executeRecovery permissionless, so a third party can complete the recovery before
+        // this service settles; the binding lets the service recognise "the recovery I
+        // started" and adopt the authoritative core outcome instead of re-running it.
+        // New prefixes — never written by previous deployments.
+        private const byte PREFIX_RECOVERY_BINDING_EPOCH = 0x1E;
+        private const byte PREFIX_RECOVERY_BINDING_TARGET = 0x1F;
+        // Audit fix (settlement idempotency): the owner this service adopted when a core
+        // recovery completed. Adopting consumes the service pending record and its binding,
+        // so a repeated settleRecovery has nothing left to read unless the completion itself
+        // is remembered. Written only by the adopt path, which keeps "already done"
+        // distinguishable from "never approved".
+        private const byte PREFIX_RECOVERY_COMPLETION = 0x20;
         private const byte PREFIX_CONTRACT_ADMIN = 0xF0;
         // SA-D-01 (audit fix H5): timelocked contract upgrade. The admin first proposes the
         // sha256 of the new NEF and manifest, then can only apply that exact artifact pair

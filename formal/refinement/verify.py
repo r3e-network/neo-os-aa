@@ -58,6 +58,17 @@ def require(condition, message):
         raise RefinementError(message)
 
 
+# The retired custom kernel carried a public NEF build, a source project and a
+# sponsorship model, and this lane bound all three. Phase 3 deleted them, so the
+# lane has no live implementation to bind. Re-pointing it at the native overlay
+# would certify a different build under a different compiler pipeline, so the
+# lane is archived instead: the historical receipts under refinement/fixtures
+# stay verbatim and the receipt validators below still audit their shape.
+ARCHIVED_LANE = ("the custom kernel was retired in Phase 3 and its public NEF build no longer exists; "
+                 "historical receipts are kept verbatim under formal/refinement/fixtures and "
+                 "native coverage is claimed by formal/verify.py")
+
+
 def decode_nef(raw):
     """Strictly decode a canonical NEF3 for independent byte-identity checks.
 
@@ -289,99 +300,12 @@ def main(argv=None):
     parser.add_argument("--allow-partial", action="store_true", help="Return success for checked partial proofs while keeping full refinement unverified")
     parser.add_argument("--arithmetic-only", action="store_true", help="Reproduce the earlier arithmetic-region lane only; never certify full refinement")
     parser.add_argument("--timeout-seconds", type=int, default=300)
-    args = parser.parse_args(argv)
-    output = args.output_dir.resolve()
-    try:
-        require(args.timeout_seconds > 0, "timeout must be positive")
-        require(not output.exists() or not any(output.iterdir()), "output directory must be new or empty")
-        output.mkdir(parents=True, exist_ok=True)
-        root = args.source_root.resolve()
-        here = Path(__file__).resolve().parent
-        require(here != output and here not in output.parents, "evidence output must be outside verification source directory")
-        tool_project = here / "export/RefinementExport.csproj"
-        source_project = root / "contracts/custom/SmartAccount.csproj"
-        nef_path = root / "contracts/bin/public/SmartAccount.nef"
-        manifest_path = root / "contracts/bin/public/SmartAccount.manifest.json"
-        protocol_models = [here.parent / "coq/CustomSponsorship.v"]
-        tool_inputs = tool_snapshot(here, protocol_models)
-        project_inputs = project_snapshot(root)
-        build = ["dotnet", "build", str(tool_project), "--verbosity", "quiet"]
-        if args.compiler_tool_dir:
-            build.append("-p:CompilerToolDirectory=" + str(args.compiler_tool_dir.resolve()))
-        _run(build, output / "export-build.log", args.timeout_seconds)
-        executable = here / "export/bin/Debug/net10.0/RefinementExport.dll"
-        command = ["dotnet", str(executable), "--source-root", str(root), "--project", str(source_project),
-                   "--nef", str(nef_path), "--manifest", str(manifest_path)]
-        if args.compiler_tool_dir:
-            command.extend(["--compiler-tool-dir", str(args.compiler_tool_dir.resolve())])
-        raw = _run(command, output / "export.log", args.timeout_seconds)
-        try:
-            inventory = json.loads(raw)
-        except ValueError as exc:
-            raise RefinementError("exporter did not return a JSON inventory") from exc
-        inventory_path = output / "inventory.json"
-        # Preserve the exporter's compact bytes; the typed inventory is large.
-        inventory_path.write_text(raw if raw.endswith("\n") else raw + "\n")
-        summary = validate_inventory(inventory, nef_path, manifest_path, root)
-        require(all(inventory["inputs"].get(path) == value for path, value in project_inputs.items()),
-                "compilation input omitted or changed in exported inventory")
-        require(project_snapshot(root) == project_inputs,
-                "compilation input set or bytes changed during export")
-        proof_command = [sys.executable, str(here / "prove.py"), "--inventory", str(inventory_path),
-                         "--output-dir", str(output / "proofs"), "--json-report", str(output / "proof.json")]
-        _run(proof_command, output / "proof.log", args.timeout_seconds)
-        proof = json.loads((output / "proof.json").read_text())
-        supporting, helper_inventory, source_projection = None, None, None
-        receipt_hashes = {"arithmetic": sha256(output / "proof.json")}
-        if not args.arithmetic_only:
-            spec = importlib.util.spec_from_file_location("sa_fresh_source_projection", here / "method_source.py")
-            projector = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(projector)
-            source_projection = projector.project_method(inventory)
-            (output / "source-projection.json").write_text(json.dumps(source_projection, indent=2) + "\n")
-            supporting = {}
-            for name, runner in (("numeric", "numeric_proofs.py"), ("reservation", "reservation_proofs.py"),
-                                 ("method", "method_proofs.py")):
-                command = [sys.executable, str(here / runner), "--output-dir", str(output / (name + "-proofs")),
-                           "--json-report", str(output / (name + "-proof.json"))]
-                if name == "method":
-                    command.extend(["--inventory", str(inventory_path), "--controls"])
-                _run(command, output / (name + "-proof.log"), args.timeout_seconds)
-                supporting[name] = json.loads((output / (name + "-proof.json")).read_text())
-                receipt_hashes[name] = sha256(output / (name + "-proof.json"))
-            spec = importlib.util.spec_from_file_location("sa_complete_method_inventory", here / "method_inventory.py")
-            complete_method = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(complete_method)
-            helper_inventory = complete_method.build_method_inventory(inventory)
-            (output / "method-inventory.json").write_text(json.dumps(helper_inventory, indent=2) + "\n")
-        report = coverage_report(inventory, proof, supporting_proofs=supporting, helper_inventory=helper_inventory,
-                                 expected_source_projection_sha256=source_projection["sourceProjectionSha256"] if source_projection else None)
-        validate_inventory(inventory, nef_path, manifest_path, root)
-        require(project_snapshot(root) == project_inputs,
-                "compilation input set or bytes changed during proof")
-        require(tool_snapshot(here, protocol_models) == tool_inputs,
-                "verification tool input set or bytes changed during run")
-        report.update({"schema": "neoos-sa-implementation-refinement/v1", "inventory": summary,
-                       "inventorySha256": sha256(inventory_path), "proofReceiptSha256": sha256(output / "proof.json"),
-                       "proofReceiptSha256ByLane": receipt_hashes,
-                       "proofSelection": "arithmetic-region" if args.arithmetic_only else "complete-helper-and-supporting-models",
-                       "nefSha256": sha256(nef_path), "manifestSha256": sha256(manifest_path),
-                       "toolInputSha256": tool_inputs, "projectInputSha256": project_inputs,
-                       "publicNetworkWritesPerformed": False,
-                       "independentDecoder": {"neoVmSourceCommit": _DECODER.NEO_VM_SOURCE_COMMIT,
-                                              "sourceSha256": dict(_DECODER.SOURCE_HASHES),
-                                              "opcodeTableSha256": _DECODER.OPCODE_TABLE_SHA256,
-                                              "scope": "Independent structural decoding, not full instruction semantics proof"},
-                       "completeRefinementRequired": not args.allow_partial})
-        (output / "result.json").write_text(json.dumps(report, indent=2) + "\n")
-        print(json.dumps({"status": report["status"], "implementationVerified": report["implementationVerified"],
-                          "abiEntries": summary["abiEntries"], "unprovedEntrypoints": len(report["unprovedEntrypoints"]),
-                          "receipt": str(output / "result.json")}))
-        return 0 if args.allow_partial else 2
-    except (RefinementError, OSError, ValueError, KeyError, TypeError) as exc:
-        # Never overwrite an old success receipt in a nonempty caller directory.
-        print("Refinement verification failed: " + str(exc), file=sys.stderr)
-        return 1
+    parser.parse_args(argv)
+    # Fail closed: an archived lane must never emit a receipt, not even a stale
+    # one, because any receipt it produced would name a build that no longer
+    # exists. Exit 1 is the same code the lane returned for invalid evidence.
+    print("Refinement verification archived: " + ARCHIVED_LANE, file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":

@@ -397,20 +397,21 @@ test("receipt history uses formatted labels instead of raw createdAt fields", ()
   assert.match(source, /createdLabel/);
 });
 
-test("console view exists with service cards linking to workspace, identity, market, and docs", () => {
+test("console view exists with service cards linking to native accounts, identity, plugins, and docs", () => {
   const consolePath = path.resolve("src/views/ConsoleView.vue");
   const consoleSource = fs.readFileSync(consolePath, "utf8");
   assert.match(consoleSource, /Console/);
-  assert.match(consoleSource, /Account Workspace/);
+  assert.match(consoleSource, /Native Accounts/);
   assert.match(consoleSource, /Identity & DID/);
-  assert.match(consoleSource, /Address Market/);
   assert.match(consoleSource, /Plugins & Hooks/);
   assert.match(consoleSource, /Documentation/);
   assert.match(consoleSource, /Getting Started/);
-  assert.match(consoleSource, /\/app/);
+  assert.match(consoleSource, /\/native/);
   assert.match(consoleSource, /\/identity/);
-  assert.match(consoleSource, /\/market/);
   assert.match(consoleSource, /\/docs/);
+  // The custom workspace (/app) and address market (/market) routes are retired.
+  assert.doesNotMatch(consoleSource, /to="\/app"/);
+  assert.doesNotMatch(consoleSource, /to="\/market"/);
 });
 
 test("router includes console route", () => {
@@ -424,10 +425,12 @@ test("home view prioritizes focus workflow entry points", () => {
   const homeSource = fs.readFileSync(homePath, "utf8");
   assert.match(homeSource, /sa-home-focus/);
   assert.match(homeSource, /sa-home-step-link/);
-  assert.match(homeSource, /to="\/app" class="btn-primary/);
-  assert.match(homeSource, /to="\/market" class="btn-secondary/);
+  assert.match(homeSource, /to="\/native" class="btn-primary/);
   assert.match(homeSource, /Deployment reference/);
   assert.doesNotMatch(homeSource, /to="\/console" class="btn-primary/);
+  // The retired custom workspace and address market entry points must be gone.
+  assert.doesNotMatch(homeSource, /to="\/app"/);
+  assert.doesNotMatch(homeSource, /to="\/market"/);
 });
 
 test("main layout navigation includes console link with distinct styling", () => {

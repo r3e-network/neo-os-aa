@@ -1,4 +1,8 @@
-(* Custom V3 / PLATFORM source-candidate cumulative sponsorship cap.
+(* ARCHIVED HISTORICAL MODEL -- not a live correspondence obligation. The
+   custom kernel this models was retired in Phase 3; the module is kept for its
+   abstract theorems and mutation tests only, and claims no source link.
+
+   Custom V3 / PLATFORM source-candidate cumulative sponsorship cap.
    A single core ledger is shared by all accounts, sponsors and paymasters.
    Transaction identity, nonnegative paid fee and atomic enclosing-transaction
    rollback are correspondence inputs. This model does not prove NeoVM storage,

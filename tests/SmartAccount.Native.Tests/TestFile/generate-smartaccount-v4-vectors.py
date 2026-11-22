@@ -111,7 +111,7 @@ def serialize_array(items) -> bytes:
 
 
 def operation(target=b"", method=b"ping", args=None, nonce=0, deadline=1700000000000,
-              validator_id=0, credential_generation=0, authority_epoch=1,
+              validator_id=0, credential_generation=1, authority_epoch=1,
               configuration_nonce=0, signature=SIGNATURE, nonce_subkey=NONCE_SUBKEY,
               hook_proofs=None) -> bytes:
     """The canonical (unsigned) thirteen-field operation of §4.2."""
@@ -170,13 +170,13 @@ def main() -> int:
         "verificationScript": verification_script(account).hex(),
         "operation": {
             "canonical": canonical.hex(),
-            "digest": operation_digest(canonical, account, 0, 0, 1, 0).hex(),
+            "digest": operation_digest(canonical, account, 0, 1, 1, 0).hex(),
         },
         "digests": {
-            "epoch2": operation_digest(operation(signature=b"", authority_epoch=2), account, 0, 0, 2, 0).hex(),
-            "nonce1": operation_digest(operation(signature=b"", configuration_nonce=1), account, 0, 0, 1, 1).hex(),
-            "validator1": operation_digest(operation(signature=b"", validator_id=1), account, 1, 0, 1, 0).hex(),
-            "subkey1": operation_digest(operation(signature=b"", nonce_subkey=bytes.fromhex("ee" * 32)), account, 0, 0, 1, 0).hex(),
+            "epoch2": operation_digest(operation(signature=b"", authority_epoch=2), account, 0, 1, 2, 0).hex(),
+            "nonce1": operation_digest(operation(signature=b"", configuration_nonce=1), account, 0, 1, 1, 1).hex(),
+            "validator1": operation_digest(operation(signature=b"", validator_id=1), account, 1, 1, 1, 0).hex(),
+            "subkey1": operation_digest(operation(signature=b"", nonce_subkey=bytes.fromhex("ee" * 32)), account, 0, 1, 1, 0).hex(),
         },
     }
     json.dump(vectors, sys.stdout, indent=2)

@@ -8,7 +8,9 @@ import {
   buildUserOperation,
   buildUserOperationTypedData,
   computeArgsHash,
+  computeOperationDigest,
   fetchNonce,
+  fetchOperationRoute,
   recoverPublicKeyFromTypedDataSignature,
   toCanonicalOperationArgs,
   toCompactEcdsaSignature,
@@ -141,6 +143,130 @@ test('fetchNonce reads getNonce for the routed validator instance and namespace'
   ]);
 });
 
+test('the operation route takes its generation from the chain, and follows an advance', async () => {
+  // The route is the only place a client learns the routing generation. It must
+  // come from the module descriptor (§9 field 8), never from a literal: the
+  // test advances the instance's generation between two reads and checks the
+  // route follows, so a re-introduced default of 1 fails here.
+  const bs = (hex) => ({ type: 'ByteString', value: Buffer.from(hex, 'hex').toString('base64') });
+  const routeFor = async (generation) => {
+    const fetchImpl = async (_url, options) => {
+      const { params } = JSON.parse(options.body);
+      if (params[1] === 'getAccount') {
+        return jsonResponse({
+          state: 'HALT',
+          stack: [
+            {
+              type: 'Array',
+              value: [
+                { type: 'Boolean', value: true },
+                { type: 'Integer', value: '0' },
+                bs('11'.repeat(20)),
+                bs('00'.repeat(20)),
+                { type: 'Integer', value: '4' },
+                { type: 'Integer', value: '9' },
+                { type: 'Integer', value: '0' },
+                { type: 'Boolean', value: true },
+                { type: 'Boolean', value: false },
+                { type: 'Boolean', value: false },
+                { type: 'Integer', value: '0' },
+                { type: 'Integer', value: '1' },
+                { type: 'Boolean', value: false },
+                { type: 'Integer', value: '0' },
+                { type: 'Boolean', value: false },
+                { type: 'Boolean', value: false },
+              ],
+            },
+          ],
+        });
+      }
+      if (params[1] === 'getModules') {
+        return jsonResponse({
+          state: 'HALT',
+          stack: [{ type: 'Array', value: [{ type: 'Integer', value: '2' }] }, { type: 'Integer', value: '0' }],
+        });
+      }
+      if (params[1] === 'getModule') {
+        return jsonResponse({
+          state: 'HALT',
+          stack: [
+            {
+              type: 'Array',
+              value: [
+                { type: 'Integer', value: '2' },
+                { type: 'Integer', value: '1' },
+                // Stored order: decodeHash160Stack reverses into the display form.
+                bs(VALIDATOR.match(/../g).reverse().join('')),
+                { type: 'Integer', value: '7' },
+                { type: 'Integer', value: '1' },
+                bs('aa'.repeat(32)),
+                bs('bb'.repeat(32)),
+                { type: 'Integer', value: '1' },
+                { type: 'Integer', value: String(generation) },
+                { type: 'Boolean', value: false },
+                { type: 'Boolean', value: true },
+                { type: 'Boolean', value: true },
+              ],
+            },
+          ],
+        });
+      }
+      throw Error(`unexpected read ${params[1]}`);
+    };
+    return fetchOperationRoute({
+      rpcUrl: 'https://rpc.example.org',
+      saContractHash: CORE,
+      accountId: ACCOUNT,
+      fetchImpl,
+    });
+  };
+
+  const fresh = await routeFor(1);
+  assert.equal(fresh.validatorId, '2');
+  assert.equal(fresh.credentialGeneration, '1');
+  assert.equal(fresh.authorityEpoch, '4');
+  assert.equal(fresh.configurationNonce, '9');
+  assert.equal(fresh.verifyingContract, VALIDATOR);
+
+  const advanced = await routeFor(2);
+  assert.equal(advanced.credentialGeneration, '2');
+
+  // The advanced route builds a different §4.3 digest, which is why a stale 1
+  // is a real failure and not a cosmetic difference.
+  const context = { networkMagic: 894710606, coreContractHash: CORE, accountId: ACCOUNT };
+  const digestOf = (route) =>
+    computeOperationDigest({
+      ...context,
+      operation: buildUserOperation({
+        targetContract: CORE,
+        method: 'balanceOf',
+        args: [],
+        nonce: '1',
+        deadline: '2',
+        validatorId: route.validatorId,
+        credentialGeneration: route.credentialGeneration,
+        authorityEpoch: route.authorityEpoch,
+        configurationNonce: route.configurationNonce,
+      }),
+    });
+  assert.notEqual(digestOf(fresh), digestOf(advanced));
+  // And building the advanced route's operation with the old generation is
+  // refused, so a stale generation cannot be signed by accident.
+  assert.throws(
+    () =>
+      buildUserOperation({
+        targetContract: CORE,
+        method: 'balanceOf',
+        args: [],
+        nonce: '1',
+        deadline: '2',
+        validatorId: advanced.validatorId,
+        credentialGeneration: undefined,
+      }),
+    (error) => error.message === EC.credentialGenerationRequired,
+  );
+});
+
 test('fetchNonce refuses a missing account id before any chain read', async () => {
   let reads = 0;
   await assert.rejects(
@@ -254,12 +380,58 @@ test('buildUserOperation stores the canonical argument form', () => {
     args: [{ type: 'Hash160', value: `0x${ACCOUNT}` }],
     nonce: '1',
     deadline: '2',
+    credentialGeneration: '1',
   });
 
   assert.deepEqual(operation.args, [
     { type: 'ByteString', value: ACCOUNT.match(/../g).reverse().join('') },
   ]);
   assert.equal(operation.nonceSubkey, '00'.repeat(32));
+});
+
+test('buildUserOperation refuses an operation without a credential generation', () => {
+  // The generation is a chain fact (SubjectRevision for the built-in route,
+  // CredentialGeneration for an installed validator), so the factory has no
+  // default to fall back on: a missing one is reported instead of becoming 1.
+  assert.throws(
+    () =>
+      buildUserOperation({
+        targetContract: CORE,
+        method: 'balanceOf',
+        args: [],
+        nonce: '1',
+        deadline: '2',
+      }),
+    (error) => error.message === EC.credentialGenerationRequired,
+  );
+  // A null placeholder (the workspace skeleton uses one when the built-in
+  // route's revision has not been read yet) is refused the same way.
+  assert.throws(
+    () =>
+      buildUserOperation({
+        targetContract: CORE,
+        method: 'balanceOf',
+        args: [],
+        nonce: '1',
+        deadline: '2',
+        credentialGeneration: null,
+      }),
+    (error) => error.message === EC.credentialGenerationRequired,
+  );
+  // An explicit generation is carried verbatim, including the built-in 0/1.
+  for (const generation of ['0', '1', 7]) {
+    assert.equal(
+      buildUserOperation({
+        targetContract: CORE,
+        method: 'balanceOf',
+        args: [],
+        nonce: '1',
+        deadline: '2',
+        credentialGeneration: generation,
+      }).credentialGeneration,
+      String(generation),
+    );
+  }
 });
 
 test('the v3 builders are gone from the client transaction builders', async () => {

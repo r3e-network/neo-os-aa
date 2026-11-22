@@ -157,27 +157,21 @@ namespace Neo.UnitTests.SmartContract.Native
                 ["0x52"] = () => SmartAccountProtocol.GetModuleInstanceKey(account, moduleId),
                 ["0x53"] = () => SmartAccountProtocol.GetModuleIndexKey(
                     account, SmartAccountModuleProtocol.ModuleTypeCodeValidator, moduleId),
-                ["0x54"] = () => SmartAccountProtocol.GetHookOrderKey(account),
-                ["0x55"] = () => SmartAccountProtocol.GetConfigIntentKey(account, Integer(input, "intentId")),
                 ["0x56"] = () => SmartAccountProtocol.GetNonceCursorKey(account, channel),
-                ["0x57"] = () => SmartAccountProtocol.GetMessageSubjectKey(account),
-                // 0x58 and 0x5D have a declared prefix but no named builder yet in
-                // this kernel; the shared shape (prefix || raw accountId) is still
-                // asserted so the pinned bytes cannot drift unnoticed.
-                ["0x58"] = () => [SmartAccountModuleProtocol.PrefixApplicationContext, .. accountRaw],
-                ["0x59"] = () => SmartAccountProtocol.GetCoreRecoveryKey(account),
-                ["0x5A"] = () => SmartAccountProtocol.GetMigrationStateKey(account),
-                ["0x5B"] = () => SmartAccountProtocol.GetThresholdPolicyKey(account, Integer(input, "policyId")),
                 ["0x5C"] = () => SmartAccountProtocol.GetNonceNamespaceKey(account, channel),
-                ["0x5D"] = () => [SmartAccountModuleProtocol.PrefixMarketControlEpoch, .. accountRaw],
-                ["0x5E"] = () => SmartAccountProtocol.GetConfigIntentIndexKey(account),
             };
 
+            // The shared table also pins the prefixes of the features the
+            // minimal core no longer owns (hook order, configuration intents,
+            // message subjects, recovery, migration, threshold policy). Every
+            // prefix this core still declares must reproduce the pinned bytes;
+            // the retired ones are simply not built any more.
             Assert.HasCount(15, keys.EnumerateObject().ToArray());
+            Assert.HasCount(6, builders);
             foreach (JsonProperty property in keys.EnumerateObject())
             {
-                Assert.IsTrue(builders.ContainsKey(property.Name), $"unpinned prefix {property.Name}");
-                byte[] built = builders[property.Name]();
+                if (!builders.TryGetValue(property.Name, out Func<byte[]> build)) continue;
+                byte[] built = build();
                 Assert.AreEqual(property.Value.GetString(), Convert.ToHexStringLower(built),
                     $"{property.Name} key bytes drifted from the shared vector");
                 Assert.HasCount(lengths.GetProperty(property.Name).GetInt32(), built,
@@ -186,72 +180,6 @@ namespace Neo.UnitTests.SmartContract.Native
                     Assert.AreEqual(Convert.ToHexStringLower(accountRaw),
                         Convert.ToHexStringLower(built[1..21]));
             }
-        }
-        [TestMethod]
-        public void MessageEnvelopeMatchesThePinnedDerivation()
-        {
-            JsonElement vector = Load("message-envelope");
-            JsonElement input = vector.GetProperty("input");
-            JsonElement expected = vector.GetProperty("expected");
-            JsonElement native = expected.GetProperty("native");
-
-            UInt160 account = UInt160.Parse(Hex(input, "accountId"));
-            UInt160 core = UInt160.Parse(Hex(native, "coreHash"));
-            Assert.AreEqual(NativeContract.SmartAccount.Hash, core,
-                "the pinned native core hash is the kernel's service hash");
-            Assert.AreEqual((uint)native.GetProperty("network").GetInt64(),
-                UT_SmartAccount.Settings.Network);
-
-            byte[] callerScript = UT_SmartAccount.ForwarderScript();
-            Assert.AreEqual(Hex(native, "forwarderScriptHex"),
-                Convert.ToHexStringLower(callerScript),
-                "the pinned caller is this fixture's forwarder, byte for byte");
-            Assert.AreEqual(Hex(native, "originalSender"),
-                callerScript.ToScriptHash().ToString());
-
-            // §8 domain, recomputed from the pinned inputs.
-            byte[] messageHash = Convert.FromHexString(Hex(input, "messageHash"));
-            byte[] domain = SmartAccountProtocol.Concat(
-                "NeoSmartAccount/Message"u8.ToArray(),
-                [SmartAccountModuleProtocol.ModuleProtocolVersion],
-                SmartAccountProtocol.UInt32Le((uint)native.GetProperty("network").GetInt64()),
-                core.ToArray(), account.ToArray(), callerScript.ToScriptHash().ToArray(),
-                SmartAccountProtocol.UInt64Be(Integer(input, "validatorId")),
-                SmartAccountProtocol.UInt64Be(Integer(input, "credentialGeneration")),
-                SmartAccountProtocol.UInt64Be(Integer(input, "authorityEpoch")));
-            Assert.AreEqual(Hex(native, "messageDomainHex"), Convert.ToHexStringLower(domain),
-                "§8 message domain drifted from the pinned vector");
-            Assert.AreEqual(Hex(native, "messageDigestHex"), Convert.ToHexStringLower(
-                System.Security.Cryptography.SHA256.HashData(domain.Concat(messageHash).ToArray())));
-
-            DataCache snapshot = UT_SmartAccount.Snapshot();
-            UInt160 registered = UT_SmartAccount.Register(snapshot);
-            Assert.AreEqual(Hex(input, "accountId"), registered.ToString(),
-                "the vector account is this fixture's custody + salt");
-            UInt160 caller = UT_SmartAccount.Forwarder(snapshot);
-            Assert.AreEqual(Hex(native, "originalSender"), caller.ToString(),
-                "the deployed forwarder must be the pinned caller");
-
-            object[] envelope = [
-                (BigInteger)Integer(input, "envelopeVersion"),
-                (BigInteger)Integer(input, "validatorId"),
-                (BigInteger)Integer(input, "credentialGeneration"),
-                native.GetProperty("signaturePairs").EnumerateArray()
-                    .Select(pair => (object)pair.EnumerateArray()
-                        .Select(item => (object)Convert.FromHexString(item.GetString())).ToArray())
-                    .ToArray(),
-            ];
-
-            Assert.AreEqual(Hex(expected, "successMagicHex"), Convert.ToHexStringLower(
-                UT_SmartAccount.Success(snapshot, "call", [registered, messageHash, envelope],
-                    target: caller).GetSpan().ToArray()),
-                "a pinned, subject-authorized P-256 signature must return the strict magic");
-
-            // F-16 negative half: ERC-1271 is a magic surface, never a throw surface.
-            Assert.AreEqual(Hex(expected, "failureMagicHex"), Convert.ToHexStringLower(
-                UT_SmartAccount.Success(snapshot, "call", [registered, new byte[32], envelope],
-                    target: caller).GetSpan().ToArray()),
-                "a signature over another message never verifies");
         }
     }
 }

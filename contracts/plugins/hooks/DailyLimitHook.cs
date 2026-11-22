@@ -214,7 +214,10 @@ namespace SmartAccount.Hooks
             // NEO/GAS are NEP-17 (they expose balanceOf), so they are metered identically.
             SnapshotAllLimitedBalances(accountId, moduleId);
 
-            if (!TryReadTrackedTransfer(operation, out UInt160 targetContract, out UInt160 fromAccount, out BigInteger amount))
+            // The ABI fast path below is only taken for a direct NEP-17 transfer of a token
+            // that this instance explicitly limits. Every other operation keeps the
+            // balance-delta metering of the snapshots taken above and is never rejected here.
+            if (!TryReadTrackedTransfer(accountId, moduleId, operation, out UInt160 targetContract, out UInt160 fromAccount, out BigInteger amount))
             {
                 return (ByteString)new byte[0];
             }
@@ -223,8 +226,10 @@ namespace SmartAccount.Hooks
             // balance-delta metering in PostCheck, which catches every value-movement path.
             ExecutionEngine.Assert(amount > 0, "Transfer amount must be positive");
             ExecutionEngine.Assert(IsProtectedTransferSource(accountId, fromAccount), "Transfer source not permitted");
+            // The helper only returns true for a target with a configured limit; the guard
+            // stays as a defensive no-op so this path can never fail open on a future change.
             LimitConfig? config = GetLimitConfig(accountId, moduleId, targetContract);
-            if (config == null) return (ByteString)new byte[0]; // No limit configured for this token
+            if (config == null) return (ByteString)new byte[0];
 
             BigInteger currentTime = Runtime.Time;
             BigInteger spentToday = config!.UseRollingWindow
@@ -255,7 +260,7 @@ namespace SmartAccount.Hooks
             UInt160 directToken = UInt160.Zero;
             BigInteger declaredAmount = 0;
             if (result is bool accepted && accepted
-                && TryReadTrackedTransfer(operation, out UInt160 token, out UInt160 from, out BigInteger amount)
+                && TryReadTrackedTransfer(accountId, moduleId, operation, out UInt160 token, out UInt160 from, out BigInteger amount)
                 && IsProtectedTransferSource(accountId, from))
             {
                 directToken = token;
@@ -266,7 +271,13 @@ namespace SmartAccount.Hooks
 
         // ---- Operation view ----
 
-        private static bool TryReadTrackedTransfer(object[] operation, out UInt160 targetContract, out UInt160 fromAccount, out BigInteger amount)
+        /// <summary>
+        /// Recognizes a direct NEP-17 <c>transfer(from, to, amount, data)</c> whose target token
+        /// has a limit configured for this instance. Any other operation returns false and is
+        /// therefore left to the balance-delta metering of the configured assets.
+        /// </summary>
+        private static bool TryReadTrackedTransfer(UInt160 accountId, BigInteger moduleId, object[] operation,
+            out UInt160 targetContract, out UInt160 fromAccount, out BigInteger amount)
         {
             targetContract = UInt160.Zero;
             fromAccount = UInt160.Zero;
@@ -274,17 +285,25 @@ namespace SmartAccount.Hooks
 
             if (ModuleOperation.Method(operation) != "transfer") return false;
 
+            // Resolve the target before reading any argument (Mark finding #7): the precise
+            // ABI fast check is only meaningful for a token this instance explicitly limits.
+            // A hook that limits GAS must not read a NEP-11 transfer(to, tokenId, data) — whose
+            // second argument is a token id rather than an address and whose third is the
+            // callback data — as a NEP-17 transfer and reject a legitimate NFT operation.
+            UInt160 token = ModuleOperation.Target(operation);
+            if (token == UInt160.Zero || GetLimitConfig(accountId, moduleId, token) == null) return false;
+
+            // Exact NEP-17 shape: [from(20 bytes), to(20 bytes, non-zero), amount(integer), data].
+            // A payload that does not match is metered by balance delta instead of being
+            // asserted on, so a foreign ABI can never be failed closed by this hook.
             object[] args = ModuleOperation.Args(operation);
-            if (args.Length < 3) return false;
+            if (args.Length != 4) return false;
+            if (!(args[0] is ByteString) || ((ByteString)args[0]).Length != 20) return false;
+            if (!(args[1] is ByteString) || ((ByteString)args[1]).Length != 20) return false;
+            if ((UInt160)args[1] == UInt160.Zero) return false;
+            if (!(args[2] is BigInteger)) return false;
 
-            // Fail closed on a malformed NEP-17 transfer payload: the canonical view is
-            // attacker-authored, so every field this hook relies on is type-checked.
-            ExecutionEngine.Assert(args[0] is ByteString && ((ByteString)args[0]).Length == 20, "Invalid transfer source");
-            ExecutionEngine.Assert(args[1] is ByteString && ((ByteString)args[1]).Length == 20
-                && (UInt160)args[1] != UInt160.Zero, "Invalid transfer recipient");
-            ExecutionEngine.Assert(args[2] is BigInteger, "Invalid transfer amount type");
-
-            targetContract = ModuleOperation.Target(operation);
+            targetContract = token;
             fromAccount = (UInt160)args[0];
             amount = (BigInteger)args[2];
             return true;

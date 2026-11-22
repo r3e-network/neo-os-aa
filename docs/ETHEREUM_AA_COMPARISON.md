@@ -303,7 +303,7 @@ stateDiagram-v2
 
 The entrypoints take the account id; `beginRecovery` also takes the custody it rotates
 to, and `getRecoveryStatus` reads the pending record back
-(`contracts/custom/SmartAccount.Escape.cs`).
+(`contracts/native/SmartAccount/SmartAccount.cs`).
 
 **Features:**
 - **Timelock:** 7-90 days, fixed per account at creation

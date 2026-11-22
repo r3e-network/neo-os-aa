@@ -8,7 +8,7 @@ import { encryptJsonWithMorpheusOracleKey } from '@/utils/morpheusEncryption';
 import { walletService, getSmartAccountHash } from '@/services/walletService';
 import { buildDelegatedIdentityParamsHex, formatDelegatedIdentityTicket, normalizeDelegatedIdentityProvider } from '@/services/delegatedIdentityService.js';
 import { connectedDidProfile } from '@/utils/did';
-import { decodeStackHash160 } from '@/features/studio/helpers';
+import { decodeStackHash160 } from '@/utils/stack';
 import { createAccountIdentityReader } from './saIdentityReadService.js';
 import {
   decodeAccountDescriptor,

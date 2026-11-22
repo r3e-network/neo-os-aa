@@ -117,7 +117,7 @@
                 {{ t("docs.backToHome", "Back to Home") }}
               </router-link>
               <router-link
-                to="/app"
+                to="/native"
                 class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-sa-muted hover:text-sa-text rounded-lg hover:bg-sa-dark transition-all duration-200"
               >
                 <svg
@@ -134,27 +134,7 @@
                     d="M13 10V3L4 14h7v7l9-11h-7z"
                   ></path>
                 </svg>
-                {{ t("docs.appWorkspace", "App Workspace") }}
-              </router-link>
-              <router-link
-                to="/market"
-                class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-sa-muted hover:text-sa-text rounded-lg hover:bg-sa-dark transition-all duration-200"
-              >
-                <svg
-                  aria-hidden="true"
-                  class="w-3.5 h-3.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z"
-                  ></path>
-                </svg>
-                {{ t("docs.addressMarket", "Address Market") }}
+                {{ t("nav.native", "Native Accounts") }}
               </router-link>
             </div>
           </div>

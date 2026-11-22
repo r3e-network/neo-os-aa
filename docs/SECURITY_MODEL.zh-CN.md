@@ -213,6 +213,80 @@ flowchart TD
 4. **转账来源计量：** 虚拟账户的资产位于核心推导的代理脚本哈希（`getProxyScriptHash(accountId)`），而不是 `accountId`。固定或计量转账来源的验证器或钩子必须与该代理地址比对；`SubscriptionValidator` 与 `DailyLimitHook` 正是如此，且来源等于 `accountId` 会被直接拒绝。
 5. **插件级见证检查需要可达作用域：** 验证器或钩子作为核心的嵌套调用运行，因此其内部的 `Runtime.CheckWitness`（例如 `SubscriptionValidator` 中的商户检查）只能看到作用域可达该插件的签名方。`CalledByEntry` 止步于核心并会被拒绝；私有链验证记录了这一错误，以及使用可达作用域成功的拉取。商户应以 `CustomContracts` 把其签名方限定到验证器，而不是签署 `Global`。
 
+### 5.3 凭据代次通道
+
+三个记录各自携带一个代次，且它们不是同一个计数器。签名绑定其路由所命名的那个记录，因此把它们
+归并成一个默认值是安全缺陷、而非便利：
+
+| 路由 | 绑定的代次 | 记录 |
+| --- | --- | --- |
+| 内置消息签名方（`validatorId` 0） | 账户的 `SubjectRevision` | 0x57 |
+| 已安装验证器实例 | 该实例的 `CredentialGeneration` | 0x52 |
+| 活跃阈值策略 | 该策略的 `CredentialGeneration` | 0x5B |
+
+- **内置代次不是常量 1。** 每一次提交的安全配置、凭据撤销、冻结／解冻、恢复与 custody 变更都会
+  推进 `SubjectRevision`；没有 0x57 主体记录的账户只在第一次此类变更之前才是代次 1。把已移动的
+  账户当作 1 的客户端会推导出核心从未产生过的签名域与 nonce 通道，于是内置路由以自身的无效签名
+  结果拒绝该消息，而已安装验证器或策略路由以 `SA_CREDENTIAL_STALE` 故障——两者都是被拒绝的操作，
+  而不是中继方可以掩盖的可重试 nonce 不匹配。
+- **代码与凭据推进不同的计数器。** 重新绑定模块代码推进的是 `moduleRevision`。只有
+  `revokeCredentials`（custody 授权、无回调）会废弃已安装实例的凭据代次；只有策略重写会推进阈值
+  策略的代次，它携带旧值再自增，因此重塑永不重置为 1。
+- **代次由核心解析，不由调用方臆测。** `getNonce` 在内部读取路由的代次并给出核心真正会使用的
+  通道；调用方可以把自身的推导与这一答案交叉校验，但不得另外推导替代值。
+- **离线构建器必须被告知。** 无链上访问的代次／摘要构建器在构造上无法读取 `SubjectRevision`，
+  因此它要求显式传入 `credentialGeneration`，缺失时即报错。默认为 1、默认为 2，或假定
+  `getAccount` 会公布修订号，都不成立：每一种都会对账户从未使用的命名空间产生一个格式良好的
+  签名。只有在明确记录“该账户从未推进”的已复核新账户 fixture 中，硬编码 1 才可接受。
+
+### 5.4 主体键、主体匹配与 custody 溯源
+
+- **两个 0x57 键，两种宽度。** `0x57 ‖ accountId`（21 字节）是规范的 `MessageSubjectRecord`：
+  最多 16 个主体、一个阈值与 `SubjectRevision`。`0x57 ‖ accountId ‖ 0x01`（22 字节）是仅由核心
+  写入与删除的内部溯源标记，永远不是第二个主体行。规范键保持 21 字节——加宽到 22 会搬移每个既有
+  账户的记录，并静默改变一个已复核的键。
+- **主体匹配只接受两种宽度。** 32 字节主体必须精确等于签名方验证脚本的原始 `SHA256`；20 字节
+  主体必须精确等于签名方的账户地址（`RIPEMD160(SHA256(script))`，即 N3 脚本哈希）。其他宽度
+  一律不匹配。两种形式都对 `messageDigest` 执行同一个 ECDSA 检查，因此混合使用是允许的，且
+  两者都不是更弱的身分主张。
+- **custody 派生的溯源被记录，而非被推断。** 注册时写入 `Subjects = [custody]`、阈值 1、
+  `SubjectRevision` 1 以及那个 22 字节标记。custody 轮换仅在**该标记存在时**重写主体集合并推进
+  修订号。缺少标记意味着溯源未知：主体集既可能是通过主体意图显式配置的，也可能是早于该标记的
+  历史默认主体状态。运行时对两者都不做推断——它只是不轮换——且即便某个主体恰好等于旧 custody
+  地址，也不会被解读为显式委托的证据：地址相等从不用于推断溯源。标记存在但取值异常是完整性
+  故障，不是轮换信号。逃生与账户拆除会同时删除这两个键。
+
+### 5.5 已复核工件身份，以及重新 pin 不是什么
+
+2026-11-21 对 custom `public` 工件的已复核重建是 NEF `397f96ab…` 与 manifest `4939cf01…`；
+单独的 `PLATFORM` 构建是 `7d5fad65…` / `296a3ad4…`，不是这些 pin 所描述的工件。已刷新的证据
+是逐项枚举的，而非整体声明：精化套件的 NEF / manifest / 偏移 pin、golden vectors、gas 回执、
+initializer 源码清单、source-lock 与可复现性报告已重新锚定到那些字节，它们暴露出的重编号是
+在模型里修正的、而不是在观测里：
+槽 58（而非 38）承载 `Prefix_TransactionReimbursement`，编解码 token 是 `deserialize` 2 /
+`serialize` 3（而非 3 / 4）。
+
+组合 helper 证书已在 Rocq 9.0.1 上针对当前工件重新签发，依赖它的组合证明也随该次签发重新
+生成。回执 `formal/refinement/fixtures/current-method-proof/method-proof.json`（摘要
+`a4bd1854…`）绑定 NEF `397f96ab…`、完整 helper `[36586,36867)`（281 字节、116 条指令）、
+方法摘要 `9aec81b7…`、证书摘要 `f339b6ec…` 与 `CapMethodVm` 模型 `5ac5fa2c…`。回执记录
+`kernelChecked: true`、`referenceRefinementVerified: true` 与
+`fullImplementationVerified: false`：`coqc` 与 `coqchk -silent` 干净，111 条闭合假设全部枚举，
+六个语义对照均被拒绝，以及组合、上下文、公开纯函数与 gas 泳道套件（`test_composition_proofs.py`、
+`test_context_proofs.py`、`test_public_pure_proofs.py`、`test_gas_proofs.py`）28/28 通过。
+该结果只认证有界的 helper 及其参考精化，不证明整个实现、ApplicationEngine 组合、原生二进制
+编解码或 gas 记账、调用方可达性、81 个公开 ABI 入口点，也不证明 initializer 执行。initializer
+的 `CapContext` 仍未覆盖建立 v4 `UInt64Mask` 静态槽所用的 `PUSHINT8`/`SHL`/`SUB` 写入；该泳道
+由 Task 26 处理中，尚未闭环。
+
+那次刷新不改变代理转账边界。当前 custom Verification 内核精确接受四种交易形态：两参数的
+`executeUserOp`/`executeUserOps` 调用与五参数的 `executeSponsoredUserOp`/`executeSponsoredUserOps`
+包装（各自含单条与批量），且运行时套件在真实代理见证下驱动了确切的五参数 sponsored GAS
+转账信封，同时拒绝追加调用、为其他账户 / 核心构造的调用以及非代理费用支付方。这是内核接受，
+不是 relay 或部署层支持：relay 路由尚未迁移到 v4，历史部署回执描述的是更早的部署、不是本 v4
+源码的证明，且没有任何当前源码的链上回执断言一次真实的 sponsored proxy transfer 结算。刷新
+哈希永远不会把内核接受或那些历史回执变成已被接受的部署能力。
+
 ---
 
 ## 6. 攻击面分析
@@ -357,7 +431,7 @@ stateDiagram-v2
 
 入口都接收账户 id；`beginRecovery` 还接收将要轮换到的托管权，`getRecoveryStatus` 以
 `[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]` 回读待处理记录
-（`contracts/custom/SmartAccount.Escape.cs`；`contracts/build/` 下固定版本的工件是较早的双入口形态）。
+（`contracts/native/SmartAccount/SmartAccount.cs`；`contracts/build/` 下固定版本的工件是较早的双入口形态）。
 
 ### 9.2 安全属性
 

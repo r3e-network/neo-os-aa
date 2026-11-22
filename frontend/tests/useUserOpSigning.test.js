@@ -248,6 +248,8 @@ test('a different signed envelope yields a different operation digest', async ()
     nonce: '1',
     deadline: '2',
     validatorId: '2',
+    // Reviewed fixture: the installed validator's published generation.
+    credentialGeneration: '1',
   });
   const second = { ...first, method: 'transfer' };
 

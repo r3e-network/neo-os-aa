@@ -17,12 +17,7 @@ test('matrix domain helpers remain available while the V3 workspace rejects lega
   const loadPanel = read('src/features/operations/components/LoadAccountPanel.vue');
   assert.match(loadPanel, /\.matrix/);
 
-  const studioPanel = read('src/features/studio/components/CreateAccountPanel.vue');
-  assert.match(studioPanel, /\.matrix/);
-
   const workspace = read('src/features/operations/components/HomeOperationsWorkspace.vue');
-  const studioController = read('src/features/studio/useStudioController.js');
   assert.match(workspace, /\.matrix domain/);
   assert.match(workspace, /cannot be discovered/);
-  assert.match(studioController, /invokeMultiple/);
 });

@@ -27,6 +27,20 @@ const multiScript = (m, keys) => pushInt(m) + keys.map((key) => "0c21" + key).jo
 const keys = ordered(members.map((member) => member.publicKey));
 const verificationScript = multiScript(2, keys);
 const guardianHash = hash160(verificationScript);
+const MODULE = "55".repeat(20);
+const ACCOUNT_ID = "11".repeat(20);
+const I = (value) => ({ type: "Integer", value: String(value) });
+const LIST = (...value) => ({ type: "Array", value });
+/**
+ * The account actions the minimal core publishes. All of them are custody-gated:
+ * the multisig is the authority witness in every case, and only the operands
+ * differ. Module administration carries protocol values, not C# helpers.
+ */
+const ACTIONS = {
+  guardian: { method: "freezeAccount", args: [] },
+  custody: { method: "unfreezeAccount", args: [] },
+  module: { method: "installModule", args: [I(1), c.hashValue(MODULE), LIST()] },
+};
 const memberFor = (key) => members.find((member) => member.publicKey === key);
 const tools = () => require("../../../shared/nativeWalletWitness.mjs").createNativeWalletWitnessTools({ hash160, verify: nodeVerify });
 function nodeVerify(publicKey, signature, signData) {
@@ -62,16 +76,17 @@ function transactionFixture(role = "guardian", signer = multisig()) {
   client.getAccount = async () => ({ custodyAddress: guardianHash, recoveryAuthority: null });
   client.revalidatePlan = async () => { revalidations++; return true; };
   client.simulate = async () => ({ state: "HALT", gasConsumed: "10", minimumRequiredFee: "100", incompleteTransfers: [], stack: [{ type: "Any", value: null }] });
-  // `executeRecovery` is permissionless by design, so the payer-only role needs
-  // no authority witness; the other two are custody-gated.
-  const method = role === "payer" ? "executeRecovery" : role === "custody" ? "unfreezeAccount" : "freezeAccount";
-  const plan = { kind: "account", accountId: "11".repeat(20), method,
-    signers: [guardianHash],
-    script: c.dynamicCall(CORE, method, [c.hashValue("11".repeat(20))]),
+  // Every native account action is custody-gated, so the multisig is always the
+  // authority witness. Who pays the fee is the only variable: the guardian role
+  // hands it to an independent payer, the others let the payer stay independent
+  // while the witnessed signer carries the core-scoped authority scope.
+  const action = ACTIONS[role];
+  const plan = { kind: "account", accountId: ACCOUNT_ID, method: action.method,
+    signers: [client.proxyAddress(ACCOUNT_ID)],
+    script: c.dynamicCall(CORE, action.method, [c.hashValue(ACCOUNT_ID), ...action.args]),
   };
-  const recipe = { method: "buildAccountActionScript", input: { method, accountId: "11".repeat(20) } };
-  const options = { feePayer: role === "payer" ? signer : payer,
-    authorizers: role === "payer" ? [] : [signer], recipe, nonce: 42,
+  const recipe = { method: "buildAccountActionScript", input: { method: action.method, accountId: ACCOUNT_ID, args: action.args } };
+  const options = { feePayer: payer, authorizers: [signer], recipe, nonce: 42,
     maxSystemFee: 1000, maxNetworkFee: 1000, maxTotalFee: 2000 };
   return { client, plan, options, calls, count: () => revalidations, fee(value) { networkFee = value; } };
 }
@@ -100,14 +115,20 @@ test("all 2-of-3 guardian quorums prepare, sign and serialize one scoped multisi
   }
 });
 
-test("standard multisig also signs independent payer and custody roles without adding members as signers", async () => {
-  for (const role of ["payer", "custody"]) {
+test("standard multisig also signs custody and module-administration actions without adding members as signers", async () => {
+  for (const role of ["custody", "module"]) {
     const f = transactionFixture(role);
     const prepared = await f.client.prepareTransaction(f.plan, f.options);
+    // One independent payer plus one multisig authority: the three members are
+    // quorum inside the witness, never three signers.
+    assert.equal(prepared.transaction.signers.length, 2);
+    assert.deepEqual(prepared.transaction.signers[1], { account: "0x" + guardianHash,
+      scopes: "CustomContracts", allowedcontracts: ["0x" + CORE] });
     const signed = await f.client.signTransaction(prepared);
-    assert.equal(prepared.transaction.signers.length, role === "payer" ? 1 : 2);
-    assert.equal(prepared.transaction.signers[role === "payer" ? 0 : 1].scopes, role === "payer" ? "None" : "CustomContracts");
-    assert.equal(decode(signed.rawTransaction).witnesses.length, prepared.transaction.signers.length);
+    const tx = decode(signed.rawTransaction);
+    assert.equal(tx.witnesses.length, 2);
+    assert.equal(Buffer.from(tx.witnesses[1].invocation, "base64").length, 2 * 66);
+    assert.equal(Buffer.from(tx.witnesses[1].verification, "base64").toString("hex"), verificationScript);
   }
 });
 

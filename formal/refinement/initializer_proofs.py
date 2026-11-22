@@ -14,6 +14,8 @@ import initializer_source
 
 HERE = Path(__file__).resolve().parent
 MODULES = ["IntegerSemantics", "CapArithmetic", "CapMethodVm", "CapContext", "InitializerSource"]
+# The Neo VM defines STSFLD0..STSFLD6 as the compact forms of STSFLD 0..6.
+SHORT_STORES = {"STSFLD" + str(index): index for index in range(7)}
 require = initializer_source.require
 
 
@@ -39,15 +41,20 @@ def bind(inventory):
         slots[name] = int(index)
     require(set(slots) == set(lookup) and len(set(slots.values())) == len(slots),
             "Static field/slot mapping is not a bijection")
-    # The frame is declared by the bytes, not inferred from the descriptor count:
-    # the v4 build allocates 79 slots while only 71 are written, because constant
-    # fields and one compiler-private slot never receive a store.
+    # The frame is declared by the bytes, not inferred from the descriptor count.
+    # The reviewed 2026-11-20 rebuild declares 82 slots; the compiler debug info
+    # names 81 of them and the initializer stores exactly those 81 -- slots 0..6
+    # through the compact STSFLD0..STSFLD6 aliases, slots 7..81 through STSFLD.
+    # Slot 14 is declared but never stored or described, so it stays outside the
+    # field/slot bijection instead of being invented from the frame size.
     instructions = initializer["instructions"]
     require(instructions and instructions[0]["name"] == "INITSSLOT",
             "Initializer does not declare its frame")
     frame = int(instructions[0]["operandHex"], 16)
     require(max(slots.values()) < frame, "Static slot outside the declared frame")
-    written = {int(item["operandHex"], 16) for item in instructions if item["name"] == "STSFLD"}
+    written = {int(item["operandHex"], 16) if item["name"] == "STSFLD"
+               else SHORT_STORES[item["name"]] for item in instructions
+               if item["name"] == "STSFLD" or item["name"] in SHORT_STORES}
     require(written <= set(slots.values()), "Initializer writes an undescribed static slot")
     return {"source": projection, "initializer": initializer, "slots": slots, "frame": frame,
             "unwritten": sorted(set(slots.values()) - written)}
@@ -62,7 +69,7 @@ Import ListNotations. Open Scope Z_scope.
 Definition source_assignments : list (nat * SourceStaticExpression) := [%s].
 Theorem all_static_source_values_refine_initializer : forall hp st,
  exists target source,
- run_init 236 initializer_code (initializer_entry hp st) = InitReturned target /\
+ run_init init_fuel initializer_code (initializer_entry hp st) = InitReturned target /\
  source_initialize source_assignments (source_entry %d hp) = Some source /\
  init_heap target = source_heap source /\
  init_slots target = Some (source_slots source) /\
@@ -98,6 +105,11 @@ def run_proofs(inventory, output_dir, controls=True):
     raw = {path: path.read_bytes() for path in paths}
     inputs = {str(path): digest(data) for path, data in raw.items()}
     bound = bind(inventory)
+    # The certificate is a theorem about one specific instruction model, so verify
+    # that the live initializer still decodes there before rendering. PUSHINT8,
+    # SHL and SUB are part of the model now; this guard catches the next opcode
+    # the build adds instead of reporting a kernel error nobody can attribute.
+    context_proofs.require_model_domain(bound["initializer"])
     artifacts = {module: raw[HERE / "coq" / (module + ".v")] for module in MODULES}
     artifacts["CapContextArtifact"] = context_proofs.render_certificate(bound["initializer"]).encode("utf-8")
     artifacts["InitializerSourceArtifact"] = render(bound).encode("utf-8")

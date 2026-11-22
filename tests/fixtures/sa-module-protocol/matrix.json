@@ -9,7 +9,6 @@
       "fixture": "golden-vectors/operation-envelope.json",
       "custom": [
         "ProtocolFixtureTests.OperationEnvelopeMatchesThePinnedBytesAndDigest",
-        "SourceInvariantTests.SourceInvariant_ExecuteUserOp_AuthorizationPaths",
         "MultiSigInstanceConfigurationRuntimeTests.MemberKeysBindAtomicallyUnderTheCoreInstallPhase"
       ],
       "native": [
@@ -126,8 +125,7 @@
       "status": "pinned",
       "fixture": null,
       "custom": [
-        "FixVerifyContextTests.Fix_VerifyContext_UnmatchedNativeCallerIsRejected",
-        "SourceInvariantTests.SourceInvariant_ExecuteUserOp_AuthorizationPaths"
+        "CallbackResultBoundaryRuntimeTests.InteropIteratorTargetResultFailsClosedBeforeHookPostCheck"
       ],
       "native": [],
       "note": ""
@@ -189,7 +187,8 @@
       "status": "pinned",
       "fixture": null,
       "custom": [
-        "Fix_Escape_Tests.ExecuteRecovery_SweepsTheModuleModelAndRotatesCustody",
+        "OwnerOnlyRecoveryRuntimeTests.OwnerOnlyRecovery_RejectsEveryModuleModelActionUpFront",
+        "OwnerOnlyRecoveryRuntimeTests.OwnerOnlyRecovery_LatchSurvivesFreezeUnfreezeAndCustodyRotation",
         "OwnerOnlyRecoveryRuntimeTests.OwnerOnlyRecovery_LatchesAndSurvivesARecovery"
       ],
       "native": [],
@@ -200,10 +199,7 @@
       "invariant": "no-plugin operations + built-in message signatures; contract custody cannot fake a message signature",
       "status": "pinned",
       "fixture": "golden-vectors/message-envelope.json",
-      "custom": [
-        "ProtocolFixtureTests.MessageEnvelopeMatchesThePinnedDerivation",
-        "ProtocolFixtureTests.MessageEnvelopeFailuresReturnTheFailureMagic"
-      ],
+      "custom": [],
       "native": [
         "UT_SmartAccountFixtures.MessageEnvelopeMatchesThePinnedDerivation",
         "UT_SmartAccount.MessageSignaturesReturnTheStrictEr1271Magic"
@@ -216,8 +212,7 @@
       "status": "pinned",
       "fixture": null,
       "custom": [
-        "ImplementationRefinementGasRuntimeTests.ActualBudgetAtMeasuredCeilingHaltsAndOneDatoshiLessFaults",
-        "SourceInvariantTests.SourceInvariant_ModuleLifecycleCallbacksUseHardBudget"
+        "ImplementationRefinementGasRuntimeTests.ActualBudgetAtMeasuredCeilingHaltsAndOneDatoshiLessFaults"
       ],
       "native": [],
       "note": "the custom public build meters after the fact and rolls back; the platform build is the Plan B lane (see docs/SA-FORMAL-VERIFICATION.md)"

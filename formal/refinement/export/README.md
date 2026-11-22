@@ -10,12 +10,17 @@ From the repository root:
 dotnet build formal/refinement/export/RefinementExport.csproj --nologo
 dotnet formal/refinement/export/bin/Debug/net10.0/RefinementExport.dll \
   --source-root "$PWD" \
-  --project "$PWD/contracts/custom/SmartAccount.csproj" \
-  --nef "$PWD/contracts/bin/public/SmartAccountV3.nef" \
-  --manifest "$PWD/contracts/bin/public/SmartAccountV3.manifest.json" \
+  --project "$PWD/<contract-project>.csproj" \
+  --nef "$PWD/<build-dir>/<name>.nef" \
+  --manifest "$PWD/<build-dir>/<name>.manifest.json" \
   > /tmp/sa-refinement-inventory.json
 python3 -m unittest formal/refinement/export/test_export.py
 ```
+
+The flags are project-agnostic. The public user-contract kernel this tool was
+first bound to has since been retired (native-only consolidation), so
+`test_export.py` skips itself instead of failing when that project is absent;
+the current true source is `contracts/native/Neo.csproj`.
 
 For a different installation location, supply
 `-p:CompilerToolDirectory=/absolute/tools/net10.0/any` when building and

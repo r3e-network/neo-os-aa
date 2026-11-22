@@ -11,13 +11,13 @@
 
 > 反向衔接：把调用方的栈窗口变成本次调用参数的步骤属于第十九号作用域
 > `interop-argument-conversion`，见
-> [SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md#interop-argument-conversion-kernel-checked-nineteenth-gate-scope)。
+> the archived method-refinement record (removed from the tree)。
 
 ## 为什么需要这一层
 
 `formal/coq/EntryDispatch.v` 声明它的入口位于 interop 准入与参数转换*之后*。
 `syscall-dispatch` 作用域
-（[SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md#syscall-admission-systemcontractcall-and-callt)）覆盖准入，并止于
+（the archived method-refinement record (removed from the tree)）覆盖准入，并止于
 `CallContractInternal` 的参数元组。本作用域从这里开始：第二个
 `CallContractInternal` 重载，以及 `LoadContract` 构造的帧。它止于构造完成的上下文，
 在 callee 的任何指令执行之前。

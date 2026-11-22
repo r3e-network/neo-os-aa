@@ -4,7 +4,7 @@ A virtual account holds assets at the hash of its proxy verification script, not
 
 ## Exact transaction shape
 
-The transaction has exactly one application call: `core.executeUserOp(accountId, op)` or `core.executeUserOps(accountId, ops)`, each with two arguments. Argument construction may only contain constant pushes and data construction opcodes. The verifier binds the final call to the actual core and actual account ID. Other entrypoints, other cores/accounts, additional calls and control flow are rejected.
+The transaction has exactly one application call: `core.executeUserOp(accountId, op)` or `core.executeUserOps(accountId, ops)`, each with two arguments. Argument construction may only contain constant pushes and data construction opcodes. The verifier binds the final call to the actual core and actual account ID. For this direct (unsponsored) shape, other entrypoints, other cores/accounts, additional calls and control flow are rejected. The v4 custom Verification kernel separately binds the two five-argument sponsored wrappers with the same data-push discipline, single and batch — see the sponsorship boundary below for what that kernel acceptance does and does not mean.
 
 Signer 0 is the fee-paying relay with `CalledByEntry`. Signer 1 is the derived proxy, with precisely one `Allow` rule containing `Or(CalledByContract(core), CalledByContract(configuredTarget))`. The proxy witness has an empty invocation script and a verification script consisting of `core.verify(accountId)`. The relay signature covers the complete transaction, including both signers, script and fees. Both witnesses are present during network-fee calculation and final serialization. The proxy is never permitted to pay the enclosing transaction's fees.
 
@@ -33,7 +33,7 @@ The relay preserves explicit unsponsored opt-in, off-chain sponsorship approval 
 
 ## Sponsorship boundary
 
-**Proxy transfers through `executeSponsoredUserOp` and `executeSponsoredUserOps` remain disabled.** The contract's Verification entrypoint refuses these envelopes, and the relay explicitly refuses proxy transfers using either entrypoint before calculating fees or signing a transaction for broadcast.
+**Sponsored proxy transfers are kernel-accepted but not deployment-supported.** The current v4 custom Verification binds exactly four precise transaction shapes — the two-argument `executeUserOp`/`executeUserOps` calls and the five-argument `executeSponsoredUserOp`/`executeSponsoredUserOps` wrappers, each in single and batch form — and the runtime suite drives a real proxy witness through the exact five-argument sponsored envelope for a GAS transfer, rejecting an appended trailing call, a shaped call for another account or core, and a non-proxy fee payer. That is shape-bound kernel acceptance, not an end-to-end capability: the relay route has not been migrated to the v4 module ABI and explicitly refuses proxy transfers using either sponsored entrypoint before calculating fees or signing a transaction for broadcast, and real on-chain evidence for a sponsored proxy transfer is limited to that regression suite, with no current-source on-chain receipt asserting a settlement. Enabling the route still needs the reviewed design below.
 
 A transaction witness survives after `executeUserOp` clears its hook and verification context. Current sponsorship accepts a paymaster based on its self-reported `authorizedCore`; that is not an independent trust decision. If settlement invokes a contract covered by the proxy witness scope, that authority could be reused outside the signed operation's hook accounting. Supporting sponsored proxy transfers therefore needs a reviewed design for paymaster authority and witness lifetime. Passing an ordinary paymaster happy-path test is insufficient.
 
@@ -46,3 +46,13 @@ The NEP-17 preset can stage a proxy transfer in relay mode. The staged operation
 The configured scope remains an administrator-managed prerequisite. This change does not make arbitrary accounts self-service for scope configuration or activate a native SmartAccount profile.
 
 The protocol v4 source suite does not drive the relay route: its four scenarios exercise account creation, the configuration intents, the core hook order and owner-only recovery, so no current-source receipt asserts proxy-transfer balances, exact signer rules, fee reserves or relay sponsorship refusal. Those assertions still run against the frozen deployed artifacts and their expectations in `tests/localchain/expected-deployed.json`; that is historical evidence for the deployed contract, not a claim about the v4 core. Re-targeting the relay route at the v4 module ABI is separate work.
+
+## What an artifact refresh does and does not change
+
+Re-pinning the build (the 2026-11-20 reproducibility certificate, its private-chain source receipt and the provenance join) moves artifact identities only. It does not:
+
+- turn the `SA-12` receipt into a v4 source proof — that scenario still runs against the frozen deployed artifacts, and no current-source receipt asserts a proxy-transfer balance, the exact signer rules, the fee reserve or the sponsorship refusal;
+- enable sponsored proxy transfers — kernel acceptance of the exact five-argument envelopes does not enable them end to end: the relay still refuses either sponsored entrypoint, real on-chain sponsored proxy-transfer evidence remains limited to the runtime regression suite, and the reviewed paymaster-authority and witness-lifetime design below is still required;
+- retarget the relay at the v4 module ABI — that remains separate work, and the relay keeps refusing a standard token transfer that lacks a valid witness whenever the feature is off.
+
+An artifact hash is an identity, never an acceptance. Reading the number as "proxy transfers are now proven on v4" is exactly the inference this section exists to refuse.

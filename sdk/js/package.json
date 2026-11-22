@@ -37,12 +37,7 @@
     "testnet:validate:report": "./run_testnet_validation_suite.sh",
     "testnet:validate:smoke": "node tests/testnet_smoke.js",
     "testnet:validate:plugin-matrix": "node tests/testnet_plugin_matrix.js",
-    "testnet:validate:market": "node tests/testnet_market_escrow.js",
-    "testnet:validate:paymaster-policy": "node tests/testnet_paymaster_policy.mjs",
-    "testnet:validate:paymaster": "node tests/testnet_paymaster_relay.mjs",
-    "testnet:validate:paymaster-onchain": "node tests/testnet_paymaster_onchain.mjs",
-    "mainnet:validate:readonly": "node tests/mainnet_readonly.mjs",
-    "mainnet:deploy:market-paymaster": "node ../../scripts/deploy_mainnet_market_paymaster.js"
+    "mainnet:validate:readonly": "node tests/mainnet_readonly.mjs"
   },
   "dependencies": {
     "ethers": "^6.17.0"

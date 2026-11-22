@@ -37,7 +37,10 @@ import { MORPHEUS_PUBLIC_REGISTRY } from '../src/config/generatedMorpheusRegistr
 // excludes it from the current-runtime documents), and NativeSmartAccountClient declares the exact
 // method set it validates a deployment against. A native callable is live when that artefact names
 // it, the same way a deployed manifest makes an N3 callable live (DS-CU-202 section 3).
-import { NATIVE_REQUIRED_ABI } from '../../shared/nativeSmartAccountClient.mjs';
+import {
+  NATIVE_ACCOUNT_ADDRESS_ABI,
+  NATIVE_REQUIRED_ABI,
+} from '../../shared/nativeSmartAccountClient.mjs';
 
 const frontendRoot = fileURLToPath(new URL('..', import.meta.url));
 const repoRoot = path.resolve(frontendRoot, '..');
@@ -77,7 +80,6 @@ const CURRENT_DOCS = [
   // compatibility note intentionally distinguishes newly compiled artifacts
   // from older public deployments. Keep these current workflow documents out
   // of the historical dead-entrypoint ratchet.
-  'docs/CUSTOM_ACCOUNT_WORKSPACE.md',
   'docs/PENDING_CONFIG_UPDATE_READ_ABI.md',
   // Current protocol and refinement documents introduced with the
   // SmartAccount rename. They describe the source ABI directly, so the
@@ -86,7 +88,6 @@ const CURRENT_DOCS = [
   'docs/SA-CONTRACT-HANDOFF.md',
   'docs/SA-ENTRYPOINT-CLOSURE.md',
   'docs/SA-FRONTEND-CORRESPONDENCE.md',
-  'docs/SA-METHOD-REFINEMENT.md',
 ];
 
 // The custom delivery track has two additive reads in source that are deliberately not copied
@@ -94,10 +95,6 @@ const CURRENT_DOCS = [
 // allowlist file-scoped and caveat-scoped: it is an explicit source-versus-deployment boundary,
 // not a general exemption for undocumented or unshipped entrypoints.
 const SOURCE_ONLY_CUSTOM_READS = new Map([
-  ['docs/CUSTOM_ACCOUNT_WORKSPACE.md', {
-    names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
-    caveat: /旧部署只提供存在性和成熟时间|完整审阅需要部署|older deployments? exposes? only\s+existence and maturity/i,
-  }],
   ['docs/PENDING_CONFIG_UPDATE_READ_ABI.md', {
     names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
     caveat: /newly compiled source|Existing deployments|not evidence of a deployed upgrade/i,
@@ -130,10 +127,6 @@ const SOURCE_BRIDGE_DOCS = new Map([
     reason: 'Records source-to-artifact correspondence across the current SA tree, the pinned compiler, Neo Core and Neo VM, including private source members and runtime APIs.',
     marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
   }],
-  ['docs/SA-METHOD-REFINEMENT.md', {
-    reason: 'Collects the pinned Neo Core interop conversion and System.Contract.Call/CALLT admission lanes beside the SA method-level refinement lanes; its names are SA source identities, fields of pinned runtime descriptors or reviewed pinned-runtime symbols, never deployed ABI claims.',
-    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
-  }],
 ]);
 
 // Exact external symbols reviewed in the pinned Neo Core/VM source. They are not imported as a
@@ -143,10 +136,6 @@ const SOURCE_BRIDGE_DOCS = new Map([
 const PINNED_RUNTIME_SYMBOLS = new Map([
   ['CallFromNativeContractAsync', 'ApplicationEngine native-contract call used by the pinned contract-handoff projection.'],
   ['HasReturnValue', 'MethodToken field consumed by the pinned CALLT admission path.'],
-  ['IsArray', 'InteropParameterDescriptor member evaluated by the pinned interop-conversion projection.'],
-  ['IsDynamicCall', 'ExecutionContextState member set by the pinned System.Contract.Call path.'],
-  ['Register', 'ApplicationEngine interop registration method projected by the syscall-admission lane.'],
-  ['callFlags', 'Pinned contract-call argument and validation local, not an SA ABI member.'],
   ['executeNext', 'ApplicationEngine instruction loop projected by the exception-identity lane.'],
   ['hasReturnValue', 'Pinned contract-handoff local derived from the selected ABI descriptor.'],
 ]);
@@ -165,7 +154,10 @@ const NO_SNAPSHOT_AUDIT_DOCS = [];
 // method (callVerifierChild was also defined in the since-deleted SmartAccount.VerifierChildren.cs
 // and absent from the deployed manifest) is still judged by the deployed ABI everywhere else.
 const NATIVE_PROFILE_DOCS = ['docs/NATIVE_SDK.md', 'docs/NATIVE_ACCOUNT_WORKSPACE.md'];
-const nativeAbiNames = new Set(Object.keys(NATIVE_REQUIRED_ABI));
+const nativeAbiNames = new Set([
+  ...Object.keys(NATIVE_REQUIRED_ABI),
+  ...Object.keys(NATIVE_ACCOUNT_ADDRESS_ABI),
+]);
 const NO_NAMES = new Set();
 
 // Documents that still name something the deployed runtime does not carry. The list is a ratchet: it
@@ -198,7 +190,8 @@ const V2_DEBT = {
 };
 
 // Framework and service calls that share a name with a contract method but are not one.
-// ContractManagement is the Neo native contract: contracts/custom/SmartAccount.Accounts.cs:404 calls
+// ContractManagement is the Neo native contract: the retired custom kernel's
+// SmartAccount.Accounts.cs:404 calls
 // ContractManagement.GetContract and tests/SmartAccount.Contracts.Tests/*.cs invoke the native
 // "getContract" by string, so a document that reads a NEF back that way names no SA entrypoint.
 // CallFlags is the SmartContract.Framework enum used as the third argument of Contract.Call; it is a
@@ -206,13 +199,17 @@ const V2_DEBT = {
 // entry by entry (DS-CU-210 section 3).
 const FRAMEWORK_RECEIVERS = new Set(['Runtime', 'Contract', 'ContractManagement', 'System', 'CryptoLib', 'Storage', 'Helper', 'ExecutionEngine', 'Neo', 'CallFlags']);
 // Inline code that looks like an entrypoint but is a parameter, a field or a service name.
-// callHash is a field of the pending-module-call record (contracts/custom/SmartAccount.Models.cs:65),
-// not a callable; DS-CU-202 section 4.
+// callHash is a field of the pending-module-call record (SmartAccount.Models.cs:65 of the
+// retired custom kernel), not a callable; DS-CU-202 section 4.
 // getAuthorityEpoch is an ABI 2 read on the pinned private native core (the sibling native-core
 // track), named by the module packager's permission check: it is the one name the native modules are
 // required to be able to call on that core, so it is neither a member nor a dead reference of this
 // repository's deployed manifests.
-const NON_CALLABLES = new Set(['create_sa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash', 'getAuthorityEpoch']);
+// CallWithGasLimit is `System.Contract.CallWithGasLimit`, the bounded-call interop the private
+// platform runtime adds under HF_SmartAccountV1. The platform documents name it at length to record
+// what that runtime carries; it is a pinned-runtime interop, never an entrypoint of this
+// repository's own contracts, so it is neither a member nor a dead reference either.
+const NON_CALLABLES = new Set(['create_sa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash', 'getAuthorityEpoch', 'CallWithGasLimit']);
 
 const ENTRYPOINT = /^(?:execute|register|preview|initiate|finalize|settle|update|cancel|confirm|propose|compute|get|set|is|has|can|withdraw|revoke|rotate|claim|deposit|call|lock|unlock|create|build|derive|validate|query|prepare|sign|broadcast|discover)[A-Z][A-Za-z0-9]*$/;
 // A line that marks a name as gone. The repository's translation copies state removal in Chinese,
@@ -357,14 +354,14 @@ const exportedInSourceSpelling = new Set([...sourceDefinitions].filter((name) =>
 
 // The v4 configuration action codes. An intent's action is an Array whose first element is an
 // integer code, and the core spells each code once, as an `Action<Name>` constant
-// (contracts/custom/SmartAccount.Models.cs). A document names an action by the camelCase form of
-// that constant - `setThresholdPolicy`, `installModule` - and no manifest exports it, because an
-// action is a wire value inside `proposeConfiguration`, not an ABI member. The set is derived from
-// the constants for the same reason the divergent class is derived from the manifests: a new action
-// becomes readable the moment the core defines it, and no document can invent one.
+// (contracts/native/SmartAccount/SmartAccountModuleProtocol.cs). A document names an action by the
+// camelCase form of that constant - `setThresholdPolicy`, `installModule` - and no manifest exports
+// it, because an action is a wire value inside `proposeConfiguration`, not an ABI member. The set is
+// derived from the constants for the same reason the divergent class is derived from the manifests:
+// a new action becomes readable the moment the core defines it, and no document can invent one.
 const actionNames = new Set();
 for (const file of tracked) {
-  if (!file.startsWith('contracts/custom/') || !file.endsWith('.cs')) continue;
+  if (!file.startsWith('contracts/native/') || !file.endsWith('.cs')) continue;
   for (const match of read(file).matchAll(/const int Action([A-Z]\w*)\s*=/g)) {
     actionNames.add(match[1][0].toLowerCase() + match[1].slice(1));
   }
@@ -1271,9 +1268,40 @@ function digestReportInventoryAllowances() {
     // scripts/build_native_modules.py, and the native-v4 wording in
     // docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md were reviewed against
     // the sources and re-pinned; same 357 digest lines, new bytes.
+    // Re-triaged for the v4 generation/provenance work: nine repo pins (the six
+    // rewritten custom partials, DailyLimitHook, the authority-epoch proposal and
+    // scripts/verify_repo.sh) and eight external native-core pins were re-read from
+    // the reviewed sources through formal/verify.py's own digest functions; no key
+    // was added or removed, so the digest-line count is unchanged.
+    // Re-triaged for the native-only cleanup: the retired custom sources left the
+    // roster (60 pinned repo sources remain), and SmartAccount.cs,
+    // SmartAccountModuleProtocol.cs, scripts/check_neo_platform_packages.mjs and
+    // scripts/verify_repo.sh were re-read through formal/verify.py's own digest
+    // function: 349 digest lines. verify_repo.sh was re-pinned once more after the
+    // native gate re-adopted the docs dependency-security and identity-bundle
+    // browser checks the custom profile used to own.
+    // Re-triaged for the 2026-11-22 re-pin: sources 60 -> 56 and nativeCoreSources
+    // 313 -> 309 (verify.py re-pinned in the same pass). The allowance regex reaches
+    // 341 of the lock's 365 digest lines; the other 24 name extensions outside the
+    // reviewed class (.md/.py/.sh/.mjs/.txt/.resx, Dockerfile, nuget.config).
+    // Re-pinned once more on 2026-11-22 when the native threshold-policy guards and
+    // check_multisig_bounded retired from verify.py: only the formal/verify.py digest
+    // value changed, so the count stays 341 (a .py line is outside the reviewed class)
+    // and the full-text hash moved.
+    // Re-pinned for the 2026-11-22 protocol-audit fixes: the six native SmartAccount
+    // kernel sources (SmartAccount.cs, SmartAccount.Execution.cs, SmartAccount.Modules.cs,
+    // SmartAccountRecords.cs, SmartAccountModulePolicy.cs, SmartAccountModuleProtocol.cs)
+    // and their six mirrored external native-core pins were re-read through
+    // formal/verify.py's own digest functions; no key was added or removed, so the
+    // count stays 341 and the full-text hash moved.
+    // Re-pinned for the C-24 implementation round: SmartAccount.Modules.cs,
+    // SmartAccount.cs and SmartAccountModuleProtocol.cs (three kernel sources and
+    // their three mirrored external native-core pins) were re-read through
+    // formal/verify.py's own digest functions; no key was added or removed, so the
+    // count stays 341 and the full-text hash moved.
     entry('sa-formal-source-lock-content-digests',
-      'formal/source-lock.json', 357,
-      '7f1c643b911c0ab03f7ea14d1d4c6131db39f976c019958d6253eaba8b4bd78a'),
+      'formal/source-lock.json', 341,
+      'f9f6b8fc29d5464b0f7bc16196d24a3c8823f876551a183c87e1d9e4198908d4'),
     entry('sa-artifact-reproducibility-20261025-content-digests',
       'docs/reports/sa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
@@ -1318,7 +1346,9 @@ function digestInventoryControls(line) {
 // `be06b8f..3dc7d8a`; the 2026-10 artifact refresh adds 93 findings of the same digest-map class.
 // The scanner-level test below holds both directions against every count.
 const CU231_CLASSIFIED = new Map([
-  ['formal/source-lock.json', 18],
+  // 2026-11-22 source-lock re-pin (sources 60 -> 56, nativeCoreSources 313 -> 309):
+  // the canonical control scan of the new lock bytes reports 17 findings, was 19.
+  ['formal/source-lock.json', 17],
   ['docs/reports/sa-artifact-reproducibility-20261025.json', 37],
   ['docs/reports/sa-artifact-reproducibility-20261030.json', 37],
   ['docs/reports/sa-artifact-reproducibility-20261031.json', 37],
@@ -1882,34 +1912,34 @@ test('CU-163: source-bridge scope is explicit and admits only current source or 
 
   assert.ok(currentContractSourceNames.has('ClearAccount'));
   assert.ok(currentContractSourceNames.has('clearAccount'));
-  assert.ok(currentContractSourceNames.has('IsOwnerOnlyRecovery'));
-  assert.ok(currentContractSourceNames.has('isOwnerOnlyRecovery'));
+  assert.ok(currentContractSourceNames.has('RequirePinnedCore'));
+  assert.ok(currentContractSourceNames.has('requirePinnedCore'));
   for (const [name, reason] of PINNED_RUNTIME_SYMBOLS) {
     assert.ok(reason.length >= 40, `${name}: pinned runtime symbol needs a reviewed rationale`);
     assert.ok(used.has(name), `${name}: pinned runtime symbol is no longer cited by a source-bridge document`);
   }
 
-  assert.ok(isSourceBridgeName('docs/SA-METHOD-REFINEMENT.md', 'Register'));
+  assert.ok(isSourceBridgeName('docs/SA-ENTRYPOINT-CLOSURE.md', 'CallFromNativeContractAsync'));
   assert.ok(isSourceBridgeName('docs/SA-FRONTEND-CORRESPONDENCE.md', 'ClearAccount'));
   assert.ok(!isSourceBridgeName('docs/architecture.md', 'Register'),
     'a source-bridge name escaped into a deployed-ABI document');
-  assert.ok(!isSourceBridgeName('docs/SA-METHOD-REFINEMENT.md', 'ExecuteInjectedBridgeOp'),
+  assert.ok(!isSourceBridgeName('docs/SA-CONTRACT-HANDOFF.md', 'ExecuteInjectedBridgeOp'),
     'the source-bridge class admitted a name from neither permitted oracle');
 
   // The rule itself must be able to fail in the real scanner. Plant a call that exists in neither the
   // current contract source nor the reviewed pinned-runtime set and require the current-runtime gate
   // to report it, then restore the document for every later test.
-  const target = 'docs/SA-METHOD-REFINEMENT.md';
+  const target = 'docs/SA-CONTRACT-HANDOFF.md';
   const absolute = path.join(repoRoot, target);
   // The plant and its checks run on LF-normalized content (the committed form), while the restore
   // writes the raw worktree bytes back, so an autocrlf checkout neither defeats the marker lookup
   // nor has its line endings rewritten by the test.
   const original = fs.readFileSync(absolute, 'utf8');
   const normalized = original.replace(/\r\n?/g, '\n');
-  const marker = '## Pinned inputs\n';
-  assert.ok(normalized.includes(marker), 'the planted-drift document lost its pinned-source marker');
+  const heading = normalized.split('\n').find((line) => line.startsWith('## Pinned inputs'));
+  assert.ok(heading, 'the planted-drift document lost its pinned-source marker');
   fs.writeFileSync(absolute,
-    normalized.replace(marker, `${marker}\n\`ExecuteInjectedBridgeOp()\` is not in either oracle.\n`));
+    normalized.replace(heading, `${heading}\n\n\`ExecuteInjectedBridgeOp()\` is not in either oracle.`));
   try {
     const problems = failures();
     assert.ok(problems.some((problem) => problem.includes(`${target}:`)
@@ -2259,14 +2289,14 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
   const mutants = [
     {
       rule: 'a dead call inside a fenced code block is reported (the drift that was invisible before CU-210)',
-      file: 'frontend/src/assets/docs/custom-modules.md',
-      plant: (text) => text.replace("const script = buildConfigurationScript({", "const script = buildLegacyVerifierConfig({"),
+      file: 'docs/NATIVE_SDK.md',
+      plant: (text) => text.replace("const install = client.buildAccountActionScript({", "const install = client.buildLegacyVerifierConfig({"),
       claim: 'buildLegacyVerifierConfig',
     },
     {
       rule: 'a fenced block cannot show a removed entrypoint as current, and a marked removal silences it',
-      file: 'frontend/src/assets/docs/custom-modules.md',
-      plant: (text) => text.replace("const script = buildConfigurationScript({", "const script = buildLegacyVerifierConfig({ // removed call, kept as the before example"),
+      file: 'docs/NATIVE_SDK.md',
+      plant: (text) => text.replace("const install = client.buildAccountActionScript({", "const install = client.buildLegacyVerifierConfig({ // removed call, kept as the before example"),
       claim: null,
     },
     {
@@ -2284,8 +2314,8 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
     },
     {
       rule: 'a dead call spelled the way the build spells an exported member is reported (the drift the camel-case filter made invisible; F7)',
-      file: 'frontend/src/assets/docs/custom-modules.md',
-      plant: (text) => text.replace("const script = buildConfigurationScript({", "const script = buildConfigurationScript({\n  preflight: await listDeployedVerifiers(masterContractHash),"),
+      file: 'docs/NATIVE_SDK.md',
+      plant: (text) => text.replace("const install = client.buildAccountActionScript({", "const install = client.buildAccountActionScript({\n  preflight: await listDeployedVerifiers(masterContractHash),"),
       claim: 'listDeployedVerifiers',
     },
     {
@@ -2372,7 +2402,7 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
         assert.ok(!scan.claims[mutant.file]?.includes(mutant.mention),
           `${mutant.rule}: the planted label was reported as a claim`);
       } else {
-        assert.ok(!scan.claims[mutant.file]?.includes('setLegacyVerifierAddress'),
+        assert.ok(!scan.claims[mutant.file]?.includes('buildLegacyVerifierConfig'),
           `${mutant.rule}: a fence the document marks removed was still reported`);
       }
     } finally {
@@ -2461,7 +2491,7 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
 // The matrix is written out HERE rather than read from the lexer's own table, so a shape cannot
 // pass by agreeing with the table it is supposed to test (DEC-DS-9). The test after the block is
 // the other direction: it refuses a table row that no shape plants.
-const R3_FILE = 'frontend/src/assets/docs/custom-modules.md';
+const R3_FILE = 'frontend/src/assets/docs/guide.md';
 const R3_COMMENTED = 'gatherChildProofPackets(context, operation)';
 const R3_COMMENTED_NAME = 'gatherChildProofPackets';
 const R3_CONTROL = 'bulkVerifySignatures(context, operation);';
@@ -2719,11 +2749,11 @@ test('CU-211: the liveness oracle is case-aware in both directions', () => {
     'the C# source spelling of an exported member is live again; the fence scan cannot see such a name');
   assert.equal(isLiveName('canExecuteHook', 'docs/SECURITY_MODEL.md'), true,
     'the manifest spelling of an exported member is not live');
-  assert.ok(sourceDefinitions.has('GetThresholdPolicy'),
-    'the source-definition oracle lost GetThresholdPolicy, the private core read the pinned build cannot export');
-  assert.equal(deployedSpelling('GetThresholdPolicy'), undefined,
-    'GetThresholdPolicy is exported by a manifest now, so the live-as-source control is stale');
-  assert.equal(isLiveName('GetThresholdPolicy', 'docs/SECURITY_MODEL.md'), true,
+  assert.ok(sourceDefinitions.has('RequirePinnedCore'),
+    'the source-definition oracle lost RequirePinnedCore, a plugin guard no manifest exports');
+  assert.equal(deployedSpelling('RequirePinnedCore'), undefined,
+    'RequirePinnedCore is exported by a manifest now, so the live-as-source control is stale');
+  assert.equal(isLiveName('RequirePinnedCore', 'docs/SECURITY_MODEL.md'), true,
     'a C# definition that no manifest exports is treated as dead; the oracle is rejecting names by shape, not by artifact');
   // The ledger keeps the two classes apart and says what the artifact exports, so a reader does not
   // have to open a manifest to know what a `spelling:` entry should have been.
@@ -2759,12 +2789,15 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   //    the artifact that carried them, which is exactly the move a derivation exists to record.
   //    It moved 194 -> 191 when the AA -> SA rename spelled SetAllowedAA / IsAllowedAA / GetAAContract
   //    as SetAllowedSA / IsAllowedSA / GetSAContract. It moved 191 -> 134 in the v4 migration: the
-  //    verifier, hook, escape and backup-owner modules were deleted from contracts/custom (their
+  //    verifier, hook, escape and backup-owner modules were deleted from the custom tree (their
   //    state moved into the module model), so the C# members those files defined left the source
   //    with the files, and the members they exported left the pinned manifests with their artifacts.
   //    The class measures the source it is given against the build it is given, and these are the
-  //    two on disk.
-  assert.equal(divergentSpellings.size, 134,
+  //    two on disk. It moved 134 -> 81 with the deletion of the custom contract tree (Task #43):
+  //    the custom tree held the account, market-escrow, paymaster and registrar members the pinned
+  //    manifests still export, so those members left the source and the class together with the
+  //    files, leaving contracts/plugins and tests/mocks as the only contract sources on disk.
+  assert.equal(divergentSpellings.size, 81,
     'the divergent class changed size: a contract member was added, renamed or removed, and the ledger below must be re-measured');
   for (const name of divergentSpellings) {
     assert.equal(deployedSpellingOfSource(name), (() => {
@@ -2783,13 +2816,13 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   assert.ok(!divergentSpellings.has('_deploy'), '_deploy is not a divergent spelling');
   // The other direction of DEC-DS-5 rule 2: a C# definition no manifest exports stays live as source
   // and must not be dragged into the class.
-  assert.ok(sourceDefinitions.has('GetThresholdPolicy'),
-    'the source-definition oracle lost GetThresholdPolicy, the private core read the pinned build cannot export');
-  assert.equal(deployedSpelling('GetThresholdPolicy'), undefined,
-    'GetThresholdPolicy is exported by a manifest now, so the live-as-source control is stale');
-  assert.ok(!divergentSpellings.has('GetThresholdPolicy'),
+  assert.ok(sourceDefinitions.has('RequirePinnedCore'),
+    'the source-definition oracle lost RequirePinnedCore, a plugin guard no manifest exports');
+  assert.equal(deployedSpelling('RequirePinnedCore'), undefined,
+    'RequirePinnedCore is exported by a manifest now, so the live-as-source control is stale');
+  assert.ok(!divergentSpellings.has('RequirePinnedCore'),
     'a source-only definition was pulled into the divergent class');
-  assert.equal(isLiveName('GetThresholdPolicy', 'docs/SECURITY_MODEL.md'), true,
+  assert.equal(isLiveName('RequirePinnedCore', 'docs/SECURITY_MODEL.md'), true,
     'a C# definition that no manifest exports is treated as dead; the oracle is rejecting names by shape, not by artifact');
 
   // 2. Both oracles read the class. The inline oracle is asked through `callableNames`, the fence
@@ -2801,9 +2834,8 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   // derivation so it keeps meaning when the class moves. The three verifier-model members the list
   // carried before the v4 migration (VerifyExecution, VerifyAdmin, VerifyMetaTx) left it with the
   // modules that defined them, and three v4 members replace them.
-  const blind = ['ClearAccount', 'SupportsModuleType', 'OnOracleResult', 'PreExecute', 'PostExecute', 'Transfer',
-    'SetupRecovery', 'Verify', 'BalanceOf', 'ClearSessionKey', 'EnterMarketEscrow', 'OnNEP17Payment',
-    'RefundPendingPayment', 'Admin'];
+  const blind = ['ClearAccount', 'OnOracleResult', 'PreExecute', 'PostExecute', 'Transfer',
+    'SetupRecovery', 'BalanceOf', 'ClearSessionKey', 'OnNEP17Payment', 'Admin'];
   for (const name of blind) {
     assert.ok(!shapedLikeEntrypoint(name), `${name} is read by the shape rule now, so it is not a blind name`);
     assert.ok(isCallableName(name), `${name} is still invisible to the vocabulary`);
@@ -2839,11 +2871,11 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
     ['Transfer'], 'a span that names the class on its own is not read');
   assert.deepEqual(callableNames('list `createListing, updateListingPrice`').map(({ name }) => name),
     ['createListing', 'updateListingPrice'], 'a comma-separated name list is no longer read');
-  assert.deepEqual(callableNames('call `EnterMarketEscrow(accountId, marketContract, listingId)`').map(({ name }) => name),
-    ['EnterMarketEscrow'], 'a call to the source spelling is no longer read, or its argument names are read as names');
+  assert.deepEqual(callableNames('call `ClearSessionKey(accountId)`').map(({ name }) => name),
+    ['ClearSessionKey'], 'a call to the source spelling is no longer read, or its argument names are read as names');
   // The other direction: the deployed spelling is exact ABI, and the shape rule deliberately does not
   // read it, so the vocabulary is not "any case variant" either.
-  assert.deepEqual(callableNames('call `enterMarketEscrow(accountId, marketContract, listingId)`').map(({ name }) => name),
+  assert.deepEqual(callableNames('call `clearSessionKey(accountId)`').map(({ name }) => name),
     [], 'the vocabulary reads a name the shape rule never read and no source definition carries');
 
   // 4. The ledger this vocabulary produces: 3 `spelling:` entries and no `entrypoint:` entry in 2

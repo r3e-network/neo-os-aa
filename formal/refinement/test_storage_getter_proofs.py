@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent
 INVENTORY_PATH = os.environ.get('STORAGE_GETTER_INVENTORY')
 # A minimal synthetic inventory is used when no real artifact is provided;
 # it exercises only the frontend grammar, never kernel or binding status.
-SYNTHETIC_PREFIX_FILE = 'contracts/custom/SmartAccount.Internal.cs'
+SYNTHETIC_PREFIX_FILE = 'contracts/native/SmartAccount/SmartAccountModuleProtocol.cs'
 
 
 def synthetic_inventory():

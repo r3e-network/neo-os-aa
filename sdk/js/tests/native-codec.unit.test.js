@@ -41,7 +41,7 @@ const operation = {
   nonceSubkey: ZERO_SUBKEY,
   deadline: DEADLINE,
   validatorId: 0,
-  credentialGeneration: 0,
+  credentialGeneration: 1,
   authorityEpoch: 1,
   configurationNonce: 0,
   signature: '',
@@ -122,7 +122,8 @@ test('the digest domain is the §4.3 layout, network little-endian', () => {
     Buffer.from(CORE, 'hex').reverse(),
     Buffer.from(ACCOUNT_ID, 'hex').reverse(),
     Buffer.from('0000000000000000', 'hex'),
-    Buffer.from('0000000000000000', 'hex'),
+    // §4.1 [8]: the generation is 1-based, so the domain binds a 1, not a 0.
+    Buffer.from('0000000000000001', 'hex'),
     Buffer.from('0000000000000001', 'hex'),
     Buffer.from('0000000000000000', 'hex'),
   ]).toString('hex');
@@ -149,13 +150,16 @@ test('the message digest binds sender, hash and authority epoch', () => {
   );
   assert.notEqual(base, other);
   assert.notEqual(
-    c.messageDigest({ ...context, authorityEpoch: 1 }, { ...message, hash: 'ac'.repeat(32) }),
+    c.messageDigest(
+      { ...context, authorityEpoch: 1 },
+      { ...message, hash: 'ac'.repeat(32), credentialGeneration: 0 },
+    ),
     base,
   );
   assert.notEqual(
     c.messageDigest(
       { ...context, authorityEpoch: 1 },
-      { ...message, originalSender: CORE },
+      { ...message, originalSender: CORE, credentialGeneration: 0 },
     ),
     base,
   );
@@ -180,12 +184,27 @@ test('the message digest binds sender, hash and authority epoch', () => {
   );
   // A message without a sender or hash cannot be bound to an account.
   assert.throws(
-    () => c.messageDigest({ ...context, authorityEpoch: 1 }, { originalSender: CUSTODY }),
+    () =>
+      c.messageDigest(
+        { ...context, authorityEpoch: 1 },
+        { originalSender: CUSTODY, credentialGeneration: 0 },
+      ),
     /hex bytes/,
   );
   assert.throws(
-    () => c.messageDigest({ ...context, authorityEpoch: 1 }, { hash: 'ab'.repeat(32) }),
+    () =>
+      c.messageDigest(
+        { ...context, authorityEpoch: 1 },
+        { hash: 'ab'.repeat(32), credentialGeneration: 0 },
+      ),
     /hex bytes/,
+  );
+  // §8 binds the route generation to SubjectRevision / CredentialGeneration, so
+  // there is no protocol default: an absent one is refused instead of being
+  // silently replaced with 0 or 1.
+  assert.throws(
+    () => c.messageDigest({ ...context, authorityEpoch: 1 }, { ...message }),
+    /credential generation is required/,
   );
 });
 
@@ -218,6 +237,59 @@ test('nonce channels are 191-bit namespaces derived from the routing tuple', () 
     () => c.deriveNonceChannel(nonceContext, { ...routing, nonceSubkey: '00' }),
     /hex byte length/,
   );
+  // The generation is part of the namespace, so a routing tuple without one is
+  // refused rather than bound to an assumed namespace.
+  const { credentialGeneration, ...withoutGeneration } = routing;
+  assert.ok(credentialGeneration !== undefined);
+  assert.throws(
+    () => c.deriveNonceChannel(nonceContext, withoutGeneration),
+    /credential generation is required/,
+  );
+  assert.throws(
+    () => c.nonceNamespaceDigest(nonceContext, withoutGeneration),
+    /credential generation is required/,
+  );
+});
+
+test('the derived channel is the kernel vector: digest bytes 8..31, byte 8 masked to seven bits', () => {
+  // tests/fixtures/sa-module-protocol/golden-vectors/nonce-channel.json is the
+  // Phase-1 vector the C# kernel was corrected against: the channel is the low
+  // 191 bits of the 256-bit namespace digest, i.e. digest bytes 8..31 with the
+  // top bit of byte 8 cleared. The custom expectation in the same file still
+  // records the 185-bit (`& 0x01`) form, so only the native block is read here.
+  const vector = JSON.parse(
+    fs.readFileSync(
+      path.join(
+        __dirname,
+        '../../..',
+        'tests/fixtures/sa-module-protocol/golden-vectors/nonce-channel.json',
+      ),
+      'utf8',
+    ),
+  );
+  const expected = vector.expected.native;
+  const channelContext = {
+    networkMagic: NETWORK,
+    coreContractHash: strip(expected.coreHash),
+    accountId: strip(vector.input.accountId),
+    authorityEpoch: vector.input.authorityEpoch,
+  };
+  const routing = {
+    validatorId: vector.input.validatorId,
+    credentialGeneration: vector.input.credentialGeneration,
+    nonceSubkey: vector.input.nonceSubkey,
+  };
+  const digest = c.nonceNamespaceDigest(channelContext, routing);
+  assert.equal(digest, expected.fullDigestHex);
+  // Rebuilt by hand from the digest: a revert to `digest[8] & 0x01` (185 bits)
+  // clears six more bits of the leading byte and no longer matches.
+  const handBuilt = `${(parseInt(digest.slice(16, 18), 16) & 0x7f)
+    .toString(16)
+    .padStart(2, '0')}${digest.slice(18)}`;
+  assert.equal(handBuilt, expected.channelBytesHex);
+  const channel = c.deriveNonceChannel(channelContext, routing);
+  assert.equal(channel, BigInt('0x' + expected.channelBytesHex).toString());
+  assert.equal(c.composeNonce(channel, 0), BigInt(expected.packedNonce));
 });
 
 test('packed nonce round-trips and enforces both widths', () => {
@@ -309,6 +381,48 @@ test('operation bounds: method, target, subkey, deadline, signature, hook proofs
       hookProofs: [{ hookId: 1, proof: 'aa'.repeat(4097) }],
     }),
   /4096/);
+  // §4.1 [12]: a hook id names a module, so 0 is not a hook. The cursor starts
+  // at 0 and the check is strictly ascending, which rejects a zero id too.
+  assert.throws(() =>
+    c.serializeOperation({
+      ...op,
+      hookProofs: [{ hookId: 0, proof: 'aa' }],
+    }),
+  /ascending/);
+});
+
+test('protocol caps: 1-based generation, 16 KiB operation, 64 KiB batch', () => {
+  // §4.1 [8]: the core faults a zero generation with SA_OPERATION_MALFORMED, so
+  // the codec refuses to encode one rather than emitting an unexecutable op.
+  assert.throws(
+    () =>
+      c.serializeOperation({ ...operation, credentialGeneration: 0, signature: '11'.repeat(64) }),
+    /credentialGeneration must be >= 1/,
+  );
+  // The largest operation the field bounds allow still exceeds the envelope cap:
+  // 4 KiB of arguments, an 8192-byte signature and 4 KiB of hook proofs.
+  const heavy = {
+    ...operation,
+    args: [{ type: 'ByteString', value: 'aa'.repeat(4000) }],
+    signature: '11'.repeat(8192),
+    hookProofs: [{ hookId: 1, proof: 'aa'.repeat(4095) }],
+  };
+  assert.throws(() => c.serializeOperation(heavy), /exceeds 16384/);
+  // A digest does not shrink the operation: the cap is measured on the signed
+  // form, because the core validates the broadcast bytes, not the preimage.
+  assert.throws(() => c.serializeOperation(heavy, true), /exceeds 16384/);
+  // 32 operations that are each legal still exceed the 64 KiB batch envelope:
+  // an op of 4 KiB of arguments is well under 16 KiB, but 32 of them are not.
+  const bulk = {
+    ...operation,
+    args: [{ type: 'ByteString', value: 'aa'.repeat(4000) }],
+    signature: '11'.repeat(64),
+  };
+  assert.ok(c.serializeOperation(bulk));
+  assert.throws(
+    () => c.buildExecutionScript(ACCOUNT_ID, Array.from({ length: 32 }, () => bulk), context),
+    /exceeds 65536/,
+  );
 });
 
 test('built-in and threshold signature fields are serialized, not hashed', () => {

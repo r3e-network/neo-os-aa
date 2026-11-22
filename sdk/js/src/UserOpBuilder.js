@@ -51,7 +51,7 @@ class UserOperationBuilder {
       nonceSubkey: undefined,
       deadline: undefined,
       validatorId: 0,
-      credentialGeneration: 1,
+      credentialGeneration: undefined,
       authorityEpoch: undefined,
       configurationNonce: undefined,
       signature: '',
@@ -101,6 +101,13 @@ class UserOperationBuilder {
    * Routing identity of the nonce channel (§6). A field left out keeps its
    * current value; there is no unset, because a cleared routing field would
    * only be discovered as a missing field at build time.
+   *
+   * `credentialGeneration` is required and never defaulted. The right value is
+   * a chain fact: the built-in validator (id 0) uses the account's 0x57
+   * SubjectRevision, and an installed validator or active threshold policy uses
+   * its CredentialGeneration. The builder is offline, so the caller must read
+   * that value first -- a guessed 1 would produce a digest the core rejects as
+   * ErrorCredentialStale the moment the revision has advanced.
    */
   setRouting({ validatorId, credentialGeneration, authorityEpoch, configurationNonce }) {
     if (validatorId !== undefined) this._state.validatorId = validatorId;
@@ -178,6 +185,17 @@ class UserOperationBuilder {
     const { networkMagic, coreContractHash, accountId, validatorId, credentialGeneration,
       authorityEpoch, nonceSubkey } = this._state;
     if (accountId === undefined) fail(EC.VALIDATION_ACCOUNT_ID_REQUIRED);
+    // The generation is not part of the account record and the builder never
+    // talks to RPC, so there is nothing to fall back to: report the missing
+    // field instead of deriving a namespace the core would reject.
+    if (credentialGeneration === undefined || credentialGeneration === null) {
+      fail(EC.VALIDATION_OPTIONS_REQUIRED, {
+        hint:
+          'credential generation is required: read it from the chain ' +
+          '(SubjectRevision for the built-in validator, CredentialGeneration for an ' +
+          'installed validator or active threshold policy); the builder never assumes one',
+      });
+    }
     try {
       const context = {
         networkMagic: codec.unsigned(networkMagic, 32, 'network magic').toString(),
@@ -223,7 +241,7 @@ class UserOperationBuilder {
       nonceSubkey: state.nonceSubkey,
       deadline: integer(state.deadline, 'deadline', 255),
       validatorId: integer(state.validatorId ?? 0, 'validator id'),
-      credentialGeneration: integer(state.credentialGeneration ?? 1, 'credential generation'),
+      credentialGeneration: integer(state.credentialGeneration, 'credential generation'),
       authorityEpoch: integer(state.authorityEpoch, 'authority epoch'),
       configurationNonce: integer(state.configurationNonce, 'configuration nonce'),
       signature: state.signature ?? '',

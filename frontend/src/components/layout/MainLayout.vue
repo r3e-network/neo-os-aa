@@ -361,10 +361,8 @@ const navLinks = [
     fallback: "Console",
     isConsole: true,
   },
-  { to: "/app", label: "nav.app", fallback: "Workspace" },
   { to: "/identity", label: "nav.identity", fallback: "Identity" },
   { to: "/native", label: "nav.native", fallback: "Native" },
-  { to: "/market", label: "nav.market", fallback: "Market" },
   { to: "/docs", label: "nav.docs", fallback: "Docs" },
 ];
 
@@ -375,14 +373,9 @@ const footerColumns = [
     links: [
       { to: "/console", label: "footer.footerConsole", fallback: "Console" },
       {
-        to: "/app",
-        label: "footer.footerAppWorkspace",
-        fallback: "App Workspace",
-      },
-      {
-        to: "/market",
-        label: "footer.footerAddressMarket",
-        fallback: "Address Market",
+        to: "/native",
+        label: "nav.native",
+        fallback: "Native Accounts",
       },
       {
         to: { path: "/docs", query: { doc: "transactionViewer" } },

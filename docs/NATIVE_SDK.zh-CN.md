@@ -70,7 +70,9 @@ await client.broadcastTransaction(signed);
 
 `buildExecutionScript({accountId, operations})` 对单个操作发出 `executeUserOp(accountId, op)`，对批次发出 `executeUserOps(accountId, ops)`。操作是十三字段的 v4 数组：版本、目标、方法、参数、nonce、nonce 子键、截止时间、验证器 id、凭据代次、授权 epoch、配置 nonce、签名与钩子证明。
 
-`deriveNonceRouting(accountId, routing)` 与 `getNonce(accountId, {authorityEpoch, validatorId, credentialGeneration, nonceSubkey})` 读取操作必须携带的路由；`getNonceSequence` 读取通道游标。`getOperationDigest` 与 `validateUserOp` 在签名之前读取摘要与核心的判定。`isValidSignature` 按账户的默认消息授权校验一条消息签名。
+`deriveNonceRouting(accountId, routing)` 与 `getNonce(accountId, lookup)` 读取操作必须携带的路由；`getNonceSequence` 读取通道游标。`getOperationDigest` 与 `validateUserOp` 在签名之前读取摘要与核心的判定。核心没有消息入口：消息签名由签名模块按账户的默认消息授权校验，主体记录归该合约所有。
+
+`getNonce` 接收 `{validatorId, nonceSubkey}`，并可选地成对接收 `{credentialGeneration, authorityEpoch}`。成对提供时该读取成为交叉校验：核心返回的通道必须与客户端推导的一致，否则在签名之前就失败；两者都不提供时只采信合约返回的通道，因为代次由核心自行解析（见《凭据代次》）。`resolveCredentialGeneration` 给出已安装验证器的该值；内置通道的代次不由 ABI 发布，它会如实报告不可解析，而不是猜一个。
 
 ```js
 const plan = client.buildExecutionScript({ accountId: state.accountId, operations: [operation] });
@@ -80,36 +82,47 @@ const plan = client.buildExecutionScript({ accountId: state.accountId, operation
 
 `validateNativeInvocationResult` 在签名之前检查执行证据，并在确切的已签名交易上再次检查。单个操作必须返回恰好一个格式正确、可序列化的 VM 项；批次必须返回一个确切的 Array，每个操作对应一个结果。名为 `transfer` 的方法必须严格返回 Boolean `true`；缺失、截断、类型错误、false 或非 Boolean 的转账结果都不能授权提交。其他目标方法保留其原生返回语义，包括 Boolean `false` 与 Null。生命周期调用合法地返回空栈是允许的，但缺失或畸形的栈会被拒绝。出错的模拟仍可用于诊断，且绝不会自动给出费用批准。
 
-## 模块与配置意图
+## 凭据代次
 
-创建时不选择任何东西。`proposeConfiguration(accountId, actions, readSet)` 暂存一个配置意图，`confirmConfiguration(accountId, intentId, actions)` 在 24 小时成熟之后应用它，`cancelConfiguration(accountId, intentId)` 丢弃它。确认之前账户完全不变。
+有三种不同的代次会进入 §4.3 的签名域和 §6 的通道，三者绝不可互换：
+
+| 路由 | 核心绑定的代次 | 存放位置 |
+| --- | --- | --- |
+| 内置验证器（`validatorId` 为 0） | 账户的 `SubjectRevision` | 0x57 subject 记录 |
+| 已安装验证器 | 该实例的 `CredentialGeneration` | 0x52 实例记录，由 `getModule` 发布 |
+| 生效中的阈值策略 | 策略的 `CredentialGeneration` | 0x5B 策略记录 |
+
+核心在每个操作和每次 `getNonce` 读取时自行解析代次，因此被链接受的操作用的永远是核心推导出的通道，而不是客户端的猜测。携带账户已离开代次的操作会以 `SA_CREDENTIAL_STALE` 失败；被重塑的阈值策略同样会让其上一代的通道失效。
+
+客户端栈里没有任何默认值。离线构建器没有 RPC，`getAccount` 也不携带该修订号，因此 `UserOperationBuilder` 在缺少显式 `credentialGeneration` 时拒绝构建（`SDK_011`），前端操作工厂则抛出 `EC_credential_generation_required`；两者都不会给内置通道填 1、给其他情况填 2。经过评审的 fixture 可以显式写明代次，那是对该 fixture 的声明，而不是默认值。摘要和通道都绑定了这个值，所以代次过期不会静默滑到下一个通道：它是一次拒绝。
+
+## 模块
+
+注册时可以原子地附带安装：核心在注册时最多执行 16 个动作，而它现在仍会执行的只有 `installModule` 与 `uninstallModule`。此后的一切都走两个公开方法。
+
+`installModule(accountId, moduleType, moduleContractHash, initData)` 与 `removeModule(accountId, moduleId, deInitData)` 取 v4 的安装码——验证器（1）或钩子（4）——不带配置摘要，因为核心读取模块自己的配置；注册动作会带一个，并由共享核心比对。两个调用都接受托管见证或某个已安装验证器实例的见证（用户态治理模块用它管理自身的那种形态），并且都会推进配置 nonce。
 
 ```js
-const propose = client.buildConfigurationScript({
-  kind: 'propose',
+const install = client.buildAccountActionScript({
+  method: 'installModule',
   accountId: state.accountId,
-  actions: [installAction],   // [1, moduleType, moduleHash, profileDigest, initData]
-  readSet: [],
-});
-const confirm = client.buildConfigurationScript({
-  kind: 'confirm',
-  accountId: state.accountId,
-  intentId,
-  actions: proposed.actions,  // the identical action bytes the intent carries
+  args: [moduleTypeCode, moduleContractHash, initData],
 });
 ```
 
-动作包括 `installModule`、`uninstallModule`、`configureModule`、`setHookOrder`、`setDefaultPolicy`、`rebindModuleCode`、`setThresholdPolicy`、`setRecoveryPolicy`、`setMessageSubjects` 与 `migrateAccount`。`getPendingConfiguration(accountId, intentId)` 返回意图及其成熟时间与动作摘要，`getPendingConfigurationIntentIds(accountId)` 列出尚未完成的 id。确认之前，请把摘要与你提出的意图比对；仅仅存在待生效记录并不能证明它携带的就是你的变更。
+核心不保留任何配置意图：需要成熟 24 小时然后被确认或取消的变更属于治理模块，由它通过这两个方法提交成熟后的调用。期待存在提案窗口的客户端，面向的是另一个合约。`getAccount` 仍会发布 `configurationNonce` 与 `hookOrderRevision`，让读者可以排序变更，同时它在描述符里保留了恢复字段以维持 ABI 稳定，报告其未激活值。
 
-`getModules(accountId, 'validator'|'hook', {cursor, limit})` 分页读取已安装实例；`getModule(accountId, moduleId)` 读取十二字段描述符（类型、合约哈希与 id、更新计数、NEF 与配置摘要、模块修订、凭据代次、实例隔离、消息能力、阈值资格）；`getHookOrder` 返回核心持有的钩子顺序。模块只能读取自己持有的状态——生命周期回调属于核心。
+`getModules(accountId, 'validator'|'hook', {cursor, limit})` 分页读取已安装实例；`getModule(accountId, moduleId)` 读取一个描述符（类型、合约哈希与 id、更新计数、NEF 与配置摘要、模块修订、凭据代次、实例隔离、消息能力、阈值资格）。`isModuleInstalled` 在不分页的情况下回答准入问题，`getAuthorizedModuleId` 报告核心为某个阶段路由到的实例。模块只能读取自己持有的状态——生命周期回调属于核心。
 
-`revokeCredentials(accountId, moduleId)` 是延迟的例外：它是由托管授权的动作，会立即推进实例凭据代次，因此绑定到旧代次的签名立刻失效。
+钩子顺序由已安装的钩子实例与描述符发布的 `hookOrderRevision` 推导；调用它们的编排器是一个模块，因此核心无顺序可读，也无顺序可改。凭据代次通过移除并重新安装实例推进，也就是由托管授权的 `removeModule`/`installModule` 组合——核心上没有单独的吊销入口。
 
-## 恢复与账户动作
+## 账户动作
 
-`beginRecovery(accountId, newCustody)`、`cancelRecovery(accountId)` 与 `executeRecovery(accountId)` 都通过 `buildAccountActionScript` 构建，`freezeAccount`、`unfreezeAccount` 与 `revokeCredentials` 也是如此。SDK 按方案种类与账户状态推导权限集合：`beginRecovery` 与 `cancelRecovery` 接受托管或已配置的恢复权限方；成熟之后 `executeRecovery` 无需权限；其他每个动作都要求托管。`getRecoveryStatus(accountId)` 读取待生效恢复及其成熟时间。
+`freezeAccount(accountId)` 与 `unfreezeAccount(accountId)` 是核心拥有的两个即时转换，都由 `buildAccountActionScript` 构建，且都只允许托管。冻结会推进授权 epoch，因此此前产生的每个签名都不再通过校验；账户未冻结时解冻会被拒绝。账户等待迁移期间，两者都会被拒绝。
 
-冻结会推进配置 nonce 并清除待生效意图与待生效恢复。恢复保留身份、资产、nonce 通道与 Frozen 状态，并在不调用模块的情况下撤销已安装模块。恢复与配置都通过授权 epoch 与配置 nonce 使旧签名失效，SDK 会在签名之前与广播之前重新读取状态、摘要与 nonce。
+恢复是一个模块。`beginRecovery`、`cancelRecovery`、`executeRecovery` 与 `getRecoveryStatus` 都是恢复模块自己的方法：交接延迟及其成熟都在该模块的存储里，因此核心既不规划也不校验它们，SDK 也不会从核心方案推导恢复权限集合。需要恢复的客户端面向的是恢复模块的脚本哈希。
+
+冻结推进配置 nonce 并清除核心的恢复字段。两个转换都通过授权 epoch 让旧签名失效，SDK 会在签名之前与广播之前重新读取状态、摘要与 nonce。
 
 ## 费用与最终预检
 

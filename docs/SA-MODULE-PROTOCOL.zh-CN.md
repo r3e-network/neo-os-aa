@@ -1,21 +1,21 @@
 # SA 模块协议 —— 共同规范（协议版本 4）
 
-本文件是 Neo Smart Account（SA）模块模型的**唯一共同规范**，供两个 kernel 批次实施：
+本文件是 Neo Smart Account（SA）模块模型的**唯一共同规范**，由 native kernel 批次实施：
 
-- custom kernel —— 任务 #39（`contracts/`）
 - 原生合约版 kernel —— 任务 #40（`contracts/native/SmartAccount/`）
+- 已退役的 custom kernel —— 任务 #39，归档交付记录
 
-本文定义的 DTO、profile、存储布局、上限、错误码、事件与 gas 预算对两版**完全一致**；
-任何一版 kernel 不得偏离或自行重新设计。凡两版运行时确有差异之处（如 caller/阶段
-门实现机制），必须作为披露的能力差异显式列出，绝不允许表现为 DTO 分叉。
+本文定义的 DTO、profile、存储布局、上限、错误码、事件与 gas 预算，是核心与每个模块之间的
+契约；任何实现不得偏离或自行重新设计。凡运行时确有差异之处（如 caller/阶段门实现机制），
+必须作为披露的能力差异显式列出，绝不允许表现为 DTO 分叉。
 
-状态：**已交付规范 + 共享常量 + fixture + 两个 kernel。**
-`contracts/custom` 与 `contracts/native/SmartAccount` 已实现本文描述的表面；
-`tests/SmartAccount.Contracts.Tests` 与 `tests/SmartAccount.Native.Tests` 覆盖二者，
-且两者都对 `tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json`
-中的共享向量做断言；custom 一侧的断言见
-`tests/SmartAccount.Contracts.Tests/CrossCoreVectorTests.cs`。本文不声称该源码已在
-链上部署；形式化模型的状态单独记录在 `docs/SA-FORMAL-VERIFICATION.zh-CN.md`。
+状态：**已交付规范 + 共享常量 + fixture + native kernel。**
+`contracts/native/SmartAccount` 已实现本文描述的表面；
+`tests/SmartAccount.Native.Tests` 覆盖它，并对
+`tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json` 中的共享向量
+做断言。曾经实现同一表面的第二个 kernel 已退役，因此本文与其向量是唯一的共享契约。
+本文不声称该源码已在链上部署；形式化模型的状态单独记录在
+`docs/SA-FORMAL-VERIFICATION.zh-CN.md`。
 
 配套文档：
 
@@ -24,9 +24,8 @@
 - `docs/SA-MIGRATION-MANIFEST.md` —— 旧→新迁移 manifest 设计（§14）。
 - `tests/fixtures/sa-module-protocol/README.md` —— golden 向量/拒绝回归 fixture
   格式与 kernel 验证矩阵。
-- `contracts/custom/SmartAccount.ModuleProtocol.cs` 与
-  `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` ——
-  成对常量文件，承载本文全部数值（§15）。两个文件必须始终携带相同数值。
+- `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` ——
+  常量文件，承载本文全部数值（§15）。
 
 ## 1. 范围与术语迁移
 
@@ -173,6 +172,10 @@ digest := SHA256( domain || canonicalUnsignedOperation )
 `version`、`validatorId`、`credentialGeneration` 同时出现在数组与域中；域副本是签名
 绑定的权威，数组副本用于执行路由。
 
+`credentialGeneration` **没有默认值**。§6.1 说明不同路由绑定哪个代次；客户端若自行
+填写 1 或 2，就会派生出核心永不校验的签名域与通道，并且失败形态是“签名绑定到账户
+不使用的命名空间”，而不是可重试的 nonce 不匹配。
+
 ## 5. 签名 DTO 结构
 
 `signature` 字段是 validator 自定义 DTO（对核心不透明），上界 1–8192 字节。每种
@@ -209,7 +212,7 @@ validator 签名格式**必须**在其自身 DTO 内、或通过哈希上述核�
   U64BE(validatorId) || U64BE(credentialGeneration) || nonceSubkey )` 的**低 191 位**。
 - channel 是**派生的，不是自选的**。`nonce` 低 64 位是 sequence；必须等于存储
   游标（或耗尽哨兵）。
-- 存储键中的 channel 字节为 24 字节，右对齐大端，高 7 位为零。
+- 存储键中的 channel 字节为 24 字节，大端，`channel[0] = digest[8] & 0x7F`（只清最高 1 位，共 191 位）。
 - 每 channel 持久保存**完整 256 位派生摘要**（0x5C）；若第二个不同派生映射到
   已使用的 191 位 channel，操作被拒绝（截断碰撞 fail-closed），绝不静默共享。
 - sequence 耗尽（游标 == 2^64 哨兵）：channel 死亡；无回绕。
@@ -221,6 +224,33 @@ validator 签名格式**必须**在其自身 DTO 内、或通过哈希上述核�
 `configurationNonce` **不是**操作 nonce：每次安全配置提交、凭证撤销、freeze/
 unfreeze、恢复与 custody 变更都单调推进；操作消费与额度计数不推进它；清理、卸载、
 市场出售不重置它。
+
+### 6.1 各路由绑定的代次
+
+`credentialGeneration` 不是全局计数器：它标识路由主体当前的凭证集合，由核心按路由
+解析（绝不是调用方给的默认值；内置路由的代次也没有任何 ABI 方法对外发布）。
+
+| 路由 | 绑定的代次 | 记录 |
+| --- | --- | --- |
+| 内置（`validatorId` = 0） | 账户的 `SubjectRevision` | 0x57 |
+| 已安装验证器实例 | 该实例的 `CredentialGeneration` | 0x52 |
+| 生效中的阈值策略 | 策略的 `CredentialGeneration` | 0x5B |
+
+两 kernel 共同成立的推论：
+
+- 内置代次**不是**固定的 1。每次主体变更都推进 `SubjectRevision`（§8.3），客户端
+  硬编码 1 会派生出核心在修订号推进后永不能重现的通道。无 0x57 主体记录的账户仍
+  处于代次 1。
+- 已安装实例从代次 1 开始，只在 `revokeCredentials` 时推进——那是 custody 授权、
+  无回调的即时撤销，一次废弃所有绑定旧代次的签名。重新绑定模块代码推进的是
+  `moduleRevision`，不是凭据代次。
+- 阈值策略的代次跨重写单调（新策略写入时为代次 1；每次重写携带旧值再自增），因此
+  重塑后的策略会杀死上一代的通道，且永不重置为 1。
+- 因为代次在 §4.3 的签名域内，过期值不是可重试的 nonce 不匹配。已安装验证器或阈值策略
+  路由以 `SA_CREDENTIAL_STALE` 故障；内置路由则以自身的无效签名结果拒绝该消息，因为代次
+  在比较任何主体之前就已经与 `SubjectRevision` 比对。
+- `getNonce` 在核心内部解析代次并返回核心会使用的通道。调用方可自行交叉校验，但以
+  核心的答案为准。
 
 ## 7. 存储布局规划
 
@@ -238,7 +268,7 @@ unfreeze、恢复与 custody 变更都单调推进；操作消费与额度计数
 | 0x54 | +acctId | 核心持有 hookOrder 列表 + hookOrderRevision |
 | 0x55 | +acctId+intentId[8 BE] | 配置意图记录 |
 | 0x56 | +acctId+channel[24 BE] | nonce 游标（新编码） |
-| 0x57 | +acctId | 内建消息签名主体（≤16 个 P-256 密钥、阈值）+ subjectRevision |
+| 0x57 | +acctId | 内建消息签名主体（≤16 个 20 或 32 字节主体，阈值）+ subjectRevision（§8.1） |
 | 0x58 | +acctId | Application 回调/执行上下文（阶段 + 重入状态） |
 | 0x59 | +acctId | 核心恢复与紧急失效记录（Market 逃生路径，§7.5） |
 | 0x5A | +acctId | 迁移状态与旧状态摘要（§14） |
@@ -338,31 +368,70 @@ messageDigest := SHA256( domain || hash )
 核心转发脱敏后的签名 payload 与 `originalSender`；执行额度 hook 绝不适用于不透明
 消息哈希。SessionKeyValidator 与 SubscriptionValidator **默认不声明**任意消息能力。
 
+### 8.1 0x57 的两个键
+
+每个账户的主体存储占两个键，宽度故意不同：
+
+| 键 | 字节数 | 含义 |
+| --- | --- | --- |
+| `0x57 ‖ accountId` | 21 | canonical 主体行：`MessageSubjectRecord`（≤16 个主体、阈值、`SubjectRevision`） |
+| `0x57 ‖ accountId ‖ 0x01` | 22 | 内部 provenance 标记，绝不是第二条主体行 |
+
+canonical 行保持 **21 字节**：改成 22 会移动所有既有账户的记录，并把一个已评审的键
+变成另一个键。标记复用 canonical 前缀加一字节后缀，而不另占一个协议前缀，且只由核心
+写入与删除。
+
+### 8.2 主体匹配
+
+主体条目绑定的是签名者**脚本**，接受两种宽度：
+
+- 32 字节主体是签名者验证脚本的裸 `SHA256`，必须精确相等；
+- 20 字节主体是签名者的账户地址（`RIPEMD160(SHA256(script))`，即 N3 script hash），
+  必须精确相等。
+
+其他宽度一律不匹配。两种形态都对应同一套对 `messageDigest` 的 ECDSA 校验，因此同一
+账户可以混用；注册写入的是 20 字节形态，因为 canonical P-256 custody 脚本的哈希正好
+就是 custody 地址，该密钥因此无需等待 24 小时的主体意图即可立即签发内建消息。
+
+### 8.3 custody 派生的主体与 provenance
+
+注册写入 `Subjects = [custody]`、阈值 1、`SubjectRevision` 1，并置上 22 字节的
+provenance 标记。custody 轮换时，核心只在**该标记存在**的情况下把主体集合改写为新
+custody 并推进 `SubjectRevision`：
+
+- 标记缺失意味着 provenance 未知：主体集合既可能是（通过主体意图）显式配置的，也可能是早于
+  该标记的历史默认主体状态。运行时对两者都不做推断——它只是不改写——且即便某个主体恰好等于
+  旧 custody 地址，也不会被解读为显式委托的证据：绝不用地址相等来推断 provenance；
+- 标记存在但取值异常属于完整性故障，而不是轮换信号；
+- 轮换会以新修订号发出主体更新事件，因此内置凭据代次随主体集合一同推进。Escape
+  （§7.5）与账户拆除会删除这两个键。
+
 ## 9. 公共接口（两 kernel 命名一致）
 
-查询：`getProtocolInfo`、`getAccount(accountId)`、`supportsModuleType(type)`、
+查询：`getProtocolInfo`、`getAccount(accountId)`、`getAccountAddress(accountId)`、`supportsModuleType(type)`、
 `supportsExecutionMode(mode)`、`getModules(accountId, type, cursor, limit)`
 （limit 1–32；返回下一 cursor 与当前 configurationNonce；cursor 基于 moduleId）、
 `getModule(accountId, moduleId)`、
 `isModuleInstalled(accountId, type, moduleHash, additionalContext)`、
-`getHookOrder(accountId)`、`getPendingConfiguration(accountId, intentId)`、
+`getAuthorizedModuleId(accountId, phase)`、
 `getNonce(accountId, validatorId, nonceSubkey)`（packed）、
 `getNonceSequence(accountId, channel)`、
-`getOperationDigest(accountId, operation)`、
-`isValidSignature(accountId, hash, signatureEnvelope)`。
+`getOperationDigest(accountId, operation)`。
 
-配置：`proposeConfiguration(accountId, actions, readSet)`、
-`confirmConfiguration(accountId, intentId, actions)`、
-`cancelConfiguration(accountId, intentId)`。
+配置：`installModule(accountId, moduleType, moduleContractHash, initData)` 与
+`removeModule(accountId, moduleId, deInitData)`，两者都由托管见证或某个已安装验证器实例的见证授权，
+且都会推进配置 nonce。核心不保留意图记录、没有成熟窗口、没有取消路径：
+那些属于治理模块，由它通过这两个方法提交成熟后的调用。
 
-动作：`installModule`、`uninstallModule`、`configureModule`、`setHookOrder`、
-`setDefaultPolicy`、`rebindModuleCode`、`setThresholdPolicy`、`setRecoveryPolicy`。
-多动作意图是单一原子提案 —— 绝不是绕过时间锁的路径。
+动作：核心只执行两个动作码，`installModule` 与 `uninstallModule`，
+注册通过两个模块方法所用的同一个执行器跑它们。v3 kernel 携带的其他每个动作码都已移除 ——
+仍组装它们的脚本会以 `SA_OPERATION_MALFORMED` 被拒绝，而不是被静默忽略。
 
 执行：`validateUserOp(accountId, operation)`（只读、真实验证、结构化结果）、
 `executeUserOp(accountId, operation)`、`executeUserOps(accountId, operations)`、
-`freezeAccount(accountId)`、`unfreezeAccount(accountId)`、`beginRecovery(...)`、
-`cancelRecovery(accountId)`、`executeRecovery(accountId)`。
+`freezeAccount(accountId)`、`unfreezeAccount(accountId)`。恢复是一个模块：
+`beginRecovery`、`cancelRecovery` 与 `executeRecovery` 是那个模块的方法，
+核心一个都不暴露。
 
 身份决定的 witness 入口 `verify(accountId)`（嵌入代理脚本）保留为真正的 witness
 门，不是旧 API 别名。旧 `getVerifier`/`getHook`/`CallVerifier`/`CallHook`/`*Child`
@@ -469,7 +538,9 @@ Pending 意图：每账户独立 `intentId`（0x51 内独立分配器）；未�
 冲突的过期意图失效，不是所有 pending。到期意图显式清理；成熟记录不得偷偷替换。
 确认再要求 custody witness；引入新控制主体还要求新主体见证。
 
-冻结语义：custody witness 可冻结；冻结后仅只读查询、恢复/逃生与 unfreeze 可达；
+冻结语义：custody witness 可冻结；冻结后仅只读查询、恢复/逃生与 unfreeze 可 达；
+`freezeAccount` 立即生效，而 `unfreezeAccount` 只提议解冻意图，由 `confirmConfiguration`
+在统一 24 h 延迟后执行 —— 处于 `MigrationRequired` 的账户永远不能解冻；
 冻结推进代际（旧签名与意图失效）。最后一个 validator 规则：内建路由永远存在但受
 默认政策门控 —— 卸载最后一个 validator 必须在同一 24 h 意图中启用内建路由，且既有
 hook 继续运行；没有自动 owner fallback；仅紧急恢复可 callback-free 摘除全部政策。
@@ -515,13 +586,12 @@ hook 继续运行；没有自动 owner fallback；仅紧急恢复可 callback-fr
 
 ### 11.1 数值位置与覆盖范围
 
-两 kernel 都把单次上限钉在各自的协议常量文件里
-（`contracts/custom/SmartAccount.ModuleProtocol.cs` 与
-`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`）：
+内核把单次上限钉在协议常量文件里
+（`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`）：
 `ValidationPerCallGasLimit = 100_000_000`、`CompletionPerCallGasLimit =
 100_000_000`、`HookCallbackGasLimit = 250_000_000`、
 `LifecycleCallbackGasLimit = 250_000_000`。两个 validator aggregate 由这些上限与
-`MaxThresholdPolicyMembers` 计算得出（custom kernel 模块分区的
+`MaxThresholdPolicyMembers` 计算得出（kernel 模块分区的
 `ValidationAggregateGasLimit()` / `CompletionAggregateGasLimit()`；hook aggregate
 是 `HookAggregateGasBudget()`）。
 
@@ -581,8 +651,8 @@ profile 是对象键排序、无空白、**末尾无换行**的 UTF-8 JSON 文�
 
 `scripts/sync-module-profiles.mjs` 重写非 canonical 文件、用 `.profile.json` 回填
 字面量、校验模块确实声明了 profile 声称的回调，并支持 `--check`（STALE/ERROR 时以
-退出码 1 失败）。`contracts/compile.sh` 在编译前先跑 `--check`，因此漂移的字面量
-不可能进入产物。
+退出码 1 失败）。`scripts/sync-module-profiles.mjs --check` 在 STALE/ERROR 时失败；请在构建前先运行它，
+因为已退役的 `contracts/compile.sh` 不再把它链接进编译流程。
 
 绑定顺序与失败模式（两 kernel 一致）：
 
@@ -645,11 +715,11 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 
 | 工件 | 路径 |
 | --- | --- |
-| custom 版常量 | `contracts/custom/SmartAccount.ModuleProtocol.cs`（partial `SmartAccount`） |
+
 | 原生版常量 | `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`（internal static `SmartAccountModuleProtocol`，经 `scripts/sync_native_smartaccount.py` 同步到 neo-native-core） |
 | fixture 骨架 | `tests/fixtures/sa-module-protocol/`（README + schema + 模板） |
 
-两个常量文件对以下数值保持一致：协议版本 4；模块类型码 1/4；§3 全部上限；13
+常量文件钉住以下数值：协议版本 4；模块类型码 1/4；§3 全部上限；13
 字段 envelope 字段序号；nonce 尺寸（32 字节 subkey、24 字节 channel）；序列化上限
 （4096/8192/4096/16384/65536）；时间锁（86 400 000 / 604 800 000 /
 7 776 000 000 ms）；gas 预算（100 000 000 / 250 000 000 datoshi）；ERC-1271 magic
@@ -658,13 +728,15 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 名；以及定宽大端键后缀编码（两个文件都提供相同键构建器：`UInt64ToBigEndian`
 与各前缀复合键构建器）。
 
-## 16. Kernel 实施映射（任务 #39 / #40）
+## 16. Kernel 实施映射
 
-### 16.1 custom kernel（#39，与 #25 共享修改批次）
+> 下方的 #39 表是已退役 custom kernel 的交付记录归档；仍描述本仓库的是 #40 映射。
+
+### 16.1 已退役的 custom kernel（#39，归档交付记录）
 
 | 规范章节 | custom 版需创建/修改的文件 |
 | --- | --- |
-| §2/§3/§7 常量 | 消费 `contracts/custom/SmartAccount.ModuleProtocol.cs`（本批已加入 `SmartAccount.csproj`） |
+| §2/§3/§7 常量 | 消费随已退役 custom kernel 一起发布的常量文件（`SmartAccount.ModuleProtocol.cs`） |
 | §7.1/§7.4 前缀 | 在 `SmartAccount.cs` STORAGE PREFIX MAP 注释中追加 0x50–0x5E 行；把 `SmartAccount.ModuleProtocol.cs` 加入 `tests/SmartAccount.Contracts.Tests/StoragePrefixMapTests.cs` 的 `WalletPartials`，**与首次键使用同一批次**（DeriveShape 要求使用证据） |
 | §4/§5 envelope + 摘要 | `SmartAccount.Execution.cs`（13 字段解码、摘要、batch）；如拆分则新建 `SmartAccount.Intents.cs` |
 | §6 nonce | `SmartAccount.Internal.cs`/新 nonce partial（0x56/0x5C，与旧 0x03 合并） |
@@ -678,8 +750,8 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 | 插件 | `contracts/plugins/validators/` —— 9 个 validator（`P256Validator`、`Web3AuthValidator`、`TeeKeyValidator`、`NeoWitnessValidator`、`DelegatedIdentityValidator`、`MultiSigValidator`、`SessionKeyValidator`、`SubscriptionValidator`、`ZKEmailVerifier`），加共享层 `ModuleOperation.cs`、`ValidatorAuthority.cs`、`ValidatorPayload.cs`、`ValidatorClock.cs`、`ValidatorModels.cs`、`SignerDomain.cs` |
 | hook | `contracts/plugins/hooks/` —— `DailyLimitHook`、`TokenRestrictedHook`、`WhitelistHook`、`NeoDIDCredentialHook`、退役的 `MultiHook`（安装被拒）、共享 `HookAuthority.cs` |
 | recovery 拆分 | `contracts/plugins/recovery/ActionSessionValidator.cs`（validator 模块）与 `contracts/plugins/recovery/SocialRecoveryService.*.cs`（服务合约）；各自附带 canonical profile |
-| profile 事实源 | 每个模块同目录的 `<Name>.profile.json`，字面量以 `ModuleProfileJson` 嵌入源码，由 `scripts/sync-module-profiles.mjs` 保持同步、`contracts/compile.sh` 门禁（§12.1） |
-| 构建布局 | `contracts/compile.sh` 输出 `contracts/bin/public`（核心、服务、mock）、`bin/public/validators`、`bin/public/hooks`；nccs 会编译传入项目所在目录的全部工程 |
+| profile 事实源 | 每个模块同目录的 `<Name>.profile.json`，字面量以 `ModuleProfileJson` 嵌入源码，由 `scripts/sync-module-profiles.mjs` 保持同步（构建前运行 `--check`） |
+| 构建布局 | 已退役的 custom 构建输出 `contracts/bin/public`（核心、服务、mock）、`bin/public/validators`、`bin/public/hooks`；原生核由 MSBuild 构建到各项目自己的 `bin/Release/net10.0/`，`scripts/build_native_modules.py` 把六个 native-profile 模块写到它的 `--output` |
 
 ### 16.2 原生 kernel（#40，与 #29 共享修改批次）
 

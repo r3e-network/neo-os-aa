@@ -44,7 +44,12 @@ export interface UserOperation {
   nonceSubkey: string;
   deadline: VMInteger;
   validatorId?: VMInteger;
-  credentialGeneration?: VMInteger;
+  /**
+   * Required: the routing generation is part of the §4.3 domain. Built-in
+   * validator → the account 0x57 SubjectRevision; installed validator or
+   * active threshold policy → its CredentialGeneration. There is no default.
+   */
+  credentialGeneration: VMInteger;
   authorityEpoch: VMInteger;
   configurationNonce: VMInteger;
   signature?: string;
@@ -58,20 +63,37 @@ export interface ProtocolContext {
   accountId: string;
 }
 
-/** Nonce routing inputs; the authority epoch is part of the namespace. */
+/** Nonce routing inputs; the authority epoch and generation are part of the namespace. */
 export interface NonceRouting {
   authorityEpoch: VMInteger;
   validatorId?: VMInteger;
-  credentialGeneration?: VMInteger;
+  /**
+   * Required by every digest and channel derivation (§6). Built-in validator →
+   * the account 0x57 SubjectRevision; installed validator or active threshold
+   * policy → its CredentialGeneration. There is no protocol default.
+   */
+  credentialGeneration: VMInteger;
   nonceSubkey: string;
 }
+
+/**
+ * `getNonce` routing. The kernel resolves the routing generation itself (§6), so
+ * the namespace inputs are optional here. Supplying *both* the generation and
+ * the authority epoch turns the read into a cross-check that refuses a stale
+ * view; supplying neither trusts only the channel the contract returned.
+ */
+export type NonceLookup = { validatorId?: VMInteger; nonceSubkey: string } & (
+  | { credentialGeneration?: undefined; authorityEpoch?: undefined }
+  | { credentialGeneration: VMInteger; authorityEpoch: VMInteger }
+);
 
 /** §8 message envelope: the original sender, the 32-byte hash and the route. */
 export interface MessageEnvelope {
   originalSender: string;
   hash: string;
   validatorId?: VMInteger;
-  credentialGeneration?: VMInteger;
+  /** Required: §8 binds it to SubjectRevision or CredentialGeneration. */
+  credentialGeneration: VMInteger;
 }
 
 export interface MessageContext extends ProtocolContext {
@@ -179,6 +201,12 @@ export type RequiredAbiEntry = readonly [
 export declare const NATIVE_REQUIRED_ABI: Readonly<
   Record<string, RequiredAbiEntry>
 >;
+/**
+ * The account-address query of the native core (§9).
+ */
+export declare const NATIVE_ACCOUNT_ADDRESS_ABI: Readonly<
+  Record<string, RequiredAbiEntry>
+>;
 export declare const NATIVE_REQUIRED_EVENTS: readonly string[];
 
 export interface NativeProfile {
@@ -266,11 +294,6 @@ export interface ModulePage {
   readonly configurationNonce: string;
 }
 
-export interface HookOrder {
-  readonly hookIds: readonly string[];
-  readonly revision: string;
-}
-
 export interface ProtocolInfo {
   readonly protocolVersion: string;
   readonly migrationModeOpen: unknown;
@@ -282,33 +305,9 @@ export interface NonceState {
   readonly sequence: string;
 }
 
-export interface RecoveryStatus {
-  readonly pending: unknown;
-  readonly initiatedAt: string;
-  readonly matureAt: string;
-  readonly authorityEpochAtInit: string;
-  readonly newCustody: string;
-}
-
-export interface PendingConfiguration {
-  readonly exists: unknown;
-  readonly intentId: string;
-  readonly proposedAt: string;
-  readonly matureAt: string;
-  readonly expiresAt: string;
-  readonly authorityEpoch: string;
-  readonly actionDigest: string;
-  readonly actions: readonly unknown[];
-}
-
 export interface OperationValidation {
   readonly accepted: boolean;
   readonly operationDigest: string;
-}
-
-export interface SignatureCheck {
-  readonly valid: boolean;
-  readonly magic: string;
 }
 
 /** A failed simulation is reported, not thrown; the review shows it. */
@@ -322,7 +321,7 @@ export interface SimulationResult {
 }
 
 export interface PlanBase {
-  readonly kind: "registration" | "execution" | "configuration" | "account";
+  readonly kind: "registration" | "execution" | "account";
   readonly method: string;
   readonly script: string;
   readonly signers: readonly string[];
@@ -357,13 +356,6 @@ export interface ExecutionPlan extends PlanBase {
   readonly operations: readonly UserOperation[];
 }
 
-export interface ConfigurationPlan extends PlanBase {
-  readonly kind: "configuration";
-  readonly method: "proposeConfiguration" | "confirmConfiguration" | "cancelConfiguration";
-  readonly accountId: string;
-  readonly accountAddress: string;
-}
-
 export interface AccountActionPlan extends PlanBase {
   readonly kind: "account";
   readonly accountId: string;
@@ -374,7 +366,6 @@ export type NativePlan =
   | RegistrationPlan
   | BatchRegistrationPlan
   | ExecutionPlan
-  | ConfigurationPlan
   | AccountActionPlan;
 
 /** The method that built a reviewed plan, and the input that rebuilds it. */
@@ -395,16 +386,12 @@ export interface ExecutionInput {
   operations: UserOperation[];
 }
 
-export type ConfigurationIntentKind = "propose" | "confirm" | "cancel";
-
-export interface ConfigurationInput {
-  kind: ConfigurationIntentKind;
-  accountId: string;
-  intentId?: VMInteger;
-  actions?: VMValue[];
-  readSet?: VMValue[];
-}
-
+/**
+ * An account-level call the core declares itself: `freezeAccount`,
+ * `unfreezeAccount`, `installModule` or `removeModule`. Configuration intents,
+ * recovery and credential revocation are user-space module concerns, so they
+ * are not native account actions.
+ */
 export interface AccountActionInput {
   method: string;
   accountId: string;
@@ -605,9 +592,10 @@ export interface SmartAccountKernel {
     moduleHash: string,
     additionalContext?: string,
   ): Promise<boolean>;
-  getHookOrder(accountId: string): Promise<HookOrder>;
   deriveNonceRouting(accountId: string, routing: NonceRouting): string;
-  getNonce(accountId: string, routing: NonceRouting): Promise<NonceState>;
+  /** Resolves the kernel's generation for an installed validator (chain read). */
+  resolveCredentialGeneration(accountId: string, validatorId?: VMInteger): Promise<string>;
+  getNonce(accountId: string, routing: NonceLookup): Promise<NonceState>;
   getNonceSequence(accountId: string, channel: VMInteger): Promise<string>;
   getOperationDigest(
     accountId: string,
@@ -617,20 +605,8 @@ export interface SmartAccountKernel {
     accountId: string,
     operation: UserOperation,
   ): Promise<OperationValidation>;
-  isValidSignature(
-    accountId: string,
-    hash: string,
-    envelope: VMValue[],
-  ): Promise<SignatureCheck>;
-  getRecoveryStatus(accountId: string): Promise<RecoveryStatus | null>;
-  getPendingConfiguration(
-    accountId: string,
-    intentId: VMInteger,
-  ): Promise<PendingConfiguration | null>;
-  getPendingConfigurationIntentIds(accountId: string): Promise<readonly string[]>;
   buildCreateAccountScript(input: CreateAccountInput): RegistrationPlan;
   buildExecutionScript(input: ExecutionInput): ExecutionPlan;
-  buildConfigurationScript(input: ConfigurationInput): ConfigurationPlan;
   buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
     plan: NativePlan,
@@ -659,8 +635,8 @@ export interface SmartAccountKernel {
 }
 
 /**
- * The native kernel client: the same protocol as the custom kernel, bound to
- * the native core hash and call flags 5 (CallFlags.ReadOnly).
+ * The native kernel client: the v4 protocol bound to the native core hash and
+ * call flags 5 (CallFlags.ReadOnly).
  */
 export declare class NativeSmartAccountClient implements SmartAccountKernel {
   constructor(options: {
@@ -685,6 +661,11 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
     salt: string;
   }): NativeIdentity;
   getAccount(accountId: string): Promise<AccountDescriptor | null>;
+  /**
+   * The asset-holding script hash of the account (§9); it is the derived proxy
+   * address and is refused if the core answers anything else.
+   */
+  getAccountAddress(accountId: string): Promise<string>;
   getProtocolInfo(): Promise<ProtocolInfo>;
   getModules(
     accountId: string,
@@ -698,9 +679,10 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
     moduleHash: string,
     additionalContext?: string,
   ): Promise<boolean>;
-  getHookOrder(accountId: string): Promise<HookOrder>;
   deriveNonceRouting(accountId: string, routing: NonceRouting): string;
-  getNonce(accountId: string, routing: NonceRouting): Promise<NonceState>;
+  /** Resolves the kernel's generation for an installed validator (chain read). */
+  resolveCredentialGeneration(accountId: string, validatorId?: VMInteger): Promise<string>;
+  getNonce(accountId: string, routing: NonceLookup): Promise<NonceState>;
   getNonceSequence(accountId: string, channel: VMInteger): Promise<string>;
   getOperationDigest(
     accountId: string,
@@ -710,20 +692,8 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
     accountId: string,
     operation: UserOperation,
   ): Promise<OperationValidation>;
-  isValidSignature(
-    accountId: string,
-    hash: string,
-    envelope: VMValue[],
-  ): Promise<SignatureCheck>;
-  getRecoveryStatus(accountId: string): Promise<RecoveryStatus | null>;
-  getPendingConfiguration(
-    accountId: string,
-    intentId: VMInteger,
-  ): Promise<PendingConfiguration | null>;
-  getPendingConfigurationIntentIds(accountId: string): Promise<readonly string[]>;
   buildCreateAccountScript(input: CreateAccountInput): RegistrationPlan;
   buildExecutionScript(input: ExecutionInput): ExecutionPlan;
-  buildConfigurationScript(input: ConfigurationInput): ConfigurationPlan;
   buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
     plan: NativePlan,

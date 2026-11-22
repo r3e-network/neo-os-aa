@@ -12,7 +12,7 @@ manifest 字节。
 | --- | --- | --- |
 | `Neo.SmartContract.Framework`、`Neo.SmartContract.Testing` | 3.10.1 | `Directory.Build.props`（`NeoSmartContractFrameworkVersion`） |
 | 它们引入的 Neo 包 | `Neo`、`Neo.Extensions`、`Neo.IO`、`Neo.Json`、`Neo.VM`、`Neo.Disassembler.CSharp` 3.10.1；`Neo.Cryptography.BLS12_381` 3.9.0 | `contracts/neo-platform-packages.json`（每个包的 SHA-512） |
-| 其他每个包（MSTest、Akka 等） | 解析出的版本与内容哈希 | 28 个公开项目的已提交锁文件；`--include-native` 检查全部 38 个，含六个原生模块、两个仅测试用的 epoch 探测项目，以及两个 NuGet 依赖锁为空的运行时探测宿主 |
+| 其他每个包（MSTest、Akka 等） | 解析出的版本与内容哈希 | 每个在范围内的项目都有已提交锁文件；默认范围是原生清单（六个原生模块、两个仅测试用的 epoch 探测项目，以及两个 NuGet 依赖锁为空的运行时探测宿主） |
 | 包源 | 仅 nuget.org，每个包 id 都映射到它 | `nuget.config` |
 | 编译器 | `Neo.Compiler.CSharp` 3.9.1（`nccs`） | `.github/workflows/ci.yml`；已安装的包会与 `contracts/neo-platform-packages.json` 核对 |
 | SDK | .NET 10（`net10.0`） | `ci.yml` 中的 `actions/setup-dotnet` |
@@ -26,58 +26,63 @@ manifest 字节。
 dotnet tool install -g neo.compiler.csharp --version 3.9.1
 node scripts/check_neo_platform_packages.mjs                  # pins, lock files, locked restore, package hashes
 node scripts/check_neo_platform_packages.mjs --compiler-only  # the installed nccs is the pinned package
-bash contracts/compile.sh                                     # every contract into contracts/bin/public
-dotnet test SmartAccount.sln -c Release
+dotnet build SmartAccount.sln -c Release                      # 仅含原生的解决方案：固定原核、六个模块、探测宿主
+dotnet test tests/SmartAccount.Native.Tests/SmartAccount.Tests.csproj -c Release
 ```
 
-`./scripts/verify_repo.sh --contracts-only` 会运行同样的步骤，外加部署工具测试与格式检查。
-要证明一次干净还原，请先把 `NUGET_PACKAGES` 指向一个空目录。
+`SmartAccount.sln` 是原生构建入口：它包含原生核叠加项目（`contracts/native/Neo.csproj`）、
+六个 native-profile 模块、原生单元测试与探测宿主，不包含任何 custom 项目。构建它需要一个
+已审阅的原核检出目录；用 `NEOOS_NATIVE_CORE_SOURCE` 指向它（默认同级的 `../neo-native-core`）。
+
+`./scripts/verify_repo.sh --contracts-only` 运行原生构建与单元测试轨；MSBuild 把原生核写入各项目
+自己的 `bin/Release/net10.0/`。要证明一次干净还原，请先把 `NUGET_PACKAGES` 指向一个空目录。
 
 ### 选择验证画像
 
-`./scripts/verify_repo.sh --profile custom` 是默认值。它运行公开合约构建与测试、部署工具回归、
-前端检查与 SDK 检查，但不还原原生探测项目，也不构建原生 epoch VM 固定样例。
-`--contracts-only`、`--frontend-only` 与 `--sdk-only` 仍然用于选择要验证的组件。共享的确定性
-前端／SDK 单元测试保留在两个画像中；它们不需要原生节点。
+`./scripts/verify_repo.sh --profile native` 是默认值，也是唯一画像。它运行原生包锁、
+协议与运行器守卫、仅含原生的解决方案构建与单元测试、原生模块 epoch VM 回归以及原生浏览器
+覆盖，且不读取已退役 custom 树的任何内容。`--contracts-only`、`--frontend-only` 与
+`--sdk-only` 仍然用于选择要验证的组件。共享的确定性前端／SDK 单元测试照常运行；它们不需要
+原生节点。
 
-`--profile native` 选择原生包锁、协议与运行器守卫、原生模块 epoch VM 回归以及原生浏览器覆盖。
-`--profile all` 同时运行两个画像。每个被选中的命令都是强制的，其失败会终止门禁。原生 epoch
-固定样例是模块级 VM 证据；独立的 `native-profile.yml` 工作流额外构建固定的原核并执行原生 VM
-矩阵。两条命令都不确立公开激活或全链准入。
+每个被选中的命令都是强制的，其失败会终止门禁。原生 epoch 固定样例是模块级 VM 证据；独立的
+`native-profile.yml` 工作流额外构建固定的原核并执行原生 VM 矩阵。两条命令都不确立公开激活
+或全链准入。
 
 主 CI 工作流还会在安装前端依赖与 Playwright 之后，以一个独立的必需步骤运行原生浏览器固定样例。
 它复用这些安装，不重复前端构建或完整单元测试套件。该工作流没有路径过滤，因此原生 UI、共享
 代码、SDK 与前端测试的改动都会选中浏览器门禁，而无需原生节点。
 
-`--formal` 显式加入聚合形式化检查及其源码锁要求。`--neoexpress` 在一次性发布的 NeoExpress 链上
-选择公开 profile 当前源码验收，适用于 `custom` 或 `all`。它先重建两个工件画像，然后把
-`contracts/bin/public` 交给 `tests/localchain/run.py --variant source`。`NEOOS_NEOXP`（否则
-`NEOXP`、PATH 或用户工具目录）选择已发布的运行器；该路径不启用任何私有分叉。
+`--formal` 显式加入聚合形式化检查及其源码锁要求。`--skip-e2e` 跳过一次性链支路，但保留全部
+离线门禁。`NEOOS_NEOXP`（否则 `NEOXP`、PATH 或用户工具目录）选择已发布的运行器；该路径
+不启用任何私有分叉。
 
-`scripts/check-custom-runtime-provenance.mjs` 把重建证书与当前源码快照、九个已部署模块的精确
-NEF 哈希、校验和、完整 manifest 与 RPC script 回读连接起来。它复用源码套件已有的验收预言机。
-这是经过测量的子集，不是对整个模块目录或公开部署的证明。独立的
-`scripts/neoexpress_validate.py` 与 `verify-private-artifact-provenance.mjs` 仍然是私有 PLATFORM
-的全模块矩阵。该未被选中的矩阵上报为 NOT RUN，并且不增加custom 门禁。原生全链验证遵循其单独的
-文档化运行器。可选的已选中检查在未被选中时保留其显式的 NOT RUN 消息。
+原生侧的溯源合并由 `scripts/native_epoch_probe.py` 与 `scripts/neoexpress_native_*_validate.py`
+套件完成：它们把重建工件与当前源码快照、模块 NEF 哈希、校验和、完整 manifest 与 RPC script
+回读绑定起来。这是经过测量的子集，不是对整个模块目录或公开部署的证明。原生全链验证遵循其
+单独的文档化运行器。可选的已选中检查在未被选中时保留其显式的 NOT RUN 消息。
 
 ## 复现
 
-### 公开与私有画像
+### 原生构建产物
 
-`contracts/bin/public` 中的默认核心使用已发布的 `System.Contract.Call`：签名验证为只读，而验证器的
-钩子的 `postCheck` 保留写权限用于记账。它不发出任何 `System.Contract.CallWithGasLimit`。模块回调测试运行在已发布的 TestEngine 上；`tests/localchain/test_public_profile.py` 在一次性发布的
-neoxp 上执行一次已签名操作。
+原生核是唯一的构建目标。`dotnet build SmartAccount.sln` 针对固定的原核检出目录编译叠加核心
+（`contracts/native/SmartAccount/`），`scripts/build_native_modules.py` 在锁定还原策略下用两棵
+独立的 scratch 树复现六个 `SMARTACCOUNT_NATIVE` 模块，并把它们写入调用方指定的 `--output` 目录。
+`scripts/native_epoch_probe.py` 在公开 VM 中运行这些工件，并把回执写到它自己的 `--output`。两者都没有
+默认目录，`contracts/bin/native` 也不是任何脚本的目标。
 
-`bash contracts/compile.sh` 还会在 `contracts/bin/platform` 中单独构建私有核心。若只想构建该画像，
-运行 `bash contracts/compile.sh --platform`。固定的 nccs 3.9.1 会忽略 MSBuild 的
-`DefineConstants`，因此脚本会在执行源码的临时副本前加上 `#define PLATFORM`，之后删除该副本。
-私有核心保留两个 10 GAS 上限回调，并在运行时要求私有核心系统调用；不要把该工件部署到公开网络。
+已退役 custom 轨的 `public` 与 `platform` 画像（`contracts/bin/public`、`contracts/bin/platform`）
+属于归档工件，且从未被跟踪：`bin/` 在忽略列表中，干净检出中两者都不存在。它们的 `compile.sh` 配方与所
+构建的用户合约项目在仓库转为 native-only 时被移除。
+下文记录的摘要作为历史回执保留，仓库中没有任何东西重建它们，且
+`scripts/check-artifact-reproducibility.mjs` 拒绝重放已删除的配方。不要部署这些工件，也不要把
+它们记录的字节当作当前的原生证据。
 
-公开画像不对验证器 gas 设上限。生命周期 ABI 准入不是验证器信任策略或资源策略。公开中继在赞助
-之前必须自行施加经复核的模块策略、模拟与有限交易费用上限；这些控制不确立协议级子预算。无限制
-的受赞助准入仍然不安全。`contracts/build` 仍然是历史已部署工件固定样例。公开部署／升级 helper
-选择 `contracts/bin/public`，并拒绝逃逸出该目录的路径；`contracts/bin/platform` 永远不是公开发布源。
+作为记录：已退役的公开画像使用已发布的 `System.Contract.Call`，校验只读、`postCheck` 记账可写，
+且不对验证器 gas 设上限；已退役的私有 `PLATFORM` 画像使用 `System.Contract.CallWithGasLimit`。
+生命周期 ABI 准入从来不是验证器信任或资源策略：公开中继在赞助前仍必须自行施加经复核的模块策略、
+模拟与有限交易费用上限，无限制的受赞助准入仍然不安全。`contracts/build` 仍是历史已部署工件固定样例。
 
 ### 公开验证器发布选择
 
@@ -93,18 +98,21 @@ manifest。
 
 ### 两次构建对比
 
+下文证书所用的两次构建重放依赖 `contracts/compile.sh`，而该脚本已随 custom 轨一起删除。因此
+`scripts/check-artifact-reproducibility.mjs` 会直接失败关闭，而不是重放仓库中已不存在的配方；
+记录的摘要作为历史回执保留。原生替代方案是 `scripts/build_native_modules.py`：它在两棵位于不同
+临时路径的独立 scratch 树中构建六个 `SMARTACCOUNT_NATIVE` 模块，除非每个 NEF 与 manifest 的摘要
+都一致，否则失败：
+
 ```bash
-for dir in "$A" "$B/deeper"; do          # two different absolute paths
-  mkdir -p "$dir" && git archive <commit> | tar -x -C "$dir" && (cd "$dir" && bash contracts/compile.sh) &&
-    (cd "$dir/contracts/bin" && find . \( -name '*.nef' -o -name '*.manifest.json' \) | sort | xargs shasum -a 256) > "$dir.sha256"
-done
-diff "$A.sha256" "$B/deeper.sha256" && echo reproduced
+python3 scripts/build_native_modules.py --contracts contracts \
+  --compiler "$NCCS_BIN" --cache "$NUGET_PACKAGES" \
+  --output <新目录> --receipt <receipt.json>
 ```
 
-`node scripts/check-artifact-reproducibility.mjs` 在临时副本中重放规范的 `contracts/compile.sh`，
-并比较 **两个**画像：`contracts/bin/public` 与 `contracts/bin/platform`，各自给出独立的画像结论。
-任一画像缺失核心、目录为空、出现多余工件或字节漂移，门禁都会失败。它不会仅凭可复现性推断
-运行时兼容性。2026-10-08 的重放匹配 **80/80** 个文件：`bin/public` 下 **78** 个、`bin/platform` 下
+它不会仅凭可复现性推断运行时兼容性。以下段落记录已退役 custom 画像的重放及其归档证书。
+
+2026-10-08 的重放匹配 **80/80** 个文件：`bin/public` 下 **78** 个、`bin/platform` 下
 **2** 个，无漂移、无缺失。原生集成源码的精确摘要与画像结论见
 [`sa-native-abi2-public-platform-reproducibility-20261008.json`](reports/sa-native-abi2-public-platform-reproducibility-20261008.json)。
 2026-10-31 的当前源码重放同样匹配 **80/80** 个文件，画像划分仍是 **78 + 2**，无漂移、无缺失。
@@ -125,6 +133,42 @@ diff "$A.sha256" "$B/deeper.sha256" && echo reproduced
 重新生成（132 个源码输入；清理提交的回执此前早生成了 `SmartAccount.MarketEscrow.cs` 的一次修订，
 本次重新生成也一并纠正），它所认证的候选／公开 ABI 差异为
 [`sa-ordinary-candidate-compatibility-20261116.json`](reports/sa-ordinary-candidate-compatibility-20261116.json)。
+2026-11-20 对 v4 代次与主体 provenance 修订（21 字节主体行旁的 22 字节 provenance 标记、
+custody 派生的主体轮换、核心内部的路由代次解析）的重放同样匹配，无漂移、无缺失：共比对
+**66** 个工件，`bin/public` **64** 个、`bin/platform` **2** 个，覆盖 **174** 个源码输入。
+`tests/mocks` 下六套新的 mock 合约/工程/lock 三元组（GasBurningHook、GasBurningValidator、
+MockDivisibleNep11Token、MockNep11Token、MockNep17Token、MockNepPaymentReceiver）天然在清单
+之内，因为 `SOURCE_ROOTS` 是整目录复制 `tests/mocks`，而不是按显式文件列表。证书为
+[`sa-artifact-reproducibility-20261120.json`](reports/sa-artifact-reproducibility-20261120.json)，
+它认证的两对核心工件是：
+
+| 画像 | `SmartAccount.nef` SHA-256 | `SmartAccount.manifest.json` SHA-256 |
+| --- | --- | --- |
+| `bin/public` | `27e28aa06068d0d9898a6dcf3d703d7561e05e2e12d4a8bd8202ae7abdc654e1` | `f0c6467b05004fdbedc0a9b8f6368ab29a30e84a6b38ece56219a6913282bd23` |
+| `bin/platform` | `60f17dfd0a19b40076b0a72577ed29ea6d480e8bbe73b2a37dc207c08a1b4048` | `61900e8a80a8fc8cd3b3fb4698050f53e7dd18ee64da13bc4ab2f1cfc20cd55c` |
+
+同一次运行的私有链回执为
+[`sa-custom-source-chain-20261120.json`](reports/sa-custom-source-chain-20261120.json)
+（28/28 项验收检查通过，九个工件均从刚编译出的 public 画像部署）与
+[`sa-custom-runtime-provenance-20261120.json`](reports/sa-custom-runtime-provenance-20261120.json)
+（把该回执与上述证书连接，源码快照 `164c58a3…`）。它们只为其点名的源码与工件作证，
+不为公网部署作证：本次运行不写入任何链上状态，`tracked_tree_drift` 仍列出
+`contracts/build`，因为该树被刻意钉在已部署的主网字节码上。工件身份刷新不是验收事件
+——它只说当前源码编译出什么。
+2026-11-21 对规范一致性变更（凭据代次从 1 起、核心级重入排斥、每个可写回调后与提交前的代码
+绑定连续性、`NefSha256` 采用 `SHA256(NEF)`）的重放同样匹配，无漂移、无缺失：共比对 **66** 个
+工件，`bin/public` **64** 个、`bin/platform` **2** 个，覆盖 **174** 个源码输入，两个画像均报告
+`matches_fresh_build: true`，且 `chain_writes_performed: false`。其证书为
+[`sa-artifact-reproducibility-20261121.json`](reports/sa-artifact-reproducibility-20261121.json)，
+它认证的两对核心工件是：
+
+| 画像 | `SmartAccount.nef` SHA-256 | `SmartAccount.manifest.json` SHA-256 |
+| --- | --- | --- |
+| `bin/public` | `397f96ab1997dcd8aad6455a797a569dfff2789c4ffff4dbfcab4ff590d553bf` | `4939cf01fb812fff5fb83fc4edd71205041d9a91201390ff9f21716692c23470` |
+| `bin/platform` | `7d5fad653060bbe6dca63bc14dc7be8097e138c46956c23c787cba2fe604fdd8` | `296a3ad498dd4a553e1aa91449817b6eab3b4814cf3c15fe3830fe004f6b7550` |
+
+该次重放中两个画像都移动了：`PLATFORM` 画像编译同一批 custom 源码，因此带有同一批协议变更。
+`contracts/build` 仍是被刻意钉住的主网部署锚，并如实报告为漂移。
 连接后的 NeoExpress 回执绑定到一次经复核的源码运行时构建（`sourceRuntime`）：其 104 文件映射、
 源码构建回执、`neoxp.dll` 与包装器哈希在私有运行前后各检查一次，回执中排除了宿主路径。
 NEF 不携带源码路径或 URL，其头部的编译器字符串为 `Neo.Compiler.CSharp 3.9.1+5fa9566e...`，因此

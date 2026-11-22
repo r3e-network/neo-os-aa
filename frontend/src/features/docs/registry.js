@@ -36,12 +36,6 @@ const DOC_DEFINITIONS = {
       'zh-CN': () => import('@/assets/docs/data-flow.zh.md?raw'),
     },
   },
-  modules: {
-    title: { en: 'Custom Modules', 'zh-CN': '自定义模块' },
-    loaders: {
-      en: () => import('@/assets/docs/custom-modules.md?raw'),
-    },
-  },
   evm: {
     title: { en: 'Ethereum / EVM Integration', 'zh-CN': '以太坊 / EVM 集成' },
     loaders: {
@@ -64,12 +58,6 @@ const DOC_DEFINITIONS = {
     title: { en: 'Validator, Policy & Hook Modules', 'zh-CN': '验证器、策略与钩子模块' },
     loaders: {
       en: () => import('@/assets/docs/module-guide.md?raw'),
-    },
-  },
-  addressMarket: {
-    title: { en: 'SA Address Market', 'zh-CN': 'SA 地址市场' },
-    loaders: {
-      en: () => import('@/assets/docs/address-market.md?raw'),
     },
   },
   morpheusActions: {

@@ -63,7 +63,7 @@ test('the real npm tarball is a self-contained, reproducible production package'
     const exportedNames = JSON.parse(run(process.execPath, ['--input-type=commonjs', '-e', `
       const assert = require('node:assert/strict');
       const sdk = require('@r3e-network/neo-smart-account');
-      const client = new sdk.SmartAccountClient({ rpcUrl: 'http://127.0.0.1:9', networkMagic: 894710606, contractHash: '11'.repeat(20) });
+      const client = new sdk.NativeSmartAccountClient({ rpcUrl: 'http://127.0.0.1:9', networkMagic: 894710606, contractHash: '11'.repeat(20) });
       const identity = client.deriveIdentity({ custodyAddress: '22'.repeat(20), salt: '33'.repeat(32) });
       assert.match(identity.accountId, /^[0-9a-f]{40}$/);
       assert.equal(client.proxyAddress(identity.accountId).length, 40);
@@ -100,7 +100,7 @@ test('the real npm tarball is a self-contained, reproducible production package'
       import { createRequire } from 'node:module';
       const require = createRequire(import.meta.url);
       assert.deepEqual(Object.keys(sdk).sort(), Object.keys(require('@r3e-network/neo-smart-account')).sort());
-      assert.equal(typeof sdk.SmartAccountClient, 'function');
+      assert.equal(typeof sdk.NativeSmartAccountClient, 'function');
       for (const key of Object.keys(sdk)) assert.equal(namedExports[key], sdk[key], key);
     `], consumer);
   });
@@ -108,8 +108,8 @@ test('the real npm tarball is a self-contained, reproducible production package'
   await t.test('installed package builds v4 plans, session-key commands and member digests offline', () => {
     run(process.execPath, ['--input-type=commonjs', '-e', `
       const assert = require('node:assert/strict');
-      const { SmartAccountClient, codec, thresholdTools, buildSessionKeyInstallCommand } = require('@r3e-network/neo-smart-account');
-      const client = new SmartAccountClient({ rpcUrl: 'http://127.0.0.1:9', networkMagic: 894710606, contractHash: '11'.repeat(20) });
+      const { NativeSmartAccountClient, codec, thresholdTools, buildSessionKeyInstallCommand } = require('@r3e-network/neo-smart-account');
+      const client = new NativeSmartAccountClient({ rpcUrl: 'http://127.0.0.1:9', networkMagic: 894710606, contractHash: '11'.repeat(20) });
       const accountId = '22'.repeat(20);
       const operation = {
         targetContract: '44'.repeat(20), method: 'transfer', args: [], nonce: '1',

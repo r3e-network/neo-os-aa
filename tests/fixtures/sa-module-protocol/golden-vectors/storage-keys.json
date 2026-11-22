@@ -2,8 +2,7 @@
   "vectorId": "sa4-storage-keys",
   "kind": "storage-key",
   "constantsRevision": {
-    "custom": "ae220783aa0a303f47332adf135aa44416c58c0e",
-    "native": "0d9ad4f08797f4b2e8ad63c83182fa554ef33fb9"
+    "native": "3ee06cd18ad6f63c464555c595e3227f2c1db7c8"
   },
   "input": {
     "accountId": "0xf2125dfcd4f8992f79231d8c175fc499baa10130",
@@ -11,7 +10,7 @@
     "moduleType": 1,
     "intentId": 1,
     "policyId": 1,
-    "channelBytesHex": "013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd"
+    "channelBytesHex": "0884dd3961b49a8331bb88baed99c9992d5d542384f07e27"
   },
   "expected": {
     "keys": {
@@ -21,13 +20,13 @@
       "0x53": "533001a1ba99c45f178c1d23792f99f8d4fc5d12f2010000000000000001",
       "0x54": "543001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
       "0x55": "553001a1ba99c45f178c1d23792f99f8d4fc5d12f20000000000000001",
-      "0x56": "563001a1ba99c45f178c1d23792f99f8d4fc5d12f2013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd",
+      "0x56": "563001a1ba99c45f178c1d23792f99f8d4fc5d12f20884dd3961b49a8331bb88baed99c9992d5d542384f07e27",
       "0x57": "573001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
       "0x58": "583001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
       "0x59": "593001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
       "0x5A": "5a3001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
       "0x5B": "5b3001a1ba99c45f178c1d23792f99f8d4fc5d12f20000000000000001",
-      "0x5C": "5c3001a1ba99c45f178c1d23792f99f8d4fc5d12f2013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd",
+      "0x5C": "5c3001a1ba99c45f178c1d23792f99f8d4fc5d12f20884dd3961b49a8331bb88baed99c9992d5d542384f07e27",
       "0x5D": "5d3001a1ba99c45f178c1d23792f99f8d4fc5d12f2",
       "0x5E": "5e3001a1ba99c45f178c1d23792f99f8d4fc5d12f2"
     },

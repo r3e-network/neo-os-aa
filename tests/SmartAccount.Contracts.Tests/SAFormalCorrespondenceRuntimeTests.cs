@@ -269,11 +269,12 @@ public class SAFormalCorrespondenceRuntimeTests
         Harness h = new();
 
         object nested = "leaf";
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < 7; i++)
             nested = new object[] { nested };
 
-        // The top-level Args vector is excluded from the depth count, so eight nested
-        // arrays remain valid at the protocol boundary.
+        // §4.1 counts the top-level Args vector as depth 1, so at most eight array
+        // levels including that root reach the boundary: seven nested arrays are
+        // still in profile, an eighth is one level past the limit.
         h.Fx.Call(h.Wallet, "getOperationDigest", h.Account,
             h.Op(0, Lane(0), args: new object?[] { nested }));
 

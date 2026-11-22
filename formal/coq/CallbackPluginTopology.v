@@ -10,11 +10,11 @@
   cleanup cannot rotate the module pointer.
 
   Concrete correspondence points:
-    contracts/custom/SmartAccount.Execution.cs
-    contracts/custom/SmartAccount.Accounts.cs
-    contracts/custom/SmartAccount.Internal.cs
-    contracts/custom/SmartAccount.Models.cs
-    contracts/custom/SmartAccount.VerifyContext.cs
+    `SmartAccount.Execution.cs` (retired custom kernel)
+    `SmartAccount.Accounts.cs` (retired custom kernel)
+    `SmartAccount.Internal.cs` (retired custom kernel)
+    `SmartAccount.Models.cs` (retired custom kernel)
+    `SmartAccount.VerifyContext.cs` (retired custom kernel)
     contracts/plugins/hooks/MultiHook.cs
     contracts/plugins/verifiers/MultiSigVerifier.cs
     contracts/plugins/verifiers/VerifierPayload.cs

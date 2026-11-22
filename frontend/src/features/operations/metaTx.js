@@ -100,7 +100,16 @@ export function toCanonicalOperationArgs(args = []) {
   return args.map(canonicalArgument);
 }
 
-/** A v4 operation built from the codec, ready to be signed in field 11. */
+/**
+ * A v4 operation built from the codec, ready to be signed in field 11.
+ *
+ * `credentialGeneration` has no default on purpose. The routing generation is a
+ * chain fact -- the built-in validator's is the account's 0x57 SubjectRevision
+ * and an installed validator's is its CredentialGeneration -- so a factory that
+ * substituted 1 would hand out a digest the core rejects as
+ * ErrorCredentialStale as soon as the revision has advanced. Callers that have
+ * a route in hand (see `fetchOperationRoute`) already carry the right value.
+ */
 export function buildUserOperation({
   targetContract = '',
   method = '',
@@ -109,12 +118,15 @@ export function buildUserOperation({
   nonceSubkey = DEFAULT_NONCE_SUBKEY,
   deadline = 0,
   validatorId = 0,
-  credentialGeneration = 1,
+  credentialGeneration,
   authorityEpoch = 0,
   configurationNonce = 0,
   signature = '',
   hookProofs = [],
 } = {}) {
+  if (credentialGeneration === undefined || credentialGeneration === null) {
+    throw new Error(EC.credentialGenerationRequired);
+  }
   return {
     targetContract: sanitizeHex(targetContract),
     method: String(method || ''),
@@ -262,8 +274,8 @@ export async function fetchModuleDescriptor({
   return descriptor;
 }
 
-/** Module type ids used by `getModules`: 1 = validator, 2 = hook. */
-const MODULE_TYPE_IDS = Object.freeze({ validator: 1, hook: 2 });
+/** Module type ids used by `getModules`: 1 = validator, 4 = hook (ERC-7579). */
+const MODULE_TYPE_IDS = Object.freeze({ validator: 1, hook: 4 });
 
 /**
  * Lists the account's installed modules of one type. `getModules` pages by

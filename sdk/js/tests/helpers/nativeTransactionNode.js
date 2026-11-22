@@ -18,6 +18,7 @@ const {
   NATIVE_SMART_ACCOUNT_CONTRACT: CORE,
 } = require("../../src/native");
 const {
+  NATIVE_ACCOUNT_ADDRESS_ABI,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
 } = require("../../src/native/client");
@@ -86,7 +87,7 @@ function manifest() {
   return {
     name: "SmartAccount",
     abi: {
-      methods: Object.entries(NATIVE_REQUIRED_ABI).map(
+      methods: Object.entries({ ...NATIVE_REQUIRED_ABI, ...NATIVE_ACCOUNT_ADDRESS_ABI }).map(
         ([name, [types, returntype, safe, names]]) => ({
           name,
           parameters: names.map((parameter, index) => ({
@@ -218,7 +219,7 @@ function operation({
 const CAPS = { maxSystemFee: "1000", maxNetworkFee: "1000", maxTotalFee: "2000" };
 
 /**
- * The four v4 plan shapes, each with the recipe that rebuilds it. A review is
+ * The three v4 plan shapes, each with the recipe that rebuilds it. A review is
  * only as trustworthy as the recipe that reproduces its script, so the two are
  * always produced together here.
  */
@@ -234,10 +235,6 @@ const build = {
   account(node, { accountId = ACCOUNT, method = "freezeAccount", args = [] } = {}) {
     const input = { method, accountId, args };
     return { plan: node.client.buildAccountActionScript(input), recipe: { method: "buildAccountActionScript", input } };
-  },
-  configuration(node, { accountId = ACCOUNT, kind = "propose", intentId = 7, actions = [], readSet = [] } = {}) {
-    const input = { kind, accountId, intentId, actions, readSet };
-    return { plan: node.client.buildConfigurationScript(input), recipe: { method: "buildConfigurationScript", input } };
   },
 };
 

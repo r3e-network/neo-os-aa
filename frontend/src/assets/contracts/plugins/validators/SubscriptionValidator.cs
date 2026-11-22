@@ -120,8 +120,11 @@ namespace SmartAccount.Validators
                 ModuleConfig.RequireArgs(data, 1);
                 ByteString subId = (ByteString)data[1];
                 RequireSubId(subId);
+                // Mark finding #9: only the subscription record is removed. The last charged
+                // period survives as a tombstone, so re-creating the same subId — even with an
+                // identical period definition — cannot unlock a second charge inside a billing
+                // period that was already booked.
                 Storage.Delete(Storage.CurrentContext, RecordKey(Prefix_Subscription, accountId, moduleId, subId));
-                Storage.Delete(Storage.CurrentContext, RecordKey(Prefix_LastChargedPeriod, accountId, moduleId, subId));
                 return;
             }
             ExecutionEngine.Assert(false, "Unknown config command");
@@ -137,7 +140,9 @@ namespace SmartAccount.Validators
             ExecutionEngine.Assert(periodSeconds > 0, "Invalid subscription period");
 
             // The last charged period is deliberately preserved: re-creating a
-            // subId must not permit a second charge in the period already booked.
+            // subId must not permit a second charge in the period already booked,
+            // and a cancelled instance keeps that tombstone
+            // (see cancelSubscription above).
             Storage.Put(Storage.CurrentContext, RecordKey(Prefix_Subscription, accountId, moduleId, subId),
                 StdLib.Serialize(new object[] { merchant!, token!, amount, periodSeconds, generation }));
         }

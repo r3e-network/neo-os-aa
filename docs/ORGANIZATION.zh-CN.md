@@ -2,10 +2,11 @@
 
 > 中文版本与 `docs/ORGANIZATION.md` 同构。若两者冲突，以英文版本为准。
 
-2026-11-18 更新为三目录合约布局（`contracts/custom`、`contracts/native`、
-`contracts/plugins`），它取代了 2026-10-13 的 `implementations/` 入口。更早的
-2026-09-27 组织快照已随部署前的兼容面一并删除，因此本文件是唯一被跟踪的布局声明；
-当前布局与归属规则如下。
+2026-11-21 更新为 native-only 合约布局（`contracts/native`、
+`contracts/plugins`），它取代了 2026-11-18 的三目录布局；后者中的 custom
+user-contract 树已随用户合约内核一并退役。该布局取代了 2026-10-13 的
+`implementations/` 入口。更早的 2026-09-27 组织快照已随部署前的兼容面一并删除，
+因此本文件是唯一被跟踪的布局声明；当前布局与归属规则如下。
 
 ## 用途
 
@@ -38,7 +39,6 @@ Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
         templates/           第三方模块起点
         native-profile/      共用模块的 native 配置构建
       build/                 公开部署的固定工件
-      compile.sh             把全部合约构建到 contracts/bin/（已忽略）
     tests/                   测试套件
       mocks/                 测试套件部署的 mock 合约
     formal/                  形式验证输入与检查
@@ -52,29 +52,26 @@ Smart Accounts 的 Neo N3 SA 合约、前端工具与 SDK 面。
     SmartAccount.sln         .NET 解决方案
     README.md                公开项目与边界文档
 
-`contracts/custom/` 与 `contracts/native/` 存放同一分支上的两个实现；
-`contracts/plugins/` 存放两者都会安装的验证器与钩子模块。每个实现目录带有一份
-`profile.json`，记录其源码根、工件与验证命令；源码文件不重复。custom 配置
-（`contracts/custom/`）是当前 user-contract 的交付路径。native 配置
-（`contracts/native/`）存放为标准提交准备的共识 `SmartAccount` 服务真源；对应的
-Neo core 仓库携带由它生成的副本，并拥有 native VM 的强制执行。
+`contracts/native/` 存放分支上唯一的实现；`contracts/plugins/` 存放它安装的
+验证器与钩子模块。每个目录带有一份 `profile.json`，记录其源码根、工件与验证
+命令；源码文件不重复。native 配置（`contracts/native/`）就是交付路径：它存放
+为标准提交准备的共识 `SmartAccount` 服务真源；对应的 Neo core 仓库携带由它生成
+的副本，并拥有 native VM 的强制执行。
 
 ## 文件组织规则
 
-- 合约源码与合约专属检查保留在 contracts/ 下，且只属于 custom/、native/ 或
-  plugins/ 其中之一。只有一个实现使用的合约归该实现；两个实现都能安装的模块归
-  plugins/。
+- 合约源码与合约专属检查保留在 contracts/ 下，且只属于 native/ 或 plugins/
+  其中之一。只有 native 服务使用的合约归 native/；服务安装的模块归 plugins/。
 - mock 与探针合约保留在 tests/mocks/ 下；它们是测试夹具，不属于任何一个实现。
 - 第三方模块起点保留在 contracts/plugins/templates/ 下；模板针对
   共享模块层（contracts/plugins/validators/ValidatorAuthority.cs、
   contracts/plugins/hooks/HookAuthority.cs）编译，scripts/check_plugin_templates.mjs 使
   其 manifest 与核心的安装期 ABI 门禁保持一致。
-- 使用 `contracts/custom/profile.json` 与
-  `contracts/native/profile.json` 选择实现配置；
+- 使用 `contracts/native/profile.json` 选择实现配置；
   不要从部署标签或共享的工件目录推断配置身份。
 - 仅 native 使用的模块与客户端代码保留在
-  `contracts/native/profile.json` 列出的 native 根目录下；custom 源码不得通过导入
-  native 入口来证明 native 已激活。
+  `contracts/native/profile.json` 列出的 native 根目录下；这些根之外的代码不得
+  通过导入 native 入口来证明 native 已激活。
 - 前端路由、UI 与前端配置保留在 frontend/ 下。
 - SA 客户端类型与构建器保留在 sdk/ 与 shared/ 下。
 - 形式证据与验证输入保留在 formal/ 下。

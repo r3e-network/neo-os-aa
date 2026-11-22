@@ -1,7 +1,8 @@
 # Repository Organization
 
-Updated on 2026-11-18 for the three-directory contract layout
-(`contracts/custom`, `contracts/native`, `contracts/plugins`), which replaced the
+Updated on 2026-11-21 for the native-only contract layout (`contracts/native`,
+`contracts/plugins`), which replaced the 2026-11-18 three-directory layout once
+the custom user-contract tree was retired. That layout had replaced the
 2026-10-13 `implementations/` entrypoints. The earlier 2026-09-27 organization
 snapshot was deleted with the pre-deployment compatibility surfaces, so this file
 is the only tracked layout statement; the current layout and ownership rules are
@@ -39,7 +40,6 @@ Smart Accounts.
         templates/           third-party module starting points
         native-profile/      native-profile builds of the shared modules
       build/                 pinned artifacts of the public deployments
-      compile.sh             builds every contract into contracts/bin/ (ignored)
     tests/                   test suites
       mocks/                 mock contracts the suites deploy
     formal/                  formal verification inputs and checks
@@ -53,34 +53,31 @@ Smart Accounts.
     SmartAccount.sln         .NET solution
     README.md                public project and boundary documentation
 
-`contracts/custom/` and `contracts/native/` hold the two implementations on
-the same branch; `contracts/plugins/` holds the validator and hook modules
-both of them install. Each implementation directory carries a `profile.json` that
-names its source roots, artifacts and verification commands; source files are
-not duplicated. The custom profile (`contracts/custom/`) is the current
-user-contract delivery path. The native profile (`contracts/native/`) holds the
-true source of the consensus `SmartAccount` service prepared for standard
-submission; the matching Neo core repository carries generated copies of it and
-owns native VM enforcement.
+`contracts/native/` holds the one implementation on the branch;
+`contracts/plugins/` holds the validator and hook modules it installs. Each
+directory carries a `profile.json` that names its source roots, artifacts and
+verification commands; source files are not duplicated. The native profile
+(`contracts/native/`) is the delivery path: it holds the true source of the
+consensus `SmartAccount` service prepared for standard submission, and the
+matching Neo core repository carries generated copies of it and owns native VM
+enforcement.
 
 ## File Organization Rules
 
 - Keep contract sources and contract-specific checks under contracts/, in
-  exactly one of custom/, native/ or plugins/. A contract only one
-  implementation uses belongs to that implementation; a module both can install
-  belongs to plugins/.
+  exactly one of native/ or plugins/. A contract only the native service uses
+  belongs to native/; a module the service installs belongs to plugins/.
 - Keep mock and probe contracts under tests/mocks/; they are test fixtures, not
   part of either implementation.
 - Keep third-party module starting points under contracts/plugins/templates/; templates
   compile against the shared module layer (contracts/plugins/validators/ValidatorAuthority.cs,
   contracts/plugins/hooks/HookAuthority.cs) and scripts/check_plugin_templates.mjs keeps
   their manifests aligned with the core's install-time ABI gate.
-- Use `contracts/custom/profile.json` and
-  `contracts/native/profile.json` to select the implementation profile;
+- Use `contracts/native/profile.json` to select the implementation profile;
   do not infer profile identity from a deployment label or a shared artifact
   directory.
 - Keep native-only modules and client code under the native roots listed by
-  `contracts/native/profile.json`; custom source must not import native
+  `contracts/native/profile.json`; nothing outside those roots may import native
   entrypoints as proof of native activation.
 - Keep frontend routes, UI, and frontend configuration under frontend/.
 - Keep SA client types and builders under sdk/ and shared/.

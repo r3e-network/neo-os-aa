@@ -1,56 +1,35 @@
 /**
  * @r3e-network/neo-smart-account — Neo Smart Account v4 SDK.
  *
- * One client surface for two kernels. `SmartAccountClient` drives a deployed
- * custom kernel (market escrow, platform registrar, metadata, sponsored
- * execution); `NativeSmartAccountClient` drives the native core. Both speak the
- * same 13-field operation, nonce namespace, digests and `SA_*` vocabulary.
+ * One client surface for one kernel: `NativeSmartAccountClient` drives the
+ * native SmartAccount core. It speaks the v4 13-field operation, nonce
+ * namespace, digests and `SA_*` vocabulary, and its proxy verification script
+ * pushes CallFlags.ReadOnly (5), which every derived account address binds.
  *
  * There is no v3 compatibility layer: `registerAccount`, `getVerifier`,
  * `updateVerifier`, `getHook`, `updateHook`, `createSponsoredUserOpPayload`
- * and the 6-field operation do not exist.
+ * and the 6-field operation do not exist. The deployed-kernel client with the
+ * market-escrow, platform-registrar, metadata and sponsored-execution
+ * surfaces is gone with the custom delivery track.
  */
 
 export * from "./native";
 
 import type {
-  AccountActionInput,
-  AccountActionPlan,
-  BroadcastResult,
-  ConfigurationInput,
-  ConfigurationPlan,
   ExecutionInput,
   ExecutionPlan,
-  InvocationResult,
   ModuleBinding,
   NativePlan,
-  NativePreparedTransaction,
-  NativeProfile,
-  NativeSignedTransaction,
-  NativeSignedTransactionArtifact,
-  NativeTransactionPreflight,
-  NativeTransactionReceipt,
   ProtocolCodec,
-  RegistrationPlan,
   SignerDescriptor,
   SignerScope,
   SimulationResult,
   SmartAccountKernel,
-  TransactionOptions,
   UserOperation,
   VMInteger,
   VMValue,
   WitnessRule,
 } from "./native";
-
-/** The custom kernel pushes CallFlags.All in its proxy verification script. */
-export declare const CUSTOM_PROXY_CALL_FLAGS: 15;
-/** `SmartAccount.State.cs` pins this implementation id. */
-export declare const CUSTOM_IMPLEMENTATION_ID: "org.r3e.neo.smart-account.v4";
-/** Custom-only ABI gate: `[parameterTypes, returntype]` per method. */
-export declare const CUSTOM_REQUIRED_ABI: Readonly<
-  Record<string, readonly [readonly string[], string]>
->;
 
 /** Neo address or 40-hex hash to display-order hex. */
 export declare function normalizeAddress(address: string): string;
@@ -267,7 +246,7 @@ export declare function preflightUserOperation(
 // Proxy witness (the account's second signer)
 // ---------------------------------------------------------------------------
 
-export declare const DEFAULT_CALL_FLAGS: 15;
+export declare const DEFAULT_CALL_FLAGS: 5;
 
 export interface ProxyInvocation {
   operation: string;
@@ -313,11 +292,15 @@ export declare function createProxyWitness(input: {
   callFlags?: number;
 }): ProxyWitnessArtifacts;
 
+/**
+ * The one shaped call the proxy witness may authorize. The invocation itself is
+ * a state write, so the script always carries CallFlags.All: there is no flag
+ * to pass, and a read-only executeUserOp is not expressible.
+ */
 export declare function buildExecuteUserOpScript(input: {
   coreHash: string;
   accountId: string;
   invocation: ProxyInvocation;
-  callFlags?: number;
 }): string;
 
 export declare function buildProxyWitnessTransaction(input: {
@@ -541,218 +524,13 @@ export declare function decodeRecoveryStatusStack(
 ): DecodedRecoveryStatus | null;
 
 // ---------------------------------------------------------------------------
-// The custom kernel
+// Native kernel client
 // ---------------------------------------------------------------------------
 
-export interface CustomClientOptions {
-  rpcUrl?: string;
-  rpcClient?: { send(method: string, params: unknown[]): Promise<any> };
-  networkMagic: VMInteger;
-  contractHash: string;
-  retry?: RetryOptions | false;
-}
-
-export interface CreateAccountsInput {
-  custodyAddress: string;
-  salts: readonly string[];
-  recoveryTimelockMs?: VMInteger;
-}
-
-export interface LegacyRegistrationInput {
-  verifier: string;
-  verifierParams: string;
-  hookId: string;
-  backupOwner: string;
-  escapeTimelock?: VMInteger;
-}
-
-export interface CustomActionInput {
-  method: string;
-  accountId: string;
-  args?: VMValue[];
-}
-
-/** The custody-authorised custom actions this client will build a plan for. */
-export type CustodyAction = "setMetadataUri";
-
-export interface MarketEscrowState {
-  readonly marketContract: string;
-  readonly listingId: string;
-  readonly active: boolean;
-}
-
-export interface MigrationState {
-  readonly status: string;
-  readonly manifestDigest: string;
-  readonly classification: string;
-  readonly legacyModuleCount: string;
-  readonly legacyScopeInvalidated: boolean;
-  readonly importedAt: string;
-}
-
-export interface PlatformAccountInput {
-  appBinding: string;
-  backupOwner: string;
-  escapeTimelock?: VMInteger;
-}
-
-export interface StablePlatformAccountInput {
-  appBinding: string;
-  escapeTimelock?: VMInteger;
-}
-
-export interface SponsoredExecutionInput {
-  accountId: string;
-  operations: UserOperation | readonly UserOperation[];
-  paymaster: string;
-  sponsor: string;
-  reimbursementAmount: VMInteger;
-}
-
-export interface SponsoredExecutionPlan extends ExecutionPlan {
-  readonly method: "executeSponsoredUserOp" | "executeSponsoredUserOps";
-  readonly operations: readonly UserOperation[];
-  readonly paymaster: string;
-  readonly sponsor: string;
-  readonly reimbursementAmount: string;
-}
-
-/**
- * Drives one deployed custom kernel. Everything protocol-shaped is inherited
- * from the shared kernel client; this class adds registration, custody actions,
- * market/registrar/migration reads and sponsored execution.
- */
-export declare class SmartAccountClient implements SmartAccountKernel {
-  constructor(options: CustomClientOptions);
-  readonly networkMagic: number;
-  readonly contractHash: string;
-  readonly callFlags: number;
-  profile: NativeProfile | null;
-  proxyAddress(accountId: string): string;
-  invokeScript(
-    script: string,
-    signers?: readonly SignerDescriptor[],
-  ): Promise<InvocationResult>;
-  discover(): Promise<NativeProfile & { kernel: "custom" }>;
-  deriveIdentity(input: { custodyAddress: string; salt: string }): {
-    readonly accountId: string;
-    readonly verificationScript: string;
-    readonly accountAddress: string;
-  };
-  // Reads shared with the native kernel (see ./native for descriptor shapes).
-  getAccount(accountId: string): Promise<import("./native").AccountDescriptor | null>;
-  getProtocolInfo(): Promise<import("./native").ProtocolInfo>;
-  getModules(
-    accountId: string,
-    moduleType: string,
-    options?: { cursor?: VMInteger; limit?: number },
-  ): Promise<import("./native").ModulePage>;
-  getModule(
-    accountId: string,
-    moduleId: VMInteger,
-  ): Promise<import("./native").ModuleBinding | null>;
-  isModuleInstalled(
-    accountId: string,
-    moduleType: string,
-    moduleHash: string,
-    additionalContext?: string,
-  ): Promise<boolean>;
-  getHookOrder(accountId: string): Promise<import("./native").HookOrder>;
-  deriveNonceRouting(
-    accountId: string,
-    routing: import("./native").NonceRouting,
-  ): string;
-  getNonce(
-    accountId: string,
-    routing: import("./native").NonceRouting,
-  ): Promise<import("./native").NonceState>;
-  getNonceSequence(accountId: string, channel: VMInteger): Promise<string>;
-  getOperationDigest(accountId: string, operation: UserOperation): Promise<string>;
-  validateUserOp(
-    accountId: string,
-    operation: UserOperation,
-  ): Promise<import("./native").OperationValidation>;
-  isValidSignature(
-    accountId: string,
-    hash: string,
-    envelope: VMValue[],
-  ): Promise<import("./native").SignatureCheck>;
-  getRecoveryStatus(
-    accountId: string,
-  ): Promise<import("./native").RecoveryStatus | null>;
-  getPendingConfiguration(
-    accountId: string,
-    intentId: VMInteger,
-  ): Promise<import("./native").PendingConfiguration | null>;
-  getPendingConfigurationIntentIds(accountId: string): Promise<readonly string[]>;
-  buildCreateAccountScript(input: {
-    custodyAddress: string;
-    salt: string;
-    recoveryTimelockMs?: VMInteger;
-    actions?: VMValue[];
-  }): RegistrationPlan;
-  buildExecutionScript(input: ExecutionInput): ExecutionPlan;
-  buildConfigurationScript(input: ConfigurationInput): ConfigurationPlan;
-  buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
-  simulate(plan: NativePlan, signers?: readonly SignerDescriptor[]): Promise<SimulationResult>;
-  execute(plan: NativePlan, signers?: readonly SignerDescriptor[]): Promise<InvocationResult>;
-  prepare<T extends NativePlan>(plan: T): T;
-  revalidatePlan(plan: NativePlan): Promise<true>;
-  // Registration (§10)
-  buildCreateAccountsScript(
-    input: CreateAccountsInput,
-  ): import("./native").BatchRegistrationPlan;
-  /** Legacy identity of a v3 registration (migration evidence, read-only). */
-  getRegistrationAccountId(input: LegacyRegistrationInput): Promise<string>;
-  // Custody-authorised account actions
-  freezeAccount(accountId: string): AccountActionPlan;
-  unfreezeAccount(accountId: string): AccountActionPlan;
-  beginRecovery(accountId: string, newCustody: string): AccountActionPlan;
-  cancelRecovery(accountId: string): AccountActionPlan;
-  executeRecovery(accountId: string): AccountActionPlan;
-  revokeCredentials(accountId: string, moduleId: VMInteger): AccountActionPlan;
-  buildCustomActionScript(input: CustomActionInput): AccountActionPlan;
-  setMetadataUri(accountId: string, metadataUri: string): AccountActionPlan;
-  // Market escrow state (writes belong to the market contract)
-  getMarketEscrow(accountId: string): Promise<MarketEscrowState>;
-  isMarketService(marketContract: string): Promise<boolean>;
-  // Platform registrar (registrar-sourced; ids stay v3-stable)
-  computePlatformAccountId(input: PlatformAccountInput): Promise<string>;
-  computeStablePlatformAccountId(input: StablePlatformAccountInput): Promise<string>;
-  getPlatformAccountBinding(accountId: string): Promise<string | null>;
-  getAccountIdByProxy(proxy: string): Promise<string>;
-  getProxyScriptHash(accountId: string): Promise<string>;
-  getPlatformRegistrar(): Promise<string>;
-  getPendingPlatformRegistrar(): Promise<string>;
-  getPlatformRegistrarAvailableAt(): Promise<string>;
-  // Metadata, migration and sponsored execution
-  getMetadataUri(accountId: string): Promise<string>;
-  isMigrationRequired(accountId: string): Promise<boolean>;
-  getMigrationState(accountId: string): Promise<MigrationState>;
-  buildSponsoredExecutionScript(
-    input: SponsoredExecutionInput,
-  ): SponsoredExecutionPlan;
-  // Transaction lifecycle
-  prepareTransaction(
-    plan: NativePlan,
-    options: TransactionOptions,
-  ): Promise<NativePreparedTransaction>;
-  signTransaction(prepared: NativePreparedTransaction): Promise<NativeSignedTransaction>;
-  exportSignedTransaction(
-    signed: NativeSignedTransaction,
-  ): NativeSignedTransactionArtifact;
-  preflightTransaction(
-    signed: NativeSignedTransaction,
-  ): Promise<NativeTransactionPreflight>;
-  broadcastTransaction(signed: NativeSignedTransaction): Promise<BroadcastResult>;
-  getTransactionReceipt(
-    signed: NativeSignedTransaction,
-  ): Promise<NativeTransactionReceipt>;
-}
-
-export declare function createSmartAccountClient(
-  options: CustomClientOptions,
-): SmartAccountClient;
+/** Factory form of the native client entry point. */
+export declare function createNativeSmartAccountClient(
+  options: ConstructorParameters<typeof import("./native").NativeSmartAccountClient>[0],
+): import("./native").NativeSmartAccountClient;
 
 /** The single protocol codec every entry point shares. */
 export declare const codec: ProtocolCodec;

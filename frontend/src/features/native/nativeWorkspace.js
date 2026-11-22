@@ -2,12 +2,15 @@
  * Native kernel account workspace (SA module protocol v4).
  *
  * Everything here mirrors the compiled v4 surface of
- * `contracts/native/SmartAccount/*`: registration is custody + salt + recovery
- * timelock, account actions are freeze / unfreeze / recovery, and every
- * configuration change is one 24-hour intent that expires seven days after
- * maturity. The v3 slots (verifier, hook, recovery address, pending module
- * call) do not exist in v4 and are deliberately absent: a removed concept must
- * fail, never be silently re-mapped onto a different one.
+ * `contracts/native/SmartAccount/*`, which is the minimal core: it registers
+ * an account from custody + salt + recovery timelock, freezes and unfreezes
+ * it, administers module instances and executes signed operations. Recovery,
+ * message, hook-order and configuration-intent transitions are user-space
+ * module concerns; the core keeps their descriptor slots for ABI stability and
+ * reports the inactive value, so this workspace reads them as inactive instead
+ * of inventing module state. The v3 slots (verifier, hook, recovery address,
+ * pending module call) do not exist in v4 and are deliberately absent: a
+ * removed concept must fail, never be silently re-mapped onto a different one.
  *
  * The workspace never invents authority. It reads the account from the core,
  * derives who may sign, simulates the exact script, and hands the caller a
@@ -58,10 +61,10 @@ const freeze = (value) => {
 // than the chain enforces.
 export const RECOVERY_TIMELOCK_MIN_MS = 604800000; // 7 days
 export const RECOVERY_TIMELOCK_MAX_MS = 7776000000; // 90 days
-export const MODULE_CHANGE_DELAY_MS = 86400000; // 24 h intent timelock
-export const CONFIGURATION_INTENT_EXPIRY_MS = 604800000; // matureAt + 7 days
+// The core installs at most this many actions at registration; a later
+// configuration change belongs to the governance module and carries its own
+// limits, so no intent window is promised here.
 export const MAX_ACTIONS_PER_INTENT = 16;
-export const MAX_ACTIVE_INTENTS = 16;
 export const MAX_OPERATIONS_PER_ENVELOPE = 32;
 export const NATIVE_MODULE_TYPES = freeze({ validator: 1, hook: 4 });
 export const NATIVE_MODULE_LIMITS = freeze({ validator: 32, hook: 8 });
@@ -558,12 +561,15 @@ export function describeConfigurationAction(action) {
 // Account actions (immediate, custody/recovery gated, no intent).
 // ---------------------------------------------------------------------------
 
+// The core owns exactly the two immediate transitions. Recovery begin / execute
+// / cancel are the recovery module's methods, so they are not actions this
+// workspace can plan against the core ABI.
 export const NATIVE_ACTIONS = freeze([
   {
     value: "freezeAccount",
     label: "Freeze the account",
     detail:
-      "Custody witness. Freezing advances the authority epoch, so every signed operation and every pending configuration intent from before stops being valid.",
+      "Custody witness. Freezing advances the authority epoch, so every signed operation from before stops being valid.",
   },
   {
     value: "unfreezeAccount",
@@ -571,47 +577,21 @@ export const NATIVE_ACTIONS = freeze([
     detail:
       "Custody witness. Only a frozen account can be unfrozen, and the authority epoch advances again.",
   },
-  {
-    value: "beginRecovery",
-    label: "Begin custody recovery",
-    address: true,
-    detail:
-      "Custody or the recovery authority starts recovery, and the new custody wallet must also sign. It matures after this account's recovery timelock.",
-  },
-  {
-    value: "executeRecovery",
-    label: "Complete custody recovery",
-    detail:
-      "Permissionless once mature. It removes every module, pending intent and nonce cursor, advances the epoch and re-enables the built-in route.",
-  },
-  {
-    value: "cancelRecovery",
-    label: "Cancel custody recovery",
-    detail:
-      "Custody or the recovery authority cancels a pending recovery. Nothing else changes.",
-  },
 ]);
 
-export function actionBlockReason(state, action, now) {
+export function actionBlockReason(state, action) {
   if (!state) return "Load an account first.";
-  const pending = state.pendingRecovery;
+  // Migration outranks the freeze state: a migrating account cannot run either
+  // transition, and "not frozen" would be a misleading reason for a frozen one.
+  if (
+    ["freezeAccount", "unfreezeAccount"].includes(action) &&
+    state.statusName === "MigrationRequired"
+  )
+    return "This account must complete migration first.";
   if (action === "freezeAccount" && state.statusName === "Frozen")
     return "The account is already frozen.";
   if (action === "unfreezeAccount" && state.statusName !== "Frozen")
     return "The account is not frozen.";
-  if (action === "beginRecovery" && pending)
-    return "A custody recovery is already pending.";
-  if (action === "executeRecovery" && !pending)
-    return "No custody recovery is pending.";
-  if (action === "executeRecovery" && BigInt(pending.matureAt) > BigInt(now))
-    return "Custody recovery has not matured.";
-  if (action === "cancelRecovery" && !pending)
-    return "No custody recovery is pending.";
-  if (
-    ["freezeAccount", "unfreezeAccount", "beginRecovery"].includes(action) &&
-    state.statusName === "MigrationRequired"
-  )
-    return "This account must complete migration first.";
   return "";
 }
 
@@ -649,23 +629,19 @@ async function chainTime(client) {
 }
 
 async function readState(client, accountId) {
-  const [account, recovery] = await Promise.all([
-    client.getAccount(accountId),
-    client.getRecoveryStatus(accountId),
-  ]);
+  const account = await client.getAccount(accountId);
   if (!account) fail("This native account is not registered.");
   return freeze({
     ...account,
     statusName: NATIVE_STATUS_NAMES[account.status] ?? "Unknown",
-    pendingRecovery:
-      recovery && recovery.pending
-        ? {
-            newCustody: recovery.newCustody,
-            initiatedAt: recovery.initiatedAt,
-            matureAt: recovery.matureAt,
-            authorityEpochAtInit: recovery.authorityEpochAtInit,
-          }
-        : null,
+    // The core publishes recoveryPending/recoveryMatureAt only so its
+    // descriptor stays ABI-stable; the recovery lifecycle lives in a module, so
+    // the core answers the inactive value. Nothing is invented here: a legacy
+    // kernel that still reports a pending recovery exposes its maturity (the
+    // one fact the core publishes) and no new custody.
+    pendingRecovery: account.recoveryPending
+      ? { matureAt: account.recoveryMatureAt }
+      : null,
   });
 }
 
@@ -681,22 +657,6 @@ async function readModules(client, accountId) {
   };
   const [validators, hooks] = await Promise.all([page("validator"), page("hook")]);
   return freeze({ validators, hooks });
-}
-
-async function readIntents(client, accountId, now) {
-  const ids = await client.getPendingConfigurationIntentIds(accountId);
-  const intents = [];
-  for (const intentId of ids) {
-    const intent = await client.getPendingConfiguration(accountId, intentId);
-    if (!intent || !intent.exists) continue;
-    intents.push({
-      ...intent,
-      mature: BigInt(intent.matureAt) <= BigInt(now),
-      expired: BigInt(intent.expiresAt) < BigInt(now),
-      descriptions: intent.actions.map(describeConfigurationAction),
-    });
-  }
-  return freeze(intents);
 }
 
 function sdkSigners(client, plan, actor, authorities) {
@@ -733,19 +693,9 @@ function sdkSigners(client, plan, actor, authorities) {
   return signers;
 }
 
-function recoveryAuthorityOnly(state, authority, action) {
-  if (authority === state.custodyAddress) return;
-  if (
-    action !== "beginRecovery" &&
-    action !== "cancelRecovery"
-  )
+function custodyOnly(state, authority) {
+  if (authority !== state.custodyAddress)
     fail("Only the custody wallet can sign this account action.");
-  if (
-    !state.recoveryAuthority ||
-    state.recoveryAuthority === ZERO_HASH ||
-    authority !== state.recoveryAuthority
-  )
-    fail("Only custody or the recovery authority can start or cancel recovery.");
 }
 
 export async function rebuildNativeReview(client, exported) {
@@ -767,35 +717,17 @@ export async function rebuildNativeReview(client, exported) {
     plan = client.buildCreateAccountScript(recipe.input);
   else if (recipe?.method === "buildAccountActionScript")
     plan = client.buildAccountActionScript(recipe.input);
-  else if (recipe?.method === "buildConfigurationScript")
-    plan = client.buildConfigurationScript(recipe.input);
   else if (recipe?.method === "buildExecutionScript")
     plan = client.buildExecutionScript(recipe.input);
   else fail("Unsupported review recipe.");
-  // Script equality alone cannot identify a mutable intent: executeRecovery has
-  // the same script before and after the pending custody changes. Compare every
-  // public plan field, then the authority roster and signer scopes.
+  // Script equality alone cannot identify a mutable plan: two freezes of the
+  // same account share a script. Compare every public plan field, then the
+  // authority roster and signer scopes.
   if (comparable(plan) !== comparable(exported.plan))
     fail("Reviewed authority, pending intent or operation changed. Review again.");
-  // The confirm script names an intent id; the action set is what the core
-  // re-checks against its own digest, so a live intent that was replaced under
-  // the same id must fail here rather than be signed.
-  if (
-    plan.kind === "configuration" &&
-    plan.method !== "proposeConfiguration" &&
-    recipe.input.intentId !== undefined
-  ) {
-    const pending = await client.getPendingConfiguration(
-      plan.accountId,
-      recipe.input.intentId,
-    );
-    if (
-      !pending ||
-      !pending.exists ||
-      comparable(pending.actions) !== comparable(recipe.input.actions)
-    )
-      fail("Reviewed pending intent changed. Review again.");
-  }
+  // A configuration-intent recipe belonged to a kernel that carried one. The
+  // minimal core has no such method, so a review exported against this ABI can
+  // never contain one; the recipe branch above already refused it.
   const payer = nativeAddress(exported.feePayer);
   const authorities = await expectedAuthorities(client, plan, exported);
   if (
@@ -809,11 +741,6 @@ export async function rebuildNativeReview(client, exported) {
     nativeAddress(exported.authority) !== exported.authority
   )
     fail("Reviewed authority changed. Review again.");
-  if (
-    exported.newCustody !== undefined &&
-    nativeAddress(exported.newCustody) !== exported.newCustody
-  )
-    fail("Reviewed new custody changed. Review again.");
   client.prepare(plan);
   await client.revalidatePlan(plan);
   return plan;
@@ -822,21 +749,12 @@ export async function rebuildNativeReview(client, exported) {
 async function expectedAuthorities(client, plan, exported) {
   if (plan.kind === "registration") return [plan.custodyAddress];
   if (plan.kind === "execution") return [];
-  if (plan.method === "executeRecovery") return [];
   const state = await readState(client, plan.accountId);
-  if (plan.method === "beginRecovery") {
-    if (!exported.authority || !exported.newCustody)
-      fail("Reviewed recovery authority or new custody changed. Review again.");
-    recoveryAuthorityOnly(state, exported.authority, plan.method);
-    return [exported.authority, exported.newCustody];
+  if (plan.method === "freezeAccount" || plan.method === "unfreezeAccount") {
+    if (exported.authority !== undefined) custodyOnly(state, exported.authority);
+    return [state.custodyAddress];
   }
-  if (plan.method === "cancelRecovery") {
-    if (!exported.authority)
-      fail("Reviewed recovery authority changed. Review again.");
-    recoveryAuthorityOnly(state, exported.authority, plan.method);
-    return [exported.authority];
-  }
-  return [state.custodyAddress];
+  fail("Unsupported account action.");
 }
 
 export function validateNativeReceipt(review, transaction, log, txid) {
@@ -993,18 +911,6 @@ export function createNativeWorkspace({
     const found = await c.discover();
     if (comparable(found) !== comparable(review.profile))
       fail("Review network or native profile mismatch.");
-    if (review.intentId !== undefined) {
-      const pending = await c.getPendingConfiguration(
-        review.plan.accountId,
-        review.intentId,
-      );
-      if (
-        !pending ||
-        !pending.exists ||
-        comparable(pending.actions) !== comparable(review.intentActions)
-      )
-        fail("The pending intent changed. Refresh it before reviewing.");
-    }
     await c.revalidatePlan(review.plan);
   }
   async function reviewPlan({
@@ -1124,13 +1030,18 @@ export function createNativeWorkspace({
       const id = nativeAddress(accountId);
       await c.discover();
       const account = await readState(c, id);
-      const [protocol, modules, hookOrder, chainNow] = await Promise.all([
+      const [protocol, modules, chainNow] = await Promise.all([
         c.getProtocolInfo(),
         readModules(c, id),
-        c.getHookOrder(id),
         chainTime(c),
       ]);
-      const pending = await readIntents(c, id, chainNow);
+      // Hook order is no longer a core getter: the revision is published in the
+      // account descriptor and the members are the installed hook instances,
+      // read back from getModules. That is the whole fact the core owns.
+      const hookOrder = freeze({
+        hookIds: modules.hooks.map((module) => module.moduleId),
+        revision: account.hookOrderRevision,
+      });
       guard(version);
       if (intent !== intentVersion) fail("Account input changed. Load again.");
       return freeze({
@@ -1138,7 +1049,9 @@ export function createNativeWorkspace({
         protocol,
         modules,
         hookOrder,
-        pending,
+        // The minimal core holds no configuration intent; the governance
+        // module does, so the core's pending list is always empty.
+        pending: [],
         chainTime: chainNow,
       });
     },
@@ -1192,7 +1105,7 @@ export function createNativeWorkspace({
         actor: input.feePayer || normalized.custodyAddress,
         description: normalized.actions.length
           ? "Register with the initial module install executed atomically, no timelock. The first validator disables the built-in custody route."
-          : "Register with the built-in custody route. Validators and hooks are installed afterwards by a 24-hour configuration intent, never at creation.",
+          : "Register with the built-in custody route. Validators and hooks are administered afterwards by installModule/removeModule; the core has no proposal window.",
       });
     },
     async lifecycle(input) {
@@ -1202,60 +1115,30 @@ export function createNativeWorkspace({
       if (!NATIVE_ACTIONS.some((entry) => entry.value === action))
         fail("Choose a supported account action.");
       const state = await readState(c, accountId);
-      const now = await chainTime(c);
-      const block = actionBlockReason(state, action, now);
+      const block = actionBlockReason(state, action);
       if (block) fail(block);
-      const newCustody =
-        action === "beginRecovery"
-          ? nativeAddress(input.newCustody ?? input.address)
-          : undefined;
-      if (action === "beginRecovery") {
-        if (
-          newCustody === state.custodyAddress ||
-          newCustody === state.accountAddress ||
-          newCustody === c.contractHash
-        )
-          fail("The new custody wallet must be a different Neo account.");
-      }
-      let actor = nativeAddress(input.feePayer || input.authority || state.custodyAddress);
-      // Freeze and unfreeze are custody-only; recovery is custody or the recovery
-      // authority, and a permissionless executeRecovery needs neither.
-      if (
-        ["freezeAccount", "unfreezeAccount", "beginRecovery", "cancelRecovery"].includes(
-          action,
-        )
-      )
-        recoveryAuthorityOnly(state, actor, action);
-      if (action === "executeRecovery" && actor === state.accountAddress)
-        fail("The fee payer must be a separate Neo wallet, not the account proxy.");
+      // Freeze and unfreeze are custody-only. Recovery begin / execute / cancel
+      // belong to the recovery module and are not core methods, so no core
+      // authority rule is invented for them here.
+      const actor = nativeAddress(
+        input.feePayer || input.authority || state.custodyAddress,
+      );
+      custodyOnly(state, actor);
       const args = [RPC_HASH(accountId)];
       const vmArgs = [];
-      if (action === "beginRecovery") {
-        args.push(RPC_HASH(newCustody));
-        vmArgs.push(nativeCodec.hashValue(newCustody));
-      }
       const plan = c.buildAccountActionScript({
         method: action,
         accountId,
         args: vmArgs,
       });
-      const authorities = ["beginRecovery", "cancelRecovery", "freezeAccount", "unfreezeAccount"].includes(action)
-        ? [actor]
-        : [];
-      if (action === "beginRecovery") authorities.push(newCustody);
       return reviewPlan({
         version,
         c,
         intent,
         plan,
         args,
-        authorities,
-        extra:
-          action === "beginRecovery"
-            ? { authority: actor, newCustody }
-            : ["cancelRecovery"].includes(action)
-              ? { authority: actor }
-              : {},
+        authorities: [actor],
+        extra: {},
         recipe: {
           method: "buildAccountActionScript",
           input: {
@@ -1276,103 +1159,22 @@ export function createNativeWorkspace({
       const id = nativeAddress(accountId);
       await c.discover();
       const now = await chainTime(c);
-      const intents = await readIntents(c, id, now);
       guard(version);
       if (intent !== intentVersion)
         fail("Configuration inputs changed. Refresh the pending intents again.");
-      return freeze({ accountId: id, chainTime: now, intents });
+      // Proposals, maturity and expiry are the governance module's state. The
+      // core has no intent record, so the honest answer for this account is an
+      // empty list rather than a read of something the ABI does not publish.
+      return freeze({ accountId: id, chainTime: now, intents: [] });
     },
-    async configuration(input) {
-      const { version, c, intent } = begin();
-      const accountId = nativeAddress(input.accountId);
-      const kind = String(input.kind ?? "");
-      if (!["propose", "confirm", "cancel"].includes(kind))
-        fail("Choose propose, confirm or cancel.");
-      const state = await readState(c, accountId);
-      const now = await chainTime(c);
-      let actions = input.actions ? [...input.actions] : [];
-      let intentId = input.intentId;
-      // An expired intent is dead weight the core lets anyone clear, so the
-      // cancellation needs no authority at all. A live one needs custody.
-      let permissionlessCancel = false;
-      if (kind === "propose") {
-        if (state.statusName !== "Active")
-          fail(
-            state.statusName === "Frozen"
-              ? "Configuration is blocked while the account is frozen."
-              : "Only the migration import may run while migration is required.",
-          );
-        if (!actions.length || actions.length > MAX_ACTIONS_PER_INTENT)
-          fail(`A configuration intent carries 1 to ${MAX_ACTIONS_PER_INTENT} actions.`);
-        if (!Array.isArray(input.readSet ?? []) || (input.readSet ?? []).length > MAX_ACTIONS_PER_INTENT)
-          fail("The read set carries at most 16 keys.");
-      } else {
-        if (intentId === undefined || intentId === null)
-          fail("Choose a pending configuration intent.");
-        const pending = await c.getPendingConfiguration(accountId, intentId);
-        if (!pending || !pending.exists)
-          fail("This configuration intent is not pending.");
-        if (
-          input.expectedIntent &&
-          comparable(pending.actions) !== comparable(input.expectedIntent.actions)
-        )
-          fail("The pending intent changed. Refresh it before reviewing.");
-        intentId = pending.intentId;
-        actions = pending.actions;
-        if (kind === "confirm") {
-          if (BigInt(pending.matureAt) > BigInt(now))
-            fail("The configuration intent has not matured.");
-          if (BigInt(pending.expiresAt) < BigInt(now))
-            fail("The configuration intent has expired; cancel it instead.");
-          if (BigInt(pending.authorityEpoch) !== BigInt(state.authorityEpoch))
-            fail("The intent belongs to an earlier authority epoch.");
-          if (state.statusName !== "Active")
-            fail("Configuration is blocked while the account is frozen.");
-        }
-        if (kind === "cancel" && BigInt(pending.expiresAt) < BigInt(now))
-          permissionlessCancel = true;
-      }
-      const readSet = (input.readSet ?? []).map((key) => ({
-        type: "ByteString",
-        value: nativeCodec.hex(key),
-      }));
-      const plan = c.buildConfigurationScript({
-        kind,
-        accountId,
-        intentId,
-        actions,
-        readSet,
-      });
-      const boundIntent =
-        kind === "propose"
-          ? {}
-          : { intentId: String(intentId), intentActions: actions };
-      const recipeInput = {
-        kind,
-        accountId,
-        ...(kind === "propose" ? {} : { intentId: String(intentId) }),
-        actions,
-        readSet,
-      };
-      const authorities = permissionlessCancel ? [] : [state.custodyAddress];
-      return reviewPlan({
-        version,
-        c,
-        intent,
-        plan,
-        authorities,
-        requiresExactScript: true,
-        extra: boundIntent,
-        recipe: { method: "buildConfigurationScript", input: recipeInput },
-        submission: input.submission,
-        actor: input.feePayer || state.custodyAddress,
-        description:
-          kind === "propose"
-            ? "Propose one atomic configuration intent: it matures after 24 hours and expires 7 days after maturity. Nothing changes until it is confirmed."
-            : kind === "confirm"
-              ? "Confirm the exact matured intent. The core re-checks the action digest, so a covert replacement cannot pass."
-              : "Cancel the pending intent. A live intent needs custody; an expired intent can be cleaned by anyone.",
-      });
+    async configuration() {
+      // The core is a kernel: it exposes installModule/removeModule and nothing
+      // else about configuration. A 24-hour proposal that matures, expires and
+      // is confirmed by digest is the governance module's contract, so there is
+      // no core script to build and no authority the core could re-check.
+      fail(
+        "The minimal core has no configuration intent. Module administration is installModule/removeModule; the proposal window belongs to the governance module.",
+      );
     },
     async operation(input) {
       const { version, c, intent } = begin();

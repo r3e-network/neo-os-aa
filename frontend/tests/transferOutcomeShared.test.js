@@ -1,6 +1,6 @@
 // CU-06 cross-package gate for shared/transferOutcome.mjs: the rules that decide "this transfer returned false"
 // are one module, vendored byte for byte into the frontend (the Vercel project root is frontend/), read by the
-// relay route, the wallet's preflight and confirmation mapper, and exported by the SDK. This file pins the
+// relay route, the wallet's preflight and the SDK. This file pins the
 // module's own rules and then runs one table of result shapes through every path to prove they agree.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,7 +10,6 @@ import { createRequire } from 'node:module';
 
 import * as shared from '../../shared/transferOutcome.mjs';
 import * as vendored from '../src/shared/transferOutcome.mjs';
-import { TX_STATUS, waitForTransactionConfirmation } from '../src/features/studio/txConfirmation.js';
 import { normalizeRelayPreflightResult } from '../src/features/operations/relayPreflight.js';
 import {
   GAS_HASH,
@@ -239,13 +238,6 @@ test('every path reaches the same verdict for every result shape', async () => {
     verdicts.sharedLog = shared.findFailedTransferInExecution(log.executions[0]).length > 0;
     verdicts.sdkLog = sdk.findFailedTransferInExecution(log.executions[0]).length > 0;
 
-    const mapped = await waitForTransactionConfirmation('https://rpc.example/neo', 'a1'.repeat(32), {
-      fetchImpl: async () => ({ ok: true, async json() { return { result: log }; } }),
-      sleep: async () => {},
-      initialDelayMs: 1,
-    });
-    verdicts.mapper = mapped.status === TX_STATUS.FAILED;
-
     const preflight = normalizeRelayPreflightResult(
       { simulate: true, ok: true, vmState: 'HALT', gasConsumed: '1', operation: invocation.operation, stack },
       'meta',
@@ -265,7 +257,7 @@ test('every path reaches the same verdict for every result shape', async () => {
       await node.close();
     }
 
-    assert.equal(Object.keys(verdicts).length, 8, `${shape.name}: every path ran`);
+    assert.equal(Object.keys(verdicts).length, 7, `${shape.name}: every path ran`);
     for (const [route, verdict] of Object.entries(verdicts)) {
       assert.equal(verdict, shape.failed, `${shape.name}: ${route}`);
     }

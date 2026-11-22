@@ -1,5 +1,7 @@
 (* Artifact-specific caller composition. Successful nested returns share the
-   reserved view; caught context faults and actual cache semantics are excluded. *)
+   reserved view; caught context faults and actual cache semantics are excluded.
+   Static slot 58 is `Prefix_TransactionReimbursement` in the reviewed v4 NEF;
+   v3 used slot 38, which v4 reuses for `UInt64Mask`. *)
 From Coq Require Import ZArith List Bool Lia.
 Require Import IntegerSemantics CapArithmetic CapMethodVm CapMethodArtifact.
 Import ListNotations.
@@ -54,7 +56,7 @@ Proof. intros hash [|kind old spent] H; cbn [valid_budget effective_reserved] in
 Qed.
 Theorem helper_reservation_sound : forall hash sf nf q before amount reserved static_values,
  legal_inputs hash sf nf q before ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  helper_step hash sf nf q before static_values = Some (amount,reserved) ->
  0 < amount /\
  amount = source_charge (sf+nf) q (effective_reserved hash before) /\
@@ -98,7 +100,7 @@ Proof.
 Qed.
 Theorem paid_helper_reservation_bound : forall hash sf nf q before amount reserved static_values,
  legal_inputs hash sf nf q before ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  helper_step hash sf nf q before static_values = Some (amount,reserved) ->
  0 < sf+nf -> effective_reserved hash reserved <= sf+nf.
 Proof.
@@ -126,7 +128,7 @@ Theorem zero_fee_caller_conditions : forall hash q before,
 Proof. intros. unfold legal_inputs; unfold valid_hash in *; repeat split; try tauto; try lia; vm_compute; reflexivity. Qed.
 Theorem cross_transaction_helper_resets : forall hash old sf nf q spent kind amount reserved static_values,
  legal_inputs hash sf nf q (PresentBudget kind old spent) ->
- static_values 38%nat = Some (VBuffer [33%nat]) -> bytes_eqb old hash = false ->
+ static_values 58%nat = Some (VBuffer [33%nat]) -> bytes_eqb old hash = false ->
  helper_step hash sf nf q (PresentBudget kind old spent) static_values = Some (amount,reserved) ->
  reserved = PresentBudget kind hash amount.
 Proof.
@@ -136,7 +138,7 @@ Proof.
  replace (0+amount) with amount in Hreserved by ring. exact Hreserved.
 Qed.
 Theorem zero_fee_helper_success_condition : forall hash q before static_values,
- legal_inputs hash 0 0 q before -> static_values 38%nat = Some (VBuffer [33%nat]) ->
+ legal_inputs hash 0 0 q before -> static_values 58%nat = Some (VBuffer [33%nat]) ->
  helper_step hash 0 0 q before static_values =
  Some (q,PresentBudget (input_kind before) hash (effective_reserved hash before+q)).
 Proof.
@@ -163,7 +165,7 @@ Ltac use_step_sound Hstatic :=
  end.
 Theorem finite_nested_reservation_conservation : forall hash sf nf static_values before after amounts failed,
  NestedCalls hash sf nf static_values before after amounts failed ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  effective_reserved hash after = effective_reserved hash before + sum_reservations amounts.
 Proof.
  intros hash sf nf static_values before after amounts failed Hcalls.
@@ -174,7 +176,7 @@ Proof.
 Qed.
 Theorem finite_nested_positive_reservations : forall hash sf nf static_values before after amounts failed,
  NestedCalls hash sf nf static_values before after amounts failed ->
- static_values 38%nat = Some (VBuffer [33%nat]) -> Forall (fun amount => 0 < amount) amounts.
+ static_values 58%nat = Some (VBuffer [33%nat]) -> Forall (fun amount => 0 < amount) amounts.
 Proof.
  intros hash sf nf static_values before after amounts failed Hcalls.
  induction Hcalls; intros Hstatic; try solve [constructor].
@@ -184,7 +186,7 @@ Proof.
 Qed.
 Theorem finite_nested_valid_ledger : forall hash sf nf static_values before after amounts failed,
  NestedCalls hash sf nf static_values before after amounts failed ->
- static_values 38%nat = Some (VBuffer [33%nat]) -> valid_budget before -> valid_budget after.
+ static_values 58%nat = Some (VBuffer [33%nat]) -> valid_budget before -> valid_budget after.
 Proof.
  intros hash sf nf static_values before after amounts failed Hcalls.
  induction Hcalls; intros Hstatic Hvalid; unfold callback_ledger in *; try assumption.
@@ -193,7 +195,7 @@ Proof.
 Qed.
 Lemma finite_nested_paid_working_bound : forall hash sf nf static_values before after amounts failed,
  NestedCalls hash sf nf static_values before after amounts failed ->
- static_values 38%nat = Some (VBuffer [33%nat]) -> 0 < sf+nf ->
+ static_values 58%nat = Some (VBuffer [33%nat]) -> 0 < sf+nf ->
  effective_reserved hash before <= sf+nf -> effective_reserved hash after <= sf+nf.
 Proof.
  intros hash sf nf static_values before after amounts failed Hcalls.
@@ -204,7 +206,7 @@ Proof.
 Qed.
 Theorem finite_nested_paid_fee_bound : forall hash sf nf static_values before after amounts failed,
  NestedCalls hash sf nf static_values before after amounts failed ->
- static_values 38%nat = Some (VBuffer [33%nat]) -> 0 < sf+nf -> valid_budget before ->
+ static_values 58%nat = Some (VBuffer [33%nat]) -> 0 < sf+nf -> valid_budget before ->
  effective_reserved hash before <= sf+nf ->
  sum_reservations amounts <= sf+nf /\ effective_reserved hash after <= sf+nf.
 Proof.
@@ -213,7 +215,7 @@ Proof.
  pose proof (effective_reserved_nonnegative hash before H2). lia.
 Qed.
 Theorem callback_receives_helper_committed_view : forall hash sf nf q before amount reserved static_values,
- legal_inputs hash sf nf q before -> static_values 38%nat = Some (VBuffer [33%nat]) ->
+ legal_inputs hash sf nf q before -> static_values 58%nat = Some (VBuffer [33%nat]) ->
  helper_step hash sf nf q before static_values = Some (amount,reserved) ->
  observe (run_vm 130 CapMethodArtifact.artifact
    (initial_vm hash sf nf q (stored_value before) static_values)) =
@@ -231,7 +233,7 @@ Proof. intros hash [|kind old spent] H; cbn [valid_budget effective_reserved] in
 Qed.
 Theorem finite_nested_zero_fee_representability : forall hash static_values before after amounts failed,
  NestedCalls hash 0 0 static_values before after amounts failed ->
- static_values 38%nat = Some (VBuffer [33%nat]) -> valid_budget before ->
+ static_values 58%nat = Some (VBuffer [33%nat]) -> valid_budget before ->
  integer_fits (effective_reserved hash before + sum_reservations amounts) /\
  effective_reserved hash before + sum_reservations amounts < integer_limit.
 Proof.
@@ -251,7 +253,7 @@ Theorem outer_fault_commits_no_reservations : forall snapshot working amounts,
 Proof. reflexivity. Qed.
 Theorem outer_paid_commit_fee_bound : forall hash sf nf static_values snapshot working amounts failed,
  NestedCalls hash sf nf static_values snapshot working amounts failed ->
- static_values 38%nat = Some (VBuffer [33%nat]) -> 0 < sf+nf -> valid_budget snapshot ->
+ static_values 58%nat = Some (VBuffer [33%nat]) -> 0 < sf+nf -> valid_budget snapshot ->
  effective_reserved hash snapshot <= sf+nf ->
  effective_reserved hash (finish_outer (outer_transaction snapshot working amounts failed)) <= sf+nf /\
  sum_reservations (committed_reservations (outer_transaction snapshot working amounts failed)) <= sf+nf.

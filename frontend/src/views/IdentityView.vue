@@ -129,7 +129,7 @@ const accountContextLabel = computed(
 );
 const workspaceLink = computed(() =>
   accountAddressScriptHash.value
-    ? { path: "/app", query: { account: accountAddressScriptHash.value } }
-    : "/app",
+    ? { path: "/native", query: { account: accountAddressScriptHash.value } }
+    : "/native",
 );
 </script>

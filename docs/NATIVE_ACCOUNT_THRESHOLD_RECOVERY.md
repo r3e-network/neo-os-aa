@@ -5,8 +5,9 @@ its fee payer. It is a transaction-witness account, not a threshold policy over 
 another native account proxy. It does not change account identity, the recovery timelock or the
 module model. Public activation remains a separate protocol decision.
 
-The account's recovery authority is set by a `setRecoveryPolicy` action inside a configuration intent,
-so it matures for 24 hours like every other intent. `beginRecovery(accountId, newCustody)` then needs
+The account's recovery authority lives in its control record and is changed by a governance module,
+not by the core: the core carries no action that sets it, so the module runs its own maturity window
+before it submits the change. `beginRecovery(accountId, newCustody)` then needs
 the custody address **or** the configured recovery authority, and additionally the new custody
 address's witness. `cancelRecovery(accountId)` accepts either of the two. `freezeAccount` is
 custody-only, and — unlike the v3 guardian model — `unfreezeAccount` is custody-only as well:
@@ -75,12 +76,13 @@ carries a 7..90 day timelock chosen at creation, and `executeRecovery` is permis
 timelock matures and the authority epoch is unchanged. Execution is callback-free: it deletes every
 module-model row, clears the recovery authority, restores `Active`, and re-enables default operation
 and message authorization. The new custody therefore starts without any installed module and must
-install its validators again through configuration intents.
+install its validators again with `installModule`.
 
 If custody is lost and fewer than m recovery members remain usable, there is no cryptographic
 shortcut: changing the threshold or roster produces a different wallet script hash and does not
-change the configured recovery authority. While Active with no pending recovery, custody can propose
-a recovery-authority replacement, which matures for 24 hours.
+change the configured recovery authority. While Active with no pending recovery, custody replaces
+it directly with `removeModule` followed by `installModule`; there is no maturity window to wait
+for.
 
 Keep the threshold, complete public-key roster and exact verification script with public account
 records, and keep participant wallet backups independently. Different public keys do not prove

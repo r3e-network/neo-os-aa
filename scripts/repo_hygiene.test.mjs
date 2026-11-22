@@ -30,16 +30,16 @@ import { loadIgnoreRules } from "./lib/gitignore-rules.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-test("NeoDID cross-repo gate resolves the services vendor artifact path", () => {
+test("NeoDID cross-repo artifact resolution stays on the pinned services vendor tree", () => {
+  // verify_repo.sh used to plumb NEOOS_SERVICES_CONTRACT_BUILD into the custom contract
+  // suite. That suite was retired with the custom track, so the native gate must not
+  // carry the cross-repo artifact plumbing; the resolution lives on in the standalone
+  // validators and the runtime harness below.
   const script = fs.readFileSync(path.join(repoRoot, "scripts", "verify_repo.sh"), "utf8");
-  assert.ok(
-    script.includes("${NEOOS_SERVICES_CONTRACT_BUILD:-$ROOT_DIR/../neo-os-services/vendor/neo-os-did/contracts/build}"),
-    "verify_repo.sh must find the pinned NeoDIDRegistry artifact after the source moved",
-  );
   assert.equal(
-    script.includes("$ROOT_DIR/../neo-os-services/contracts/build"),
+    script.includes("neo-os-services/contracts/build"),
     false,
-    "the retired services contracts/build default must not return",
+    "the retired services contracts/build default must not return to the native gate",
   );
   const integrationTest = fs.readFileSync(
     path.join(repoRoot, "tests", "SmartAccount.Contracts.Tests", "NeoDidActionTicketIntegrationRuntimeTests.cs"),
@@ -192,10 +192,10 @@ const MUST_NOT_BE_IGNORED = [
   ".codegraph/.gitignore",
   "contracts/build/SmartAccount.nef",
   "contracts/build/SmartAccount.manifest.json",
-  "contracts/custom/SmartAccount.csproj",
+  "contracts/native/Neo.csproj",
   "Directory.Build.props",
   "nuget.config",
-  "contracts/custom/packages.lock.json",
+  "contracts/native/packages.lock.json",
   "contracts/plugins/verifiers/packages.SessionKeyVerifier.lock.json",
   "tests/SmartAccount.Contracts.Tests/packages.lock.json",
   "tests/SmartAccount.Contracts.Tests/fixtures/deployed-mainnet/SmartAccountV3.nef",

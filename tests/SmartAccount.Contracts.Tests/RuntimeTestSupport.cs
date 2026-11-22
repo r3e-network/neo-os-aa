@@ -19,18 +19,43 @@ using Neo.VM.Types;
 namespace SmartAccount.Contracts.Tests;
 
 /// <summary>
-/// Shared VM harness for behavioral suites that execute the compiled contracts under
-/// <c>contracts/bin/public</c> through a real Neo execution engine. It extends the pattern of
+/// Shared, profile-neutral VM harness for behavioral suites that execute compiled
+/// contracts through a real Neo execution engine. It extends the pattern of
 /// <c>RuntimeWalletHarness</c> in <c>RuntimeExecutionTests.cs</c> with multi-contract deploys,
 /// explicit transaction signers (Global witness scope so witnesses survive nested contract
 /// calls), nested-array argument marshalling, and GAS funding/balance helpers.
+///
+/// The artifact directory is no longer tied to the retired custom profile: a host that
+/// built its own artifacts passes them explicitly (<see cref="DeployArtifact"/>), and the
+/// repository-relative default points at the native track output. Suites that still deploy
+/// a compiled tree by name select it through <c>SMARTACCOUNT_ARTIFACT_DIR</c>, so nothing in
+/// this helper requires <c>contracts/bin/public</c> to exist.
 /// </summary>
 internal sealed class RuntimeFixture
 {
+    private const string ArtifactDirectoryVariable = "SMARTACCOUNT_ARTIFACT_DIR";
+
     private static readonly string RepoRoot =
         Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 
-    private static readonly string CompiledContractsDir = Path.Combine(RepoRoot, "contracts", "bin", "public");
+    private static readonly string CompiledContractsDir = ResolveArtifactDirectory();
+
+    /// <summary>
+    /// Default artifact directory when a host passes no path of its own:
+    /// <c>contracts/bin/native</c>, the native-profile module output. No script creates that
+    /// directory implicitly — <c>scripts/build_native_modules.py</c> and the epoch probe write to the
+    /// <c>--output</c> they are given — so a local run points <c>SMARTACCOUNT_ARTIFACT_DIR</c> at a
+    /// module build, and the epoch probe hands its own directory to the probe on the command line.
+    /// </summary>
+    public static string ArtifactDirectory => CompiledContractsDir;
+
+    private static string ResolveArtifactDirectory()
+    {
+        string? configured = Environment.GetEnvironmentVariable(ArtifactDirectoryVariable);
+        if (!string.IsNullOrWhiteSpace(configured))
+            return Path.GetFullPath(configured!);
+        return Path.Combine(RepoRoot, "contracts", "bin", "native");
+    }
 
     private static readonly FieldInfo FeeAmountField =
         typeof(ApplicationEngine).GetField("_feeAmount", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -50,8 +75,8 @@ internal sealed class RuntimeFixture
     }
 
     /// <summary>
-    /// Deploys a compiled artifact from contracts/bin/public (the directory the deploy
-    /// tooling reads), with logical names such as verifiers/SessionKeyValidator.
+    /// Deploys a compiled artifact from <see cref="ArtifactDirectory"/> (the native track
+    /// output by default), with logical names such as verifiers/SessionKeyValidator.
     /// </summary>
     public UInt160 Deploy(string baseName, object? data = null)
     {

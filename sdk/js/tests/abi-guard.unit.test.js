@@ -1,56 +1,40 @@
 /**
- * ABI guard: the SDK may only emit contract operations the v4 kernel really
- * declares, with the exact name, arity and declared types, and it may only
- * speak the `SA_*` vocabulary the kernels really raise.
+ * ABI guard: the SDK may only emit contract operations the v4 native kernel
+ * really declares, with the exact name, arity and declared types, and it may
+ * only speak the `SA_*` vocabulary the kernel really raises.
  *
  * Neo N3 method lookup is exact-match (case-sensitive, name plus parameter
  * count), so one wrong casing or arity is a method-not-found FAULT on chain.
- * Three sources are checked against each other:
+ * Two sources are checked against each other:
  *
- * - `tests/fixtures/custom-abi-v4.json`: the checked-in snapshot of every
- *   compiled custom-kernel signature (overloads kept). Hermetic, so the suite
- *   runs without a local build.
- * - `contracts/bin/public/SmartAccount.manifest.json`: the freshly compiled
- *   ABI, compared with the snapshot whenever a build is present, so drift in
- *   the kernel cannot hide behind a stale snapshot.
- * - `contracts/native/SmartAccount/*.cs` and `contracts/custom/**`: the two
- *   kernels' sources, for the error-code vocabulary and for the operation
- *   parameter shape the native build declares.
+ * - `contracts/native/SmartAccount/*.cs`: the true source of the kernel, and
+ *   therefore of the ABI the core publishes (a native contract has no compiled
+ *   manifest artifact — see `helpers/nativeAbi.js`).
+ * - the SDK and shared modules: every operation string they emit, and every
+ *   signature the discovery gate requires.
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { SA_ERROR_CODES, SA_ERRORS } = require('../src/index');
 const {
-  CUSTOM_IMPLEMENTATION_ID,
-  CUSTOM_REQUIRED_ABI,
-  SA_ERROR_CODES,
-  SA_ERRORS,
-} = require('../src/index');
-const {
+  NATIVE_ACCOUNT_ADDRESS_ABI,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
   PROTOCOL_VERSION,
 } = require('../src/native');
-const { declaredType } = require('../../../shared/nativeSmartAccountClient.mjs');
+const { nativeAbi } = require('./helpers/nativeAbi');
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
-const fixture = require('./fixtures/custom-abi-v4.json');
-const compiledPath = path.join(
-  repoRoot,
-  'contracts',
-  'bin',
-  'public',
-  'SmartAccount.manifest.json',
-);
+const abi = nativeAbi(repoRoot);
+const nativeSource = 'contracts/native/SmartAccount';
 
-const signature = (method) => ({
-  types: method.parameters.map((parameter) => parameter.type),
-  names: method.parameters.map((parameter) => parameter.name),
-  returntype: method.returntype,
-  safe: Boolean(method.safe),
-});
+/** Every declared signature of one name, normalised for comparison. */
+const signatures = (name) => abi.get(name) ?? [];
+
+const REQUIRED = { ...NATIVE_REQUIRED_ABI, ...NATIVE_ACCOUNT_ADDRESS_ABI };
 
 /**
  * Line and block comments carry the migration notes that name removed v3
@@ -59,23 +43,6 @@ const signature = (method) => ({
 function stripComments(source) {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
-
-/** Every snapshot signature of one name, normalised for comparison. */
-const signatures = (name) => (fixture.methods[name] ?? []).map(signature);
-
-/** One canonical string per declared signature, from either source. */
-const canonical = (list) =>
-  list
-    .map((entry) =>
-      JSON.stringify(
-        signature({
-          parameters: entry.parameters ?? entry.types.map((type, index) => ({ name: entry.names[index], type })),
-          returntype: entry.returntype,
-          safe: entry.safe,
-        }),
-      ),
-    )
-    .sort();
 
 function csharpSources(directory) {
   return fs
@@ -89,54 +56,45 @@ function csharpSources(directory) {
     );
 }
 
-test('the custom kernel ABI is the v4 surface, not a renamed v3 one', () => {
-  const methods = fixture.methods;
-  // The v4 protocol entry points, including the intent, module, recovery and
-  // migration surfaces (§3, §7, §10, §16).
+test('the native ABI is the minimal-core v4 surface', () => {
+  // The 25 exported entry points of the minimal core (spec §3, §7, §9, §10,
+  // §12.5): the configuration family plus the four restricted landing
+  // entries behind the module decisions.
   for (const name of [
     'computeAccountIdentity',
-    'computeRegistrationAccountId',
     'createAccount',
     'createAccounts',
     'getOperationDigest',
     'validateUserOp',
     'executeUserOp',
     'executeUserOps',
-    'isValidSignature',
     'getNonce',
     'getNonceSequence',
-    'proposeConfiguration',
-    'confirmConfiguration',
-    'cancelConfiguration',
-    'getPendingConfiguration',
-    'getPendingConfigurationIntentIds',
+    'installModule',
+    'removeModule',
+    'setRecoveryPolicy',
+    'setBuiltinAuthorization',
+    'revokeModuleCredentials',
+    'resetAccount',
     'getModules',
     'getModule',
     'isModuleInstalled',
-    'getHookOrder',
     'getAuthorizedModuleId',
-    'revokeCredentials',
     'freezeAccount',
     'unfreezeAccount',
-    'isAccountFrozen',
-    'beginRecovery',
-    'cancelRecovery',
-    'executeRecovery',
-    'getRecoveryStatus',
-    'isMigrationRequired',
-    'markMigrationRequired',
-    'getMigrationState',
-    'setMetadataUri',
-    'getMetadataUri',
     'getProtocolInfo',
     'getAccount',
+    'getAccountAddress',
     'getAccountImplementationId',
     'verify',
   ]) {
-    assert.ok(methods[name], `missing v4 method ${name}`);
+    if (name === 'computeAccountIdentity') continue; // a pure helper, not a contract method
+    assert.ok(abi.has(name), `missing v4 method ${name}`);
   }
-  // Removed with the single-slot verifier/hook model: there is no alias, so a
-  // v3 caller must fail to resolve rather than silently reach a renamed method.
+  assert.equal([...abi.keys()].length, 25, 'the minimal core exports exactly 25 methods');
+  // Removed with the single-slot verifier/hook model, the platform services and
+  // the features that moved to user-space modules. There is no alias, so an old
+  // caller must fail to resolve rather than silently reach a renamed method.
   for (const name of [
     'registerAccount',
     'registerAccounts',
@@ -168,99 +126,98 @@ test('the custom kernel ABI is the v4 surface, not a renamed v3 one', () => {
     'getEscapeTimelock',
     'isEscapeActive',
     'previewUserOpValidation',
+    'getProxyScriptHash',
+    'executeSponsoredUserOp',
+    'setMetadataUri',
+    'getMetadataUri',
+    'isMigrationRequired',
+    'markMigrationRequired',
+    'getMigrationState',
+    // Features that are user-space module concerns in the minimal core.
+    'proposeConfiguration',
+    'confirmConfiguration',
+    'cancelConfiguration',
+    'getPendingConfiguration',
+    'getPendingConfigurationIntentIds',
+    'beginRecovery',
+    'cancelRecovery',
+    'executeRecovery',
+    'getRecoveryStatus',
+    'isValidSignature',
+    'getHookOrder',
+    'setHookOrder',
+    'revokeCredentials',
+    'canonicalP256PublicKey',
+    'supportsModuleType',
+    'supportsExecutionMode',
+    'setThresholdPolicy',
+    'getThresholdPolicy',
+    'updateMessageSubject',
+    'getMessageSubjects',
   ]) {
-    assert.equal(methods[name], undefined, `v3 method ${name} is still in the ABI`);
+    assert.equal(abi.has(name), false, `retired method ${name} is still in the ABI`);
   }
-});
-
-test('the compiled v4 ABI and the checked-in snapshot agree', () => {
-  if (!fs.existsSync(compiledPath)) return;
-  const compiled = JSON.parse(fs.readFileSync(compiledPath, 'utf8'));
-  const fresh = {};
-  for (const method of compiled.abi.methods) (fresh[method.name] ??= []).push(signature(method));
-  assert.deepEqual(
-    Object.keys(fresh).sort(),
-    Object.keys(fixture.methods).sort(),
-    'regenerate sdk/js/tests/fixtures/custom-abi-v4.json: the kernel ABI changed',
-  );
-  for (const name of Object.keys(fresh)) {
-    assert.deepEqual(canonical(fresh[name]), canonical(fixture.methods[name]), name);
-  }
-  assert.deepEqual(
-    compiled.abi.events.map((event) => event.name).sort(),
-    fixture.events,
-    'regenerate the snapshot: the kernel event surface changed',
-  );
 });
 
 test('every SDK-required operation is declared once with the exact shape', () => {
-  // The shared gate pins parameter names as well as types; the custom-only gate
-  // pins the custom services this client builds and reads.
-  for (const [name, [types, returntype, safe, names]] of Object.entries(NATIVE_REQUIRED_ABI)) {
+  for (const [name, [types, returntype, safe, names]] of Object.entries(REQUIRED)) {
     const declared = signatures(name);
-    const match = declared.find(
-      (entry) =>
-        entry.returntype === returntype &&
-        entry.safe === safe &&
-        entry.types.length === types.length &&
-        types.every((type, index) => declaredType(type, entry.types[index])) &&
-        names.every((parameter, index) => entry.names[index] === parameter),
-    );
-    assert.ok(match, `shared gate requires ${name}(${types.join(',')}) -> ${returntype}`);
+    assert.equal(declared.length, 1, `${name} must be declared exactly once`);
+    const [entry] = declared;
+    assert.deepEqual(entry.types, [...types], `${name} parameter types`);
+    assert.deepEqual(entry.names, [...names], `${name} parameter names`);
+    assert.equal(entry.returntype, returntype, `${name} return type`);
+    assert.equal(entry.safe, safe, `${name} safe flag`);
   }
-  for (const [name, [types, returntype]] of Object.entries(CUSTOM_REQUIRED_ABI)) {
-    const match = signatures(name).find(
-      (entry) =>
-        entry.returntype === returntype &&
-        entry.types.length === types.length &&
-        types.every((type, index) => declaredType(type, entry.types[index])),
+});
+
+test('the native-only account address query is declared by the native kernel', () => {
+  const native = csharpSources(nativeSource).map((file) => fs.readFileSync(file, 'utf8'));
+  for (const [name, [types, returntype, safe, names]] of Object.entries(
+    NATIVE_ACCOUNT_ADDRESS_ABI,
+  )) {
+    assert.equal(types.length, names.length, `${name} parameter types and names must agree`);
+    const declaration = native
+      .flatMap((source) => [...source.matchAll(/\bpublic UInt160 GetAccountAddress\(([^)]*)\)/g)])
+      .map((match) => match[1]);
+    assert.equal(declaration.length, 1, `native kernel must declare exactly one ${name}`);
+    assert.match(declaration[0], /\bUInt160\b/, `${name} takes a Hash160 account id`);
+    // The published `safe` flag is the compiler's projection of the attribute, so
+    // a method that stopped being ReadStates would be exported as a write.
+    const attributed = native.flatMap((source) =>
+      [...source.matchAll(/\[ContractMethod\([^\]]*\)\][\s\S]{0,400}?\bpublic UInt160 GetAccountAddress\(/g)].map(
+        (match) => match[0],
+      ),
     );
-    assert.ok(match, `custom gate requires ${name}(${types.join(',')}) -> ${returntype}`);
-    assert.equal(signatures(name).length, 1, `${name} must not be overloaded`);
+    assert.equal(attributed.length, 1, `native ${name} must be an exported contract method`);
+    assert.match(attributed[0], /CallFlags\.ReadStates/, `native ${name} must be a pure read`);
+    assert.deepEqual([...types], ['Hash160']);
+    assert.deepEqual([...names], ['accountId']);
+    assert.equal(returntype, 'Hash160');
+    assert.equal(safe, true, `${name} is a read`);
   }
 });
 
 test('the operation argument is a compound the client always serializes as an Array', () => {
-  // Spec §4: one operation is one Array of thirteen items. The native build
-  // declares `Array`; the custom build's compiler infers `Any` from its
-  // `object operation` parameter. The gate tolerates exactly that pair, and the
-  // native source must not drift to anything weaker. These are the only six
-  // declarations in the compiled custom ABI that name `Any`:
-  // `_deploy` (framework hook, never called by the SDK) and the five entry
-  // points that take one serialized operation.
-  for (const name of ['getOperationDigest', 'validateUserOp', 'executeUserOp', 'isValidSignature']) {
+  // Spec §4: one operation is one Array of thirteen items, and the native core
+  // declares exactly that. No parameter may be the untyped `Any`.
+  for (const name of ['getOperationDigest', 'validateUserOp', 'executeUserOp']) {
     const [entry] = signatures(name);
-    const index = entry.types.findIndex((type) => type === 'Array' || type === 'Any');
-    assert.ok(index >= 0, `${name} must declare a compound operation parameter`);
-    assert.equal(entry.types[index], 'Any', `${name} still declares the compiler-inferred parameter`);
+    assert.deepEqual(entry.types.slice(1).filter((type) => type === 'Array').length, 1, name);
   }
-  // The sponsored entry point takes the same single operation in the middle.
-  assert.equal(signatures('executeSponsoredUserOp')[0].types[1], 'Any');
-  // `executeUserOps` takes the operations Array itself, so it declares Array.
+  // `executeUserOps` takes the operations Array itself, so it declares Array too.
   assert.equal(signatures('executeUserOps')[0].types[1], 'Array');
-  assert.equal(declaredType('Array', 'Array'), true);
-  assert.equal(declaredType('Array', 'Any'), true);
-  // Nothing else is interchangeable, in either direction.
-  assert.equal(declaredType('Any', 'Array'), false);
-  assert.equal(declaredType('ByteArray', 'Any'), false);
-  assert.equal(declaredType('Array', 'Struct'), false);
-  assert.equal(declaredType('Hash160', 'ByteArray'), false);
-  // No other method may hide behind `Any`: the tolerance is not a general one.
-  const inferred = [
-    'getOperationDigest',
-    'validateUserOp',
-    'executeUserOp',
-    'executeSponsoredUserOp',
-    'isValidSignature',
-    '_deploy',
-  ];
-  for (const [name, list] of Object.entries(fixture.methods)) {
-    for (const entry of list) {
-      if (!entry.parameters.some((parameter) => parameter.type === 'Any')) continue;
-      assert.ok(inferred.includes(name), `${name} declares Any outside the documented operation parameter`);
+  for (const [name, entries] of abi) {
+    for (const entry of entries) {
+      assert.equal(
+        entry.types.includes('Any'),
+        false,
+        `${name} declares an untyped Any parameter; the operation is an Array`,
+      );
     }
   }
-  const native = csharpSources('contracts/native/SmartAccount').map((file) => fs.readFileSync(file, 'utf8'));
+  // The native build declares `Array` on the entry points themselves.
+  const native = csharpSources(nativeSource).map((file) => fs.readFileSync(file, 'utf8'));
   for (const method of ['GetOperationDigest', 'ValidateUserOp', 'ExecuteUserOp']) {
     // Declarations wrap, so the parameter list is matched across lines.
     const declaration = native
@@ -272,9 +229,22 @@ test('the operation argument is a compound the client always serializes as an Ar
   }
 });
 
-test('every operation string the SDK emits exists in the compiled ABI', () => {
+test('every operation event the client requires is declared by the native kernel', () => {
+  // `[ContractEvent(hardfork, index, "Name", ...)]`: the name is the third
+  // positional argument, there is no `Name =` property in the attribute.
+  const declared = new Set(
+    [...csharpSources(nativeSource).flatMap((file) => [
+      ...fs.readFileSync(file, 'utf8').matchAll(/\[ContractEvent\(\s*[^,]+,\s*\d+\s*,\s*"([A-Za-z0-9_]+)"/g),
+    ])].map((match) => match[1]),
+  );
+  assert.ok(declared.size > 0, 'the native source declares no events');
+  for (const name of NATIVE_REQUIRED_EVENTS) assert.ok(declared.has(name), `missing event ${name}`);
+});
+
+test('every operation string the SDK emits exists in the native ABI', () => {
   const files = [
     path.join(__dirname, '..', 'src', 'index.js'),
+    path.join(__dirname, '..', 'src', 'native.js'),
     path.join(repoRoot, 'shared', 'nativeSmartAccountClient.mjs'),
     path.join(repoRoot, 'shared', 'nativeTransactionArtifact.mjs'),
   ];
@@ -290,9 +260,11 @@ test('every operation string the SDK emits exists in the compiled ABI', () => {
     }
   }
   // The scan must find the surface; an empty map would make this test vacuous.
-  assert.ok(emitted.size >= 30, `only ${emitted.size} operations found in the SDK source`);
+  for (const name of ['getAccount', 'getOperationDigest', 'validateUserOp', 'getProtocolInfo']) {
+    assert.ok(emitted.has(name), `the scan did not find ${name} in the SDK source`);
+  }
   for (const [name, file] of emitted) {
-    assert.ok(fixture.methods[name], `${file} emits ${name}, which the v4 ABI does not declare`);
+    assert.ok(abi.has(name), `${file} emits ${name}, which the v4 ABI does not declare`);
   }
   // A read through invokescript must be declared safe: an unsafe method is a
   // state change requested by a read path.
@@ -329,6 +301,10 @@ test('the SDK source carries no removed v3 operation', () => {
     'buildLegacyOperationView',
     'supportsV3',
     'clearAccount',
+    'buildCustomActionScript',
+    'CUSTOM_REQUIRED_ABI',
+    'CUSTOM_IMPLEMENTATION_ID',
+    'CUSTOM_PROXY_CALL_FLAGS',
   ];
   for (const file of files) {
     const source = stripComments(fs.readFileSync(file, 'utf8'));
@@ -342,21 +318,22 @@ test('the SDK source carries no removed v3 operation', () => {
   }
 });
 
-test('the SA_* vocabulary is exactly the vocabulary both kernels raise', () => {
+test('the SA_* vocabulary is exactly the vocabulary the native kernel raises', () => {
   assert.equal(PROTOCOL_VERSION, 4);
-  assert.equal(CUSTOM_IMPLEMENTATION_ID, 'org.r3e.neo.smart-account.v4');
   const codes = (directory) =>
     new Set(
       csharpSources(directory).flatMap((file) =>
         [...fs.readFileSync(file, 'utf8').matchAll(/"(SA_[A-Z0-9_]+)"/g)].map((match) => match[1]),
       ),
     );
-  const custom = codes('contracts/custom');
-  const native = codes('contracts/native/SmartAccount');
+  // The native kernel in contracts/native/SmartAccount is the only kernel left,
+  // so it is the sole vocabulary the SDK must map exactly.
+  const native = codes(nativeSource);
   const sdk = new Set(SA_ERROR_CODES);
-  assert.ok(sdk.size >= 40, `only ${sdk.size} SA_* codes are mapped`);
+  // The minimal core raises exactly thirty-three distinct codes; the floor keeps
+  // a wholesale truncation of the map from passing the set comparison below.
+  assert.ok(sdk.size >= 33, `only ${sdk.size} SA_* codes are mapped`);
   assert.deepEqual([...sdk].sort(), [...native].sort(), 'SDK and native kernel vocabularies differ');
-  for (const code of custom) assert.ok(sdk.has(code), `custom kernel raises unmapped ${code}`);
   // The map is bidirectional: the name resolves back to its own index.
   SA_ERROR_CODES.forEach((name, index) => {
     assert.equal(SA_ERRORS[name] && index >= 0, true, `${name} has no message`);

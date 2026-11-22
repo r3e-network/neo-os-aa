@@ -383,7 +383,7 @@ require(not frontend_receipt['knownGaps']['slicedGaps'], ...)
 
 | 腿 | 由什么确立 | 强度 |
 | --- | --- | --- |
-| C# 项目 -> NEF 字节 | `formal/refinement/export` 用固定的 NCCS 3.9.1 重新编译 `contracts/custom/SmartAccount.csproj`，并要求 `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`，外加对 manifest 的 `JsonNode.DeepEquals` | 每次门禁运行的字节身份 |
+| C# 项目 -> NEF 字节 | `formal/refinement/export` 用固定的 NCCS 3.9.1 重新编译 `SmartAccount.cs` (retired custom kernel)proj`，并要求 `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`，外加对 manifest 的 `JsonNode.DeepEquals` | 每次门禁运行的字节身份 |
 | C# 文本 -> 泳道读取的内容 | 本测试装置 | 两个独立读取器在实测语料上的一致 |
 | ABI -> 真实引擎派发的内容 | `export --abi-dispatch` 加 `abi_dispatch.py` | 109 个条目中 107 个派发到声明偏移，两个引擎入口点按名称拒绝 |
 | C# 语义 -> VM 语义 | 仍只有派发路径之外的空无，本文不主张任何东西 | 开放 |
@@ -710,9 +710,9 @@ sha256。`plugins/build-plugins.sh` 是记录的构建步骤：它拒绝针对�
 
 合约有两件事只有从成功一侧才可见，二者都是先弄错才发现的。`finalizeEscape(id, 0x0)` 与
 `finalizeEscapeToOwner(id)` 不是同一操作：前者清除验证器与 hook 并把账户恢复到备份所有者模式，后者
-还把它标记为永久仅所有者。本文件初稿期望在返回验证器的调用之后 `isOwnerOnlyRecovery` 为 true；引擎
-说是 false，而随后一次 `finalizeEscapeToOwner` 报告 `Escape not initiated` 而不是
-`Already recovered`。两个期望都对照引擎被改正，文件现在各驱动一个账户走一条路径。另一件是
+还把它标记为永久仅所有者。本文件初稿期望在返回验证器的调用之后账户报告“仅所有者恢复”；引擎
+说是 false，而随后一次 `finalizeEscapeToOwner` 报告 `Escape not initiated` 而不 是
+`Already recovered`。两个期望都对照引擎被改正，文件现在各驱动一个账户走一条路径 。另一件是
 `registerAccounts` 按账户接收验证器参数，这使两个 id 在同一个备份所有者下可区分——批量用 `01` 与
 `02` 注册两个账户，并从两者回读同一个备份所有者。
 

@@ -115,12 +115,13 @@ The automatic first public candidates are:
 
 | ABI entry | Exact body interval | Bytes / instructions | Remaining body work |
 | --- | --- | --- | --- |
-| `getAccountImplementationId/0` | `[39563,39596)` | 33 / 3 | Source string/ABI observation and VM body theorem |
+| `getAccountImplementationId/0` | ``39563,39596)` | 33 / 3 | Source string/ABI observation and VM body theorem |
 | `supportsModuleType/1` | `[39947,39979)` | 32 / 12 | Boolean `PUSHT`, string comparison bounds/faults and source projection |
 | `supportsExecutionMode/1` | `[39979,40030)` | 51 / 18 | Same requirements |
 
 All have no static fields, external effects, internal calls or graph loops. Their
-body proofs are developed separately in [SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md#public-pure-method-reference-refinement).
+body proofs were developed separately, and the archived reflection
+artifacts live under `formal/refinement/fixtures/current-method-proof/`.
 Their full entrypoint dependencies remain open here.
 
 Automatic selection also finds 29 private source helpers with no explicit
@@ -347,7 +348,7 @@ fourteen direct callees, the `sha256` and `verifyWithECDsa` tokens and the
 | --- | --- | --- | --- |
 | `isOwnerOnlyRecovery/1` | `[17700,17718)` | 18 / 7 | `ValidateAccountId` `1467`, `HasOwnerOnlyRecovery` `17204` |
 | `isAccountFrozen/1` | `[17663,17700)` | 37 / 20 | `ValidateAccountId` `1467`, `GetAccountControl` `1566`, `HasLegacyFrozenLatch` `17156` |
-| `isMarketEscrowActive/1` | `[14388,14430)` | 42 / 14 | `GetMarketEscrowContract` `14430`, `GetMarketEscrowListingId` `14496` |
+| `isMarketEscrowActive/1` | `[14388,14430)` | 42 / 14 | two market-escrow reader helpers; the custom source that defined them was removed with the retired custom tree (Task #43), so only the artifact interval is cited |
 | `getNonce/3` | `[35916,36022)` | 106 / 47 | `ValidateAccountId` `1467`, `RequireAccountControl` `30206`, `ResolveCredentialGeneration` `35797`, `ReadNonceCursor` `24023` and three more |
 | `getNonce/2` | `[40313,40407)` | 94 / 47 | `ValidateAccountId` `1467`, `IsUnsignedIntegerWithinBytes` `20806` |
 | `isModuleInstalled/4` | `[40220,40286)` | 66 / 26 | `ValidateAccountId` `1467`, `FindModuleIdByContract` `8613`, `ModuleTypeCodeFromName` `40030` |

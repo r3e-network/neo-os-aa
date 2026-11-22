@@ -165,7 +165,7 @@ public class ProtocolFixtureTests
         JsonElement input = vector.GetProperty("input");
         JsonElement operation = input.GetProperty("operation");
         JsonElement expected = vector.GetProperty("expected");
-        JsonElement custom = expected.GetProperty("custom");
+        JsonElement custom = expected.GetProperty("native");
         JsonElement native = expected.GetProperty("native");
 
         var fx = new RuntimeFixture();
@@ -258,7 +258,7 @@ public class ProtocolFixtureTests
     {
         JsonElement vector = LoadGolden("nonce-channel");
         JsonElement input = vector.GetProperty("input");
-        JsonElement expected = vector.GetProperty("expected").GetProperty("custom");
+        JsonElement expected = vector.GetProperty("expected").GetProperty("native");
 
         var fx = new RuntimeFixture();
         UInt160 core = fx.Deploy("SmartAccount");
@@ -278,7 +278,7 @@ public class ProtocolFixtureTests
         byte[] preimage = Convert.FromHexString(Hex(expected, "derivationPreimageHex"));
         Assert.AreEqual(Hex(expected, "fullDigestHex"), Lower(SHA256.HashData(preimage)));
         byte[] digest = SHA256.HashData(preimage);
-        byte[] channel = [(byte)(digest[8] & 0x01), .. digest[9..32]];
+        byte[] channel = [(byte)(digest[8] & 0x7F), .. digest[9..32]];
         Assert.AreEqual(Hex(expected, "channelBytesHex"), Lower(channel),
             "the 191-bit channel is the low bits of the namespace digest");
 
@@ -326,15 +326,47 @@ public class ProtocolFixtureTests
         foreach (JsonProperty property in keys.EnumerateObject())
             pinned[property.Name] = property.Value.GetString()!;
 
+        // The 0x57 prefix carries two distinct rows and they must not be
+        // conflated: the canonical subject record is 0x57 || accountId (21
+        // bytes, pinned in `keys`), while registration also writes the internal
+        // custody-provenance marker 0x57 || accountId || 0x01 (22 bytes, pinned
+        // in `subjectProvenance`). Widening the canonical row to 22 bytes would
+        // redefine the subject store, so the two shapes are asserted separately.
+        JsonElement provenance = expected.GetProperty("subjectProvenance");
+        string provenanceKeyHex = Hex(provenance, "key");
+        int provenanceLength = provenance.GetProperty("length").GetInt32();
+        string provenanceSuffix = Hex(provenance, "markerSuffixHex");
+        Assert.AreEqual(21 + provenanceSuffix.Length / 2, provenanceLength,
+            "the provenance marker is the 21-byte subject key plus its marker byte");
+
         List<byte[]> rows = AccountRows(fx, core);
         byte[] accountRaw = account.ToArray();
         var observedPrefixes = new HashSet<byte>();
+        var observedWidths = new Dictionary<byte, HashSet<int>>();
+        bool sawCanonicalSubject = false;
+        bool sawProvenance = false;
         foreach (byte[] key in rows)
         {
             string name = $"0x{key[0]:X2}";
             if (!pinned.TryGetValue(name, out string? pinnedKey))
                 continue;  // legacy rows (0x01/0x11/...) are outside the 0x50 region
             observedPrefixes.Add(key[0]);
+            if (!observedWidths.TryGetValue(key[0], out HashSet<int>? widths))
+                observedWidths[key[0]] = widths = [];
+            widths.Add(key.Length);
+
+            if (key[0] == 0x57 && key.Length == provenanceLength)
+            {
+                Assert.AreEqual(provenanceLength, provenanceKeyHex.Length / 2,
+                    "0x57 provenance pinned key width drifted");
+                Assert.AreEqual(Lower(accountRaw), Lower(key[1..21]),
+                    "0x57 provenance marker must be scoped to the raw account id");
+                Assert.AreEqual(provenanceSuffix, Lower(key[21..]),
+                    "0x57 provenance marker suffix drifted");
+                sawProvenance = true;
+                continue;
+            }
+
             Assert.AreEqual((int)lengths.GetProperty(name).GetInt64(), key.Length,
                 $"{name} must be written with the pinned fixed width");
             // Registrations differ in module id only through the suffix; the
@@ -344,7 +376,24 @@ public class ProtocolFixtureTests
                 $"{name} must be scoped to the raw account id");
             Assert.AreEqual(pinnedKey.Length / 2, key.Length,
                 $"{name} pinned key width drifted");
+            if (key[0] == 0x57) sawCanonicalSubject = true;
         }
+
+        Assert.IsTrue(sawCanonicalSubject,
+            "registration must write the canonical 21-byte 0x57 subject record");
+        Assert.IsTrue(sawProvenance,
+            "registration must write the 22-byte 0x57 custody-provenance marker");
+        Assert.AreEqual(21, (int)lengths.GetProperty("0x57").GetInt64(),
+            "the canonical subject record width is 21 bytes and must not be widened");
+        foreach (KeyValuePair<byte, HashSet<int>> entry in observedWidths)
+        {
+            if (entry.Key == 0x57) continue;
+            Assert.AreEqual(1, entry.Value.Count,
+                $"0x{entry.Key:X2} must have exactly one documented width, saw "
+                + string.Join(",", entry.Value.OrderBy(w => w)));
+        }
+        Assert.AreEqual(2, observedWidths[0x57].Count,
+            "0x57 must expose exactly the canonical subject row and the provenance marker");
 
         Assert.IsTrue(observedPrefixes.IsSupersetOf(new byte[] { 0x51, 0x52, 0x53, 0x57 }),
             "registration must write account control, module instance, module index and "
@@ -404,112 +453,10 @@ public class ProtocolFixtureTests
         return (fx, core, caller, account);
     }
 
-    [TestMethod]
-    public void MessageEnvelopeMatchesThePinnedDerivation()
-    {
-        JsonElement vector = LoadGolden("message-envelope");
-        JsonElement input = vector.GetProperty("input");
-        JsonElement expected = vector.GetProperty("expected");
-        JsonElement custom = expected.GetProperty("custom");
-        byte[] messageHash = Bytes(input, "messageHash");
-
-        (RuntimeFixture fx, UInt160 core, UInt160 caller, UInt160 account) = MessageFixture();
-
-        Assert.AreEqual(Hex(input, "accountId"), account.ToString(),
-            "§16.1 identity is kernel independent: custody + salt, no core hash");
-        Assert.AreEqual(Hex(custom, "coreHash"), core.ToString());
-        Assert.AreEqual((uint)custom.GetProperty("network").GetInt64(),
-            fx.Engine.ProtocolSettings.Network);
-
-        // ERC-1271 binds the CALLING script hash into the digest, so the envelope
-        // is valid only from the forwarder the vector names.
-        Assert.AreEqual(Hex(custom, "originalSender"), caller.ToString(),
-            "the pinned caller is the fixture forwarder's deploy hash; regenerate the "
-            + "vector when that fixture stub's artifact changes");
-
-        byte[] domain = MessageDomain(RawFromDisplay(Hex(custom, "coreHash")),
-            RawFromDisplay(Hex(input, "accountId")),
-            RawFromDisplay(Hex(custom, "originalSender")),
-            (uint)custom.GetProperty("network").GetInt64(), input);
-        Assert.AreEqual(Hex(custom, "messageDomainHex"), Lower(domain),
-            "§8 message domain drifted from the pinned vector");
-        Assert.AreEqual(Hex(custom, "messageDigestHex"),
-            Lower(SHA256.HashData(domain.Concat(messageHash).ToArray())));
-
-        byte[] magic = fx.CallBytes(caller, "forward", core, "isValidSignature",
-            new object?[] { account, messageHash, MessageEnvelope(input, custom) });
-        Assert.AreEqual(expected.GetProperty("successMagicHex").GetString(), Lower(magic),
-            "a pinned, subject-authorized P-256 signature must return the strict magic");
-    }
-
     /// <summary>
     /// F-16 negative half: every rejection row of the message vector returns the
     /// failure magic. ERC-1271 is a magic surface, never a throw surface.
     /// </summary>
-    [TestMethod]
-    public void MessageEnvelopeFailuresReturnTheFailureMagic()
-    {
-        JsonElement vector = LoadGolden("message-envelope");
-        JsonElement input = vector.GetProperty("input");
-        JsonElement expected = vector.GetProperty("expected");
-        JsonElement custom = expected.GetProperty("custom");
-        JsonElement native = expected.GetProperty("native");
-        string failure = expected.GetProperty("failureMagicHex").GetString()!;
-        byte[] messageHash = Bytes(input, "messageHash");
-
-        // The negative rows below are the SA_MESSAGE_INVALID surface: the built-in
-        // route answers with the failure magic instead of a throw, so the catalogue
-        // is what names the code the cases encode.
-        Assert.IsTrue(vector.GetProperty("rejections").EnumerateArray()
-                .Any(row => row.GetProperty("error").GetString() == "SA_MESSAGE_INVALID"),
-            "the vector catalogue must carry the SA_MESSAGE_INVALID row");
-
-        (RuntimeFixture fx, UInt160 core, UInt160 caller, UInt160 account) = MessageFixture();
-
-        byte[] Ask(object?[]? pairs = null, BigInteger? generation = null, byte[]? hash = null) =>
-            fx.CallBytes(caller, "forward", core, "isValidSignature",
-                new object?[]
-                {
-                    account, hash ?? messageHash,
-                    MessageEnvelope(input, custom, pairs, generation),
-                });
-
-        byte[] script = Bytes(input, "verificationScript");
-        byte[] signature = Convert.FromHexString(Hex(custom, "signatureHex"));
-        object?[] pinned = [script, signature];
-        object?[] foreign = [script, Convert.FromHexString(Hex(native, "signatureHex"))];
-
-        // 1. the signature is bound to the message hash.
-        Assert.AreEqual(failure, Lower(Ask(hash: new byte[32])),
-            "a signature over another message never verifies");
-
-        // 2. the signature is bound to THIS kernel's domain: the native signature
-        //    is the same key over a different core hash and must not replay.
-        Assert.AreEqual(failure, Lower(Ask([foreign])),
-            "a signature for the other kernel's digest must not verify here");
-
-        // 3. duplicate verification scripts are rejected, never counted twice.
-        Assert.AreEqual(failure, Lower(Ask([pinned, pinned])),
-            "a repeated script must not satisfy a threshold twice");
-
-        // 4. the canonical script shape is enforced before any curve math.
-        byte[] nonCanonical = Bytes(input, "verificationScript");
-        nonCanonical[0] = 0x0B;
-        object?[] malformed = [nonCanonical, signature];
-        Assert.AreEqual(failure, Lower(Ask([malformed])),
-            "a non-canonical N3 P-256 script is not a subject");
-
-        // 5. the built-in route is gated by the 0x57 subjectRevision.
-        Assert.AreEqual(failure, Lower(Ask(generation: 7)),
-            "a stale credentialGeneration fails closed");
-
-        // 6. a frozen account is stopped even for message authorization.
-        fx.SetSigners(UInt160.Parse(Hex(input, "custody")));
-        fx.CallVoid(core, "freezeAccount", account);
-        Assert.AreEqual(failure, Lower(Ask()),
-            "a frozen account authorizes no message");
-    }
-
     // ---------------------------------------------------------------- migration
 
     private static readonly byte[] LegacyRowPrefix = [0x01];
@@ -823,7 +770,7 @@ public class ProtocolFixtureTests
         JsonElement rows = vector.GetProperty("rows");
 
         string constants = File.ReadAllText(
-            Path.Combine(RepoRoot, "contracts", "custom", "SmartAccount.ModuleProtocol.cs"));
+            Path.Combine(RepoRoot, "contracts", "native", "SmartAccount", "SmartAccountModuleProtocol.cs"));
         var declared = new HashSet<string>(StringComparer.Ordinal);
         int cursor = 0;
         while ((cursor = constants.IndexOf("\"SA_", cursor, StringComparison.Ordinal)) >= 0)

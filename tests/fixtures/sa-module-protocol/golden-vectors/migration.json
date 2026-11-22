@@ -2,8 +2,7 @@
   "vectorId": "sa4-migration",
   "kind": "migration",
   "constantsRevision": {
-    "custom": "ae220783aa0a303f47332adf135aa44416c58c0e",
-    "native": "0d9ad4f08797f4b2e8ad63c83182fa554ef33fb9"
+    "native": "3ee06cd18ad6f63c464555c595e3227f2c1db7c8"
   },
   "input": {
     "accountId": "0x4e9ff241e877790d09a174fd4e412904797b235b",

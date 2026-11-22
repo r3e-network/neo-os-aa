@@ -143,23 +143,7 @@ namespace Neo.SmartContract.Native
             return result;
         }
 
-        internal static byte[][] BytesArray(StackItem item, int maximum, int entryMaximum)
-        {
-            if (item.Type != StackItemType.Array || item is not Array array || array.Count > maximum)
-                throw new FormatException("The SmartAccount record field must be a bounded ByteString Array.");
-            byte[][] result = new byte[array.Count][];
-            for (int i = 0; i < array.Count; i++) result[i] = Bytes(array[i], entryMaximum);
-            return result;
-        }
-
         internal static Array IntegerArray(IReadOnlyList<BigInteger> values)
-        {
-            Array array = new();
-            for (int i = 0; i < values.Count; i++) array.Add(values[i]);
-            return array;
-        }
-
-        internal static Array BytesArray(IReadOnlyList<byte[]> values)
         {
             Array array = new();
             for (int i = 0; i < values.Count; i++) array.Add(values[i]);
@@ -167,11 +151,18 @@ namespace Neo.SmartContract.Native
         }
     }
 
-    /// <summary>v4 account control metadata (spec §7.2), stored under 0x51 + accountId.</summary>
+    /// <summary>
+    /// v4 account control metadata (spec §7.2), stored under 0x51 + accountId.
+    ///
+    /// The record layout is retained verbatim from the full profile so persisted
+    /// accounts keep decoding: fields that only the removed higher-level
+    /// features used (message authorization, owner-only recovery, hook order)
+    /// stay in the encoded shape and are simply no longer advanced by this core.
+    /// </summary>
     internal sealed class AccountControl
     {
-        internal const ulong RecoveryTimelockMinMs = SmartAccountModuleProtocol.RecoveryTimelockMinMs;
-        internal const ulong RecoveryTimelockMaxMs = SmartAccountModuleProtocol.RecoveryTimelockMaxMs;
+        internal const ulong RecoveryTimelockMinMs = 604_800_000;        // 7 days
+        internal const ulong RecoveryTimelockMaxMs = 7_776_000_000;      // 90 days
 
         internal SmartAccountStatus Status;
         internal UInt160 Custody = UInt160.Zero;
@@ -179,14 +170,14 @@ namespace Neo.SmartContract.Native
         internal ulong AuthorityEpoch;
         internal ulong ConfigurationNonce;
         internal ulong NextModuleId;
-        internal ulong NextIntentId;
+        internal ulong NextIntentId;                     // reserved (intents are user-space)
         internal bool DefaultOperationAuthorization;
-        internal bool DefaultMessageAuthorization;
+        internal bool DefaultMessageAuthorization;       // reserved
         internal ulong RecoveryTimelockMs;
-        internal ulong HookOrderRevision;
-        internal ulong DefaultPolicyRevision;
+        internal ulong HookOrderRevision;                // reserved
+        internal ulong DefaultPolicyRevision;            // reserved
         internal ulong ControlRevision;
-        internal bool OwnerOnlyRecovery;
+        internal bool OwnerOnlyRecovery;                 // reserved
 
         internal static AccountControl Create(UInt160 custody, ulong recoveryTimelockMs) => new()
         {
@@ -213,18 +204,15 @@ namespace Neo.SmartContract.Native
             return NextModuleId++;
         }
 
-        internal BigInteger AllocateIntentId()
-        {
-            if (NextIntentId == ulong.MaxValue)
-                throw new InvalidOperationException("The intent id allocator is exhausted.");
-            return NextIntentId++;
-        }
-
+        /// <summary>
+        /// Closes a configuration transition: the configuration nonce kills every
+        /// operation that signed against the previous module model and the
+        /// control revision records that the account was reshaped.
+        /// </summary>
         internal void Advance()
         {
-            if (ConfigurationNonce == ulong.MaxValue)
-                throw new InvalidOperationException("The configuration counter is exhausted.");
             ConfigurationNonce += 1;
+            ControlRevision += 1;
         }
 
         internal Array ToStackItem() => new(new StackItem[]
@@ -270,7 +258,16 @@ namespace Neo.SmartContract.Native
         }
     }
 
-    /// <summary>v4 module instance record (spec §7.2/§7.3), stored under 0x52 + accountId + moduleId[8 BE].</summary>
+    /// <summary>
+    /// v4 module instance record (spec §7.2/§7.3), stored under
+    /// 0x52 + accountId + moduleId[8 BE].
+    ///
+    /// The core registers validator, hook and recovery-seat modules (the
+    /// recovery seat is the exclusive caller of the reset entry, spec
+    /// §7.1/§12.5). The encoded shape is retained from the full profile, so the
+    /// capability and policy back-pointer fields survive a decode; the core
+    /// never sets them.
+    /// </summary>
     internal sealed class ModuleInstance
     {
         internal byte ModuleType;
@@ -282,15 +279,13 @@ namespace Neo.SmartContract.Native
         internal ulong ModuleRevision;
         internal ulong CredentialGeneration;
         internal bool InstanceIsolation;
-        internal bool MessageCapability;
-        internal bool ThresholdMemberEligible;
-        // Back-pointer to the active threshold policy this instance belongs to
-        // (0 when it is not a member); maintained by the policy executor so
-        // routing and uninstall checks never scan the policy namespace.
-        internal BigInteger ActivePolicyId = BigInteger.Zero;
+        internal bool MessageCapability;                 // reserved
+        internal bool ThresholdMemberEligible;           // reserved
+        internal BigInteger ActivePolicyId = BigInteger.Zero; // reserved
 
         internal bool IsValidator => ModuleType == SmartAccountModuleProtocol.ModuleTypeCodeValidator;
         internal bool IsHook => ModuleType == SmartAccountModuleProtocol.ModuleTypeCodeHook;
+        internal bool IsRecovery => ModuleType == SmartAccountModuleProtocol.ModuleTypeCodeRecovery;
 
         internal Array ToStackItem() => new(new StackItem[]
         {
@@ -306,7 +301,8 @@ namespace Neo.SmartContract.Native
             Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 12);
             BigInteger type = SmartAccountRecordCodec.Unsigned(record[0]);
             if (type != SmartAccountModuleProtocol.ModuleTypeCodeValidator
-                && type != SmartAccountModuleProtocol.ModuleTypeCodeHook)
+                && type != SmartAccountModuleProtocol.ModuleTypeCodeHook
+                && type != SmartAccountModuleProtocol.ModuleTypeCodeRecovery)
                 throw new FormatException("The module type code is not supported.");
             ModuleInstance module = new()
             {
@@ -326,235 +322,6 @@ namespace Neo.SmartContract.Native
             if (module.ContractHash == UInt160.Zero || module.ModuleRevision < 1 || module.CredentialGeneration < 1)
                 throw new FormatException("The module instance record is outside the protocol domain.");
             return module;
-        }
-    }
-
-    /// <summary>Core-owned hook order (spec §3), stored under 0x54 + accountId.</summary>
-    internal sealed class HookOrderRecord
-    {
-        internal BigInteger[] HookIds = [];
-        internal ulong Revision;
-
-        internal Array ToStackItem() => new(new StackItem[]
-        {
-            SmartAccountRecordCodec.IntegerArray(HookIds), Revision,
-        });
-
-        internal byte[] Serialize() => SmartAccountRecordCodec.Encode(ToStackItem());
-
-        internal static HookOrderRecord Decode(ReadOnlyMemory<byte> bytes)
-        {
-            Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 2);
-            HookOrderRecord order = new()
-            {
-                HookIds = SmartAccountRecordCodec.Integers(record[0],
-                    SmartAccountModuleProtocol.MaxHookModuleInstances),
-                Revision = (ulong)SmartAccountRecordCodec.Unsigned(record[1]),
-            };
-            if (order.HookIds.Length > SmartAccountModuleProtocol.MaxHookModuleInstances)
-                throw new FormatException("The hook order record exceeds the profile bound.");
-            // The order is a set: an id is never repeated, and id 0 is never a
-            // module (allocator ids start at one).
-            for (int i = 0; i < order.HookIds.Length; i++)
-            {
-                if (order.HookIds[i] < 1)
-                    throw new FormatException("The hook order record carries a non-positive id.");
-                for (int j = 0; j < i; j++)
-                    if (order.HookIds[j] == order.HookIds[i])
-                        throw new FormatException("The hook order record repeats a hook id.");
-            }
-            return order;
-        }
-    }
-
-    /// <summary>Core-owned threshold policy (spec §3.5), stored under 0x5B + accountId + policyId[8 BE].</summary>
-    internal sealed class ThresholdPolicyRecord
-    {
-        internal ulong Threshold;
-        internal BigInteger[] MemberIds = [];
-        internal bool Active;
-        internal ulong CredentialGeneration;
-
-        internal Array ToStackItem() => new(new StackItem[]
-        {
-            Threshold, SmartAccountRecordCodec.IntegerArray(MemberIds), Active, CredentialGeneration,
-        });
-
-        internal byte[] Serialize() => SmartAccountRecordCodec.Encode(ToStackItem());
-
-        internal static ThresholdPolicyRecord Decode(ReadOnlyMemory<byte> bytes)
-        {
-            Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 4);
-            ThresholdPolicyRecord policy = new()
-            {
-                Threshold = (ulong)SmartAccountRecordCodec.Unsigned(record[0]),
-                MemberIds = SmartAccountRecordCodec.Integers(record[1],
-                    SmartAccountModuleProtocol.MaxThresholdPolicyMembers),
-                Active = SmartAccountRecordCodec.Boolean(record[2]),
-                CredentialGeneration = (ulong)SmartAccountRecordCodec.Unsigned(record[3]),
-            };
-            // The policy record mirrors the write rules of both kernels: an
-            // active policy is routable, so its threshold, member count and
-            // membership must all be inside the profile; a deactivated policy
-            // carries no members. A repeated member would count twice towards
-            // the threshold, so membership is always distinct.
-            if (policy.Active)
-            {
-                if (policy.Threshold < (ulong)SmartAccountModuleProtocol.MinThresholdPolicyValue
-                    || policy.Threshold > (ulong)SmartAccountModuleProtocol.MaxThresholdPolicyValue)
-                    throw new FormatException("The threshold policy record has an out-of-range threshold.");
-                if (policy.MemberIds.Length < 1
-                    || policy.MemberIds.Length > SmartAccountModuleProtocol.MaxThresholdPolicyMembers
-                    || policy.Threshold > (ulong)policy.MemberIds.Length)
-                    throw new FormatException("The threshold policy record exceeds the member domain.");
-            }
-            else if (policy.MemberIds.Length != 0)
-                throw new FormatException("A deactivated threshold policy carries no members.");
-            for (int i = 0; i < policy.MemberIds.Length; i++)
-            {
-                if (policy.MemberIds[i] < 1)
-                    throw new FormatException("The threshold policy record carries a non-positive member id.");
-                for (int j = 0; j < i; j++)
-                    if (policy.MemberIds[j] == policy.MemberIds[i])
-                        throw new FormatException("The threshold policy record repeats a member id.");
-            }
-            return policy;
-        }
-    }
-
-    /// <summary>Configuration intent (spec §10), stored under 0x55 + accountId + intentId[8 BE].</summary>
-    internal sealed class ConfigurationIntentRecord
-    {
-        internal BigInteger IntentId;
-        internal BigInteger ProposedAt;
-        internal BigInteger MatureAt;
-        internal BigInteger ExpiresAt;
-        internal BigInteger AuthorityEpoch;
-        internal byte[] ActionDigest = new byte[32];
-        internal Array Actions = new();
-        internal byte[][] Resources = [];
-
-        internal Array ToStackItem() => new(new StackItem[]
-        {
-            IntentId, ProposedAt, MatureAt, ExpiresAt, AuthorityEpoch,
-            ActionDigest, Actions, SmartAccountRecordCodec.BytesArray(Resources),
-        });
-
-        internal byte[] Serialize() => SmartAccountRecordCodec.Encode(ToStackItem());
-
-        internal static ConfigurationIntentRecord Decode(ReadOnlyMemory<byte> bytes)
-        {
-            Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 8);
-            if (record[6].Type != StackItemType.Array || record[6] is not Array actions
-                || actions.Count is 0 or > SmartAccountModuleProtocol.MaxActionsPerConfigurationIntent)
-                throw new FormatException("A configuration intent requires a bounded action Array.");
-            ConfigurationIntentRecord intent = new()
-            {
-                IntentId = SmartAccountRecordCodec.Unsigned(record[0]),
-                ProposedAt = SmartAccountRecordCodec.Unsigned(record[1]),
-                MatureAt = SmartAccountRecordCodec.Unsigned(record[2]),
-                ExpiresAt = SmartAccountRecordCodec.Unsigned(record[3]),
-                AuthorityEpoch = SmartAccountRecordCodec.Unsigned(record[4]),
-                ActionDigest = SmartAccountRecordCodec.Fixed(record[5], 32),
-                Actions = actions,
-                Resources = SmartAccountRecordCodec.BytesArray(record[7],
-                    SmartAccountModuleProtocol.MaxActionsPerConfigurationIntent + 16, 64),
-            };
-            if (intent.IntentId < 1 || intent.MatureAt != intent.ProposedAt + SmartAccountModuleProtocol.ModuleChangeDelayMs
-                || intent.ExpiresAt != intent.MatureAt + SmartAccountModuleProtocol.ConfigurationIntentExpiryMs)
-                throw new FormatException("The configuration intent timing is outside the protocol domain.");
-            return intent;
-        }
-    }
-
-    /// <summary>Built-in message signer subjects (spec §8), stored under 0x57 + accountId.</summary>
-    internal sealed class MessageSubjectRecord
-    {
-        internal byte[][] Subjects = [];
-        internal ulong Threshold;
-        internal ulong SubjectRevision;
-
-        internal Array ToStackItem() => new(new StackItem[]
-        {
-            SmartAccountRecordCodec.BytesArray(Subjects), Threshold, SubjectRevision,
-        });
-
-        internal byte[] Serialize() => SmartAccountRecordCodec.Encode(ToStackItem());
-
-        internal static MessageSubjectRecord Decode(ReadOnlyMemory<byte> bytes)
-        {
-            Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 3);
-            MessageSubjectRecord subjects = new()
-            {
-                Subjects = SmartAccountRecordCodec.BytesArray(record[0],
-                    SmartAccountModuleProtocol.MessageSubjectKeysMax, 32),
-                Threshold = (ulong)SmartAccountRecordCodec.Unsigned(record[1]),
-                SubjectRevision = (ulong)SmartAccountRecordCodec.Unsigned(record[2]),
-            };
-            if (subjects.Subjects.Length > SmartAccountModuleProtocol.MessageSubjectKeysMax
-                || subjects.Threshold > (ulong)subjects.Subjects.Length)
-                throw new FormatException("The message subject record exceeds the profile bound.");
-            return subjects;
-        }
-    }
-
-    /// <summary>Core recovery record (spec §7.5), stored under 0x59 + accountId.</summary>
-    internal sealed class CoreRecoveryRecord
-    {
-        internal BigInteger InitiatedAt;
-        internal BigInteger MatureAt;
-        internal BigInteger AuthorityEpochAtInit;
-        internal UInt160 NewCustody = UInt160.Zero;
-
-        internal Array ToStackItem() => new(new StackItem[]
-        {
-            InitiatedAt, MatureAt, AuthorityEpochAtInit, NewCustody.ToArray(),
-        });
-
-        internal byte[] Serialize() => SmartAccountRecordCodec.Encode(ToStackItem());
-
-        internal static CoreRecoveryRecord Decode(ReadOnlyMemory<byte> bytes)
-        {
-            Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 4);
-            return new()
-            {
-                InitiatedAt = SmartAccountRecordCodec.Unsigned(record[0]),
-                MatureAt = SmartAccountRecordCodec.Unsigned(record[1]),
-                AuthorityEpochAtInit = SmartAccountRecordCodec.Unsigned(record[2]),
-                NewCustody = SmartAccountRecordCodec.Address(record[3]),
-            };
-        }
-    }
-
-    /// <summary>Migration state (spec §14), stored under 0x5A + accountId.</summary>
-    internal sealed class MigrationStateRecord
-    {
-        internal byte Status;
-        internal byte[] ManifestDigest = new byte[32];
-        internal string Classification = string.Empty;
-        internal ulong LegacyModuleCount;
-        internal ulong ImportedAt;
-
-        internal Array ToStackItem() => new(new StackItem[]
-        {
-            (int)Status, ManifestDigest, Classification, LegacyModuleCount, ImportedAt,
-        });
-
-        internal byte[] Serialize() => SmartAccountRecordCodec.Encode(ToStackItem());
-
-        internal static MigrationStateRecord Decode(ReadOnlyMemory<byte> bytes)
-        {
-            Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 5);
-            BigInteger status = SmartAccountRecordCodec.Unsigned(record[0]);
-            if (status > 2) throw new FormatException("The migration status is not defined.");
-            return new()
-            {
-                Status = (byte)status,
-                ManifestDigest = SmartAccountRecordCodec.Fixed(record[1], 32),
-                Classification = SmartAccountRecordCodec.Text(record[2], 64),
-                LegacyModuleCount = (ulong)SmartAccountRecordCodec.Unsigned(record[3]),
-                ImportedAt = (ulong)SmartAccountRecordCodec.Unsigned(record[4]),
-            };
         }
     }
 }

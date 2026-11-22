@@ -10,13 +10,13 @@ returns, before the callee executes. `implementationVerified` and
 
 > Backward: the step that turns the caller's stack window into this call's
 > arguments is the nineteenth scope, `interop-argument-conversion` — see
-> [SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md#interop-argument-conversion-kernel-checked-nineteenth-gate-scope).
+> the archived method-refinement record (removed from the tree).
 
 ## Why this layer
 
 `formal/coq/EntryDispatch.v` declares that its entry is *after* interop
 admission and argument conversion. The `syscall-dispatch` lane
-([SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md#syscall-admission-systemcontractcall-and-callt)) covers admission and stops at the
+(the archived method-refinement record (removed from the tree)) covers admission and stops at the
 `CallContractInternal` parameter tuple. This lane starts there: the second
 `CallContractInternal` overload and the frame that `LoadContract` builds. It
 stops at the constructed context, before any instruction of the callee runs.

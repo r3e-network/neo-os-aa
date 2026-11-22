@@ -6,7 +6,7 @@
  * script and nothing to sign. The chain accepts it only because the script
  * calls `core.verify(accountId)`, which in the Verification trigger requires
  * the whole transaction to be a single `executeUserOp` / `executeUserOps` call
- * on that core for that account (contracts/custom/SmartAccount.VerifyContext.cs,
+ * on that core for that account (contracts/native/SmartAccount/SmartAccount.cs,
  * F-1). The proxy witness therefore has exactly one safe construction and it
  * lives here, so the SDK, the relay route and the wallet frontend cannot each
  * grow their own:
@@ -21,7 +21,7 @@
  * covered by the validator/built-in signature inside executeUserOp.
  *
  * The proxy address itself is never hashed here. It is derived by the caller —
- * from the core (`getProxyScriptHash`) or from the SDK codec — and passed in,
+ * from the core (`getAccountAddress`) or from the SDK codec — and passed in,
  * so this module has no crypto dependency and cannot disagree with the chain.
  *
  * Nothing on this path takes a signer, witness or rule from request metadata.
@@ -33,8 +33,14 @@ const OPERATION_FIELDS = 13;
 const ACCOUNT_ENTRYPOINTS = ['executeUserOp', 'executeUserOps'];
 const FEE_PAYER_SCOPES = ['None', 'CalledByEntry', 'CustomContracts', 'Global'];
 const MAX_CUSTOM_CONTRACTS = 16;
-/** Custom kernel pushes CallFlags.All; the native kernel's address needs 5. */
-const DEFAULT_CALL_FLAGS = 15;
+/** The native kernel's proxy address binds CallFlags.ReadOnly (5). */
+const DEFAULT_CALL_FLAGS = 5;
+/**
+ * The invocation itself is a state write, so the script always asks for
+ * CallFlags.All (15). The proxy-address flag says how `verify` is called and is
+ * never reused here: a ReadOnly executeUserOp would fault before it ran.
+ */
+const INVOCATION_CALL_FLAGS = 15;
 
 function hash160(value, name) {
   const hex = String(value || '').replace(/^0x/i, '').toLowerCase();
@@ -51,9 +57,8 @@ function reverse(hex) {
 
 /**
  * The fixed proxy verification script, byte-identical to the kernel's
- * GetProxyScriptHash preimage. Inputs use display byte order; `callFlags`
- * defaults to 15 (CallFlags.All, custom kernel) and the native kernel passes 5
- * (CallFlags.ReadOnly).
+ * GetAccountAddress preimage. Inputs use display byte order; `callFlags`
+ * defaults to 5 (CallFlags.ReadOnly), the flag the native core pushes.
  */
 function createProxyVerificationScript({ coreHash, accountId, callFlags = DEFAULT_CALL_FLAGS }) {
   if (!Number.isInteger(callFlags) || callFlags < -1 || callFlags > 16) {
@@ -109,7 +114,7 @@ function operationFields(op, name) {
  * second call, another core or another account is refused here rather than
  * left for the node's verifier to reject.
  */
-function buildExecuteUserOpScript({ coreHash, accountId, invocation, callFlags = DEFAULT_CALL_FLAGS }) {
+function buildExecuteUserOpScript({ coreHash, accountId, invocation }) {
   const core = hash160(coreHash, 'coreHash');
   const account = hash160(accountId, 'accountId');
   if (!invocation || typeof invocation !== 'object') throw new Error('invocation required');
@@ -138,7 +143,7 @@ function buildExecuteUserOpScript({ coreHash, accountId, invocation, callFlags =
     core,
     operation,
     [accountArgument, batch ? { type: 'Array', value: ops } : ops[0]],
-    callFlags,
+    INVOCATION_CALL_FLAGS,
   );
 }
 
@@ -202,7 +207,7 @@ function buildProxyWitnessTransaction({
 } = {}) {
   const core = hash160(coreHash, 'coreHash');
   const account = hash160(accountId, 'accountId');
-  const script = buildExecuteUserOpScript({ coreHash: core, accountId: account, invocation, callFlags });
+  const script = buildExecuteUserOpScript({ coreHash: core, accountId: account, invocation });
   const proxy = createProxyWitness({
     coreHash: core,
     accountId: account,

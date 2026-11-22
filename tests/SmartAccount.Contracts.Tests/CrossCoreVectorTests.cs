@@ -55,11 +55,11 @@ public class CrossCoreVectorTests
 
     /// <summary>The thirteen-field operation the vector file pins, in its
     /// canonical form: the signature field is blanked before serialisation. The
-    /// vector pins authorityEpoch 1 and credentialGeneration 0; the custom kernel
-    /// additionally requires a registered generation, which is why the digest
-    /// below raises that one field to 1.</summary>
+    /// vector pins authorityEpoch 1 and credentialGeneration 1, the smallest
+    /// generation the 1-based §4.1 field admits, so the same bytes are both the
+    /// published shape and a registration-valid envelope.</summary>
     private static VmArray CanonicalOperation(
-        UInt160 target, byte[] nonceSubkey, BigInteger generation = default) => new([
+        UInt160 target, byte[] nonceSubkey, BigInteger generation) => new([
             new VmInteger(4), target.ToArray(), "ping", new VmArray(),
             new VmInteger(0), new VmByteString(nonceSubkey), new VmInteger(1_700_000_000_000),
             new VmInteger(0), new VmInteger(generation), new VmInteger(1), new VmInteger(0),
@@ -150,13 +150,13 @@ public class CrossCoreVectorTests
         // reproduce the published bytes for the published shape. Without this the
         // comparison below could agree with a shared mistake.
         string oracle = Convert.ToHexStringLower(BinarySerializer.Serialize(
-            CanonicalOperation(target, nonceSubkey), ExecutionEngineLimits.Default));
+            CanonicalOperation(target, nonceSubkey, 1), ExecutionEngineLimits.Default));
         Assert.AreEqual(published, oracle,
             "Neo.VM binary serialisation drifted from the published canonical operation");
 
-        // (b) A registration-valid envelope differs from the published shape in
-        // one field only (credentialGeneration must be >= 1), so the digest below
-        // still pins every other byte to the vector.
+        // (b) The published shape is already registration-valid: §4.1 makes the
+        // credential generation 1-based and the vector pins 1, so the digest below
+        // pins every byte of the vector against the deployed core's own identity.
         const int generation = 1;
         byte[] canonical = BinarySerializer.Serialize(
             CanonicalOperation(target, nonceSubkey, generation), ExecutionEngineLimits.Default);
@@ -191,6 +191,14 @@ public class CrossCoreVectorTests
         // prefix -> (key length, carries account id at [1..21])
         foreach (byte[] key in observed)
         {
+            if (key[0] == 0x57 && key.Length == 22)
+            {
+                Assert.AreEqual((byte)1, key[21], "Only the internal custody-provenance suffix is defined.");
+                CollectionAssert.AreEqual(identity.Account.ToArray(), key[1..21]);
+                CollectionAssert.AreEqual(new byte[] { 1 }, fx.Engine.Storage.Snapshot[
+                    new StorageKey { Id = contractId, Key = key }].Value.ToArray());
+                continue;
+            }
             int length = key[0] switch
             {
                 0x50 => 1,   // protocol info: global, no account

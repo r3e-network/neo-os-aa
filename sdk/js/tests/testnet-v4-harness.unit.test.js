@@ -288,15 +288,20 @@ test('every runbook stage the suites run still exists on disk', () => {
   const scripts = [
     'testnet_smoke.js',
     'testnet_plugin_matrix.js',
+  ];
+  for (const script of scripts) {
+    assert.ok(fs.existsSync(path.join(__dirname, script)), `${script} must exist for the validation suite`);
+  }
+  const retired = [
+    'v3_testnet_smoke.js',
+    'v3_testnet_plugin_matrix.js',
+    'v3_testnet_market_escrow.js',
     'testnet_market_escrow.js',
     'testnet_paymaster_onchain.mjs',
     'testnet_paymaster_policy.mjs',
     'testnet_paymaster_relay.mjs',
   ];
-  for (const script of scripts) {
-    assert.ok(fs.existsSync(path.join(__dirname, script)), `${script} must exist for the validation suite`);
-  }
-  for (const retired of ['v3_testnet_smoke.js', 'v3_testnet_plugin_matrix.js', 'v3_testnet_market_escrow.js']) {
-    assert.ok(!fs.existsSync(path.join(__dirname, retired)), `${retired} is retired and must stay gone`);
+  for (const script of retired) {
+    assert.ok(!fs.existsSync(path.join(__dirname, script)), `${script} is retired and must stay gone`);
   }
 });

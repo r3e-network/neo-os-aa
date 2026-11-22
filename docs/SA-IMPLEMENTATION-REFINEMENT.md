@@ -70,15 +70,15 @@ must not be added together as if each receipt contained disjoint proofs.
 | --- | --- |
 | Protocol models | `formal/verify.py` checks the declared custom/native abstractions. Its model receipts do not establish source-to-NEF refinement. |
 | Arithmetic region | `prove.py` binds the original charge instructions to signed-256 reference arithmetic and `CustomSponsorship.charge`. Its scope remains the local region. |
-| [Numeric coercions](SA-METHOD-REFINEMENT.md#numeric-coercion-refinement) | Models GetInteger decoding and its value relation, including Boolean and ByteString. This does not prove ABI admission or actual runtime correspondence. |
-| [Reservation arithmetic](SA-METHOD-REFINEMENT.md#reservation-arithmetic-refinement) | Adds positivity, representable reservation updates and protocol fee bounds. It records the zero-fee overflow disagreement with unbounded arithmetic. |
-| [Complete helper reference refinement](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-reference-refinement) | Compares the complete typed-source projection with a byte-decoding reference VM for `CapReimbursementToActualCost`, under declared input and environment contracts. It does not certify ApplicationEngine or public entrypoints. |
+| `Numeric coercions` | Models GetInteger decoding and its value relation, including Boolean and ByteString. This does not prove ABI admission or actual runtime correspondence. |
+| `Reservation arithmetic` | Adds positivity, representable reservation updates and protocol fee bounds. It records the zero-fee overflow disagreement with unbounded arithmetic. |
+| `Complete helper reference refinement` | Compares the complete typed-source projection with a byte-decoding reference VM for `CapReimbursementToActualCost`, under declared input and environment contracts. It does not certify ApplicationEngine or public entrypoints. |
 
-The [source projection](SA-METHOD-REFINEMENT.md#full-helper-source-projection) records which typed
+The `source projection` records which typed
 operations and semantic metadata are interpreted. The
-[method inventory](SA-METHOD-REFINEMENT.md#whole-helper-refinement-inventory) accounts for all helper
+`method inventory` accounts for all helper
 instructions and separate static initialization; structural coverage alone is
-not semantic proof. The [runtime checks](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-runtime-checks) execute
+not semantic proof. The `runtime checks` execute
 the original helper in the pinned engine and distinguish valid inputs,
 malformed records, pending storage and enclosing transaction rollback. Those
 checks provide finite runtime evidence, independently of universal reference

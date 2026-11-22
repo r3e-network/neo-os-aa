@@ -48,7 +48,7 @@ flowchart LR
 V3 没有管理员、经理、阈值状态，也没有反向索引：这套 V1/V2 角色模型在 V3 重写中已被移除，SDK 中保留的 `getAccountsByAdmin` / `getAccountsByManager` 只是抛出 `LEGACY_V3_REMOVED` 的存根。账户状态通过 `getAccount(accountId)` 逐账户读取。
 
 - **批量创建：** `createAccounts(UInt160[] accountIds, UInt160 custody, ByteString[] salts, Integer recoveryTimelockMs)` 在一个交易中为同一托管权创建多个账户（1-64 项，全有或全无）；批量入口不安装任何模块，因此其后的配置都走 24 小时意图路径。
-- **创建权限：** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` 要求 `custody` 的见证（`contracts/custom/SmartAccount.Accounts.cs`）。初始配置动作对新账户原子安装；此后每次变更都是 `proposeConfiguration` → 24 小时 → `confirmConfiguration` 意图。
+- **创建权限：** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` 要求 `custody` 的见证（`contracts/native/SmartAccount/SmartAccount.cs`）。初始配置动作对新账户原子安装；此后每次变更都是 `proposeConfiguration` → 24 小时 → `confirmConfiguration` 意图。
 
 ## 3. 选择正确的路径
 

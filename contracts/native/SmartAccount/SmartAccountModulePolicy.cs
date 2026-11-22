@@ -21,19 +21,22 @@ using Neo.Persistence;
 using Neo.SmartContract.Manifest;
 using Neo.VM.Types;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Array = Neo.VM.Types.Array;
-using Boolean = Neo.VM.Types.Boolean;
 
 namespace Neo.SmartContract.Native
 {
     /// <summary>
-    /// Exact module admission for the native profile (spec §9/§12): deployed
-    /// non-protocol contract, canonical profile bound by digest, complete v4
-    /// callback ABI and code-identity continuity.
+    /// Minimal module admission for the native core (spec §7.1/§12): the module
+    /// must be a deployed non-protocol contract, it must declare the callback
+    /// surface the core itself calls, its canonical profile must be readable and
+    /// it must retain its code identity for as long as it is installed.
+    ///
+    /// Capability negotiation (message signatures, threshold membership,
+    /// composite layering) is a user-space module concern and is NOT part of
+    /// this admission gate.
     /// </summary>
     internal static class SmartAccountModulePolicy
     {
@@ -59,14 +62,16 @@ namespace Neo.SmartContract.Native
                 throw new FormatException("The module contract address identifies a native or protocol contract.");
         }
 
+        /// <summary>
+        /// Deployment code identity: SHA-256 over the deployed NEF bytes only.
+        /// The manifest is NOT part of this digest — manifest continuity is
+        /// carried by the 0x52 profile digest — so the recorded 32 bytes are the
+        /// exact code the instance was installed against (spec §3.6/§7.3).
+        /// </summary>
         internal static UInt256 CodeHash(ContractState contract)
         {
             ArgumentNullException.ThrowIfNull(contract);
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            hash.AppendData(contract.Nef.ToArray());
-            hash.AppendData([0]);
-            hash.AppendData(SmartAccountCanonicalJson.Serialize(contract.Manifest.ToJson()));
-            return new UInt256(hash.GetHashAndReset());
+            return new UInt256(SHA256.HashData(contract.Nef.ToArray()));
         }
 
         private static ContractMethodDescriptor? FindMethod(ContractState contract, string name, int arguments) =>
@@ -84,58 +89,45 @@ namespace Neo.SmartContract.Native
         }
 
         /// <summary>
-        /// The complete v4 callback surface of a module type (spec §9). A
-        /// missing-method fault is not catchable, so the whole shape is checked
-        /// before the instance is bound. Validation and message callbacks must
-        /// be declared safe: they can then never write, whatever call flags a
-        /// caller passes.
+        /// The callback surface the core itself calls (spec §7.1 table 10). The
+        /// profile reader and both lifecycle callbacks are required of every
+        /// instance kind; the two routing callbacks only of a validator, because
+        /// a hook — and likewise a recovery seat (§7.1/§12.5) — is never routed:
+        /// the hook's preCheck/postCheck belong to the HookOrchestratorModule
+        /// and the seat's executeRecovery belongs to the RecoveryModule; the
+        /// core neither calls nor checks either surface.
+        /// A missing-method fault is not catchable, so the whole shape is
+        /// checked before the instance is bound. Validation must be declared
+        /// safe: it can then never write, whatever call flags a caller passes.
         /// </summary>
         internal static void AssertCallbackAbi(ContractState contract, ModuleInstance module)
         {
+            if (!module.IsValidator && !module.IsHook && !module.IsRecovery)
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleTypeUnsupported);
             RequireMethod(contract, "onInstall", ContractParameterType.Void, null,
                 ContractParameterType.Hash160, ContractParameterType.Integer,
                 ContractParameterType.Integer, ContractParameterType.Array);
             RequireMethod(contract, "onUninstall", ContractParameterType.Void, null,
                 ContractParameterType.Hash160, ContractParameterType.Integer,
                 ContractParameterType.Integer, ContractParameterType.Array);
-            RequireMethod(contract, "configure", ContractParameterType.Void, null,
-                ContractParameterType.Hash160, ContractParameterType.Integer,
-                ContractParameterType.Integer, ContractParameterType.Array);
-            if (module.IsValidator)
-            {
-                RequireMethod(contract, "validateUserOp", ContractParameterType.Boolean, true,
-                    ContractParameterType.Hash160, ContractParameterType.ByteArray, ContractParameterType.Array);
-                RequireMethod(contract, "onUserOpComplete", ContractParameterType.Void, null,
-                    ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any);
-                if (module.MessageCapability)
-                    RequireMethod(contract, "isValidSignature", ContractParameterType.Boolean, true,
-                        ContractParameterType.Hash160, ContractParameterType.Hash160,
-                        ContractParameterType.Integer, ContractParameterType.Integer,
-                        ContractParameterType.ByteArray, ContractParameterType.Array);
-            }
-            else
-            {
-                RequireMethod(contract, "preCheck", ContractParameterType.ByteArray, null,
-                    ContractParameterType.Hash160, ContractParameterType.Array);
-                RequireMethod(contract, "postCheck", ContractParameterType.Void, null,
-                    ContractParameterType.Hash160, ContractParameterType.Array,
-                    ContractParameterType.Any, ContractParameterType.ByteArray);
-            }
+            if (!module.IsValidator) return;
+            RequireMethod(contract, "validateUserOp", ContractParameterType.Boolean, true,
+                ContractParameterType.Hash160, ContractParameterType.ByteArray, ContractParameterType.Array);
+            RequireMethod(contract, "onUserOpComplete", ContractParameterType.Void, null,
+                ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any);
         }
 
         /// <summary>
         /// Canonical-profile binding (spec §7.3/§12). The module's own read-only
-        /// <c>getModuleProfile()</c> must return exactly the bytes whose SHA-256
-        /// the configuration action committed to; the capability flags recorded
-        /// in 0x52 are then READ from that profile, never declared by the
-        /// installer. The read is bounded like a lifecycle callback and carries
-        /// no write permission.
+        /// <c>getModuleProfile()</c> is read once; its SHA-256 becomes the
+        /// recorded profile digest, so the descriptor is derived from the code
+        /// that is actually deployed instead of from an installer declaration.
+        /// The read is bounded like a lifecycle callback and carries no write
+        /// permission.
         /// </summary>
         internal static async ContractTask BindProfileAsync(ApplicationEngine engine, ModuleInstance module,
-            ContractState contract, byte[] profileDigest)
+            ContractState contract)
         {
-            if (profileDigest.Length != 32)
-                throw new FormatException("The profile digest must be exactly 32 bytes.");
             RequireMethod(contract, "getModuleProfile", ContractParameterType.String, true);
 
             engine.AddNativeCpuFee(1 << 15);
@@ -143,11 +135,10 @@ namespace Neo.SmartContract.Native
                 contract.Hash, "getModuleProfile", CallFlags.ReadStates, MaintenanceBudget))!;
             // The declared ABI is String and the core does not coerce (§11): the
             // bytes hashed below are the ones the profile call actually returned.
-            if (reply is not ByteString profileBytes || profileBytes.Size is 0 or > SmartAccountModuleProtocol.ModuleProfileBytesMax)
+            if (reply is not ByteString profileBytes
+                || profileBytes.Size is 0 or > SmartAccountModuleProtocol.ModuleProfileBytesMax)
                 throw new InvalidOperationException("getModuleProfile must return a bounded String.");
             byte[] json = profileBytes.GetSpan().ToArray();
-            if (!SHA256.HashData(json).AsSpan().SequenceEqual(profileDigest))
-                throw new InvalidOperationException("The module profile does not match the committed digest.");
             string profileJson = Encoding.UTF8.GetString(json);
 
             JObject profile;
@@ -171,17 +162,9 @@ namespace Neo.SmartContract.Native
             if (profile["capabilities"] is not JObject capabilities)
                 throw new InvalidOperationException("The module profile has no capability object.");
             bool instanceIsolation = RequireCapability(capabilities, "instanceIsolation");
-            bool messageCapability = RequireCapability(capabilities, "messageCapability");
-            bool thresholdMemberEligible = RequireCapability(capabilities, "thresholdMemberEligible");
-            if (capabilities["compositeLayer"] is not JNumber layer
-                || layer.Value < 0 || layer.Value > SmartAccountModuleProtocol.ModuleCompositeLayerMax)
-                throw new InvalidOperationException("The module profile composite layer is outside the profile bound.");
-            if (module.IsHook && (messageCapability || thresholdMemberEligible))
-                throw new InvalidOperationException("A hook profile cannot declare validator capabilities.");
 
+            module.ProfileSha256 = SHA256.HashData(json);
             module.InstanceIsolation = instanceIsolation;
-            module.MessageCapability = messageCapability;
-            module.ThresholdMemberEligible = thresholdMemberEligible;
             AssertCallbackAbi(contract, module);
         }
 
@@ -192,8 +175,13 @@ namespace Neo.SmartContract.Native
             return value.Value;
         }
 
-        internal static string SmartAccountModuleTypeName(byte moduleType) =>
-            moduleType == SmartAccountModuleProtocol.ModuleTypeCodeValidator ? "validator" : "hook";
+        internal static string SmartAccountModuleTypeName(byte moduleType) => moduleType switch
+        {
+            SmartAccountModuleProtocol.ModuleTypeCodeValidator => "validator",
+            SmartAccountModuleProtocol.ModuleTypeCodeHook => "hook",
+            SmartAccountModuleProtocol.ModuleTypeCodeRecovery => "recovery",
+            _ => throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleTypeUnsupported),
+        };
 
         /// <summary>
         /// Code-identity continuity (spec §3.6): the deployment id is the global
@@ -206,7 +194,7 @@ namespace Neo.SmartContract.Native
         {
             if (contract is null || (ulong)contract.Id != module.ContractId ||
                 contract.UpdateCounter != module.UpdateCounter)
-                throw new InvalidOperationException("The module code binding has changed.");
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleCodeBindingMismatch);
         }
 
         internal static void CaptureCodeBinding(ModuleInstance module, ContractState contract)

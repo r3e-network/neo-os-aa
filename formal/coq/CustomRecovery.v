@@ -1,4 +1,8 @@
-(* Custom source-candidate callback-free recovery projection.
+(* ARCHIVED HISTORICAL MODEL -- not a live correspondence obligation. The
+   custom kernel this models was retired in Phase 3; the module is kept for its
+   abstract theorems and mutation tests only, and claims no source link.
+
+   Custom source-candidate callback-free recovery projection.
    Identity and nonce are ghost projections of retained storage; the model does
    not prove storage layout, compiler/VM refinement or witness validity. Mature
    timer, owner witness, whole-account lock and escrow predicates are abstract.

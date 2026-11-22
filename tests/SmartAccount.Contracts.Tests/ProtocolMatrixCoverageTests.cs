@@ -124,8 +124,11 @@ public class ProtocolMatrixCoverageTests
                 $"{row.Id}: invariant is empty");
             CollectionAssert.Contains(KnownStatuses, row.Status,
                 $"{row.Id}: unknown status '{row.Status}'");
-            Assert.AreNotEqual(0, row.Custom.Count,
-                $"{row.Id}: a row must name at least one custom driver");
+            // The repository is native-only, so a row may be driven entirely from
+            // the native suite; it still has to name at least one driver whose
+            // existence the checker below can prove.
+            Assert.AreNotEqual(0, row.Custom.Count + row.Native.Count,
+                $"{row.Id}: a row must name at least one driver");
         }
     }
 

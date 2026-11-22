@@ -66,7 +66,6 @@ current release evidence.
 
 - [SA-EIP-712-SPEC.md](SA-EIP-712-SPEC.md) · [中文](SA-EIP-712-SPEC.zh-CN.md) — typed-data layout the verifiers hash on-chain
 - [SA-IMPLEMENTATION-REFINEMENT.md](SA-IMPLEMENTATION-REFINEMENT.md) · [中文](SA-IMPLEMENTATION-REFINEMENT.zh-CN.md) — refinement scope and acceptance conditions
-- [SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md) · [中文](SA-METHOD-REFINEMENT.zh-CN.md) — every method-level lane in one document, each keeping its own scope: artifact inventory, source projection, reference VM, runtime checks, arithmetic, fee semantics, public bodies, syscall admission, interop conversion and charge, exception identity
 - [SA-PROXY-TRANSFERS.md](SA-PROXY-TRANSFERS.md) · [中文](SA-PROXY-TRANSFERS.zh-CN.md) — direct proxy witness construction, fee policy, sponsorship refusal
 - [SA-MODULE-PROTOCOL.md](SA-MODULE-PROTOCOL.md) · [中文](SA-MODULE-PROTOCOL.zh-CN.md) — protocol v4 shared module specification for both kernels
 - [SA-MIGRATION-MANIFEST.md](SA-MIGRATION-MANIFEST.md) · [中文](SA-MIGRATION-MANIFEST.zh-CN.md) — legacy-to-v4 migration manifest and idempotency rules
@@ -91,7 +90,6 @@ entrypoints is the honest state, not a regression.
 - [action-sessions.md](action-sessions.md) · [中文](action-sessions.zh-CN.md) — session-key scoping, expiry and reauthorization
 - [MULTISIG_SDK.md](MULTISIG_SDK.md) · [MULTISIG_CHILD_CONFIGURATION.md](MULTISIG_CHILD_CONFIGURATION.md) — multisig bundles and child proofs ([中文](MULTISIG_SDK.zh-CN.md) · [中文](MULTISIG_CHILD_CONFIGURATION.zh-CN.md))
 - [PENDING_CONFIG_UPDATE_READ_ABI.md](PENDING_CONFIG_UPDATE_READ_ABI.md) · [中文](PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md) — config-update read surface
-- [CUSTOM_ACCOUNT_WORKSPACE.md](CUSTOM_ACCOUNT_WORKSPACE.md) · [中文](CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md) — custom-profile workspace
 - [mainnet-validation-runbook.md](mainnet-validation-runbook.md) · [中文](mainnet-validation-runbook.zh-CN.md) — read-only mainnet validation
 - [TESTNET_QUICKSTART.md](TESTNET_QUICKSTART.md) · [中文](TESTNET_QUICKSTART.zh-CN.md) — the two commands to run before any live testnet validation
 - [testnet-validation-runbook.md](testnet-validation-runbook.md) · [中文](testnet-validation-runbook.zh-CN.md) — dry-run-first testnet validation

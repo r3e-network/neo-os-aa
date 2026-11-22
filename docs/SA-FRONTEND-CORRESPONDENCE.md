@@ -486,7 +486,7 @@ are established by different mechanisms at different strengths:
 
 | Leg | What establishes it | Strength |
 | --- | --- | --- |
-| C# project -> NEF bytes | `formal/refinement/export` recompiles `contracts/custom/SmartAccount.csproj` with the pinned NCCS 3.9.1 and requires `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`, plus `JsonNode.DeepEquals` on the manifest | byte identity, every gate run |
+| C# project -> NEF bytes | `formal/refinement/export` recompiles `SmartAccount.cs` (retired custom kernel)proj` with the pinned NCCS 3.9.1 and requires `File.ReadAllBytes(compiled).SequenceEqual(pinnedNefBytes)`, plus `JsonNode.DeepEquals` on the manifest | byte identity, every gate run |
 | C# text -> what the lanes read | this harness | agreement between two independent readers on a measured corpus |
 | ABI -> what a real engine dispatches | `export --abi-dispatch` plus `abi_dispatch.py` | 107 of 109 entries dispatched onto the declared offset, the two engine entry points refused by name |
 | C# semantics -> VM semantics | still nothing beyond the dispatch path, and nothing here claims it | open |
@@ -978,10 +978,10 @@ Two things about the contract are only visible from the succeeding side, and bot
 were discovered by getting them wrong first. `finalizeEscape(id, 0x0)` and
 `finalizeEscapeToOwner(id)` are not the same operation: the first clears the
 verifier and the hook and returns the account to backup-owner mode, the second also
-marks it permanently owner-only. The first draft of this file expected
-`isOwnerOnlyRecovery` to be true after the verifier-returning call; the engine said
-false, and a later `finalizeEscapeToOwner` reported `Escape not initiated` rather
-than `Already recovered`. Both expectations were corrected against the engine and
+marks it permanently owner-only. The first draft of this file expected the account to report
+"owner-only recovery" after the verifier-returning call; the engine said false, and a later
+`finalizeEscapeToOwner` reported `Escape not initiated` rather than `Already recovered`.
+Both expectations were corrected against the engine and
 the file now drives one account each way. The other is that `registerAccounts`
 takes verifier parameters per account, which is what makes two ids distinct under
 one backup owner — the batch registers two accounts with `01` and `02` and reads

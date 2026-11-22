@@ -2,8 +2,7 @@
   "vectorId": "sa4-message-envelope",
   "kind": "message-envelope",
   "constantsRevision": {
-    "custom": "ae220783aa0a303f47332adf135aa44416c58c0e",
-    "native": "0d9ad4f08797f4b2e8ad63c83182fa554ef33fb9"
+    "native": "3ee06cd18ad6f63c464555c595e3227f2c1db7c8"
   },
   "input": {
     "custody": "0x291bff0f48bf68ca4e023953fb065fb984431f9b",
@@ -24,20 +23,6 @@
     "versionByte": 4,
     "successMagicHex": "1626ba7e",
     "failureMagicHex": "ffffffff",
-    "custom": {
-      "coreHash": "0xbcc99b511b9126f16bc0e0f33ef5a935486dafc0",
-      "network": 860833102,
-      "originalSender": "0xb71bfb20b8c2365e6d7e1e3bd0910dd89546edb2",
-      "messageDomainHex": "4e656f536d6172744163636f756e742f4d657373616765044e454f33c0af6d4835a9f53ef3e0c06bf126911b519bc9bcf68c996b12fcd9d34b7fd78bf399deda26a122d7b2ed4695d80d91d03b1e7e6d5e36c2b820fb1bb7000000000000000000000000000000010000000000000001",
-      "messageDigestHex": "d8c803d3baac4da322766f50cad8e7a3e3b21f97dc80a9e67e9ba3f4e3e8d860",
-      "signatureHex": "f370af8eddf0a688144a9628e786622fca162eb2594912f2a8ca21bffbb070f51e8a4c4893d6b737c0d4c293993d8721f3733e27001c6618ee7d0d5cb46b082b",
-      "signaturePairs": [
-        [
-          "0c21020217e617f0b6443928278f96999e69a23a4f2c152bdf6d6cdf66e5b80282d4ed4156e7b327",
-          "f370af8eddf0a688144a9628e786622fca162eb2594912f2a8ca21bffbb070f51e8a4c4893d6b737c0d4c293993d8721f3733e27001c6618ee7d0d5cb46b082b"
-        ]
-      ]
-    },
     "native": {
       "coreHash": "0x398dc3f0227d7efac5533ed5ce9937390c158084",
       "network": 860833102,

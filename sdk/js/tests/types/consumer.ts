@@ -11,9 +11,6 @@
  */
 import {
   // Protocol identity
-  CUSTOM_IMPLEMENTATION_ID,
-  CUSTOM_PROXY_CALL_FLAGS,
-  CUSTOM_REQUIRED_ABI,
   DEFAULT_CALL_FLAGS,
   NATIVE_ABI_VERSION,
   NATIVE_PROXY_CALL_FLAGS,
@@ -27,8 +24,7 @@ import {
   nativeCodec,
   // Clients
   NativeSmartAccountClient,
-  SmartAccountClient,
-  createSmartAccountClient,
+  createNativeSmartAccountClient,
   normalizeAddress,
   // Operations
   UserOperationBuilder,
@@ -90,9 +86,8 @@ import {
   codeIdentityTools,
 } from '@r3e-network/neo-smart-account';
 import type {
+  AccountActionPlan,
   AccountDescriptor,
-  BatchRegistrationPlan,
-  ConfigurationPlan,
   CreateAccountInput,
   NativePlan,
   NativePreparedTransaction,
@@ -114,7 +109,6 @@ import type {
 const ACCOUNT_ID = 'f2125dfcd4f8992f79231d8c175fc499baa10130';
 const CUSTODY = '202122232425262728292a2b2c2d2e2f30313233';
 const CORE = '398dc3f0227d7efac5533ed5ce9937390c158084';
-const CUSTOM_CORE = '944588b3e6d2aaf6f313969244f6715b68272598';
 const TARGET = '49c095ce04d38642e39155f5481615c58227a498';
 const NETWORK = 305419896;
 const SALT = '404142434445464748494a4b4c4d4e4f';
@@ -126,16 +120,13 @@ declare function awaited<T>(value: Promise<T>): T;
 // --- Protocol identity ------------------------------------------------------
 const version: 4 = PROTOCOL_VERSION;
 const abiVersion: 4 = NATIVE_ABI_VERSION;
-const customFlags: 15 = CUSTOM_PROXY_CALL_FLAGS;
 const nativeFlags: 5 = NATIVE_PROXY_CALL_FLAGS;
-const defaultFlags: 15 = DEFAULT_CALL_FLAGS;
-const implementationId: 'org.r3e.neo.smart-account.v4' = CUSTOM_IMPLEMENTATION_ID;
+const defaultFlags: 5 = DEFAULT_CALL_FLAGS;
 const domainName: 'Neo Smart Account' = USER_OPERATION_DOMAIN_NAME;
 const domainVersion: '4' = USER_OPERATION_DOMAIN_VERSION;
 const nativeContract: string = NATIVE_SMART_ACCOUNT_CONTRACT;
 const requiredEvents: readonly string[] = NATIVE_REQUIRED_EVENTS;
 const coreAbi: readonly string[] = NATIVE_REQUIRED_ABI.getAccount[0];
-const customAbi: readonly string[] = CUSTOM_REQUIRED_ABI.setMetadataUri[0];
 const sharedCodec: ProtocolCodec = codec;
 const nativeSurface: ProtocolCodec = nativeCodec;
 
@@ -148,8 +139,8 @@ const identity = codec.deriveIdentity({
 });
 const accountId: string = identity.accountId;
 const accountAddress: string = codec.accountAddress(ACCOUNT_ID, {
-  coreContractHash: CUSTOM_CORE,
-  callFlags: customFlags,
+  coreContractHash: CORE,
+  callFlags: nativeFlags,
 });
 const channel: string = codec.deriveNonceChannel(
   { networkMagic: NETWORK, coreContractHash: CORE, accountId: ACCOUNT_ID },
@@ -178,7 +169,7 @@ const operation: UserOperation = createUserOpBuilder({ networkMagic: NETWORK })
     codec.hashValue(ACCOUNT_ID),
     codec.integerValue(1),
   ])
-  .setRouting({ authorityEpoch: '1', configurationNonce: '1' })
+  .setRouting({ validatorId: 0, credentialGeneration: '1', authorityEpoch: '1', configurationNonce: '1' })
   .setNonceSubkey(NONCE_SUBKEY)
   .setNonceSequence({ channel, sequence: '0' })
   .autoDeadline()
@@ -335,13 +326,12 @@ const retried: number = awaited(
   withRetry('rpc.getblockcount', async () => 1, { maxAttempts: 2 }),
 );
 
-// --- Custom kernel client ---------------------------------------------------
-const client = createSmartAccountClient({
+// --- The packaged client ----------------------------------------------------
+const client = createNativeSmartAccountClient({
   rpcUrl: 'https://rpc.example.com',
   networkMagic: NETWORK,
-  contractHash: CUSTOM_CORE,
 });
-const sameClient: SmartAccountClient = client;
+const sameClient: NativeSmartAccountClient = client;
 const kernel: SmartAccountKernel = client;
 const normalized: string = normalizeAddress('NXV6kqVqp4Qh3Dx8a9z2sCq8sQ4QZbZ4q');
 
@@ -349,15 +339,10 @@ const registration: RegistrationPlan = client.buildCreateAccountScript({
   custodyAddress: CUSTODY,
   salt: SALT,
 });
-const batch: BatchRegistrationPlan = client.buildCreateAccountsScript({
-  custodyAddress: CUSTODY,
-  salts: [SALT],
-});
-const configuration: ConfigurationPlan = client.buildConfigurationScript({
-  kind: 'propose',
+const moduleInstall: AccountActionPlan = client.buildAccountActionScript({
+  method: 'installModule',
   accountId: ACCOUNT_ID,
-  actions: [],
-  readSet: [],
+  args: [1, CUSTODY, []],
 });
 const execution = client.buildExecutionScript({
   accountId: ACCOUNT_ID,
@@ -367,14 +352,19 @@ const executionSigners: SignerDescriptor[] = execution.signers.map((account) => 
   account,
   scopes: 'WitnessRules',
 }));
-const metadata = client.setMetadataUri(ACCOUNT_ID, 'ipfs://metadata');
-const frozen = client.freezeAccount(ACCOUNT_ID);
+// Freezing is an account action; the client never grows a method per action.
+const frozen = client.buildAccountActionScript({
+  method: 'freezeAccount',
+  accountId: ACCOUNT_ID,
+});
 const routed: string = client.deriveNonceRouting(ACCOUNT_ID, {
   authorityEpoch: '1',
+  credentialGeneration: '1',
   nonceSubkey: NONCE_SUBKEY,
 });
+const lookup = awaited(client.getNonce(ACCOUNT_ID, { validatorId: 0, nonceSubkey: NONCE_SUBKEY }));
 const state: AccountDescriptor | null = awaited(client.getAccount(ACCOUNT_ID));
-const simulation: SimulationResult = awaited(client.simulate(execution, []));
+const simulation: SimulationResult = awaited(client.simulate(execution));
 const registrationRecipe: CreateAccountInput = {
   custodyAddress: CUSTODY,
   salt: SALT,
@@ -392,6 +382,18 @@ const nativePlan: NativePlan = nativeClient.buildCreateAccountScript({
 const nativeSimulation: SimulationResult = awaited(
   nativeClient.simulate(nativePlan),
 );
+// Supplying both namespace inputs turns the read into a stale-generation check.
+const checked = awaited(
+  nativeClient.getNonce(ACCOUNT_ID, {
+    authorityEpoch: '1',
+    validatorId: 0,
+    credentialGeneration: '1',
+    nonceSubkey: NONCE_SUBKEY,
+  }),
+);
+const routingGeneration: string = awaited(
+  nativeClient.resolveCredentialGeneration(ACCOUNT_ID, '2'),
+);
 
 // --- Transaction lifecycle --------------------------------------------------
 const feePayer: WalletSigner = {
@@ -400,22 +402,22 @@ const feePayer: WalletSigner = {
   sign: async () => 'aa'.repeat(64),
 };
 const prepared: NativePreparedTransaction = awaited(
-  client.prepareTransaction(metadata, {
+  nativeClient.prepareTransaction(nativePlan, {
     feePayer,
-    recipe: { method: 'buildCustomActionScript', input: { method: 'setMetadataUri', accountId: ACCOUNT_ID } },
+    recipe: { method: 'buildCreateAccountScript', input: registrationRecipe },
     maxSystemFee: '100000000',
     maxNetworkFee: '100000000',
     maxTotalFee: '200000000',
   }),
 );
-const signed: NativeSignedTransaction = awaited(client.signTransaction(prepared));
+const signed: NativeSignedTransaction = awaited(nativeClient.signTransaction(prepared));
 const artifact: NativeSignedTransactionArtifact =
-  client.exportSignedTransaction(signed);
+  nativeClient.exportSignedTransaction(signed);
 const preflight: NativeTransactionPreflight = awaited(
-  client.preflightTransaction(signed),
+  nativeClient.preflightTransaction(signed),
 );
 const receipt: NativeTransactionReceipt = awaited(
-  client.getTransactionReceipt(signed),
+  nativeClient.getTransactionReceipt(signed),
 );
 
 // --- Shared tools -----------------------------------------------------------
@@ -452,7 +454,7 @@ const codeHash: string = identityTools.moduleCodeHash({
 // --- Removed v3 surface -----------------------------------------------------
 // The v3 client took (url, coreHash); v4 takes one options object.
 // @ts-expect-error - v3 client signature is gone
-const legacyClient = new SmartAccountClient('https://rpc.example.com', CORE);
+const legacyClient = new NativeSmartAccountClient('https://rpc.example.com', CORE);
 // @ts-expect-error - setVerifier was removed with the v3 verifier model
 builderAgain.setVerifier(TARGET);
 // @ts-expect-error - the operation is 13 fields; a 6-field shape is rejected
@@ -468,16 +470,13 @@ const legacyOperation: UserOperation = {
 void [
   version,
   abiVersion,
-  customFlags,
   nativeFlags,
   defaultFlags,
-  implementationId,
   domainName,
   domainVersion,
   nativeContract,
   requiredEvents,
   coreAbi,
-  customAbi,
   sharedCodec,
   nativeSurface,
   accountId,
@@ -538,12 +537,14 @@ void [
   kernel,
   normalized,
   registration,
-  batch,
   executionSigners,
   thresholdMembers,
   configuration,
   frozen,
   routed,
+  lookup,
+  checked,
+  routingGeneration,
   state,
   simulation,
   nativePlan,

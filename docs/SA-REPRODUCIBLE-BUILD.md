@@ -10,7 +10,7 @@ builder gets the same NEF and manifest bytes.
 | --- | --- | --- |
 | `Neo.SmartContract.Framework`, `Neo.SmartContract.Testing` | 3.10.1 | `Directory.Build.props` (`NeoSmartContractFrameworkVersion`) |
 | the Neo packages they pull in | `Neo`, `Neo.Extensions`, `Neo.IO`, `Neo.Json`, `Neo.VM`, `Neo.Disassembler.CSharp` 3.10.1; `Neo.Cryptography.BLS12_381` 3.9.0 | `contracts/neo-platform-packages.json` (SHA-512 of each package) |
-| every other package (MSTest, Akka, ...) | resolved version and content hash | committed locks for 28 public projects; `--include-native` checks all 38, including six native modules, two test-only epoch-probe projects and two runtime probe hosts with empty NuGet dependency locks |
+| every other package (MSTest, Akka, ...) | resolved version and content hash | committed locks for every in-scope project; the scope is the native inventory (six native modules, two test-only epoch-probe projects and two runtime probe hosts with empty NuGet dependency locks) |
 | package source | nuget.org only, every package id mapped to it | `nuget.config` |
 | compiler | `Neo.Compiler.CSharp` 3.9.1 (`nccs`) | `.github/workflows/ci.yml`; the installed package is checked against `contracts/neo-platform-packages.json` |
 | SDK | .NET 10 (`net10.0`) | `actions/setup-dotnet` in `ci.yml` |
@@ -25,26 +25,31 @@ with `NU1403`.
 dotnet tool install -g neo.compiler.csharp --version 3.9.1
 node scripts/check_neo_platform_packages.mjs                  # pins, lock files, locked restore, package hashes
 node scripts/check_neo_platform_packages.mjs --compiler-only  # the installed nccs is the pinned package
-bash contracts/compile.sh                                     # every contract into contracts/bin/public
-dotnet test SmartAccount.sln -c Release
+dotnet build SmartAccount.sln -c Release                      # native-only solution: pinned core, six modules, probes
+dotnet test tests/SmartAccount.Native.Tests/SmartAccount.Tests.csproj -c Release
 ```
 
-`./scripts/verify_repo.sh --contracts-only` runs the same steps plus the deploy-tool tests and the format
-check. To prove a clean restore, point `NUGET_PACKAGES` at an empty directory first.
+`SmartAccount.sln` is the native build entry: it carries the native core overlay
+(`contracts/native/Neo.csproj`), the six native-profile modules, the native unit tests
+and the probe hosts, and no custom project. Building it needs a reviewed core checkout;
+set `NEOOS_NATIVE_CORE_SOURCE` to it (default sibling `../neo-native-core`).
+
+`./scripts/verify_repo.sh --contracts-only` runs the native build and unit-test lane; MSBuild
+writes the kernel into each project's `bin/Release/net10.0/`. To prove a clean restore, point
+`NUGET_PACKAGES` at an empty directory first.
 
 ### Select the validation profile
 
-`./scripts/verify_repo.sh --profile custom` is the default. It runs the public
-contract build and tests, deployment-tool regressions, frontend checks and SDK
-checks without restoring native probe projects or building the native epoch VM
-fixture. `--contracts-only`, `--frontend-only` and `--sdk-only` still select the
-component to validate. Shared deterministic frontend/SDK unit tests remain in
-both profiles; they do not require a native node.
+`./scripts/verify_repo.sh --profile native` is the default and the only
+profile. It runs the native
+package locks, protocol and runner guards, the native-only solution build and unit
+tests, the native module epoch VM regression and native browser coverage, and reads
+nothing from the retired custom tree. `--contracts-only`, `--frontend-only` and
+`--sdk-only` still select the component to validate. Shared deterministic
+frontend/SDK unit tests run either way; they do not require a native node.
 
-`--profile native` selects native package locks, protocol and runner guards, the
-native module epoch VM regression and native browser coverage. `--profile all`
-runs both profiles. Every selected command is mandatory and its failure stops
-the gate. The native epoch fixture is module-level VM evidence; the independent
+Every selected command is mandatory and its failure stops the gate. The native
+epoch fixture is module-level VM evidence; the independent
 `native-profile.yml` workflow additionally builds the pinned native core and
 executes the native VM matrix. Neither command establishes public activation or
 full-chain admission.
@@ -56,45 +61,44 @@ workflow has no path filter, so native UI, shared code, SDK and frontend test
 changes all select the browser gate without needing a native node.
 
 `--formal` explicitly adds the aggregate formal checks and their source-lock
-requirements. `--neoexpress` selects public-profile current-source acceptance on a
-disposable published NeoExpress chain and is accepted for `custom` or `all`.
-It first rebuilds both artifact profiles, then passes `contracts/bin/public` to
-`tests/localchain/run.py --variant source`. `NEOOS_NEOXP` (else `NEOXP`, PATH, or
-the user tool directory) selects the published runner; no private hardfork is
-enabled by this path.
+requirements. `--skip-e2e` drops the disposable-chain lane while keeping every
+off-chain gate. `NEOOS_NEOXP` (else `NEOXP`, PATH, or the user tool directory)
+selects the published NeoExpress runner; no private hardfork is enabled by this
+path.
 
-`scripts/check-custom-runtime-provenance.mjs` joins the rebuild certificate to
-the current source snapshot and the nine deployed modules' exact NEF hashes,
-checksums, full manifests and RPC script readback. It reuses the source suite's
-existing acceptance oracle. This is a measured subset, not proof of the entire
-module catalog or public deployment. The separate
-`scripts/neoexpress_validate.py` and `verify-private-artifact-provenance.mjs`
-remain the private PLATFORM full-module matrix. That unselected matrix is
-reported as NOT RUN and does not add a custom gate. Native full-chain
-validation follows its separate documented runner. Optional selected checks
-keep their explicit NOT RUN messages when they are not selected.
+The native lane's own provenance join lives in `scripts/native_epoch_probe.py`
+and the `scripts/neoexpress_native_*_validate.py` suites: together they bind the
+rebuilt artifact to the current source snapshot, the module NEF hashes,
+checksums, full manifests and RPC script readback. This is a measured subset,
+not proof of the entire module catalog or public deployment. Native full-chain
+validation follows its separate documented runner. Optional selected checks keep
+their explicit NOT RUN messages when they are not selected.
 
 ## Reproduce
 
-### Public and private profiles
+### Native build outputs
 
-The default core in `contracts/bin/public` uses published `System.Contract.Call`: signature validation
-is read-only, while a hook's `postCheck` retains write access for accounting. It emits no
-`System.Contract.CallWithGasLimit`. The module-callback tests run on the published TestEngine;
-`tests/localchain/test_public_profile.py` exercises a signed operation on disposable published neoxp.
+The native kernel is the only build target. `dotnet build SmartAccount.sln` compiles the overlay core
+(`contracts/native/SmartAccount/`) against the pinned core checkout, and
+`scripts/build_native_modules.py` reproduces the six `SMARTACCOUNT_NATIVE` modules in two independent
+scratch trees under the locked restore policy and writes them to the `--output` directory its caller
+names. `scripts/native_epoch_probe.py` runs those artifacts in the public VM and writes a receipt to its
+own `--output`. Neither script has a default directory, and `contracts/bin/native` is not a target.
 
-`bash contracts/compile.sh` also builds the private core separately in `contracts/bin/platform`.
-To build only that profile, run `bash contracts/compile.sh --platform`. The pinned nccs 3.9.1 ignores
-MSBuild `DefineConstants`, so the script prepends `#define PLATFORM` to a temporary copy of the execution
-source and removes the copy afterwards. The private core retains both 10 GAS bounded callbacks and
-requires the private core syscall at runtime; do not deploy that artifact on public networks.
+The retired custom track's `public` and `platform` profiles (`contracts/bin/public`,
+`contracts/bin/platform`) are archived artifacts and were never tracked: `bin/` is gitignored, so a
+clean checkout has neither. Their `compile.sh` recipe and the user-contract
+projects it built were removed when the repository went native-only; the digests recorded for them
+below stay as historical receipts, nothing in the tree rebuilds them, and
+`scripts/check-artifact-reproducibility.mjs` refuses to replay the deleted recipe. Do not deploy those
+artifacts and do not treat their recorded bytes as current native evidence.
 
-The public profile does not bound verifier gas. Lifecycle ABI admission is not a verifier trust or
-resource policy. Public relays must apply their own reviewed module policy, simulation and finite
-transaction-fee limits before sponsorship; these controls do not establish a protocol-level child
-budget. Unrestricted sponsored admission remains unsafe. `contracts/build` remains the historical
-deployed-artifact fixture. Public deploy/upgrade helpers select `contracts/bin/public` and reject paths
-escaping that directory; `contracts/bin/platform` is never a public release source.
+For the record, the retired public profile used published `System.Contract.Call` with read-only
+validation and write-capable `postCheck` accounting, and it did not bound verifier gas; the retired
+private `PLATFORM` profile used `System.Contract.CallWithGasLimit`. Lifecycle ABI admission was never
+a verifier trust or resource policy: public relays must still apply their own reviewed module policy,
+simulation and finite transaction-fee limits before sponsorship, and unrestricted sponsored admission
+remains unsafe. `contracts/build` remains the historical deployed-artifact fixture.
 
 ### Public validator release selection
 
@@ -113,18 +117,22 @@ broadcast a transaction nor establish public deployment parity.
 
 ### Two-build comparison
 
+The two-build replay that produced the certificates below used `contracts/compile.sh`, which was
+deleted with the custom track. `scripts/check-artifact-reproducibility.mjs` therefore fails closed
+instead of replaying a recipe the repository no longer contains; the recorded digests stay as
+historical receipts. The native replacement is `scripts/build_native_modules.py`, which builds the six
+`SMARTACCOUNT_NATIVE` modules in two independent scratch trees at different temporary paths and fails
+unless every NEF and manifest digest matches:
+
 ```bash
-for dir in "$A" "$B/deeper"; do          # two different absolute paths
-  mkdir -p "$dir" && git archive <commit> | tar -x -C "$dir" && (cd "$dir" && bash contracts/compile.sh) &&
-    (cd "$dir/contracts/bin" && find . \( -name '*.nef' -o -name '*.manifest.json' \) | sort | xargs shasum -a 256) > "$dir.sha256"
-done
-diff "$A.sha256" "$B/deeper.sha256" && echo reproduced
+python3 scripts/build_native_modules.py --contracts contracts \
+  --compiler "$NCCS_BIN" --cache "$NUGET_PACKAGES" \
+  --output <new-directory> --receipt <receipt.json>
 ```
 
-`node scripts/check-artifact-reproducibility.mjs` replays the canonical `contracts/compile.sh` in a
-scratch copy and compares **both** `contracts/bin/public` and `contracts/bin/platform`, with separate
-profile verdicts. A missing core, empty directory, extra artifact or byte drift in either profile
-fails the gate. It does not infer runtime compatibility from reproducibility alone.
+It does not infer runtime compatibility from reproducibility alone. The paragraphs that follow record
+the retired custom profile replays and their archived certificates.
+
 The 2026-10-08 replay matched **80/80** files: **78** under `bin/public` and **2** under
 `bin/platform`, with no drift or missing artifacts. Exact digests and the profile verdicts
 for the native integration source are in
@@ -153,6 +161,53 @@ left the tree (132 source inputs; the sweep commit's receipt had been generated 
 `SmartAccount.MarketEscrow.cs` revision early, which the regeneration also corrects),
 and the candidate/public ABI delta it certifies is
 [`sa-ordinary-candidate-compatibility-20261116.json`](reports/sa-ordinary-candidate-compatibility-20261116.json).
+The 2026-11-20 replay of the v4 generation and subject-provenance revision (the
+22-byte provenance marker beside the 21-byte subject row, custody-derived subject
+rotation, and routing-generation resolution inside the core) matched again with no
+drift and no missing artifacts: **66** artifacts compared, **64** under
+`bin/public` and **2** under `bin/platform`, over **174** source inputs. The six
+new mock contract/project/lock triplets under `tests/mocks` (GasBurningHook,
+GasBurningValidator, MockDivisibleNep11Token, MockNep11Token, MockNep17Token,
+MockNepPaymentReceiver) are inside the inventory by construction, because
+`SOURCE_ROOTS` copies `tests/mocks` whole rather than by an explicit file list.
+The certificate is
+[`sa-artifact-reproducibility-20261120.json`](reports/sa-artifact-reproducibility-20261120.json),
+and the two core pairs it certifies are:
+
+| Profile | `SmartAccount.nef` SHA-256 | `SmartAccount.manifest.json` SHA-256 |
+| --- | --- | --- |
+| `bin/public` | `27e28aa06068d0d9898a6dcf3d703d7561e05e2e12d4a8bd8202ae7abdc654e1` | `f0c6467b05004fdbedc0a9b8f6368ab29a30e84a6b38ece56219a6913282bd23` |
+| `bin/platform` | `60f17dfd0a19b40076b0a72577ed29ea6d480e8bbe73b2a37dc207c08a1b4048` | `61900e8a80a8fc8cd3b3fb4698050f53e7dd18ee64da13bc4ab2f1cfc20cd55c` |
+
+The same run's private-chain receipts are
+[`sa-custom-source-chain-20261120.json`](reports/sa-custom-source-chain-20261120.json)
+(28/28 acceptance checks, nine artifacts deployed from the freshly compiled public
+profile) and
+[`sa-custom-runtime-provenance-20261120.json`](reports/sa-custom-runtime-provenance-20261120.json)
+(that receipt joined to the certificate above, source snapshot `164c58a3…`). They
+are evidence for the sources and artifacts they name and not for a public-network
+deployment: no chain writes are performed, and `tracked_tree_drift` still lists
+`contracts/build` because that tree is deliberately pinned to the deployed mainnet
+bytecode. An artifact identity refresh is not an acceptance event — it says what
+the current sources build to.
+The 2026-11-21 protocol-conformance replay (1-based credential generation, the
+core-wide reentrancy exclusion, code-binding continuity after every writable
+callback and at commit, and `NefSha256` as `SHA256(NEF)`) matched again with no
+drift and no missing artifacts: **66** artifacts compared, **64** under
+`bin/public` and **2** under `bin/platform`, over **174** source inputs, both
+profiles reporting `matches_fresh_build: true`, and
+`chain_writes_performed: false`. Its certificate is
+[`sa-artifact-reproducibility-20261121.json`](reports/sa-artifact-reproducibility-20261121.json),
+and the two core pairs it certifies are:
+
+| Profile | `SmartAccount.nef` SHA-256 | `SmartAccount.manifest.json` SHA-256 |
+| --- | --- | --- |
+| `bin/public` | `397f96ab1997dcd8aad6455a797a569dfff2789c4ffff4dbfcab4ff590d553bf` | `4939cf01fb812fff5fb83fc4edd71205041d9a91201390ff9f21716692c23470` |
+| `bin/platform` | `7d5fad653060bbe6dca63bc14dc7be8097e138c46956c23c787cba2fe604fdd8` | `296a3ad498dd4a553e1aa91449817b6eab3b4814cf3c15fe3830fe004f6b7550` |
+
+Both profiles moved in that replay: the `PLATFORM` profile compiles the same
+custom sources, so it carries the same protocol changes. `contracts/build`
+remains the deliberate deployed-mainnet anchor and is reported as such.
 The joined NeoExpress receipt is bound to a reviewed source-runtime build
 (`sourceRuntime`): its 104-file map, source-build receipt, `neoxp.dll` and
 wrapper hashes are checked before and after the private run, with host paths

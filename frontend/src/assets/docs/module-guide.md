@@ -90,16 +90,18 @@ it is not an installable production validator.
 
 ## How To Configure
 
-Do not start from raw calldata. An install is a configuration intent:
+Do not start from raw calldata. An install is either an atomic registration action or a call to the
+core:
 
-1. `proposeConfiguration` takes the account, an action list and the read set the proposal depends on.
-2. Each action is an array whose first element is an action code: `installModule`, `uninstallModule`,
-   `configureModule`, `setHookOrder`, `setDefaultPolicy`, `rebindModuleCode`, `setThresholdPolicy`
-   or `setRecoveryPolicy`.
-3. The intent matures after 24 hours and expires 7 days after it matures.
-4. `confirmConfiguration` re-requires the custody witness and commits every action atomically — a
-   multi-action intent is one atomic proposal, never a timelock bypass.
-5. `cancelConfiguration` drops an intent that should not run.
+1. `installModule(accountId, moduleType, moduleContractHash, initData)` installs one instance in the
+   current transaction; `removeModule(accountId, moduleId, deInitData)` uninstalls it. Both accept the
+   custody witness or the witness of an already installed validator instance.
+2. A registration action is the positional vector `[1, moduleType, moduleHash, profileDigest,
+   initData]` — the install code, the module type, the module hash, the profile digest the core
+   compares and the install data. Its uninstall companion is `[2, moduleId, deInitData]`.
+3. The core executes no other action code. A delay, a maturity window and a multi-action batch belong
+   to a governance module, which collects them and then calls the two methods above; the core itself
+   applies each call atomically or not at all.
 
 A module instance is identified by `(accountId, moduleId)`, never by contract address. `moduleId` is
 allocated once per account from 1 (0 is the built-in route) and is never reused, so an uninstalled

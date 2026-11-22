@@ -170,8 +170,9 @@ class MethodProofTests(unittest.TestCase):
         self.assertEqual(bound["manifestSha256"], self.inventory["manifest"]["sha256"])
 
     def test_complete_method_is_bound(self):
-        self.assertEqual(self.program["start"], 36048)
-        self.assertEqual(self.program["end"], 36329)
+        # Reviewed 2026-11-21 against the live rebuild: the helper envelope moved
+        # by 272 bytes but the region is still 281 bytes / 116 instructions.
+        self.assertEqual((self.program["start"], self.program["end"]), (36586, 36867))
         self.assertEqual(len(self.program["bytes"]), 281)
         self.assertEqual(len(self.program["instructions"]), 116)
 
@@ -213,8 +214,8 @@ class MethodProofTests(unittest.TestCase):
         result = method.execute(self.program["bytes"], requested=1, system_fee=0,
                                 network_fee=0, tx_hash=bytes([1])*32, stored=ledger)
         # The helper now asserts the remaining VM-integer headroom before the
-        # addition, so this input is rejected by that assertion at 36297 and the
-        # ADD at 36303 never runs. It is an abort, not an arithmetic fault.
+        # addition, so this input is rejected by that assertion at 36563 and the
+        # ADD at 36569 never runs. It is an abort, not an arithmetic fault.
         self.assertEqual(result["status"], "ABORT")
         self.assertEqual(result["error"], method.MARGIN_ERROR)
         self.assertEqual(result["stored"], ledger)
@@ -307,13 +308,13 @@ class MethodProofTests(unittest.TestCase):
     def test_partial_helper_boundary_rejected(self):
         inventory = copy.deepcopy(self.inventory)
         entry = next(item for item in inventory["sourceMap"]["focusedMethods"] if item["id"] == method.METHOD)
-        entry["range"] = "36178-36208"
+        entry["range"] = "36716-36846"
         with self.assertRaisesRegex(ValueError, "boundary"):
             method.bind_method(inventory)
 
     def test_exported_instruction_drift_rejected(self):
         inventory = copy.deepcopy(self.inventory)
-        entry = next(item for item in inventory["nef"]["instructions"] if item["offset"] == 36178)
+        entry = next(item for item in inventory["nef"]["instructions"] if item["offset"] == 36716)
         entry["opcode"] = 255
         with self.assertRaisesRegex(ValueError, "inventory differs"):
             method.bind_method(inventory)
@@ -327,7 +328,7 @@ class MethodProofTests(unittest.TestCase):
 
     def test_min_to_max_control_has_observable_semantic_difference(self):
         mutated = list(self.program["bytes"])
-        mutated[36178-method.START] = 0xba
+        mutated[36716-method.START] = 0xba
         result = method.execute(mutated, requested=90, system_fee=50, network_fee=10,
                                 tx_hash=bytes([1])*32, stored=None)
         self.assertEqual((result["status"], result["result"], result["stored"].reserved), ("HALT", 90, 90))
@@ -370,7 +371,7 @@ class MethodProofTests(unittest.TestCase):
             self.assertIs(receipt["kernelChecked"], True)
             self.assertIs(receipt["referenceRefinementVerified"], True)
             self.assertIs(receipt["fullImplementationVerified"], False)
-            self.assertEqual(receipt["methodRange"], [36048, 36329])
+            self.assertEqual(receipt["methodRange"], [36586, 36867])
             self.assertEqual((receipt["byteCount"], receipt["instructionCount"]), (281, 116))
             self.assertEqual(len(receipt["semanticControls"]), 6)
             self.assertTrue(all(item["definitionsCompiled"] and item["certificateRejected"]

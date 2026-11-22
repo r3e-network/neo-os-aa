@@ -10,9 +10,9 @@
  *    The v3 serializer only knew None/CustomContracts, so a proxy-witness
  *    transaction could not be hashed at all.
  * 2. May a signed artifact authorize this exact reviewed intent? The review
- *    carries the v4 plan (registration, execution, configuration intent or
- *    account action) plus the recipe that rebuilt it, so bytes that are not
- *    the canonical encoding of the reviewed intent are refused.
+ *    carries the v4 plan (registration, execution or account action) plus the
+ *    recipe that rebuilt it, so bytes that are not the canonical encoding of
+ *    the reviewed intent are refused.
  * 3. Can an archived review be restored to read a receipt? Yes — and a
  *    restored artifact can never be preflighted or broadcast.
  *
@@ -31,16 +31,17 @@ import { createProxyWitness } from "./proxyWitness.mjs";
 
 export const NATIVE_SIGNED_ARTIFACT_MAX_CHARS = 1048576;
 const MAX_TRANSACTION_BYTES = 102400;
-const PLAN_KINDS = ["registration", "execution", "configuration", "account"];
+const PLAN_KINDS = ["registration", "execution", "account"];
+// The account actions of the minimal core: freezing, thawing and the two
+// module-administration calls. Recovery, credential revocation and the
+// configuration intents are user-space module concerns, so their scripts are
+// not reconstructable here and cannot be archived as native plans.
 const ACCOUNT_ACTIONS = [
   "freezeAccount",
   "unfreezeAccount",
-  "beginRecovery",
-  "cancelRecovery",
-  "executeRecovery",
-  "revokeCredentials",
+  "installModule",
+  "removeModule",
 ];
-const CONFIGURATION_KINDS = ["propose", "confirm", "cancel"];
 const WITNESS_RULE_CONDITIONS = ["CalledByContract"];
 
 const fail = (message) => {
@@ -136,15 +137,14 @@ const accountHash = (value) => {
 
 /**
  * The discoverable v4 profile. `implementationId` is whatever the submitting
- * core answers (`NativeSmartAccount/v4` for the native kernel,
- * `org.r3e.neo.smart-account.v4` for the custom one), and it is authenticated
- * by the profile that both the review and the artifact must agree on.
+ * core answers (`NativeSmartAccount/v4` for the native core), and it is
+ * authenticated by the profile that both the review and the artifact must
+ * agree on.
  *
  * The contract hash is shape-checked here, not pinned to the native constant:
- * a custom kernel answers at an arbitrary hash, so the caller that knows the
- * deployment is the one that compares (`checked`/`bindArtifact` compare a
- * restored artifact against `profile(client.profile)`). Pinning the constant
- * here would make every custom-kernel review unexportable.
+ * a local chain may register the core at another hash, so the caller that knows
+ * the deployment is the one that compares (`checked`/`bindArtifact` compare a
+ * restored artifact against `profile(client.profile)`).
  */
 function profile(value) {
   exactKeys(
@@ -655,31 +655,10 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
     let plan;
     if (recipe.method === "buildCreateAccountScript" && prior.kind === "registration")
       plan = client.buildCreateAccountScript(args);
-    else if (
-      recipe.method === "buildCreateAccountsScript" &&
-      prior.kind === "registration"
-    ) {
-      if (typeof client.buildCreateAccountsScript !== "function")
-        fail("this kernel has no batch registration");
-      plan = client.buildCreateAccountsScript(args);
-    } else if (recipe.method === "buildAccountActionScript" && prior.kind === "account") {
+    else if (recipe.method === "buildAccountActionScript" && prior.kind === "account") {
       if (!ACCOUNT_ACTIONS.includes(args.method))
         fail("unsupported archived account action");
       plan = client.buildAccountActionScript(args);
-    } else if (
-      recipe.method === "buildCustomActionScript" &&
-      prior.kind === "account"
-    ) {
-      // The custom kernel's custody-gated actions (metadata, escrow entry) are
-      // core calls like any other; the recipe must replay through the method
-      // that built it or the archived bytes are not the reviewed intent.
-      if (typeof client.buildCustomActionScript !== "function")
-        fail("this kernel has no custom account actions");
-      plan = client.buildCustomActionScript(args);
-    } else if (recipe.method === "buildConfigurationScript" && prior.kind === "configuration") {
-      if (!CONFIGURATION_KINDS.includes(args.kind))
-        fail("unsupported archived configuration intent");
-      plan = client.buildConfigurationScript(args);
     } else if (recipe.method === "buildExecutionScript" && prior.kind === "execution")
       plan = client.buildExecutionScript(args);
     else fail("unsupported archived review recipe");

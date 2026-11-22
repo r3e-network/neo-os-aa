@@ -3,11 +3,12 @@
  *
  * A session key is not a registration blob any more. It is a SessionKeyValidator
  * instance whose `initData`/`configData` is the command array the validator
- * parses, and that array travels inside a configuration intent — which means it
- * is a v4 operation operand and must obey §4.1: `Null`, `Boolean`, `Integer`,
- * `ByteString` and `Array` only. A string is a UTF-8 `ByteString`; a `UInt160`
- * is a `ByteString` of its stored byte order. The v3 `Hash160`/`String` spelling
- * cannot enter an operation at all, which is what the first tests pin.
+ * parses, and that array travels as the `initData` of an `installModule` account
+ * action — which means it is a v4 operation operand and must obey §4.1:
+ * `Null`, `Boolean`, `Integer`, `ByteString` and `Array` only. A string is a
+ * UTF-8 `ByteString`; a `UInt160` is a `ByteString` of its stored byte order.
+ * The v3 `Hash160`/`String` spelling cannot enter an operation at all, which is
+ * what the first tests pin.
  *
  * The rest mirrors the validator's own asserts, so a malformed command fails in
  * the SDK with a `SESSION_KEY_INVALID` error instead of reverting on chain.
@@ -16,7 +17,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  SmartAccountClient,
+  NativeSmartAccountClient,
   codec: c,
   buildSessionKeyInstallCommand,
   buildSessionKeyClearCommand,
@@ -37,8 +38,6 @@ const VALID_UNTIL = 1900000000000;
 
 // Configuration action codes and module types are protocol constants (§9); the
 // test writes them out rather than importing names the contract never exposes.
-const ACTION_INSTALL = 1;
-const ACTION_CONFIGURE = 3;
 const MODULE_TYPE_VALIDATOR = 1;
 
 const I = (value) => ({ type: "Integer", value: String(value) });
@@ -50,8 +49,8 @@ const HASH = (displayHex) => ({
   value: Buffer.from(String(displayHex).replace(/^0x/i, ""), "hex").reverse().toString("hex"),
 });
 
-const client = new SmartAccountClient({
-  rpcUrl: "http://127.0.0.1:1",
+const client = new NativeSmartAccountClient({
+  rpcClient: { send: async () => ({}) },
   networkMagic: 123,
   contractHash: CORE,
 });
@@ -67,11 +66,13 @@ const install = (overrides = {}) =>
     ...overrides,
   });
 
-const configure = (command) =>
-  client.buildConfigurationScript({
+// Installing a session key is one account action: the core allocates the module
+// id and the command array is the initData the validator parses on chain.
+const installSessionKey = (command) =>
+  client.buildAccountActionScript({
+    method: "installModule",
     accountId: ACCOUNT,
-    kind: "propose",
-    actions: [A(I(ACTION_CONFIGURE), I(MODULE_ID), A(...command))],
+    args: [I(MODULE_TYPE_VALIDATOR), HASH(MODULE), A(...command)],
   });
 
 test("setSessionKey is seven operands a v4 operation can carry", () => {
@@ -97,13 +98,13 @@ test("clearSessionKey is one operand", () => {
   assert.equal(command.length, 1);
 });
 
-test("the command encodes to the same bytes twice and inside an intent", () => {
+test("the command encodes to the same bytes twice and inside an install action", () => {
   const command = install();
   const encoded = c.encodeValue(A(...command));
   assert.equal(encoded, c.encodeValue(A(...install())));
-  // The intent script carries that very encoding: the command the caller built
+  // The install script carries that very encoding: the command the caller built
   // is the command the chain deserialises.
-  assert.ok(configure(command).script.includes(encoded));
+  assert.ok(installSessionKey(command).script.includes(encoded));
   // The array is also a legal operand of an execution operation.
   const plan = client.buildExecutionScript({
     accountId: ACCOUNT,
@@ -124,33 +125,37 @@ test("the command encodes to the same bytes twice and inside an intent", () => {
   assert.ok(plan.script.includes(encoded));
 });
 
-test("the proposal, confirmation and cancellation of a session-key intent are three plans", () => {
+test("installing and clearing a session key are two custody-gated account plans", () => {
   const command = install();
-  const actions = [A(I(ACTION_CONFIGURE), I(MODULE_ID), A(...command))];
-  const propose = client.buildConfigurationScript({ accountId: ACCOUNT, kind: "propose", actions });
-  const confirm = client.buildConfigurationScript({ accountId: ACCOUNT, kind: "confirm", intentId: 9, actions });
-  const cancel = client.buildConfigurationScript({ accountId: ACCOUNT, kind: "cancel", intentId: 9 });
-  assert.deepEqual(
-    [propose.method, confirm.method, cancel.method],
-    ["proposeConfiguration", "confirmConfiguration", "cancelConfiguration"],
-  );
-  for (const plan of [propose, confirm, cancel]) {
-    assert.equal(plan.kind, "configuration");
+  const installed = installSessionKey(command);
+  const cleared = client.buildAccountActionScript({
+    method: "removeModule",
+    accountId: ACCOUNT,
+    args: [I(MODULE_ID), A(...buildSessionKeyClearCommand())],
+  });
+  assert.deepEqual([installed.method, cleared.method], ["installModule", "removeModule"]);
+  for (const plan of [installed, cleared]) {
+    assert.equal(plan.kind, "account");
     assert.equal(plan.accountId, ACCOUNT);
-    // The confirmation re-submits the same actions: an intent cannot be
-    // replaced between proposal and maturity.
-    assert.ok(confirm.script.includes(c.encodeValue(A(...actions[0].value[2].value))));
+    // The account is the plan's only signer: the core checks the custody
+    // witness, not an authority list carried in the plan.
+    assert.deepEqual(plan.signers, [client.proxyAddress(ACCOUNT)]);
   }
-  assert.equal(client.prepare(propose), propose);
+  // The install names the validator and hands it the whole command as initData;
+  // the removal names the id the core allocated and the clear command.
+  assert.ok(installed.script.includes(c.encodeValue(A(...command))));
+  assert.ok(installed.script.includes(c.encodeValue(HASH(MODULE))));
+  assert.ok(cleared.script.includes(c.encodeValue(A(...buildSessionKeyClearCommand()))));
+  assert.equal(client.prepare(installed), installed);
 });
 
-test("an install action carries the command as initData", () => {
+test("an install action carries the command as initData and never names a module id", () => {
   const command = install();
-  const profileDigest = "ab".repeat(32);
-  const action = A(I(ACTION_INSTALL), I(MODULE_TYPE_VALIDATOR), HASH(MODULE), BYTES(profileDigest), A(...command));
-  const plan = client.buildConfigurationScript({ accountId: ACCOUNT, kind: "propose", actions: [action] });
+  const plan = installSessionKey(command);
   assert.ok(plan.script.includes(c.encodeValue(A(...command))));
-  assert.ok(plan.script.includes(c.encodeValue(BYTES(profileDigest))));
+  assert.ok(plan.script.includes(c.encodeValue(I(MODULE_TYPE_VALIDATOR))));
+  // Module ids are the core's to allocate, so an install script carries none.
+  assert.equal(plan.script.includes(c.encodeValue(I(MODULE_ID))), false);
 });
 
 test("a public key is 33 compressed or 65 uncompressed bytes", () => {

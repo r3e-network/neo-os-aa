@@ -15,8 +15,11 @@ import method_proofs as method
 import nef_decode
 
 ROOT = Path(__file__).resolve().parent
-# v4 artifact: the initializer moved independently of the helper.
-START, END = 43470, 44187
+# Reviewed 2026-11-21 against the live rebuild: `_initialize` is the terminal
+# range of a 44833-byte script, i.e. [44047,44833) -- 786 bytes and 245
+# instructions. It moved by the same +272 as the helper, and the two offsets
+# remain independent facts; neither is ever derived from the other.
+START, END = 44047, 44833
 SCOPE = "complete-initializer-reference-refinement"
 # The kernel is the long pole and this host is shared with unrelated workloads.
 # The old 1800s budget was exceeded on 2026-10-20 by a loaded host rather than by
@@ -24,8 +27,99 @@ SCOPE = "complete-initializer-reference-refinement"
 # kernel-checked and a genuine hang still fails closed at this bound.
 KERNEL_TIMEOUT = 3600
 MODELS = ["IntegerSemantics", "CapArithmetic", "CapMethodVm", "CapContext"]
-THEOREM_NAMES = ["actual_initializer_complete", "actual_initializer_preserves_existing", "actual_initializer_fresh_arrays", "actual_initializer_static_entry", "actual_initializer_no_fault_or_timeout", "actual_initializer_rejects_existing_statics"]
+THEOREM_NAMES = ["actual_initializer_complete", "actual_initializer_preserves_existing", "actual_initializer_integer_constants", "actual_initializer_static_entry", "actual_initializer_no_fault_or_timeout", "actual_initializer_rejects_existing_statics"]
 require, digest = method.require, method.digest
+
+# `CapContext.init_decode` is a deliberately small decoder: it accepts INITSSLOT,
+# STSFLD/STSFLD0-6, CONVERT Buffer, PUSHDATA1, PUSHINT16, PUSHINT32, PUSHINT8,
+# SHL, SUB, PUSH0..PUSH16, PACK and RET. It rejects every other opcode, which
+# makes `run_init` return InitFaulted. The audit below mirrors that decoder so a
+# model-domain gap is reported from the live bytes on any host, including hosts
+# without a Coq toolchain, instead of surfacing as an opaque kernel error.
+def model_step_size(code, pc):
+    """Size the Coq decoder assigns at `pc`, or None where it rejects."""
+    tail = code[pc:]
+    if not tail:
+        return None
+    opcode = tail[0]
+    if opcode in (0x56, 0x67):                                  # INITSSLOT n, STSFLD n
+        return 2
+    if opcode == 0xDB and len(tail) > 1 and tail[1] == 0x30:     # CONVERT Buffer
+        return 2
+    if opcode == 0x0C and len(tail) > 1:                        # PUSHDATA1 n data
+        return tail[1] + 2 if tail[1] <= len(tail) - 2 else None
+    if opcode == 0x00 and len(tail) > 1:                        # PUSHINT8 imm
+        return 2
+    if opcode == 0x01 and len(tail) > 2:                        # PUSHINT16
+        return 3
+    if opcode == 0x02 and len(tail) > 4:                        # PUSHINT32
+        return 5
+    if 0x10 <= opcode <= 0x20:                                  # PUSH0..PUSH16
+        return 1
+    if 0x60 <= opcode <= 0x66:                                  # STSFLD0..STSFLD6
+        return 1
+    if opcode in (0x9F, 0xA8):                                  # SUB, SHL
+        return 1
+    if opcode in (0xC0, 0x40):                                  # PACK, RET
+        return 1
+    return None
+
+
+# Execution mirror of `CapContext.checked_init_binary`. The decoder above only
+# answers "does this opcode have a size here"; this answers "what does the model
+# do with the operands", so the shift boundary and the representability limit
+# are stated in both languages instead of only inside the Coq kernel run.
+SHIFT_LIMIT = 256
+INTEGER_LIMIT = 2 ** 255
+
+
+def model_binary(op, left, right):
+    """Value `CapContext.init_step` pushes, or None where it faults."""
+    if op == "SHL":
+        if not 0 <= right <= SHIFT_LIMIT:                       # NeoVM count check
+            return None
+        value = left * 2 ** right
+    elif op == "SUB":
+        value = left - right
+    else:
+        raise ValueError("Unmodelled binary op: " + op)
+    return value if -INTEGER_LIMIT <= value < INTEGER_LIMIT else None
+
+
+def initializer_model_gaps(region_bytes, instructions=None):
+    """Initializer instructions the current `CapContext.init_decode` cannot decode.
+
+    Instruction boundaries come from the real NEF decoder, never from walking the
+    model's own sizes: a rejected opcode has no model size, and stepping one byte
+    at a time would report the operand byte as another instruction.
+    """
+    code = bytes(region_bytes)
+    region = [item for item in (instructions or []) if START <= item["offset"] < END]
+    if not region:
+        return [dict(offset=START+pc, relative=pc, opcode=code[pc], name="UNKNOWN", operandHex="")
+                for pc in range(len(code)) if model_step_size(code, pc) is None]
+    gaps = []
+    for item in region:
+        pc = item["offset"] - START
+        if model_step_size(code, pc) is None:
+            gaps.append(dict(offset=item["offset"], relative=pc, opcode=code[pc],
+                             name=item["name"], operandHex=item.get("operandHex", "")))
+    return gaps
+
+
+def require_model_domain(program):
+    """Fail closed when the live initializer leaves the decoded init model."""
+    gaps = program["modelDomainGaps"]
+    if not gaps:
+        return
+    detail = "; ".join("%s (0x%02x) at %d (+%d, operand %s)" %
+                        (g["name"], g["opcode"], g["offset"], g["relative"],
+                         g["operandHex"] or "none") for g in gaps)
+    require(False, "Initializer is outside the current CapContext.init_decode domain; "
+            "run_init faults at +%d (%d) and the undecodable instructions are %s" %
+            (gaps[0]["relative"], gaps[0]["offset"], detail) +
+            ". Extend coq/CapContext.v to cover these instructions and restate the "
+            "certificate claims before a pass can be reported.")
 
 
 def bind_helper(inventory):
@@ -53,106 +147,137 @@ def bind_initializer(inventory):
     region = [i for i in instructions if START <= i["offset"] < END]
     require(region and region[0]["offset"] == START and region[-1]["offset"] + region[-1]["size"] == END,
             "Initializer range is not an instruction boundary")
-    require(len(region) == 236 and region[-1]["name"] == "RET", "Initializer coverage mismatch")
+    require(len(region) == 245 and region[-1]["name"] == "RET", "Initializer coverage mismatch")
     return dict(start=START, end=END, bytes=list(script[START:END]), instructions=region,
                 nefSha256=bound["nefSha256"], scriptSha256=bound["scriptSha256"],
-                initializerSha256=digest(script[START:END]))
+                initializerSha256=digest(script[START:END]),
+                modelDomainGaps=initializer_model_gaps(script[START:END], instructions))
 
 
 PROOFS = r"""
+(* Reviewed 2026-11-21 against the live rebuild at [44047,44833): 786 bytes,
+   245 instructions, INITSSLOT 82 and RET at +785.
+   `CapContext.init_decode` now covers every opcode this initializer executes,
+   including the three that were previously outside the model:
+     PUSHINT8 (0x00)  one signed byte immediate, representability-checked
+     SHL      (0xA8)  checked_init_binary Shl, right operand on top of the stack
+     SUB      (0x9F)  checked_init_binary Sub, right operand on top of the stack
+   SUB is `checked_binary`. SHL is `checked_shift`, which applies the VM's own
+   count check first: a count below 0 or above 256 faults whatever the value
+   being shifted, and only then is the result tested for representability. Both
+   forms fault on a non-integer operand or on a result outside the signed
+   256-bit range, so nothing wraps. `CapContext.v` pins those boundaries with
+   `initializer_shift_*` examples, independently of the 245-instruction run.
+   That sequence produces the two 64-bit integer statics:
+     +124  PUSH1; PUSHINT8 64; SHL; PUSH1; SUB; STSFLD 38   -> 2^64 - 1
+     +550  PUSH1; PUSHINT8 64; SHL; STSFLD 40              -> 2^64
+   The initializer contains no PACK and allocates no heap object, so the previous
+   `hp ++ [first;second]` and VRef-slot conjuncts are gone. This certificate
+   covers decoding and stack/slot/heap effects of the actual bytes; it says
+   nothing about gas, the C# ApplicationEngine, the source frontend or any
+   opcode outside this initializer. *)
 Theorem actual_initializer_complete : forall hp st,
- exists final first second,
- run_init 236 initializer_code (initializer_entry hp st) = InitReturned final /\
- init_heap final = hp ++ [first;second] /\
+ exists final slots,
+ run_init init_fuel initializer_code (initializer_entry hp st) = InitReturned final /\
+ init_heap final = hp /\
  init_stack final = st /\
- init_pc final = 716%nat /\
+ init_pc final = @RET_PC@%nat /\
+ init_slots final = Some slots /\
+ length slots = @FRAME@%nat /\
  lookup_init_static final 58 = Some (VBuffer [33%nat]) /\
- lookup_init_static final 19 = Some (VRef (length hp)) /\
- lookup_init_static final 21 = Some (VRef (length (hp++[first]))) /\
- (exists slots, init_slots final = Some slots /\ length slots = 79%nat).
+ lookup_init_static final 38 = Some (VInt (2 ^ 64 - 1)) /\
+ lookup_init_static final 40 = Some (VInt (2 ^ 64)).
 Proof.
- intros hp st. vm_compute.
- eexists. eexists. eexists. repeat split; try reflexivity.
- fold (@app Object). rewrite <- app_assoc. reflexivity.
- eexists. split; reflexivity.
+ intros hp st. vm_compute. eexists. eexists. repeat split; reflexivity.
 Qed.
 
 
 Theorem actual_initializer_preserves_existing : forall hp st final index,
- run_init 236 initializer_code (initializer_entry hp st) = InitReturned final ->
+ run_init init_fuel initializer_code (initializer_entry hp st) = InitReturned final ->
  (index < length hp)%nat ->
  nth_error (init_heap final) index = nth_error hp index.
 Proof.
  intros hp st final index Hrun Hindex.
- destruct (actual_initializer_complete hp st) as [f [a [b [Hf [Hheap Hrest]]]]].
- rewrite Hrun in Hf. inversion Hf; subst f.
- rewrite Hheap. apply heap_append_preserves_existing. exact Hindex.
+ destruct (actual_initializer_complete hp st)
+  as (f & slots & Hf & Hheap & Hstack & Hpc & Hslots & Hlen & H58 & H38 & H40).
+ rewrite Hrun in Hf. inversion Hf; subst f. rewrite Hheap. reflexivity.
 Qed.
-Theorem actual_initializer_fresh_arrays : forall hp st final,
- run_init 236 initializer_code (initializer_entry hp st) = InitReturned final ->
- exists first second,
- nth_error (init_heap final) (length hp) = Some first /\
- nth_error (init_heap final) (S (length hp)) = Some second /\
- nth_error hp (length hp) = None /\
- nth_error hp (S (length hp)) = None /\
- length (init_heap final) = (length hp+2)%nat /\
- VRef (length hp) <> VRef (S (length hp)).
+Theorem actual_initializer_integer_constants : forall hp st final,
+ run_init init_fuel initializer_code (initializer_entry hp st) = InitReturned final ->
+ lookup_init_static final 38 = Some (VInt (2 ^ 64 - 1)) /\
+ lookup_init_static final 40 = Some (VInt (2 ^ 64)) /\
+ init_heap final = hp.
 Proof.
  intros hp st final Hrun.
- destruct (actual_initializer_complete hp st) as [f [a [b [Hf [Hheap Hrest]]]]].
- rewrite Hrun in Hf. inversion Hf; subst f.
- exists a,b. rewrite Hheap. repeat split.
- - rewrite nth_error_app2 by lia. rewrite Nat.sub_diag. reflexivity.
- - rewrite nth_error_app2 by lia. replace (S (length hp)-length hp)%nat with 1%nat by lia. reflexivity.
- - apply nth_error_None. lia.
- - apply nth_error_None. lia.
- - rewrite app_length. reflexivity.
- - intro H. inversion H. lia.
+ destruct (actual_initializer_complete hp st)
+  as (f & slots & Hf & Hheap & Hstack & Hpc & Hslots & Hlen & H58 & H38 & H40).
+ rewrite Hrun in Hf. inversion Hf; subst f. repeat split; assumption.
 Qed.
 Theorem actual_initializer_static_entry : forall hp st final,
- run_init 236 initializer_code (initializer_entry hp st) = InitReturned final ->
+ run_init init_fuel initializer_code (initializer_entry hp st) = InitReturned final ->
  lookup_init_static final 58 = Some (VBuffer [33%nat]) /\ init_stack final = st.
 Proof.
  intros hp st final Hrun.
- destruct (actual_initializer_complete hp st) as [f [a [b [Hf [Hheap [Hstack [Hpc [Hslot Hrest]]]]]]]].
+ destruct (actual_initializer_complete hp st)
+  as (f & slots & Hf & Hheap & Hstack & Hpc & Hslots & Hlen & H58 & H38 & H40).
  rewrite Hrun in Hf. inversion Hf; subst f. split; assumption.
 Qed.
 Theorem actual_initializer_no_fault_or_timeout : forall hp st,
- run_init 236 initializer_code (initializer_entry hp st) <> InitFaulted /\
- run_init 236 initializer_code (initializer_entry hp st) <> InitTimedOut.
+ run_init init_fuel initializer_code (initializer_entry hp st) <> InitFaulted /\
+ run_init init_fuel initializer_code (initializer_entry hp st) <> InitTimedOut.
 Proof.
- intros hp st. destruct (actual_initializer_complete hp st) as [f [a [b [Hrun Hrest]]]].
+ intros hp st. destruct (actual_initializer_complete hp st) as (f & slots & Hrun & Hrest).
  rewrite Hrun. split; discriminate.
 Qed.
 Theorem actual_initializer_rejects_existing_statics : forall hp st slots,
- run_init 236 initializer_code (init_state 0 st hp (Some slots)) = InitFaulted.
+ run_init init_fuel initializer_code (init_state 0 st hp (Some slots)) = InitFaulted.
 Proof. intros. reflexivity. Qed.
 """
 
 
 def render_certificate(program):
+    # The fuel and the halt pc are facts about this byte string, not constants to
+    # restate: one step per decoded instruction plus the terminal RET, and the
+    # pc the RET halts at is its own offset from the initializer start.
+    instructions = program["instructions"]
+    fuel, halt_pc = len(instructions) + 1, instructions[-1]["offset"] - program["start"]
+    frame = int(instructions[0]["operandHex"], 16)
+    proofs = (PROOFS.replace("@RET_PC@", str(halt_pc))
+                    .replace("@FRAME@", str(frame)))
     return ("From Coq Require Import ZArith List Bool Lia.\n"
             "Require Import IntegerSemantics CapArithmetic CapMethodVm CapContext.\n"
             "Import ListNotations.\nOpen Scope Z_scope.\n"
             "Definition initializer_code : list nat := [" +
-            ";".join(str(b)+"%nat" for b in program["bytes"]) + "].\n" + PROOFS)
+            ";".join(str(b)+"%nat" for b in program["bytes"]) + "].\n" +
+            "Definition init_fuel : nat := " + str(fuel) + "%nat.\n" + proofs)
 
 
 def semantic_controls(program, work):
     model = (work / "CapContext.v").read_bytes().decode()
     changes = []
     # The initializer stores Prefix_TransactionReimbursement by pushing the
-    # one-byte data [33] with PUSHDATA1, converting it to a Buffer, and storing
-    # it with STSFLD 58. The mutations retarget the stored buffer (33 -> 34)
-    # and the destination slot (58 -> 59); both offsets are absolute pcs of the
-    # operand bytes in the current initializer (44028/44032).
-    for name, offset, value in [("WrongStaticSlot",44032,59), ("WrongKey",44028,34)]:
+    # one-byte data [33] with PUSHDATA1 at 44603, converting it to a Buffer at
+    # 44606, and storing it with STSFLD 58 at 44608. The mutations retarget the
+    # pushed data byte (0x21 -> 0x22 at 44605) and the destination slot
+    # (58 -> 59 at 44609). The earlier 44028/44032 and 44331/44333/44337 were the
+    # same relative positions in superseded builds, so these are re-anchored,
+    # not re-chosen.
+    for name, offset, value in [("WrongStaticSlot",44609,59), ("WrongKey",44605,34)]:
+        require(offset-START < len(program["bytes"]), "Static control outside the initializer: "+name)
+        require(program["bytes"][offset-START] == (58 if name=="WrongStaticSlot" else 33),
+                "Static control operand changed: "+name)
         changed=copy.deepcopy(program)
         changed["bytes"][offset-START]=value
         changes.append((name, changed, model))
     old="(init_heap s ++ [obj ArrayKind (firstn (Z.to_nat count) rest)])"
     require(model.count(old)==1, "Allocation control target changed")
-    changes.append(("DropHeapAllocation",program,model.replace(old,"(init_heap s)")))
+    # The live initializer has no PACK, so an allocation control would now prove
+    # nothing. The two 64-bit statics are the only arithmetic it performs, and the
+    # operand-order control reaches exactly that: swapping the operands makes SUB
+    # compute 1 - 2^64 and SHL compute 64 << 1, which the slot claims reject.
+    binary="match checked_init_binary op lhs rhs with"
+    require(model.count(binary)==1, "Binary operand control target changed")
+    changes.append(("SwapBinaryOperands",program,model.replace(binary,"match checked_init_binary op rhs lhs with")))
     results=[]
     for name, changed, changed_model in changes:
         directory=work/name
@@ -185,6 +310,11 @@ def run_proofs(inventory, output_dir, controls=False):
     tool_paths=[ROOT/name for name in ("context_proofs.py","method_proofs.py","nef_decode.py","verify.py")]
     tools={str(p):digest(p.read_bytes()) for p in tool_paths}
     program=bind_initializer(inventory)
+    # Byte identity is necessary but not sufficient: the certificate below is a
+    # Coq theorem about one specific instruction model, so refuse to render it as
+    # soon as the live initializer leaves that model, instead of shipping a proof
+    # of a program the chain does not run.
+    require_model_domain(program)
     # Both counts below appear verbatim in the receipt, so derive them from the
     # bound program and the source map rather than restating a number that a
     # later build can silently invalidate.
@@ -231,11 +361,14 @@ def run_proofs(inventory, output_dir, controls=False):
                 manifestSha256=inventory["manifest"]["sha256"],
                 kernelDirectory=str(work),assumptionDeclarations=declarations,closedAssumptionCount=closed,
                 theoremNames=THEOREM_NAMES,semanticControls=controls_result,
-                established=[f"all {len(program['instructions'])} initializer instructions halt", "static slot 58 is Buffer[33]",
-                             f"{static_slots} source-mapped static slots; the certificate pins the helper slot 58 and allocated slots 18 and 20",
-                             "arbitrary existing heap objects preserved", "two fresh array references", "arbitrary stack suffix preserved"],
+                established=[f"all {len(program['instructions'])} initializer instructions decode and halt", "static slot 58 is Buffer[33]",
+                             "static slot 38 is 2^64-1 and slot 40 is 2^64, computed by SHL and SUB",
+                             "SHL faults on a shift count outside 0..256, as the VM does, before representability is tested",
+                             f"{static_slots} source-mapped static slots; the certificate pins the helper slot 58",
+                             "the initializer allocates no heap object, so arbitrary existing heap objects are preserved",
+                             "arbitrary stack suffix preserved"],
                 excludedCorrespondence=["actual ApplicationEngine and resource/gas behavior", "mutable Buffer identity",
-                                        "helper arbitrary caller context and fresh GetScriptContainer allocations", "all 109 public ABI entrypoints"])
+                                        "helper arbitrary caller context and fresh GetScriptContainer allocations", "all 81 public ABI entrypoints"])
 
 
 # Complete caller-context path proofs. All use actual byte decoding and
@@ -481,25 +614,28 @@ Proof.
  symmetry. apply CapContextIsolatedArtifact.vm_method_classified; assumption.
 Qed.
 Theorem initialized_helper_context : forall hp tail initialized hash sf nf q input,
- run_init 236 CapContextArtifact.initializer_code (initializer_entry hp tail) = InitReturned initialized ->
+ run_init CapContextArtifact.init_fuel CapContextArtifact.initializer_code (initializer_entry hp tail) = InitReturned initialized ->
  legal_inputs hash sf nf q input ->
  exists final,
  ((exists value, run_context 110 artifact hash sf nf
    (context_entry q (stored_value input) (lookup_init_static initialized) (init_heap initialized) tail) = Halt value final /\ stack final = value::tail) \/
   (exists message, run_context 110 artifact hash sf nf
    (context_entry q (stored_value input) (lookup_init_static initialized) (init_heap initialized) tail) = Aborted message final /\ stack final = tail)) /\
- (exists added, length added = 6%nat /\ heap final = hp++added) /\
+ (exists added, length added = 4%nat /\ heap final = hp++added) /\
  statics final = lookup_init_static initialized.
 Proof.
  intros hp tail initialized hash sf nf q input Hinit Hlegal.
  pose proof (CapContextArtifact.actual_initializer_static_entry hp tail initialized Hinit) as [Hstatic Hstack].
- destruct (CapContextArtifact.actual_initializer_complete hp tail) as [initial [a [b [Hinitial [Hheap Hrest]]]]].
+ (* The live initializer allocates no heap object, so the helper's four fresh
+    objects are the whole extension of the caller heap. *)
+ destruct (CapContextArtifact.actual_initializer_complete hp tail)
+  as (initial & slots & Hinitial & Hheap & Hrest).
  rewrite Hinit in Hinitial. inversion Hinitial; subst initial.
  destruct (complete_context_frame hash sf nf q input (lookup_init_static initialized) (init_heap initialized) tail Hlegal Hstatic)
  as [final [Hrun [[added [Hlen HfinalHeap]] Hstat]]].
  exists final. split; [exact Hrun|]. split; [|exact Hstat].
- exists (a::b::added). split; [cbn [length]; lia|].
- rewrite HfinalHeap, Hheap, <- app_assoc. reflexivity.
+ exists added. split; [exact Hlen|].
+ rewrite HfinalHeap, Hheap. reflexivity.
 Qed.
 
 """
@@ -554,12 +690,12 @@ CONTEXT_THEOREM_NAMES.append("actual_nonempty_caller_frame")
 def contextual_semantic_controls(program, work):
     model=(work/"CapContext.v").read_bytes().decode()
     dropped=copy.deepcopy(program)
-    # The write that installs the updated reservation is the SETITEM at 36307;
+    # The write that installs the updated reservation is the SETITEM at 36845;
     # replacing it with DROP leaves the caller heap object at its stored value.
-    # The pre-sweep target (18021) predates the 2026-11-16 design-phase legacy
-    # sweep, which moved the helper to [18900,19181); applying the old offset
-    # now lands outside the method body, and the control would prove nothing.
-    dropped["bytes"][36307-method.START]=0x45
+    # Every earlier pin (36573, 36307, 18021) named the same site in a superseded
+    # build and, after a sweep, landed outside the method body where the control
+    # would have proved nothing; 36845 is the reviewed site in the live helper.
+    dropped["bytes"][36845-method.START]=0x45
     return_site="Halt value (with_stack s (pc s+width)%nat (value::rest))"
     getter_site="Continue (with_stack allocated (pc s+width)%nat (reference::stack s))"
     require(model.count(return_site)==1 and model.count(getter_site)==1,"Context control sites changed")
@@ -642,7 +778,7 @@ def run_complete_proofs(inventory, output_dir, controls=False):
             "legal-domain observations equal the isolated helper", "initializer establishes the helper static precondition"],
         excludedCorrespondence=["actual ApplicationEngine and resource/gas behavior", "mutable Buffer identity",
             "actual native binary codecs and storage handlers", "caller reachability and valid persisted budget invariant",
-            "actual C# CALL frame/heap correspondence", "all 109 public ABI entrypoints"])
+            "actual C# CALL frame/heap correspondence", "all 81 public ABI entrypoints"])
     return receipt
 
 def main():

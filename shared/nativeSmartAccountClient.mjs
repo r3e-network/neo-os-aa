@@ -3,7 +3,7 @@
  *
  * The ABI table below is the compiled v4 surface of
  * `contracts/native/SmartAccount/*` — the same names, parameters and return
- * types the custom kernel exposes. Old `registerAccount` / `callVerifier` /
+ * types the native core exposes. Old `registerAccount` / `callVerifier` /
  * `callHook` / `*Child` / `proposeVerifier` surfaces are gone in v4 and are
  * deliberately absent here: a removed method must fail at discovery, never be
  * silently re-mapped.
@@ -79,7 +79,6 @@ export const NATIVE_REQUIRED_ABI = {
   getAccountImplementationId: requiredMethod([], "String", true),
   getProtocolInfo: requiredMethod([], "Array", true),
   getAccount: requiredMethod(account, "Array", true),
-  getRecoveryStatus: requiredMethod(account, "Array", true),
   createAccount: requiredMethod(
     [
       ["accountId", "Hash160"],
@@ -102,8 +101,69 @@ export const NATIVE_REQUIRED_ABI = {
     false,
   ),
   freezeAccount: accountAction,
+  // The core holds no thaw timelock: leaving Frozen is immediate, and any
+  // delay a deployment wants is the policy of a user-space governance module.
   unfreezeAccount: accountAction,
-  beginRecovery: requiredMethod(
+  // The two module-administration entry points of the minimal core. Both are
+  // custody-or-installed-validator authorized and both answer from the core
+  // registry, so nothing above them pins a module profile digest.
+  installModule: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["moduleType", "Integer"],
+      ["moduleContractHash", "Hash160"],
+      ["initData", "Array"],
+    ],
+    "Integer",
+    false,
+  ),
+  removeModule: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["moduleId", "Integer"],
+      ["deInitData", "Array"],
+    ],
+    "Void",
+    false,
+  ),
+  // The four restricted landing entries (spec §7.1/§7.5/§12.5): three
+  // configuration writes of the administration family — the recovery policy,
+  // the built-in authorization switches and the credential-generation bump —
+  // plus the recovery seat's exclusive reset. They carry no module data —
+  // they land decisions the caller (the custody, an installed validator, or
+  // the account's recovery seat) already made, and the core re-verifies the
+  // authority and the domains itself.
+  setRecoveryPolicy: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["recoveryAuthority", "Hash160"],
+      ["recoveryTimelockMs", "Integer"],
+      ["ownerOnlyRecovery", "Boolean"],
+    ],
+    "Void",
+    false,
+  ),
+  // The two built-in switches change only through this write (or the
+  // recovery reset); the core's last-route guard refuses to close the
+  // operation switch while no validator instance is installed.
+  setBuiltinAuthorization: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["defaultOperationAuthorization", "Boolean"],
+      ["defaultMessageAuthorization", "Boolean"],
+    ],
+    "Void",
+    false,
+  ),
+  revokeModuleCredentials: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["moduleId", "Integer"],
+    ],
+    "Void",
+    false,
+  ),
+  resetAccount: requiredMethod(
     [
       ["accountId", "Hash160"],
       ["newCustody", "Hash160"],
@@ -111,8 +171,6 @@ export const NATIVE_REQUIRED_ABI = {
     "Void",
     false,
   ),
-  cancelRecovery: accountAction,
-  executeRecovery: accountAction,
   getNonce: requiredMethod(
     [
       ["accountId", "Hash160"],
@@ -162,50 +220,6 @@ export const NATIVE_REQUIRED_ABI = {
     "Array",
     false,
   ),
-  isValidSignature: requiredMethod(
-    [
-      ["accountId", "Hash160"],
-      ["hash", "ByteArray"],
-      ["signatureEnvelope", "Array"],
-    ],
-    "ByteArray",
-    true,
-  ),
-  proposeConfiguration: requiredMethod(
-    [
-      ["accountId", "Hash160"],
-      ["actions", "Array"],
-      ["readSet", "Array"],
-    ],
-    "Integer",
-    false,
-  ),
-  confirmConfiguration: requiredMethod(
-    [
-      ["accountId", "Hash160"],
-      ["intentId", "Integer"],
-      ["actions", "Array"],
-    ],
-    "Void",
-    false,
-  ),
-  cancelConfiguration: requiredMethod(
-    [
-      ["accountId", "Hash160"],
-      ["intentId", "Integer"],
-    ],
-    "Void",
-    false,
-  ),
-  getPendingConfiguration: requiredMethod(
-    [
-      ["accountId", "Hash160"],
-      ["intentId", "Integer"],
-    ],
-    "Array",
-    true,
-  ),
-  getPendingConfigurationIntentIds: requiredMethod(account, "Array", true),
   getModules: requiredMethod(
     [
       ["accountId", "Hash160"],
@@ -234,7 +248,6 @@ export const NATIVE_REQUIRED_ABI = {
     "Boolean",
     true,
   ),
-  getHookOrder: requiredMethod(account, "Array", true),
   getAuthorizedModuleId: requiredMethod(
     [
       ["accountId", "Hash160"],
@@ -243,22 +256,26 @@ export const NATIVE_REQUIRED_ABI = {
     "Integer",
     true,
   ),
-  revokeCredentials: requiredMethod(
-    [
-      ["accountId", "Hash160"],
-      ["moduleId", "Integer"],
-    ],
-    "Void",
-    false,
-  ),
-  supportsModuleType: requiredMethod([["moduleType", "String"]], "Boolean", true),
-  supportsExecutionMode: requiredMethod([["mode", "String"]], "Boolean", true),
 };
 freeze(NATIVE_REQUIRED_ABI);
+
+// §9 asks the core for the asset-holding script hash of an account as
+// `getAccountAddress`. That name is native-only, so it is pinned here rather
+// than in the shared gate; the names every entry point shares live above.
+export const NATIVE_ACCOUNT_ADDRESS_ABI = {
+  getAccountAddress: requiredMethod(account, "Hash160", true),
+};
+freeze(NATIVE_ACCOUNT_ADDRESS_ABI);
 
 // Presence-only event gate: the client never decodes these payloads, so the
 // parameter names are not pinned (renaming a parameter is not an ABI break for
 // a byte-positional event), while a missing lifecycle event still fails.
+// The minimal core emits exactly these fourteen: registration, freeze/unfreeze,
+// operation execution, the module instance lifecycle, nonce channels and the
+// four landing-path transitions (credential revocation, the recovery-policy
+// write, the built-in authorization switches, the recovery reset).
+// Intent, message and hook-order transitions are user-space module concerns
+// and are deliberately absent.
 export const NATIVE_REQUIRED_EVENTS = Object.freeze([
   "AccountRegistered",
   "AccountFrozen",
@@ -266,25 +283,20 @@ export const NATIVE_REQUIRED_EVENTS = Object.freeze([
   "UserOpExecuted",
   "ModuleInstalled",
   "ModuleRemoved",
-  "ModuleUpdateInitiated",
-  "ModuleUpdateConfirmed",
-  "ModuleUpdateCancelled",
-  "RecoveryInitiated",
-  "RecoveryCancelled",
-  "RecoveryExecuted",
-  "ConfigurationIntentProposed",
-  "ConfigurationIntentConfirmed",
-  "ConfigurationIntentCancelled",
-  "ConfigurationIntentExpired",
+  "ModuleInstanceInstalled",
+  "ModuleInstanceRemoved",
+  "ModuleCredentialsRevoked",
+  "RecoveryPolicySet",
+  "BuiltinAuthorizationSet",
+  "AccountReset",
+  "NonceChannelOpened",
+  "NonceChannelExhausted",
 ]);
 
-// The native kernel declares a serialized operation as `Array`; the custom
-// kernel's compiler infers `Any` for its `object operation` parameter. Both
-// accept exactly the serialized Array the client builds, so the gate pins the
-// value the client sends instead of the compiler's parameter inference. Nothing
-// else is interchangeable: every other declared type must match exactly.
+// The native core declares a serialized operation as `Array`, which is exactly
+// what the client builds, so a parameter type must match the gate exactly.
 function declaredType(expected, actual) {
-  return actual === expected || (expected === "Array" && actual === "Any");
+  return actual === expected;
 }
 function matchesParameters(actual, expected) {
   return (
@@ -297,8 +309,6 @@ function matchesParameters(actual, expected) {
     )
   );
 }
-// index.js gates the custom-only surface the same way; one rule, one module.
-export { declaredType };
 function descriptors(value, label) {
   if (
     !Array.isArray(value) ||
@@ -395,30 +405,24 @@ export function validateNativeInvocationResult(plan, stack) {
   );
 }
 
+// The implementation id is the one identity the ABI cannot express, so the
+// launch pins it: a core that answers a different id is not the build this
+// client was reviewed against, even at the same script hash.
+const IMPLEMENTATION_ID = "NativeSmartAccount/v4";
+
 export function createNativeClientClass(codec, {
   // Defaults for one kernel build. They are identity, not configuration: the
-  // native kernel always answers at a fixed hash, while a custom kernel can be
-  // deployed at any hash, so its client passes both values to the constructor
-  // and every derivation (proxy address, plan scripts, ABI gate, artifacts)
-  // follows the instance rather than the class.
+  // native core always answers at its fixed hash, so this is only overridden by
+  // a test or a local chain harness that registers the core elsewhere.
   contractHash = NATIVE_SMART_ACCOUNT_CONTRACT,
-  // The native kernel's proxy script calls verify(accountId) with
-  // CallFlags.ReadOnly (PUSH5); the custom kernel pushes CallFlags.All
-  // (PUSH15). The flag is never inferred from the codec default: the proxy
-  // address must be the one the submitting kernel derives (spec §16.1).
+  // The native core's proxy script calls verify(accountId) with
+  // CallFlags.ReadOnly (PUSH5). The flag is never inferred from the codec
+  // default: the proxy address must be the one the submitting core derives
+  // (spec §16.1).
   callFlags = 5,
-  // A native contract has a negative id; a deployed custom kernel has a
-  // positive one. The ABI gate is the same either way.
-  nativeCore = true,
-  // `getAccountImplementationId` is the one identity the ABI cannot express, so
-  // the launch pins it: a kernel that answers a different id is not the build
-  // this client was reviewed against, even at the same script hash.
-  implementationId = "NativeSmartAccount/v4",
 } = {}) {
   const DEFAULT_CONTRACT = codec.hex(contractHash, 20);
   const DEFAULT_CALL_FLAGS = codec.unsigned(callFlags, 8, "proxy call flags");
-  const NATIVE_CORE = nativeCore;
-  const IMPLEMENTATION_ID = String(implementationId);
   const proxyOf = (accountId, coreHash, coreFlags) =>
     codec.accountAddress(accountId, {
       coreContractHash: coreHash,
@@ -483,19 +487,6 @@ export function createNativeClientClass(codec, {
   const hash = (v, n = 20) =>
     toHex(new Uint8Array(bytes(v, n, "hash")).reverse());
   const digest = (v, n = 32) => toHex(bytes(v, n, "digest"));
-  // A pending intent's actions travel back verbatim into `confirmConfiguration`,
-  // so they are returned in the canonical VM value form the script builder
-  // accepts (decimal Integer text, hex ByteString, nested Array). The decode
-  // above keeps bytes as bytes for hashing; an action is data, not a hash.
-  const vmValue = (v) => {
-    if (v === null || v === undefined) return { type: "Null" };
-    if (typeof v === "boolean") return { type: "Boolean", value: v };
-    if (typeof v === "bigint") return { type: "Integer", value: v.toString() };
-    if (v instanceof Uint8Array) return { type: "ByteString", value: toHex(v) };
-    if (v?.type === "Array" || v?.type === "Struct")
-      return { type: "Array", value: array(v, undefined, "action value").map(vmValue) };
-    return error("malformed intent action value");
-  };
   const uint = (v, bits, label) => {
     if (typeof v !== "bigint") error(`malformed ${label} Integer`);
     return codec.unsigned(v, bits, label).toString();
@@ -653,19 +644,19 @@ export function createNativeClientClass(codec, {
         error("RPC network magic mismatch");
       if (
         !Number.isSafeInteger(state?.id) ||
-        (NATIVE_CORE ? state.id >= 0 : state.id < 0) ||
+        state.id >= 0 ||
         codec.hex(state?.hash, 20) !== this.contractHash ||
         state?.manifest?.name !== "SmartAccount"
       )
         error("SmartAccount contract is not available");
       const methods = descriptors(state.manifest.abi?.methods, "methods");
       const events = descriptors(state.manifest.abi?.events, "events");
+      // A native contract registers with a negative id; the address query is
+      // part of its surface, so the gate requires it too.
+      const requiredAbi = { ...NATIVE_REQUIRED_ABI, ...NATIVE_ACCOUNT_ADDRESS_ABI };
       for (const [name, [types, returntype, safe, names]] of Object.entries(
-        NATIVE_REQUIRED_ABI,
+        requiredAbi,
       )) {
-        // The custom kernel keeps a v3 `getNonce(accountId, channel)` overload
-        // next to the v4 routing signature. The gate requires the exact v4
-        // signature to exist once; the client never calls an older overload.
         const matches = methods
           .filter((method) => method.name === name)
           .filter(
@@ -731,6 +722,23 @@ export function createNativeClientClass(codec, {
       );
     }
 
+    /**
+     * The script hash that holds an account's assets (§9). The kernel derives
+     * it from the same fixed proxy verification script this client builds, so
+     * the answer has to equal the locally derived address: a difference means
+     * the core hash or the call flags are not the ones this core answers with.
+     */
+    async getAccountAddress(accountId) {
+      await this._ready();
+      const id = codec.hex(accountId, 20);
+      const address = hash(await this._read("getAccountAddress", [H(id)]));
+      if (address === ZERO) error("account id has no proxy address");
+      const derived = proxyOf(id, this.contractHash, this.callFlags);
+      if (address !== derived)
+        error("core account address disagrees with the derived proxy address");
+      return address;
+    }
+
     async getProtocolInfo() {
       await this._ready();
       const info = array(await this._read("getProtocolInfo"), 2, "protocol info");
@@ -790,21 +798,6 @@ export function createNativeClientClass(codec, {
       return reply;
     }
 
-    async getHookOrder(accountId) {
-      await this._ready();
-      const [ids, revision] = array(
-        await this._read("getHookOrder", [H(accountId)]),
-        2,
-        "hook order",
-      );
-      return freeze({
-        hookIds: array(ids, undefined, "hook ids").map((id) =>
-          uint(id, 64, "hook id"),
-        ),
-        revision: uint(revision, 64, "hook order revision"),
-      });
-    }
-
     deriveNonceRouting(accountId, routing) {
       return codec.deriveNonceChannel(
         {
@@ -817,7 +810,28 @@ export function createNativeClientClass(codec, {
       );
     }
 
-    async getNonce(accountId, { authorityEpoch, validatorId = 0, credentialGeneration = 1, nonceSubkey }) {
+    /**
+     * The routing generation the kernel itself would use, read from the chain.
+     *
+     * Built-in (validator 0) → the account's 0x57 SubjectRevision. Installed
+     * validators → the instance's CredentialGeneration, which is published by
+     * `getModule`. Neither is defaulted here: the built-in revision has no ABI
+     * getter, so it is reported as unresolvable rather than guessed as 1.
+     */
+    async resolveCredentialGeneration(accountId, validatorId = 0) {
+      await this._ready();
+      const id = codec.unsigned(validatorId, 64, "validator id");
+      if (id === 0n)
+        error(
+          "the built-in validator's generation is the account SubjectRevision, " +
+            "which the kernel does not publish; supply the reviewed generation explicitly",
+        );
+      const module = await this.getModule(accountId, id);
+      if (module) return module.credentialGeneration;
+      error("validator is not installed and has no active threshold policy: " + id);
+    }
+
+    async getNonce(accountId, { authorityEpoch, validatorId = 0, credentialGeneration, nonceSubkey }) {
       await this._ready();
       codec.hex(nonceSubkey, NONCE_SUBKEY_BYTES);
       const packed = await this._read("getNonce", [
@@ -827,14 +841,26 @@ export function createNativeClientClass(codec, {
       ]);
       if (typeof packed !== "bigint" || packed < 0n || packed >= 1n << 255n)
         error("malformed packed nonce");
-      const channel = this.deriveNonceRouting(accountId, {
-        authorityEpoch,
-        validatorId,
-        credentialGeneration,
-        nonceSubkey,
-      });
-      if (packed >> 64n !== BigInt(channel))
-        error("nonce channel does not match the derived namespace");
+      // The kernel resolves the routing generation internally (§6: built-in →
+      // the 0x57 SubjectRevision, instance → its CredentialGeneration, policy →
+      // the policy generation), so it is the authority for the channel and this
+      // client never supplies a default. A caller that passes a generation gets
+      // a cross-check: a mismatch means the caller's view is stale, which the
+      // operation would hit as ErrorCredentialStale, so it is refused here.
+      const channel = (packed >> 64n).toString();
+      if (credentialGeneration !== undefined) {
+        const derived = this.deriveNonceRouting(accountId, {
+          authorityEpoch,
+          validatorId,
+          credentialGeneration,
+          nonceSubkey,
+        });
+        if (packed >> 64n !== BigInt(derived))
+          error(
+            "nonce channel does not match the derived namespace: the supplied " +
+              "credential generation or authority epoch is stale",
+          );
+      }
       return freeze({
         packed: packed.toString(),
         channel,
@@ -887,68 +913,6 @@ export function createNativeClientClass(codec, {
       });
     }
 
-    async isValidSignature(accountId, hash_, envelope) {
-      await this._ready();
-      const reply = await this._read("isValidSignature", [
-        H(accountId),
-        { type: "ByteString", value: codec.hex(hash_, 32) },
-        codec.canonicalValue({ type: "Array", value: envelope }),
-      ]);
-      const magic = toHex(bytes(reply, 4, "signature magic"));
-      return freeze({ valid: magic === "1626ba7e", magic });
-    }
-
-    async getRecoveryStatus(accountId) {
-      await this._ready();
-      const reply = array(
-        await this._read("getRecoveryStatus", [H(accountId)]),
-        undefined,
-        "recovery status",
-      );
-      if (reply.length === 0) return null;
-      if (reply.length !== 5) error("malformed recovery status");
-      return freeze({
-        pending: reply[0],
-        initiatedAt: uint(reply[1], 64, "initiated time"),
-        matureAt: uint(reply[2], 64, "maturity"),
-        authorityEpochAtInit: uint(reply[3], 64, "authority epoch"),
-        newCustody: hash(reply[4]),
-      });
-    }
-
-    async getPendingConfiguration(accountId, intentId) {
-      await this._ready();
-      const reply = array(
-        await this._read("getPendingConfiguration", [
-          H(accountId),
-          I(codec.unsigned(intentId, 64, "intent id")),
-        ]),
-        undefined,
-        "pending intent",
-      );
-      if (reply.length === 0) return null;
-      if (reply.length !== 8) error("malformed pending intent");
-      return freeze({
-        exists: reply[0],
-        intentId: uint(reply[1], 64, "intent id"),
-        proposedAt: uint(reply[2], 64, "proposed time"),
-        matureAt: uint(reply[3], 64, "maturity"),
-        expiresAt: uint(reply[4], 64, "expiry"),
-        authorityEpoch: uint(reply[5], 64, "authority epoch"),
-        actionDigest: digest(reply[6]),
-        actions: array(reply[7], undefined, "intent actions").map(vmValue),
-      });
-    }
-
-    async getPendingConfigurationIntentIds(accountId) {
-      await this._ready();
-      return array(
-        await this._read("getPendingConfigurationIntentIds", [H(accountId)]),
-        undefined,
-        "intent ids",
-      ).map((id) => uint(id, 64, "intent id"));
-    }
-
     /// §10 registration: the account id is derived from custody+salt, so the
     /// caller cannot register an id it did not commit to.
     buildCreateAccountScript({ custodyAddress, salt, recoveryTimelockMs = 0, actions = [] }) {
@@ -991,38 +955,6 @@ export function createNativeClientClass(codec, {
         operations,
         signers: [address],
         script,
-      });
-    }
-
-    buildConfigurationScript({ kind, accountId, intentId, actions = [], readSet = [] }) {
-      const id = codec.hex(accountId, 20);
-      const method = {
-        propose: "proposeConfiguration",
-        confirm: "confirmConfiguration",
-        cancel: "cancelConfiguration",
-      }[kind];
-      if (!method) error(`unknown configuration intent kind ${kind}`);
-      const args =
-        kind === "propose"
-          ? [
-              H(id),
-              codec.canonicalValue({ type: "Array", value: actions }),
-              codec.canonicalValue({ type: "Array", value: readSet }),
-            ]
-          : kind === "confirm"
-            ? [
-                H(id),
-                I(codec.unsigned(intentId, 64, "intent id")),
-                codec.canonicalValue({ type: "Array", value: actions }),
-              ]
-            : [H(id), I(codec.unsigned(intentId, 64, "intent id"))];
-      return freeze({
-        kind: "configuration",
-        method,
-        accountId: id,
-        accountAddress: this.proxyAddress(id),
-        signers: [this.proxyAddress(id)],
-        script: codec.dynamicCall(this.contractHash, method, args),
       });
     }
 

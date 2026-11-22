@@ -86,7 +86,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 ### 1. Plugin Lifecycle (install/update/remove) ✓
 
-**Implementation Location:** `contracts/custom/SmartAccount.Accounts.cs`
+**Implementation Location:** `SmartAccount.Accounts.cs` (retired custom kernel)
 
 **Features:**
 - **Installation:** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)` installs the initial validator and hook instances atomically through its `actions` list; batch `createAccounts` creates accounts with no modules installed
@@ -109,7 +109,7 @@ This is **interoperability at the adapter boundary**, not a claim of full ERC-43
 
 ### 2. Neo 2D Nonce Management (191-bit channel + 64-bit sequence) ✓
 
-**Implementation Location:** `contracts/custom/SmartAccount.Execution.cs` (`IsNonceAcceptable` / `ConsumeNonce`)
+**Implementation Location:** `SmartAccount.Execution.cs` (retired custom kernel) (`IsNonceAcceptable` / `ConsumeNonce`)
 
 **Canonical nonce domain:**
 ```csharp
@@ -142,7 +142,7 @@ are republished; that read boundary does not make such a channel executable.
 
 ### 3. Callback-Free Recovery (timelock, cancellation, execution) ✓
 
-**Implementation Location:** `contracts/custom/SmartAccount.Escape.cs`
+**Implementation Location:** `SmartAccount.Escape.cs` (retired custom kernel)
 
 **Flow:**
 ```mermaid
@@ -157,7 +157,7 @@ stateDiagram-v2
 The names carry the account id: `beginRecovery(accountId, newCustody)`,          
 `cancelRecovery(accountId)` and the permissionless `executeRecovery(accountId)`   
 are ABI methods of the current v4 source
-(`contracts/custom/SmartAccount.Escape.cs`); `getRecoveryStatus(accountId)` reads
+(`SmartAccount.Escape.cs` (retired custom kernel)); `getRecoveryStatus(accountId)` reads
 the pending record back as
 `[exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody]` and returns an
 empty array when nothing is pending.
@@ -213,7 +213,7 @@ empty array when nothing is pending.
 
 ### 5. Account State Management (atomic) ✓
 
-**Implementation Location:** `contracts/custom/SmartAccount.State.cs`
+**Implementation Location:** `SmartAccount.State.cs` (retired custom kernel)
 
 **State Structure:**
 ```csharp
@@ -254,7 +254,7 @@ deletes it and `executeRecovery` applies it once the account's `recoveryTimelock
 
 ### 6. Market Escrow (cancellation, expiry, dispute) ✓
 
-**Implementation Location:** `contracts/custom/SmartAccount.MarketEscrow.cs`
+**Implementation Location:** `SmartAccount.MarketEscrow.cs` (retired custom kernel)
 
 **Features:**
 - **Entry:** `enterMarketEscrow(accountId, marketContract, listingId)`
@@ -270,7 +270,7 @@ ExecutionEngine.Assert(!isMarketEscrowActive(accountId), "Account locked in mark
 ```
 The call is written as the deployed ABI spells it (`isMarketEscrowActive`, in
 `contracts/build/SmartAccount.manifest.json`). The C# source defines it with a leading
-capital (IsMarketEscrowActive, contracts/custom/SmartAccount.State.cs:143); that form names a method
+capital (IsMarketEscrowActive, `SmartAccount.State.cs` (retired custom kernel):143); that form names a method
 the deployment does not export, which is why it is not code-formatted here.
 - Prevents concurrent operations during active listing
 
@@ -337,7 +337,7 @@ ClearVerifyContext(accountId);
 
 ### 8. Paymaster/Sponsor Flow ✓
 
-**Implementation Locations:** `contracts/custom/SmartAccount.Paymaster.cs`, `contracts/custom/paymaster/Paymaster.cs`, and the optional Morpheus authorization service
+**Implementation Locations:** `SmartAccount.Paymaster.cs` (retired custom kernel), `paymaster/Paymaster.cs` (retired custom kernel), and the optional Morpheus authorization service
 
 The relay pays the enclosing N3 transaction's system and network fees. For the
 on-chain sponsored path, the core checks that the selected paymaster is bound to

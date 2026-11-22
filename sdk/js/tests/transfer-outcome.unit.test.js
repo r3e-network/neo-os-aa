@@ -16,7 +16,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  SmartAccountClient,
+  NativeSmartAccountClient,
   TRANSFER_RETURNED_FALSE,
   TRANSFER_RETURNED_FALSE_MESSAGE,
   findFailedTransferInExecution,
@@ -36,7 +36,7 @@ const ZERO_SUBKEY = '00'.repeat(32);
 const SIGNATURE = '11'.repeat(64);
 
 /** The proxy address the client derives for this account and these call flags. */
-const PROXY = new SmartAccountClient({
+const PROXY = new NativeSmartAccountClient({
   rpcClient: { send: async () => ({}) },
   networkMagic: NETWORK,
   contractHash: CORE,
@@ -57,7 +57,7 @@ function transfer(nonce, from = PROXY, method = 'transfer') {
     nonceSubkey: ZERO_SUBKEY,
     deadline: DEADLINE,
     validatorId: 0,
-    credentialGeneration: 0,
+    credentialGeneration: 1,
     authorityEpoch: 1,
     configurationNonce: 0,
     signature: SIGNATURE,
@@ -66,7 +66,7 @@ function transfer(nonce, from = PROXY, method = 'transfer') {
 
 /** A client whose `invokescript` answers with a fixed stack. */
 function clientAnswering(stack, { state = 'HALT' } = {}) {
-  const client = new SmartAccountClient({
+  const client = new NativeSmartAccountClient({
     rpcClient: {
       async send(method) {
         if (method === 'invokescript') return { state, stack, gasconsumed: '100' };

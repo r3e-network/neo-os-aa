@@ -218,7 +218,11 @@ namespace Neo.SmartContract.Native
                         int length = opcode == OpCode.PUSHDATA1
                             ? ReadOperand(script, ref offset, 1)[0]
                             : BinaryPrimitives.ReadUInt16LittleEndian(ReadOperand(script, ref offset, 2));
-                        if (length > SmartAccountModuleProtocol.ArgsSerializedSizeMax)
+                        // Initializer literals are operation fields: the largest
+                        // legal one is a serialized signature envelope
+                        // (SignatureBytesMax), so the per-literal bound is the
+                        // operation encoding bound, not the argument payload bound.
+                        if (length > SmartAccountModuleProtocol.OperationEncodedSizeMax)
                             throw new FormatException(
                                 "A SmartAccount initializer ByteString exceeds the profile bounds.");
                         values.Push(new(new ByteString(ReadOperand(script, ref offset, length).ToArray()), 0));

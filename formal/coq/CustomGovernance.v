@@ -1,4 +1,8 @@
 (*
+  ARCHIVED HISTORICAL MODEL -- not a live correspondence obligation.  The
+  custom kernel this models was retired in Phase 3; the module is kept for its
+  abstract theorems and mutation tests only, and claims no source link.
+
   NeoOS formal verification -- custom platform owner governance.
 
   This is a scoped state-machine model of the source-candidate platform owner

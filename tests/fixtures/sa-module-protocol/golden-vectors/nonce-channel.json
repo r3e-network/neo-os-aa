@@ -2,8 +2,7 @@
   "vectorId": "sa4-nonce-channel",
   "kind": "nonce-channel",
   "constantsRevision": {
-    "custom": "ae220783aa0a303f47332adf135aa44416c58c0e",
-    "native": "0d9ad4f08797f4b2e8ad63c83182fa554ef33fb9"
+    "native": "3ee06cd18ad6f63c464555c595e3227f2c1db7c8"
   },
   "input": {
     "accountId": "0xf2125dfcd4f8992f79231d8c175fc499baa10130",
@@ -15,28 +14,18 @@
     "legacyCursorSameChannel": 0
   },
   "expected": {
-    "custom": {
-      "coreHash": "0xbcc99b511b9126f16bc0e0f33ef5a935486dafc0",
-      "derivationPreimageHex": "04c0af6d4835a9f53ef3e0c06bf126911b519bc9bc3001a1ba99c45f178c1d23792f99f8d4fc5d12f20000000000000001000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
-      "fullDigestHex": "85e3e6920eccde95dd3aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd",
-      "channelBytesHex": "013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd",
-      "nonceCursorKeyBytes": "563001a1ba99c45f178c1d23792f99f8d4fc5d12f2013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd",
-      "nonceNamespaceKeyBytes": "5c3001a1ba99c45f178c1d23792f99f8d4fc5d12f2013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd",
-      "packedNonce": "555974188945989475253326239795395386054484976521917082647228479687805108224",
-      "packedNonceHex": "0x013aab94d007cef59f0984e4163ab11aac79f952b7e6b5dd0000000000000000"
-    },
     "native": {
       "coreHash": "0x398dc3f0227d7efac5533ed5ce9937390c158084",
       "derivationPreimageHex": "048480150c393799ced53e53c5fa7e7d22f0c38d393001a1ba99c45f178c1d23792f99f8d4fc5d12f20000000000000001000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000",
       "fullDigestHex": "f847a160b47e44a70884dd3961b49a8331bb88baed99c9992d5d542384f07e27",
-      "channelBytesHex": "0084dd3961b49a8331bb88baed99c9992d5d542384f07e27",
-      "nonceCursorKeyBytes": "563001a1ba99c45f178c1d23792f99f8d4fc5d12f20084dd3961b49a8331bb88baed99c9992d5d542384f07e27",
-      "nonceNamespaceKeyBytes": "5c3001a1ba99c45f178c1d23792f99f8d4fc5d12f20084dd3961b49a8331bb88baed99c9992d5d542384f07e27",
-      "packedNonce": "234750645499935762596569951425621435657465294483747165523013038432046809088",
-      "packedNonceHex": "0x0084dd3961b49a8331bb88baed99c9992d5d542384f07e270000000000000000"
+      "channelBytesHex": "0884dd3961b49a8331bb88baed99c9992d5d542384f07e27",
+      "nonceCursorKeyBytes": "563001a1ba99c45f178c1d23792f99f8d4fc5d12f20884dd3961b49a8331bb88baed99c9992d5d542384f07e27",
+      "nonceNamespaceKeyBytes": "5c3001a1ba99c45f178c1d23792f99f8d4fc5d12f20884dd3961b49a8331bb88baed99c9992d5d542384f07e27",
+      "packedNonce": "3853253434166066869583163232947118556072152315285014791756062538679332110336",
+      "packedNonceHex": "0x0884dd3961b49a8331bb88baed99c9992d5d542384f07e270000000000000000"
     }
   },
   "mergedCursor": 1,
   "exhaustionSentinel": "18446744073709551616",
-  "notes": "Channel := low 191 bits of SHA256(U1(4) || coreHash || accountId || U64BE(authorityEpoch) || U64BE(validatorId) || U64BE(credentialGeneration) || nonceSubkey), 24 bytes right-aligned big-endian with the top 7 bits zero. getNonce returns (channel << 64) | sequence; the vector pins sequence 0."
+  "notes": "Channel := low 191 bits of SHA256(U1(4) || coreHash || accountId || U64BE(authorityEpoch) || U64BE(validatorId) || U64BE(credentialGeneration) || nonceSubkey), 24 bytes right-aligned big-endian with the top bit of the first byte clear (191 bits). getNonce returns (channel << 64) | sequence; the vector pins sequence 0."
 }

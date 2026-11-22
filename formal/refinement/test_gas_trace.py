@@ -57,8 +57,12 @@ class GasTraceTests(unittest.TestCase):
     def test_valid_loop_opcode_mutation_rejected_by_cfg(self):
         bound = gas_trace.bind_artifact()
         modified = [dict(i) for i in bound['instructions']]
-        last_jump = next(i for i in modified if i['offset'] == 36326)
-        last_jump['edges'] = [{'kind': 'branch', 'target': 36326}]
+        # 36864 is the last JMP in the re-anchored helper ([36586,36867)); the
+        # previous pins read 36592 and 36326. The mutation keeps a real jump
+        # opcode at a real instruction boundary and only rewires the edge into a
+        # self-loop.
+        last_jump = next(i for i in modified if i['offset'] == 36864)
+        last_jump['edges'] = [{'kind': 'branch', 'target': 36864}]
         with self.assertRaises(ValueError):
             gas_trace.enumerate_paths(modified)
 
@@ -66,7 +70,10 @@ class GasTraceTests(unittest.TestCase):
         fees = gas_trace.extract_fees(gas_trace.pinned_sources())
         model = gas_trace.derive(gas_trace.bind_artifact(), fees)
         self.assertEqual(12, len(model['paths']))
-        self.assertEqual(236, len(model['initializer']))
+        # The initializer is [44047,44833) in the 2026-11-21 rebuild: 245
+        # instructions, the same shape the v4 build gave it when it added the two
+        # UInt64 statics (2^64-1 into UInt64Mask at slot 38, 2^64 at slot 40).
+        self.assertEqual(245, len(model['initializer']))
         self.assertTrue(all(p['executionCoefficient'] > 0 for p in model['paths']))
         self.assertGreater(model['maxExecutionCoefficient'], 32768)
         self.assertEqual(71, model['maxStorageBytes'])

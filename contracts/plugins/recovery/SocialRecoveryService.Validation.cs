@@ -223,6 +223,13 @@ namespace Neo.SmartContract.Examples
 
         private static void AssertOwner(UInt160 accountId)
         {
+            // Idempotent reconciliation before the gate. The core's executeRecovery is
+            // permissionless, so the approved recovery may already have completed without this
+            // service settling. Until the service record moves, the superseded owner would still
+            // satisfy every owner-only surface — credit refund, config changes, cancellation —
+            // so the gate must observe the authoritative owner, not the stale row.
+            ReconcileAuthoritativeRecovery(accountId);
+
             UInt160 owner = GetOwner(accountId);
             ExecutionEngine.Assert(owner != UInt160.Zero && Runtime.CheckWitness(owner), "Not owner");
         }

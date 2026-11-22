@@ -29,10 +29,11 @@ cd sdk/js && npm test
 
 ## SDK API Reference
 
-Every snippet below is the v4 client (`sdk/js/src/index.js` for the custom kernel, the shared
-`nativeSmartAccountClient.mjs` for the native one). Both drive the same 13-field operation and the
-same `SA_*` vocabulary. A v3 call (`registerAccount`, `createAccountPayload`, `getVerifier`,
-`updateHook`) does not resolve: there is no alias.
+Every snippet below drives the v4 protocol through `sdk/js/src/index.js` or the shared
+`nativeSmartAccountClient.mjs`, which reach the same native kernel and the same 13-field
+operation and raise the same `SA_*` vocabulary. The v3 calls (`registerAccount`,
+`createAccountPayload`, `getVerifier`, `updateHook`) were removed with the v3 runtime: there is
+no alias.
 
 ### Account Lifecycle
 
@@ -61,35 +62,37 @@ const state = await client.getAccount(identity.accountId);
 
 The create call carries the derived id, the custody address, the salt and the timelock; no verifier
 or hook is chosen at creation. `state` returns the control record (custody, recovery authority and
-timelock, authority epoch, configuration nonce, hook-order revision), the installed modules and the
-pending configuration intent.
+timelock, authority epoch, configuration nonce, hook-order revision). The recovery slots the
+descriptor still carries report their inactive value: the recovery lifecycle is a module's, so a
+reader never mistakes an ABI-stability slot for a pending handover.
 
-### Modules and configuration intents
+### Modules
 
-Modules are installed afterwards. A configuration change is proposed, matures for 24 hours, and is
-then confirmed or cancelled; nothing changes on the account before confirmation.
+Modules are installed either atomically at registration or afterwards through
+`installModule(accountId, moduleType, moduleContractHash, initData)` and
+`removeModule(accountId, moduleId, deInitData)`. Both accept the custody witness or the witness of an
+already installed validator instance, and both advance the configuration nonce. The core keeps no
+proposal window: a change that matures for 24 hours is a governance module's contract, which submits
+the matured call through those two methods.
 
 ```javascript
-const propose = client.buildConfigurationScript({
-  kind: 'propose',
+// moduleTypeCode is the v4 install code: validator (1) or hook (4). The core reads the
+// module's own profile, so the public entry carries no digest.
+const install = client.buildAccountActionScript({
+  method: 'installModule',
   accountId: identity.accountId,
-  // [1, moduleTypeCode, moduleHash, profileDigest, initData]
-  actions: [installAction],
-  readSet: [],
-});
-
-const confirm = client.buildConfigurationScript({
-  kind: 'confirm',
-  accountId: identity.accountId,
-  intentId: intent.intentId,
+  args: [moduleTypeCode, moduleContractHash, initData],
 });
 ```
 
 `getModules(accountId, 'validator' | 'hook', { cursor, limit })` pages the installed instances and
-`getModule(accountId, moduleId)` reads one. `getPendingConfiguration(accountId)` returns the intent,
-its maturity and its action digest. Every module exposes its own safe reads (`getModuleProfile`,
-`getConfig`, `getSessionKey`, `getThreshold`, `getPublicKey`, `getDailyLimit`, and so on); those are
-the only module methods a caller invokes directly, because the core owns the lifecycle callbacks.
+`getModule(accountId, moduleId)` reads one. `isModuleInstalled` answers the admission question
+without paging, and `getAuthorizedModuleId` reports the instance the core routed a phase to. Hook
+ordering is derived from the installed hook instances and the `hookOrderRevision` the descriptor
+publishes, because the orchestrator that calls them is a module. Every module also exposes its own
+safe reads (`getModuleProfile`, `getConfig`, `getSessionKey`, `getThreshold`, `getPublicKey`,
+`getDailyLimit`, and so on); those are the only module methods a caller invokes directly, because
+the core owns the lifecycle callbacks.
 
 ### Execution
 
@@ -128,43 +131,6 @@ const typedData = buildUserOperationTypedData({
   operationDigest,
 });
 ```
-
-### Sponsored Execution (Paymaster)
-
-Sponsorship keeps the v4 operation: the sponsor pays, and the account still authorises the operation
-with its own validator signature. The client refuses a batch whose operations do not share one
-target contract and method, because the core settles one reimbursement for the whole envelope.
-
-```javascript
-const plan = client.buildSponsoredExecutionScript({
-  accountId,
-  operations: [operation], // 1..32, one target contract and method
-  paymaster: paymasterHash,
-  sponsor: sponsorAddress,
-  reimbursementAmount: '1000000', // positive
-});
-```
-
-`plan.method` is `executeSponsoredUserOp` for one operation and `executeSponsoredUserOps` for a
-batch. Deposits, policies and counters live on the paymaster contract:
-
-### Paymaster Contract Methods (On-Chain)
-
-| Method | Access | Purpose |
-| --- | --- | --- |
-| `onNEP17Payment` | GAS transfer | Accept sponsor deposits |
-| `withdrawDeposit(amount)` | Sponsor witness | Withdraw excess GAS |
-| `setPolicy(accountId, target, method, maxPerOp, dailyBudget, totalBudget, validUntil)` | Sponsor witness | Create/update sponsorship policy |
-| `revokePolicy(accountId)` | Sponsor witness | Remove policy + clear counters |
-| `validatePaymasterOp(sponsor, accountId, target, method, amount)` | Safe (anyone) | Read-only preflight check |
-| `settleReimbursement(sponsor, accountId, target, method, relay, amount)` | SA Core only | Atomic settlement after execution |
-| `getSponsorDeposit(sponsor)` | Safe | Query deposit balance |
-| `getPolicy(sponsor, accountId)` | Safe | Query policy details |
-| `getDailySpent(sponsor, accountId)` | Safe | Query 24h spending |
-| `getTotalSpent(sponsor, accountId)` | Safe | Query lifetime spending |
-
-The names above are the deployed manifest's, exactly as `contracts/build/SAPaymaster.manifest.json`
-spells them; Neo ABI names are case-sensitive.
 
 ## Canonical docs
 

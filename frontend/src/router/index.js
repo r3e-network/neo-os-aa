@@ -2,11 +2,9 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { createI18nController } from '@/i18n';
 
 const MainLayout = () => import('@/components/layout/MainLayout.vue');
-const SmartAccountTool = () => import('@/components/SmartAccountTool.vue');
 const HomeView = () => import('@/views/HomeView.vue');
 const ConsoleView = () => import('@/views/ConsoleView.vue');
 const IdentityView = () => import('@/views/IdentityView.vue');
-const AddressMarketView = () => import('@/views/AddressMarketView.vue');
 const TransactionInfoView = () => import('@/views/TransactionInfoView.vue');
 const NativeAccountWorkspace = () => import('@/features/native/NativeAccountWorkspace.vue');
 const DocsView = () => import('@/views/DocsView.vue');
@@ -30,22 +28,10 @@ const routes = [
         meta: { breadcrumb: 'Console', breadcrumbKey: 'nav.console', titleKey: 'page.titleConsole', title: 'Console — Neo Smart Account' }
       },
       {
-        path: 'app',
-        name: 'app-workspace',
-        component: SmartAccountTool,
-        meta: { breadcrumb: 'Workspace', breadcrumbKey: 'nav.app', titleKey: 'page.titleApp', title: 'App Workspace — Neo Smart Account' }
-      },
-      {
         path: 'identity',
         name: 'identity-workspace',
         component: IdentityView,
         meta: { breadcrumb: 'Identity', breadcrumbKey: 'nav.identity', titleKey: 'page.titleIdentity', title: 'Identity Workspace — Neo Smart Account' }
-      },
-      {
-        path: 'market',
-        name: 'address-market',
-        component: AddressMarketView,
-        meta: { breadcrumb: 'Market', breadcrumbKey: 'nav.market', titleKey: 'page.titleMarket', title: 'Address Market — Neo Smart Account' }
       },
       {
         path: 'native',

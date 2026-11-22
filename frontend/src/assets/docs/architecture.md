@@ -1,7 +1,7 @@
 # Core Architecture
 
-This page describes the active architecture of protocol version 4: one SmartAccount core, two
-kernels (the C# custom kernel and the native kernel), and modules that plug into a fixed lifecycle.
+This page describes the active architecture of protocol version 4: one SmartAccount core, implemented by
+the native kernel (`contracts/native/SmartAccount/`), and modules that plug into a fixed lifecycle.
 
 ## 1. Component Map
 
@@ -15,8 +15,6 @@ flowchart LR
   Core[SmartAccount Core]
   ValidatorModule[Validator Modules]
   HookModule[Hook Modules]
-  Paymaster[SAPaymaster]
-  Marketplace[SA Address Market]
   Target[Target Contract]
 
   User --> Browser
@@ -27,9 +25,6 @@ flowchart LR
   Relay --> Core
   Core --> ValidatorModule
   Core --> HookModule
-  Core --> Marketplace
-  Core --> Paymaster
-  Paymaster -->|reimburse GAS| Relay
   Core --> Target
 ```
 
@@ -59,6 +54,8 @@ the id itself never holds assets.
 ```
 
 - `status` is 0 active, 1 frozen, 2 migration required.
+- `marketEscrowActive` and `legacyRow` are fixed ABI slots that the native kernel answers `false`;
+they are read for shape compatibility, never interpreted.
 - `authorityEpoch` increments on freeze, recovery and settlement: every signature and intent signed
   against the previous epoch dies with it.
 - `configurationNonce` increments whenever the configuration changes, so a pending intent probes the
@@ -109,40 +106,14 @@ flowchart TD
   Hooks --> Pre[preCheck forward over the snapshot]
   Pre --> Dispatch[Dispatch the target action]
   Dispatch --> Post[postCheck reverse over the same snapshot]
-  Post --> Reimburse[Settle an optional paymaster reimbursement]
-  Reimburse --> Return[Return the target result]
+  Post --> Return[Return the target result]
 ```
 
 A batch is one envelope with at most 32 operations, and it either commits wholly or aborts. The hook
 order snapshot is bound into the signature, so a signer cannot be shown a different hook set than the
 one that runs.
 
-## 5. Sponsored Execution Pipeline
-
-When a sponsor funds gas, the core runs `executeSponsoredUserOp` (or its batch variant) instead of the
-plain entrypoint.
-
-```mermaid
-flowchart TD
-  Entry[executeSponsoredUserOp] --> Load[Load the account control record]
-  Load --> Auth[Run the same authorization route]
-  Auth --> Hooks[Run hook preCheck]
-  Hooks --> Call[Call the target contract]
-  Call --> Post[Run hook postCheck]
-  Post --> Policy[Paymaster validates the sponsor policy]
-  Policy -- Fail --> RejectPay[Abort: policy or deposit insufficient]
-  Policy -- Pass --> Settle[Deduct the deposit and pay the relay]
-  Settle --> Return[Return the target result]
-```
-
-Sponsors deposit GAS into the paymaster and create policies with `setPolicy`. A policy scoped to a zero
-account id is global. Settlement is atomic — policy check, deposit deduction and relay reimbursement
-happen inside one call — so there is no window where the target runs but reimbursement fails. For a
-fee-bearing transaction the reimbursement is the smaller of the requested amount and the sum of system
-and network fee; the per-operation cap bounds that settlement, not the total fee, and the relay bears
-any unreimbursed remainder.
-
-## 6. Authorization Modes
+## 5. Authorization Modes
 
 Every route converges on the same entrypoint, and the route is chosen by the account's own state:
 
@@ -158,7 +129,7 @@ This is the critical boundary: a validator decides **who may authorize**, a hook
 must hold around execution**, and neither can remove the other. `ZKEmailVerifier` is a disabled
 template: it faults on every use until a real proof verifier is deployed.
 
-## 7. Recovery And Freeze
+## 6. Recovery And Freeze
 
 Recovery belongs to the core, not to a module:
 
@@ -170,13 +141,13 @@ Recovery belongs to the core, not to a module:
 
 The recovery timelock is per account, chosen at creation between 7 and 90 days. Matured recovery
 advances the authority epoch, removes every module and policy callback-free, voids pending intents and
-enables the built-in route. It calls no module, no market and no oracle.
+enables the built-in route. It calls no module and no oracle.
 
 A custody witness can freeze an account immediately with `freezeAccount`; a frozen account exposes only
 reads, recovery and `unfreezeAccount`. Freezing advances the epoch, so every outstanding signature and
 intent dies with it.
 
-## 8. Frontend and Relay Model
+## 7. Frontend and Relay Model
 
 The workspace is v4-first:
 
@@ -188,10 +159,9 @@ The workspace is v4-first:
 
 The V1/V2 wrappers are gone: no manifest and no source defines them, so only `executeUserOp` (or
 `executeUserOps` for a batch) reaches the current runtime. The relay trust boundary is explicit — the
-relay can simulate and submit, it cannot authorize for the account, and paymaster sponsorship does not
-authorize execution.
+relay can simulate and submit, it cannot authorize for the account.
 
-## 9. Module Lifecycle
+## 8. Module Lifecycle
 
 Modules are installed, replaced and removed through configuration intents, and each step is an event:
 
@@ -211,7 +181,7 @@ New configuration matures after 24 hours; the three exceptions are registration 
 initial configuration atomically), emergency freeze (immediate) and callback-free credential
 revocation (immediate, one-way).
 
-## 10. Validation Preview
+## 9. Validation Preview
 
 Relay preflight has two layers:
 
@@ -224,27 +194,29 @@ Relay preflight has two layers:
 The preview never authorizes or executes anything by itself, and it never becomes a second
 implementation of the rules: it calls the same code the execution path calls.
 
-## 11. Contract File Map
+## 10. Contract File Map
 
 | File | Responsibility |
 | --- | --- |
-| `contracts/custom/SmartAccount.cs` | Core account: constructor, dispatch, shared helpers |
-| `contracts/custom/SmartAccount.State.cs` | Control record layout and the `getAccount` view |
-| `contracts/custom/SmartAccount.Execution.cs` | Envelope decode, digest, nonce, hook sequence, dispatch |
-| `contracts/custom/SmartAccount.Modules.cs` | Module instances, code binding, hook order, threshold policy |
-| `contracts/custom/SmartAccount.Intents.cs` | Pending configuration intents, maturity and cancellation |
-| `contracts/custom/SmartAccount.ModuleProtocol.cs` | Callback ABI and profile parsing |
-| `contracts/custom/SmartAccount.Escape.cs` | Recovery, freeze and unfreeze |
-| `contracts/custom/SmartAccount.Message.cs` | Built-in message-signature envelope (ERC-1271 profile) |
-| `contracts/custom/SmartAccount.MarketEscrow.cs` | Settlement sweep and market escrow lock |
-| `contracts/custom/SmartAccount.Paymaster.cs` | Sponsored execution and reimbursement |
+| `contracts/native/SmartAccount/NativeContract.cs` | Native contract shell: hardfork, manifest, dispatch |
+| `contracts/native/SmartAccount/SmartAccount.cs` | Registration, `getAccount`, `getProtocolInfo`, the entrypoints |
+| `contracts/native/SmartAccount/SmartAccount.Execution.cs` | Envelope decode, digest, nonce channels, hook sequence, dispatch |
+| `contracts/native/SmartAccount/SmartAccount.Modules.cs` | Module instances, code binding, hook order, threshold policy |
+| `contracts/native/SmartAccount/SmartAccount.Intents.cs` | Pending configuration intents, maturity and cancellation |
+| `contracts/native/SmartAccount/SmartAccount.Keys.cs` | Account management through `executeUserOp` actions |
+| `contracts/native/SmartAccount/SmartAccount.Message.cs` | Built-in message-signature envelope (ERC-1271 profile) |
+| `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` | Callback ABI and profile parsing |
+| `contracts/native/SmartAccount/SmartAccountModulePolicy.cs` | Threshold policy rules over module instances |
+| `contracts/native/SmartAccount/SmartAccountProtocol.cs` | Identity derivation, storage keys, proxy script, `SA_*` vocabulary |
+| `contracts/native/SmartAccount/SmartAccountRecords.cs` | Control row layout and record codec |
+| `contracts/native/SmartAccount/SmartAccountEnvelope.cs` | Operation and message envelope structs |
+| `contracts/native/SmartAccount/SmartAccountInvocationContext.cs` | The bound execution context a callback may observe |
+| `contracts/native/SmartAccount/SmartAccountCanonicalJson.cs` | RFC 8785 canonical JSON helper; unreferenced by the contract source today, retained because the formal source lock pins it |
+| `contracts/native/Runtime/ApplicationEngine.Runtime.cs` | The engine seam the native kernel runs against |
 | `contracts/plugins/validators/*.cs` | Validator modules |
 | `contracts/plugins/hooks/*.cs` | Hook modules |
-| `contracts/custom/paymaster/Paymaster.cs` | `SAPaymaster`: deposit pool and sponsor policy engine |
-| `contracts/custom/market/SAAddressMarket.cs` | Listing, escrow and settlement entry |
-| `contracts/native/SmartAccount/*.cs` | Native kernel implementing the same protocol |
 
-## 12. Security Invariants
+## 11. Security Invariants
 
 1. The witness entry succeeds only inside a matching execution context for the same account.
 2. Nonces are consumed by the core, never by a module.
@@ -253,4 +225,4 @@ implementation of the rules: it calls the same code the execution path calls.
 5. Recovery execution is permissionless but applies an already-approved result, and it removes modules
    callback-free.
 6. Configuration takes effect only after a 24 hour intent matures and is confirmed by custody.
-7. The relay and the paymaster are operator conveniences: neither authorizes an operation.
+7. The relay is an operator convenience: it cannot authorize an operation.

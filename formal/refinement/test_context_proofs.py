@@ -32,9 +32,33 @@ class ContextProofTests(unittest.TestCase):
         cls.program = context.bind_initializer(cls.inventory)
 
     def test_full_initializer_identity(self):
-        self.assertEqual((self.program['start'],self.program['end']), (43470,44187))
-        self.assertEqual(len(self.program['bytes']),717)
-        self.assertEqual(len(self.program['instructions']),236)
+        # Reviewed 2026-11-21 against the live rebuild.
+        self.assertEqual((self.program['start'],self.program['end']), (44047,44833))
+        self.assertEqual(len(self.program['bytes']),786)
+        self.assertEqual(len(self.program['instructions']),245)
+
+    def test_initializer_stays_inside_the_extended_model(self):
+        # CapContext.init_decode now covers PUSHINT8, SHL and SUB, so the live
+        # initializer no longer leaves the model and the certificate may be
+        # rendered. The mirror has to stay exact in both directions: an opcode the
+        # initializer does not execute (ADD) is still outside the decoder, and a
+        # truncated PUSHINT8 immediate still has no size.
+        self.assertEqual(self.program['modelDomainGaps'], [])
+        context.require_model_domain(self.program)
+        self.assertEqual([context.model_step_size(code, 0) for code in
+                          (bytes([0x00,0x40]), bytes([0xA8]), bytes([0x9F]),
+                           bytes([0x9E]), bytes([0x00]))],
+                         [2, 1, 1, None, None])
+
+    def test_model_binary_matches_the_coq_shift_boundary(self):
+        # Same three facts the `initializer_shift_*` examples prove in
+        # CapContext.v: the count check happens before the value matters.
+        self.assertEqual([context.model_binary('SHL', 0, count) for count in (-1, 256, 257)],
+                         [None, 0, None])
+        self.assertEqual(context.model_binary('SHL', 1, 64), 2 ** 64)
+        self.assertIsNone(context.model_binary('SHL', 1, 255))
+        self.assertEqual(context.model_binary('SUB', 2 ** 64, 1), 2 ** 64 - 1)
+        self.assertIsNone(context.model_binary('SUB', -2 ** 255, 1))
 
     def test_wrong_entry_descriptor_rejected(self):
         changed=copy.deepcopy(self.inventory)
@@ -102,7 +126,7 @@ class ContextProofTests(unittest.TestCase):
             self.assertTrue(receipt['initializerReferenceVerified'])
             self.assertTrue(receipt['helperContextVerified'])
             self.assertFalse(receipt['fullImplementationVerified'])
-            self.assertEqual(receipt['methodRange'],[36048,36329])
+            self.assertEqual(receipt['methodRange'],[36586,36867])
             self.assertEqual((receipt['methodByteCount'],receipt['methodInstructionCount']),(281,116))
             self.assertEqual(len(receipt['semanticControls']),6)
             self.assertTrue(all(c['refutationKernelChecked'] for c in receipt['semanticControls'][3:]))

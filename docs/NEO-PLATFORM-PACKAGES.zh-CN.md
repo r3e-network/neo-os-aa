@@ -40,11 +40,12 @@ runner/runtime 不匹配，而不是回调上限可选的证据；该失败回�
 | Native ABI 2 | 显式的 native-module 构建输出 | SmartAccount 有界原生回调：verifier 1 GAS，hook/maintenance 2.5 GAS | 源码构建的 native 合约、`HF_SmartAccountV1`、ABI 2 metadata 与 epoch 感知模块 |
 | 私有 `PLATFORM` | `contracts/bin/platform` | `System.Contract.CallWithGasLimit`，每个 verifier 回调 10 GAS | 匹配的私有运行时与激活；无法在普通公开节点上运行 |
 
-`bash contracts/compile.sh` 用固定版本的已发布编译器与
-框架构建 `public` 与私有 `PLATFORM` 配置。脚本只在执行源码的一次性副本中定义 `PLATFORM`；
-`--platform` 只构建私有核心。公开的 deploy/upgrade 辅助脚本选择 `bin/public`。
-双配置可复现性门禁会比较两个输出目录；仅有字节一致
-并不确立运行时支持或部署一致性。
+`scripts/build_native_modules.py` 在仓库锁定还原策略下用固定版本的已发布编译器与框架复现原生模块，
+并把它们写入调用方指定的 `--output` 目录；原生核本身由 `dotnet build SmartAccount.sln` 针对固定的
+原核检出目录编译，由 MSBuild 写入各项目自己的 `bin/Release/net10.0/`。没有任何脚本以
+`contracts/bin/native` 为目标。上表两行已退役的 custom 画像仍留在表中，因为它们记录的字节是历史
+回执：其 `compile.sh` 配方已移除，它们所指的目录属于被忽略的构建输出，干净检出中两者都不存在，
+而仅有字节一致从来不确立运行时支持或部署一致性。
 
 对于私有 NeoExpress 验证，`scripts/neoexpress_validate.py` 从
 `bin/platform` 部署核心、从 `bin/public` 部署模块，并记录每次部署的配置。
@@ -72,9 +73,7 @@ Native 模块由 `scripts/build_native_modules.py` 单独构建。它的
 只为拒绝非空值，而不是静默重新解释旧描述符。
 它记录原始/预处理源码以及两种
 原始/打包工件字节，然后比较两次独立的 scratch 构建。
-在构建前运行 `node scripts/check_neo_platform_packages.mjs --include-native` 覆盖全部
-36 个项目，包括两个仅测试用的 epoch 探针项目与两个源码运行时
-探针宿主。运行时宿主不使用任何 NuGet 包：其
+在构建前运行 `node scripts/check_neo_platform_packages.mjs`：它的默认原生范围覆盖六个模块、epoch 探针及其 ABI 固定样例以及两个源码运行时探针宿主。运行时宿主不使用任何 NuGet 包：其
 已提交的锁必须包含空的 net10.0 依赖图，且其 Neo
 程序集必须来自经显式验证的源码构建运行时。Native
 runner provenance 必须独立 pin

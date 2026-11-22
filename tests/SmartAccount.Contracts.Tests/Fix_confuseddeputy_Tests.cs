@@ -221,15 +221,13 @@ public class Fix_confuseddeputy_Tests
     }
 
     [TestMethod]
-    public void NestedExecution_KeepsTheInFlightMarkerUntilTheOuterFrameCloses()
+    public void NestedDifferentAccountExecutionIsRefusedBeforeTheMarkerCanBeCleared()
     {
-        // Audit Low 6: the confused-deputy marker is depth-counted. A nested
-        // executeUserOp for a different account (the per-account lock only rejects
-        // same-account re-entry) must not clear the marker while the outer frame
-        // still executes, or the callee-side deputy checks would silently re-open for
-        // the remainder of the outer operation. The probe runs the nested frame and
-        // then reads the marker inside one operation target, so the returned value
-        // observes the state after the nested unwind.
+        // §3.6: an account lease is exclusive for the whole invocation, so a
+        // nested executeUserOp for a different account is cross-account recursion
+        // and faults with SA_REENTRANCY_FORBIDDEN. The outer frame never reaches
+        // its marker probe, the inner account never opens an execution, and no
+        // nonce is consumed on either account.
         using P256SessionKey custody = new();
         Harness h = new();
         UInt160 probe = h.Fx.Deploy("MockVerifierCore");
@@ -237,8 +235,8 @@ public class Fix_confuseddeputy_Tests
         UInt160 innerAccount = h.RegisterAccount(custody);
 
         // The inner operation is a benign read on the core itself; the outer
-        // operation's target (MockVerifierCore.forwardAfter) first triggers that
-        // nested execution and afterwards queries the marker.
+        // operation's target (MockVerifierCore.forwardAfter) tries that nested
+        // execution and then queries the marker.
         object[] innerOp = RuntimeFixture.UserOp(
             h.Wallet, "isExecutionActive", new object?[] { innerAccount },
             h.Fx.PackedNonce(h.Wallet, innerAccount, 0), h.Fx.Now() + 3_600_000, new byte[] { 0x00 });
@@ -255,13 +253,17 @@ public class Fix_confuseddeputy_Tests
         outerOp[11] = h.Fx.SignBuiltIn(h.Wallet, outerAccount, outerOp, custody);
 
         h.Fx.SetSigners(RuntimeFixture.CustodyOf(custody));
-        Assert.IsTrue(h.Fx.CallBoolean(h.Wallet, "executeUserOp", outerAccount, outerOp),
-            "The marker must still report in-flight after the nested frame unwinds");
+        TestException ex = Assert.ThrowsExactly<TestException>(() =>
+            h.Fx.CallBoolean(h.Wallet, "executeUserOp", outerAccount, outerOp),
+            "A nested frame for another account must be refused, not granted a depth");
+        StringAssert.Contains(ex.Message, "SA_REENTRANCY_FORBIDDEN");
 
-        // Once the outermost frame closes, the marker is cleared and both sequences
-        // are consumed exactly once.
+        // The refused nested frame rolls the whole invocation back: the marker is
+        // clear again and neither sequence advanced.
         Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isUserOpExecutionActive"));
-        Assert.AreEqual(BigInteger.One, h.Fx.CurrentNonceSequence(h.Wallet, outerAccount, 0));
-        Assert.AreEqual(BigInteger.One, h.Fx.CurrentNonceSequence(h.Wallet, innerAccount, 0));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", outerAccount));
+        Assert.IsFalse(h.Fx.CallBoolean(h.Wallet, "isExecutionActive", innerAccount));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CurrentNonceSequence(h.Wallet, outerAccount, 0));
+        Assert.AreEqual(BigInteger.Zero, h.Fx.CurrentNonceSequence(h.Wallet, innerAccount, 0));
     }
 }

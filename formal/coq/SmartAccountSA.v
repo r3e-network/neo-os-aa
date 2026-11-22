@@ -2,9 +2,9 @@
   NeoOS formal verification -- SmartAccount SA execution core.
 
   Source correspondence (read 2026-09-18):
-    ../neo-os-sa/contracts/custom/SmartAccount.Execution.cs
-    ../neo-os-sa/contracts/custom/SmartAccount.Models.cs
-    ../neo-os-sa/contracts/custom/SmartAccount.Escape.cs
+    `SmartAccount.Execution.cs` (retired custom kernel)
+    `SmartAccount.Models.cs` (retired custom kernel)
+    `SmartAccount.Escape.cs` (retired custom kernel)
 
   This is a hand-written abstract model of the stable application-phase
   operation boundary. It models execution locking, verifier/native-owner

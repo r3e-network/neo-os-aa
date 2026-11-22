@@ -46,7 +46,7 @@ def manifest(name="NeoWitnessValidator"):
         ])
     else:
         methods.extend([
-            method("validateUserOp", "Boolean", False, ["Hash160", "ByteString", "Array"]),
+            method("validateUserOp", "Boolean", True, ["Hash160", "ByteString", "Array"]),
             method("onUserOpComplete", "Void", False, ["Hash160", "Array", "Any"]),
             method("getSignerDomains", "Array", True, ["Hash160", "Integer"]),
         ])
@@ -96,10 +96,12 @@ class NativeModuleProfileTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "composite verifiers"):
             profile.validate_descriptor({"MultiSigValidator": spec})
 
-    def test_lifecycle_callbacks_must_be_non_safe(self):
-        for name in ("validateUserOp", "onUserOpComplete"):
+    def test_lifecycle_callbacks_publish_the_required_safety(self):
+        # `validateUserOp` is the core's read-only preview, so it must be safe;
+        # the state-changing callbacks must not be.
+        for name, safe in (("validateUserOp", True), ("onUserOpComplete", False)):
             wrong = copy.deepcopy(manifest())
-            next(m for m in wrong["abi"]["methods"] if m["name"] == name)["safe"] = True
+            next(m for m in wrong["abi"]["methods"] if m["name"] == name)["safe"] = not safe
             with self.subTest(name=name), self.assertRaisesRegex(ValueError, "lifecycle safety"):
                 self.package_manifest(wrong, "verifier", ["setConfig"])
         wrong = copy.deepcopy(manifest("WhitelistHook"))

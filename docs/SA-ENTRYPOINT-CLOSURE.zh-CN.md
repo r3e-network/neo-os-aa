@@ -95,13 +95,12 @@ manifest `f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f`）�
 
 | ABI 入口 | 精确方法体区间 | 字节／指令数 | 尚缺的方法体工作 |
 | --- | --- | --- | --- |
-| `getAccountImplementationId/0` | `[39563,39596)` | 33 / 3 | 源码字符串／ABI 观察以及 VM 方法体定理 |
+| `getAccountImplementationId/0` | ``39563,39596)` | 33 / 3 | 源码字符串／ABI 观察以及 VM 方法体定理 |
 | `supportsModuleType/1` | `[39947,39979)` | 32 / 12 | 布尔 `PUSHT`、字符串比较的边界／故障以及源码投影 |
 | `supportsExecutionMode/1` | `[39979,40030)` | 51 / 18 | 同样的要求 |
 
-三者都没有静态字段、外部效应、内部调用或调用图环。它们的方法体证明单独在
-[SA-METHOD-REFINEMENT.md](SA-METHOD-REFINEMENT.md#public-pure-method-reference-refinement)
-中展开。它们的完整入口点依赖在本清单中仍然未闭合。
+三者都没有静态字段、外部效应、内部调用或调用图环。它们的方法体证明单独展开；归档的反射产物位于 `formal/refinement/fixtures/current-method-proof/`。
+它们的完整入口点依赖在本清单中仍然未闭合。
 
 自动选择还找出 29 个没有显式外部效应或调用图环的私有源码 helper，其中七个无需扩展
 `CapMethodVm.v` 的解码文本。最小的有用候选是
@@ -271,7 +270,7 @@ v3 的待处理更新读取器 `getPendingVerifierUpdate` 与 `getPendingHookUpd
 | --- | --- | --- | --- |
 | `isOwnerOnlyRecovery/1` | `[17700,17718)` | 18 / 7 | `ValidateAccountId` `1467`、`HasOwnerOnlyRecovery` `17204` |
 | `isAccountFrozen/1` | `[17663,17700)` | 37 / 20 | `ValidateAccountId` `1467`、`GetAccountControl` `1566`、`HasLegacyFrozenLatch` `17156` |
-| `isMarketEscrowActive/1` | `[14388,14430)` | 42 / 14 | `GetMarketEscrowContract` `14430`、`GetMarketEscrowListingId` `14496` |
+| `isMarketEscrowActive/1` | `[14388,14430)` | 42 / 14 | 两个市场托管读取助手；因为定义它们的 custom 源码已随 the retired custom tree 删除（Task #43），此处只引用工件的区间 |
 | `getNonce/3` | `[35916,36022)` | 106 / 47 | `ValidateAccountId` `1467`、`RequireAccountControl` `30206`、`ResolveCredentialGeneration` `35797`、`ReadNonceCursor` `24023` 等七个 |
 | `getNonce/2` | `[40313,40407)` | 94 / 47 | `ValidateAccountId` `1467`、`IsUnsignedIntegerWithinBytes` `20806` |
 | `isModuleInstalled/4` | `[40220,40286)` | 66 / 26 | `ValidateAccountId` `1467`、`FindModuleIdByContract` `8613`、`ModuleTypeCodeFromName` `40030` |

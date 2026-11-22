@@ -42,11 +42,14 @@ action below instead of a bare `NU1102` from deep inside the build.
 | Native ABI 2 | Explicit native-module build output | SmartAccount bounded native callbacks: verifier 1 GAS, hook/maintenance 2.5 GAS | Source-built native contract, `HF_SmartAccountV1`, ABI 2 metadata and epoch-aware modules |
 | Private `PLATFORM` | `contracts/bin/platform` | `System.Contract.CallWithGasLimit`, 10 GAS per verifier callback | Matching private runtime and activation; cannot run on an ordinary public node |
 
-`bash contracts/compile.sh` builds `public` and private `PLATFORM` profiles from the pinned published compiler and
-framework. The script defines `PLATFORM` only in a disposable copy of the execution source;
-`--platform` builds only the private core. Public deploy/upgrade helpers select `bin/public`.
-The two-profile reproducibility gate compares both output directories; byte identity alone
-does not establish runtime support or deployment parity.
+`scripts/build_native_modules.py` reproduces the native modules from the pinned published compiler and
+framework under the repository locked restore policy and writes them to the `--output` directory its
+caller names; the native kernel itself is compiled by `dotnet build SmartAccount.sln` against the
+pinned core checkout, and MSBuild writes it to each project's `bin/Release/net10.0/`. No script targets
+`contracts/bin/native`. The two retired custom rows above remain in the table because their recorded
+bytes are historical receipts: their `compile.sh` recipe is gone, the directories they name are
+gitignored build output, so a clean checkout has neither, and byte identity alone never established
+runtime support or deployment parity.
 
 For private NeoExpress validation, `scripts/neoexpress_validate.py` deploys the core from
 `bin/platform` and the modules from `bin/public`, and records the profile of every deployment.
@@ -75,9 +78,9 @@ threshold policy, so the descriptor keeps `compositeVerifier`/`compositeProfile`
 only to reject a non-empty value instead of silently reinterpreting an old one.
 It records original/prepared sources and both
 raw/packaged artifact bytes, then compares two independent scratch builds.
-Run `node scripts/check_neo_platform_packages.mjs --include-native` for all
-36 projects, including two test-only module probe projects and two source-runtime
-probe hosts, before building. The runtime hosts use no NuGet packages: their
+Run `node scripts/check_neo_platform_packages.mjs` before building: its default native
+scope covers the six modules, the epoch probe and its ABI fixture, and the two source-runtime
+probe hosts (`--include-custom` adds the retired custom tree). The runtime hosts use no NuGet packages: their
 committed locks must contain an empty net10.0 dependency graph, and their Neo
 assemblies must come from an explicitly validated source-built runtime. Native
 runner provenance must independently pin the

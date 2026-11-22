@@ -22,7 +22,7 @@ import {
 } from '../src/utils/neo.js';
 
 const require = createRequire(import.meta.url);
-const { SmartAccountClient } = require('../../sdk/js/src/index.js');
+const { NativeSmartAccountClient } = require('../../sdk/js/src/index.js');
 
 /** hash160 as the protocol defines it, computed here instead of by the module under test. */
 const hash160Hex = (hex) => createHash('ripemd160')
@@ -94,7 +94,7 @@ test('the identity derivation binds the salt and refuses inputs it cannot hash',
 });
 
 test('frontend and SDK derive byte-identical account identities', () => {
-  const client = new SmartAccountClient({ rpcUrl: 'https://example.invalid', networkMagic: 894710606, contractHash: CORE_HASH });
+  const client = new NativeSmartAccountClient({ rpcClient: { send: async () => ({}) }, networkMagic: 894710606, contractHash: CORE_HASH });
   assert.equal(
     deriveAccountIdentity({ custodyAddress: CUSTODY, salt: SALT }).accountId,
     client.deriveIdentity({ custodyAddress: CUSTODY, salt: SALT }).accountId,
@@ -110,15 +110,15 @@ test('createProxyScript emits the §16.1 proxy verification script', () => {
   const accountId = '89abcdef0123456789abcdef0123456789abcdef';
   const script = createProxyScript(CORE_HASH, accountId);
 
-  // PUSHDATA1 20 accountId | PUSH1 PACK | PUSH15 | PUSHDATA1 "verify" | PUSHDATA1 20 core | SYSCALL
+  // PUSHDATA1 20 accountId | PUSH1 PACK | PUSH5 | PUSHDATA1 "verify" | PUSHDATA1 20 core | SYSCALL
   assert.equal(
     script,
-    `0c14${reverseHex(accountId)}11c01f0c067665726966790c14${reverseHex(CORE_HASH)}41627d5b52`,
-  );
-  // The native kernel pushes CallFlags.ReadOnly (5) and therefore has a different address.
-  assert.equal(
-    createProxyScript(CORE_HASH, accountId, 5),
     `0c14${reverseHex(accountId)}11c0150c067665726966790c14${reverseHex(CORE_HASH)}41627d5b52`,
+  );
+  // The flag stays explicit: CallFlags.All (15) derives a different address.
+  assert.equal(
+    createProxyScript(CORE_HASH, accountId, 15),
+    `0c14${reverseHex(accountId)}11c01f0c067665726966790c14${reverseHex(CORE_HASH)}41627d5b52`,
   );
 });
 
@@ -126,7 +126,7 @@ test('frontend and SDK derive one canonical account address', () => {
   const accountId = EXPECTED_ACCOUNT_ID;
   const script = createProxyScript(CORE_HASH, accountId);
   const address = deriveAccountAddress({ accountId, coreContractHash: CORE_HASH });
-  const client = new SmartAccountClient({ rpcUrl: 'https://example.invalid', networkMagic: 894710606, contractHash: CORE_HASH });
+  const client = new NativeSmartAccountClient({ rpcClient: { send: async () => ({}) }, networkMagic: 894710606, contractHash: CORE_HASH });
 
   assert.equal(address, reverseHex(hash160Hex(script)));
   assert.equal(client.proxyAddress(accountId), address);

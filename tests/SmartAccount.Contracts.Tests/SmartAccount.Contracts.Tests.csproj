@@ -15,7 +15,4 @@
     <PackageReference Include="Neo.SmartContract.Testing" Version="$(NeoSmartContractFrameworkVersion)" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\contracts\custom\SmartAccount.csproj" />
-  </ItemGroup>
 </Project>

@@ -236,7 +236,11 @@ This keeps long-lived drafts explainable and reviewable without letting metadata
 | `Prefix_DependencyMaintenance` | `0x25` | Bare slot: dependency maintenance marker. |
 | `Prefix_ConfigurationContextDepth` | `0x26` | Bare slot: configuration-context nesting depth. |
 
-The prefixes above are the source of truth in `contracts/custom/SmartAccount.Internal.cs` (per-account keys) and `contracts/custom/SmartAccount.Admin.cs` / `contracts/custom/SmartAccount.PlatformRegistrar.cs` (bare slots); a key is the prefix alone or the prefix concatenated with the 20-byte `accountId`.
+The prefixes above belonged to the retired user-contract kernel and are kept here
+as an archival record; a key was the prefix alone or the prefix concatenated with
+the 20-byte `accountId`. The kernel that remains builds on the shared `0x50`-`0x5F`
+region declared in `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`,
+with key builders in `contracts/native/SmartAccount/SmartAccountProtocol.cs`.
 
 
 ## Matrix Domain Boundary

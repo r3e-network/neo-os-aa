@@ -21,16 +21,18 @@ namespace SmartAccount.Contracts.Tests;
 /// Private helper entry uses a synthetic descriptor; pure entries use original ABI.
 /// Trace deltas include all charges between instruction pre/post callbacks, but do
 /// not expose each internal AddFee call. This is finite evidence, not a gas-bound
-/// theorem for arbitrary inputs or policy configuration. See SA-METHOD-REFINEMENT.md
+/// theorem for arbitrary inputs or policy configuration. See formal/refinement/fixtures/current-method-proof/
 /// ("ApplicationEngine fee semantics").
 /// </summary>
 [TestClass]
 public class ImplementationRefinementGasRuntimeTests
 {
     private const long HostingGas = 100_00000000;
-    // Re-anchored to the v4 artifact: the helper body is byte-identical and
-    // moved by 17148 bytes (18900 -> 36048); `_initialize` moved independently.
-    private const int HelperEntry = 36048, HelperEnd = 36329, InitializeEntry = 43470;
+    // Re-anchored to the rebuilt live artifact: the helper body is byte-identical
+    // (281 bytes, 116 instructions) and moved by 272 bytes (36314 -> 36586);
+    // `_initialize` moved by the same delta (43775 -> 44047) and its entry is pinned
+    // from the manifest ABI rather than derived from the helper delta.
+    private const int HelperEntry = 36586, HelperEnd = 36867, InitializeEntry = 44047;
     private sealed record Charge(int Sequence, string ScriptHash, int Pc, string OpCode, string InstructionHex,
         string Method, string BeforePico, string AfterPico, string OpcodePico, string AdditionalPico, bool Completed,
         string? StorageKeyHex = null, int? StorageValueLength = null);
@@ -54,14 +56,14 @@ public class ImplementationRefinementGasRuntimeTests
         Assert.AreEqual(shape == "exhausted", r.Fault, r.Error);
         if (r.Fault)
         {
-            Assert.AreEqual(36224, helper[^1].Pc);
+            Assert.AreEqual(36762, helper[^1].Pc);
             Assert.IsFalse(helper[^1].Completed);
-            Assert.IsFalse(helper.Any(c => c.Pc == 36320));
+            Assert.IsFalse(helper.Any(c => c.Pc == 36858));
         }
         else
         {
-            Assert.AreEqual(36328, helper[^1].Pc);
-            Assert.IsTrue(helper.Any(c => c.Pc == 36320 && c.Completed));
+            Assert.AreEqual(36866, helper[^1].Pc);
+            Assert.IsTrue(helper.Any(c => c.Pc == 36858 && c.Completed));
             Assert.AreEqual(new BigInteger(shape == "same" ? 6 : 7), r.Value!.GetInteger());
         }
         bool deserialize = r.Trace.Any(c => c.ScriptHash == NativeContract.StdLib.Hash.ToString() && c.Method == "deserialize");
@@ -78,7 +80,7 @@ public class ImplementationRefinementGasRuntimeTests
             uint hash = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(Convert.FromHexString(syscall.InstructionHex).AsSpan(1));
             InteropDescriptor descriptor = ApplicationEngine.Services[hash];
             BigInteger expectedFee = descriptor.FixedPrice * r.ExecPico;
-            if (syscall.Pc == 36320)
+            if (syscall.Pc == 36858)
             {
                 // Actual value is a 39-byte canonical ledger. The new key is
                 // one byte; same-length overwrite charges ceil(39/4)=10 bytes.
@@ -220,7 +222,7 @@ public class ImplementationRefinementGasRuntimeTests
             active = new Charge(rows.Count, hash.ToString(), pc, instruction.OpCode.ToString(),
                 Convert.ToHexString(Enumerable.Range(pc, instruction.Size).Select(i => (byte)context.Script[i]).ToArray()).ToLowerInvariant(),
                 Method(hash, pc), Raw(app).ToString(), "", opcode.ToString(), "", false);
-            if (hash == core && pc == 36320)
+            if (hash == core && pc == 36858)
             {
                 // Read the actual outgoing native Storage.Put arguments; never
                 // mutate the stack, contract state, fee amount or fee counter.
@@ -250,8 +252,8 @@ public class ImplementationRefinementGasRuntimeTests
         string dir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../contracts/bin/public"));
         byte[] rawNef = File.ReadAllBytes(Path.Combine(dir, "SmartAccount.nef"));
         byte[] rawManifest = File.ReadAllBytes(Path.Combine(dir, "SmartAccount.manifest.json"));
-        Assert.AreEqual("2887bad34ab763cc8fb1de789997e3c3b331fc7de6ef42f44b095131529cfefb", Hash(rawNef));
-        Assert.AreEqual("f44cddebab7ecc5e35a66b5cb28fb0dbe1f2c224bc139e95ce41d6606431476f", Hash(rawManifest));
+        Assert.AreEqual("397f96ab1997dcd8aad6455a797a569dfff2789c4ffff4dbfcab4ff590d553bf", Hash(rawNef));
+        Assert.AreEqual("4939cf01fb812fff5fb83fc4edd71205041d9a91201390ff9f21716692c23470", Hash(rawManifest));
         Assert.AreEqual("cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a", Hash(File.ReadAllBytes(typeof(ApplicationEngine).Assembly.Location)));
         Assert.AreEqual("cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9", Hash(File.ReadAllBytes(typeof(ExecutionEngine).Assembly.Location)));
         RuntimeFixture fx = new();

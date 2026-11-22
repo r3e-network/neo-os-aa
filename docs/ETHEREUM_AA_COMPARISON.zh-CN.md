@@ -302,7 +302,7 @@ stateDiagram-v2
 ```
 
 入口都接收账户 id；`beginRecovery` 还接收将要轮换到的托管权，`getRecoveryStatus`
-回读待处理记录（`contracts/custom/SmartAccount.Escape.cs`）。
+回读待处理记录（`contracts/native/SmartAccount/SmartAccount.cs`）。
 
 **特性：**
 - **时间锁：** 7-90 天，创建时按账户固定

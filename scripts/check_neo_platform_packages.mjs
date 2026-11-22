@@ -7,19 +7,23 @@
 // Directory.Build.props. Both are published on nuget.org, which nuget.config makes the only
 // package source. The gate stops a build whose packages are not exactly the audited ones:
 //
-//   * the props pin, the tests project and contracts/neo-platform-packages.json must agree;
-//   * every project in the selected profile must have a committed lock file (packages.lock.json, or
+//   * the props pin, the project that takes the test engine and contracts/neo-platform-packages.json
+//     must agree;
+//   * every project in the selected scope must have a committed lock file (packages.lock.json, or
 //     packages.ProjectName.lock.json where a directory holds several projects) whose Neo packages
 //     are the audited versions with the audited content hashes;
-//   * the tests project, which also builds the SA core, must restore in locked mode, and every
-//     Neo package it restored must have the audited SHA-512 (a Neo package that is not listed in
-//     the manifest is refused too);
+//   * the restore targets must restore in locked mode, and every Neo package they restored must
+//     have the audited SHA-512 (a Neo package that is not listed in the manifest is refused too);
 //   * with --compiler-only, the installed nccs must be the pinned compiler package, byte for byte.
 //
-// Public/platform gates exclude the separately built native profile. --include-native
-// also checks six native modules, both test-only epoch probes, and two hosts
-// that reference a validated source runtime instead of Neo NuGet assemblies.
-// Usage: node scripts/check_neo_platform_packages.mjs [--compiler-only | --include-native]
+// The scope is native-only: the six SMARTACCOUNT_NATIVE modules, the five standard
+// user-space modules of contracts/modules (§11-§15), the epoch probe
+// host and its ABI fixture, and the two hosts that reference a validated source runtime
+// instead of Neo NuGet assemblies. The retired custom user-contract tree is gone with the
+// custom delivery track, so no argument re-adds it: a project outside this scope is not
+// audited here, it does not exist.
+// --include-native is accepted as a no-op for existing callers; native is the default.
+// Usage: node scripts/check_neo_platform_packages.mjs [--compiler-only]
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -32,17 +36,18 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 export const PATHS = {
   props: "Directory.Build.props",
   nugetConfig: "nuget.config",
-  testsProject: "tests/SmartAccount.Contracts.Tests/SmartAccount.Contracts.Tests.csproj",
-  contractsDir: "contracts",
-  mocksDir: "tests/mocks",
-  nativeCoreDir: "contracts/native",
+  // Native-only default scope: shared module projects, the standard user-space modules,
+  // the epoch probe host, its ABI fixture and the two source-runtime probe hosts.
   nativeModulesDir: "contracts/plugins/native-profile",
+  standardModulesDir: "contracts/modules",
+  nativeModuleProject: "contracts/plugins/native-profile/SessionKeyValidator.Native.csproj",
+  nativeModuleAssets: "contracts/plugins/native-profile/obj/project.assets.json",
+  nativeCoreDir: "contracts/native",
   nativeProbeProject: "tests/NativeEpochProbe/NativeEpochProbe.csproj",
   nativeProbeContractProject: "tests/NativeEpochProbe/contracts/NativeEpochCore.csproj",
+  nativeProbeAssets: "tests/NativeEpochProbe/obj/project.assets.json",
   nativeRuntimeProbeProject: "tests/NativeModuleProbe/NativeModuleProbe.csproj",
   nativeMultiSigProbeProject: "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj",
-  coreAssets: "contracts/custom/obj/project.assets.json",
-  testsAssets: "tests/SmartAccount.Contracts.Tests/obj/project.assets.json",
   manifest: "contracts/neo-platform-packages.json",
   doc: "docs/SA-REPRODUCIBLE-BUILD.md",
 };
@@ -98,14 +103,11 @@ export function parseManifest(text, file = PATHS.manifest) {
 }
 
 /** Returns human-readable problems when the pins and the audited manifest disagree. */
-export function pinConsistencyProblems({ propsVersion, testsVersion = null, manifest }) {
+export function pinConsistencyProblems({ propsVersion, manifest }) {
   const problems = [];
   if (JSON.stringify(manifest.sourceRuntimeProbeProjects)
     !== JSON.stringify([PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject])) {
     problems.push(`${PATHS.manifest} source runtime probe project inventory is missing or changed`);
-  }
-  if (testsVersion !== null && testsVersion !== propsVersion) {
-    problems.push(`${PATHS.testsProject} pins ${testsVersion} but ${PATHS.props} pins ${propsVersion}`);
   }
   if (manifest.frameworkVersion !== propsVersion) {
     problems.push(`${PATHS.manifest} records ${manifest.frameworkVersion} but ${PATHS.props} pins ${propsVersion}`);
@@ -119,33 +121,39 @@ export function pinConsistencyProblems({ propsVersion, testsVersion = null, mani
   return problems;
 }
 
-/** Lists projects in the selected build scope, relative to the repository root. */
-export function listProjects(root = repoRoot, { includeNative = false } = {}) {
+/**
+ * Lists every project in the native build scope, relative to the repository root. The
+ * overlay Neo core project is skipped: it restores the node's own dependency graph.
+ */
+export function listProjects(root = repoRoot) {
   const found = [];
   const walk = (relative) => {
     for (const entry of fs.readdirSync(path.join(root, relative), { withFileTypes: true })) {
       if (entry.name === "bin" || entry.name === "obj" || entry.name === "node_modules") continue;
       const child = `${relative}/${entry.name}`;
       // The overlay Neo core project restores the node's own dependency graph, not the
-      // contract framework, so it is outside this gate in either scope.
+      // contract framework, so it is outside this gate in every scope.
       if (child === PATHS.nativeCoreDir) continue;
-      if (!includeNative && child === PATHS.nativeModulesDir) continue;
       if (entry.isDirectory()) walk(child);
       else if (entry.name.endsWith(".csproj")) found.push(child);
     }
   };
-  walk(PATHS.contractsDir);
-  walk(PATHS.mocksDir);
-  return [...found.sort(), PATHS.testsProject, ...(includeNative
-    ? [PATHS.nativeProbeProject, PATHS.nativeProbeContractProject,
-      PATHS.nativeRuntimeProbeProject, PATHS.nativeMultiSigProbeProject]
-    : [])];
+  walk(PATHS.nativeModulesDir);
+  walk(PATHS.standardModulesDir);
+  const projects = found.sort();
+  projects.push(
+    PATHS.nativeProbeProject,
+    PATHS.nativeProbeContractProject,
+    PATHS.nativeRuntimeProbeProject,
+    PATHS.nativeMultiSigProbeProject,
+  );
+  return projects;
 }
 
 /**
  * The lock file that belongs to a project file. A directory that holds several projects
- * (contracts/plugins/hooks, contracts/plugins/validators, tests/mocks) would share one packages.lock.json, so its
- * projects use packages.ProjectName.lock.json, as Directory.Build.props configures.
+ * (contracts/plugins/native-profile) would share one packages.lock.json, so its projects
+ * use packages.ProjectName.lock.json, as Directory.Build.props configures.
  */
 export function lockFileFor(project, projects) {
   const directory = path.posix.dirname(project);
@@ -186,7 +194,6 @@ export function lockFileProblems(locks, manifest) {
     const required = project === PATHS.nativeProbeProject
       ? ["Neo.SmartContract.Testing"]
       : ["Neo.SmartContract.Framework"];
-    if (project === PATHS.testsProject) required.push("Neo.SmartContract.Testing");
     for (const id of required) {
       if (!names.has(id.toLowerCase())) problems.push(`${file} does not lock ${id}`);
     }
@@ -333,19 +340,18 @@ function readLock(file) {
   return fs.existsSync(absolute) ? JSON.parse(fs.readFileSync(absolute, "utf8")) : null;
 }
 
-function checkPackages(manifest, { includeNative = false } = {}) {
+function checkPackages(manifest) {
   const read = (relativePath) => fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
   const propsVersion = readPinnedVersion(read(PATHS.props), PATHS.props);
-  const testsVersion = readOptionalPinnedVersion(read(PATHS.testsProject), PATHS.testsProject);
 
-  const drift = pinConsistencyProblems({ propsVersion, testsVersion, manifest });
+  const drift = pinConsistencyProblems({ propsVersion, manifest });
   if (!fs.existsSync(path.join(repoRoot, PATHS.nugetConfig))) drift.push(`${PATHS.nugetConfig} is missing, so nuget.org is not the pinned only source`);
   if (drift.length > 0) {
     report("Neo platform package pins disagree", failureMessage(manifest, "The pins are inconsistent:", drift));
     return 1;
   }
 
-  const projects = listProjects(repoRoot, { includeNative });
+  const projects = listProjects(repoRoot);
   const locks = projects.map((project) => {
     const file = lockFileFor(project, projects);
     return { project, file, lock: readLock(file) };
@@ -356,17 +362,22 @@ function checkPackages(manifest, { includeNative = false } = {}) {
     return 1;
   }
 
-  const restore = spawnSync("dotnet", ["restore", PATHS.testsProject, "-nologo"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: { ...process.env, DOTNET_CLI_UI_LANGUAGE: "en" },
-  });
-  if (restore.error) {
-    report("dotnet is not available", `Could not run dotnet restore: ${restore.error.message}`);
-    return 1;
-  }
-  const output = `${restore.stdout ?? ""}${restore.stderr ?? ""}`;
-  if (restore.status !== 0) {
+  // A native module project restores the framework closure and the epoch probe restores the test
+  // engine closure, so together they cover the whole audited manifest.
+  const restoreTargets = [PATHS.nativeModuleProject, PATHS.nativeProbeProject];
+  // `dotnet restore` takes one project (or a solution) per invocation.
+  for (const target of restoreTargets) {
+    const restore = spawnSync("dotnet", ["restore", target, "-nologo"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: { ...process.env, DOTNET_CLI_UI_LANGUAGE: "en" },
+    });
+    if (restore.error) {
+      report("dotnet is not available", `Could not run dotnet restore: ${restore.error.message}`);
+      return 1;
+    }
+    const output = `${restore.stdout ?? ""}${restore.stderr ?? ""}`;
+    if (restore.status === 0) continue;
     const failures = restoreFailures(output);
     if (failures.length > 0) {
       report(
@@ -379,11 +390,13 @@ function checkPackages(manifest, { includeNative = false } = {}) {
     return 1;
   }
 
-  if (!fs.existsSync(path.join(repoRoot, PATHS.testsAssets))) {
-    report("dotnet restore produced no assets file", `${PATHS.testsAssets} is missing after a successful restore.`);
+  const assetsFiles = [PATHS.nativeModuleAssets, PATHS.nativeProbeAssets];
+  const missingAssets = assetsFiles.find((file) => !fs.existsSync(path.join(repoRoot, file)));
+  if (missingAssets) {
+    report("dotnet restore produced no assets file", `${missingAssets} is missing after a successful restore.`);
     return 1;
   }
-  const libraries = { ...readAssetsLibraries(PATHS.coreAssets), ...readAssetsLibraries(PATHS.testsAssets) };
+  const libraries = Object.assign({}, ...assetsFiles.map((file) => readAssetsLibraries(file)));
   const problems = restoredPackageProblems(libraries, manifest);
   if (problems.length > 0) {
     report("Neo platform packages differ from the audited bytes", failureMessage(manifest, "Restore produced packages that do not match the audit:", problems));
@@ -457,7 +470,9 @@ function checkCompiler(manifest) {
 
 function main(argv) {
   const manifest = parseManifest(fs.readFileSync(path.join(repoRoot, PATHS.manifest), "utf8"));
-  return argv.includes("--compiler-only") ? checkCompiler(manifest) : checkPackages(manifest, { includeNative: argv.includes("--include-native") });
+  if (argv.includes("--compiler-only")) return checkCompiler(manifest);
+  // Native is the only scope; --include-native stays accepted for existing callers.
+  return checkPackages(manifest);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

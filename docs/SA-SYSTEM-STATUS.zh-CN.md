@@ -51,7 +51,7 @@
 
 ## 验证与发布
 
-对公开合约、前端、浏览器、SDK 消费方与依赖审计，运行 `scripts/verify_repo.sh --profile custom`。原生配置 / 模块检查使用 `--profile native`，两者都要则用 `--profile all`。按各自所需的工具运行形式化与私有链门禁，并检查其记录的作用域与跳过的检查。构建比较必须同时覆盖 `contracts/bin/public` 与 `contracts/bin/platform`。
+对原生合约构建、前端、浏览器、SDK 消费方与依赖审计，运行 `scripts/verify_repo.sh --profile native`；native 是默认值，也是唯一的实现画像。按各自所需的工具运行形式化与私有链门禁，并检查其记录的作用域与跳过的检查。原生核构建到各项目自己的 `bin/Release/net10.0/`；模块与 epoch 探测回执则写入 `--output` 指向的目录。
 
 独立的[原生 VM 工作流](../.github/workflows/native-profile.yml) 构建一个经评审的不可变核心提交与两份相同的原生模块副本，然后用真实的原生 VM 检查完整的实测复合场景矩阵。它拒绝缺失、重复、未知、失败或超预算的用例；合成交易签名人使这成为宿主测试，而不是内存池或出块确认。原生门禁中的 NativeEpochProbe 使用仅用于测试的 SmartAccount ABI 夹具，属于不同的测试边界。协议 v4 把模块改名为 validator，并把配置移到 `configure` 生命周期回调。该探针现在驱动这套回调：
 对原生 profile 构建的每个模块执行安装、配置、按阶段校验与卸载，并断言固定核心调用方校验、
@@ -75,7 +75,7 @@ configuration nonce 与控制修订号。`getRecoveryStatus` 以
 
 ## 当前源码：平台服务、冻结与发现读取
 
-已提交的custom 源码候选把平台服务从核心中抽出：市场托管结算（`abandonListing`）位于 `SAAddressMarket`，Paymaster 报销（`settleReimbursement`）位于 `SAPaymaster`，平台账户注册与所有者轮换时间锁位于独立的 `SAPlatformRegistrar`（`contracts/custom/registrar/`）。在 2026-11-13 安全修复之上，该候选新增了备份所有者门控的冻结面（`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`），它不属于已固定的公开工件。
+已提交的custom 源码候选把平台服务从核心中抽出：市场托管结算（`abandonListing`）位于 `SAAddressMarket`，Paymaster 报销（`settleReimbursement`）位于 `SAPaymaster`，平台账户注册与所有者轮换时间锁位于独立的 `SAPlatformRegistrar`（the retired custom treeregistrar/`）。在 2026-11-13 安全修复之上，该候选新增了备份所有者门控的冻结面（`freezeAccount` / `unfreezeAccount` / `isAccountFrozen`），它不属于已固定的公开工件。
 
 2026-11-16 的 Ethereum-AA 对齐修订在该候选之上新增两个安全读取：`describeAccount(accountId)` 聚合完整账户描述符（ERC-7579 风格的能力发现）；`simulateValidation(accountId, op)` ——以 ERC-4337 的 EntryPoint 命名，便于 4337 工具找到熟悉的入口——是非故障的执行检查预检（不含签名与钩子执行），同时报告托管闩锁与原生备份所有者见证。同一修订让 `SessionKeyValidator` 在模块初始化数据中接受版本 0x01 的初始密钥数据块，使会话密钥账户在第一天即可使用；之后的密钥变更需要通过新的配置意图，并各自受 24 小时成熟期与七天过期窗口约束。SDK 暴露 `describeAccount` / `simulateValidation` / `buildSessionKeyInstallCommand`，以及 ERC-4337 形态（`toErc4337UserOperation`、`estimateUserOperationGas`）与 ERC-7715 形态（`buildSessionKeyPermission`）的适配器；类型化数据签名布局见 [SA-EIP-712-SPEC.md](SA-EIP-712-SPEC.md)。
 

@@ -95,7 +95,7 @@ V3 核心刻意保持精简：授权委托给验证器插件，策略委托给�
 
 | 文件 | 职责 |
 | --- | --- |
-| `contracts/custom/SmartAccount.cs` | v4 账户控制记录、`verify`、`executeUserOp`、nonce 通道、无回调恢复、模块配置意图 |
+| `contracts/native/SmartAccount/SmartAccount.cs` | v4 账户控制记录、`verify`、`executeUserOp`、nonce 通道、无回调恢复、模块配置意图 |
 | `contracts/plugins/validators/Web3AuthValidator.cs` | EIP-712 `UserOperation` 验证 |
 | `contracts/plugins/validators/TeeKeyValidator.cs` | TEE 签名授权 |
 | `contracts/plugins/validators/P256Validator.cs` | Passkey / P-256 授权 |
@@ -105,8 +105,6 @@ V3 核心刻意保持精简：授权委托给验证器插件，策略委托给�
 | `contracts/plugins/validators/DelegatedIdentityValidator.cs` | 委托（zkLogin）身份授权 |
 | `contracts/plugins/validators/SubscriptionValidator.cs` | 有界周期性扣款；核心 nonce 是唯一序号 |
 | `contracts/plugins/hooks/*.cs` | 可选策略，如每日限额、代币限制、凭证门控 |
-| `contracts/custom/paymaster/Paymaster.cs` | 赞助 / 免 Gas 交易的链上 Paymaster（GAS 存款、策略、结算） |
-| `contracts/custom/paymaster/PaymasterAuthority.cs` | Paymaster 管理与核心授权校验 |
 
 ## 7. 模块生命周期
 

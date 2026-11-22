@@ -260,11 +260,28 @@ namespace Neo.SmartContract
             // must never become a witness principal through the legacy fast path.
             if (IsHardforkEnabled(Hardfork.HF_SmartAccountV1) && hash == NativeContract.SmartAccount.Hash)
                 return false;
-            // Only a static transaction signer may authorize the address later on.
+            // An active account proxy is authorized only by its exact target
+            // lease and VM frame, independently of transaction signer scopes.
             if (Trigger == TriggerType.Application && IsHardforkEnabled(Hardfork.HF_SmartAccountV1) &&
                 GetState<SmartAccountInvocationContext>() is { } accountContext &&
                 accountContext.IsAccountProxyActive(hash))
                 return accountContext.IsWitnessAuthorized(this, hash);
+            static bool IsAccountProxySigner(Transaction container, UInt160 account)
+            {
+                if (container.Signers is null || container.Witnesses is null) return false;
+                for (int i = 0; i < container.Signers.Length && i < container.Witnesses.Length; i++)
+                    if (container.Signers[i].Account.Equals(account))
+                        return SmartAccountProtocol.IsProxyVerificationScript(
+                            container.Witnesses[i].VerificationScript.Span);
+                return false;
+            }
+            // An account proxy is never a witness principal through signer scopes
+            // or the caller-identity shortcut: only its own verified dispatch
+            // authorizes it (spec §3.6). The proxy witness script names it without
+            // a reverse index.
+            if (IsHardforkEnabled(Hardfork.HF_SmartAccountV1) && ScriptContainer is Transaction witnessTx &&
+                IsAccountProxySigner(witnessTx, hash))
+                return false;
             if (hash.Equals(CallingScriptHash)) return true;
 
             if (ScriptContainer is Transaction tx)

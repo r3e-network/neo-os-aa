@@ -24,22 +24,25 @@ namespace Neo.SmartContract.Native
     /// Writer phases of the v4 execution state machine (spec §7.1/§9). A
     /// module callback is authorized only while the recorded phase is the one
     /// that callback belongs to, for the exact active module instance.
+    ///
+    /// The minimal core runs one validator callback per phase, so no aggregate
+    /// gas pool is tracked here: every callback carries its own hard VM gas
+    /// limit instead.
     /// </summary>
     internal enum SmartAccountCallbackPhase : byte
     {
         None = 0,
         Validation = 1,
-        HookPre = 2,
+        // 2 and 4 were the hook pre/post phases. The minimal core runs no
+        // hooks, so those values are retired and never defined again: a module
+        // asking for them is rejected instead of being granted an unused phase.
         TargetDispatch = 3,
-        HookPost = 4,
         Completion = 5,
         Configuration = 6,
         Cleanup = 7,
     }
 
-    internal enum SmartAccountGasPool { Validation, Hook, Completion }
-
-    /// <summary>Engine-local account locks, phase grants and aggregate gas pools.</summary>
+    /// <summary>Engine-local account locks, execution state and phase grants.</summary>
     internal sealed class SmartAccountInvocationContext
     {
         private readonly Dictionary<UInt160, AccountLease> _accounts = new();
@@ -52,9 +55,6 @@ namespace Neo.SmartContract.Native
             internal byte Phase;
             internal BigInteger ActiveModuleId = BigInteger.Zero;
             internal UInt160 ActiveModuleContract = UInt160.Zero;
-            internal long ValidationRemaining;
-            internal long HookRemaining;
-            internal long CompletionRemaining;
         }
 
         private abstract class Lease(SmartAccountInvocationContext owner) : IDisposable
@@ -111,8 +111,14 @@ namespace Neo.SmartContract.Native
         internal IDisposable EnterAccount(UInt160 accountId)
         {
             RequireIdentity(accountId);
-            if (_accounts.ContainsKey(accountId))
-                throw new InvalidOperationException("The SmartAccount is already executing an authorized transition.");
+            // One authorized transition at a time (spec §3.6): while any account
+            // lease is open, entering the same account is direct re-entry and
+            // entering a different account is cross-account recursion. Both are
+            // reentrancy and fault with the shared code. A batch is unaffected:
+            // its operations run sequentially on one account and every lease is
+            // released before the next operation enters.
+            if (_accounts.Count > 0)
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorReentrancyForbidden);
             var lease = new AccountLease(this, accountId);
             _accounts.Add(lease.Identity, lease);
             _scopes.Push(lease);
@@ -128,7 +134,7 @@ namespace Neo.SmartContract.Native
             return account;
         }
 
-        /// <summary>Engine-local execution state of an account (phase + gas pools).</summary>
+        /// <summary>Engine-local execution state of an account (phase and active grant).</summary>
         internal AccountExecution Execution(UInt160 accountId)
         {
             if (!_executions.TryGetValue(accountId, out var execution))
@@ -139,38 +145,14 @@ namespace Neo.SmartContract.Native
         internal bool TryGetExecution(UInt160 accountId, out AccountExecution execution) =>
             _executions.TryGetValue(accountId, out execution!);
 
-        internal void OpenExecution(UInt160 accountId, long validation, long hook, long completion)
+        internal void OpenExecution(UInt160 accountId)
         {
             if (_executions.ContainsKey(accountId))
                 throw new InvalidOperationException("The SmartAccount already has an open execution context.");
-            _executions.Add(accountId, new AccountExecution
-            {
-                ValidationRemaining = validation,
-                HookRemaining = hook,
-                CompletionRemaining = completion,
-            });
+            _executions.Add(accountId, new AccountExecution());
         }
 
         internal void CloseExecution(UInt160 accountId) => _executions.Remove(accountId);
-
-        internal long Remaining(AccountExecution execution, SmartAccountGasPool pool) => pool switch
-        {
-            SmartAccountGasPool.Validation => execution.ValidationRemaining,
-            SmartAccountGasPool.Hook => execution.HookRemaining,
-            SmartAccountGasPool.Completion => execution.CompletionRemaining,
-            _ => throw new ArgumentOutOfRangeException(nameof(pool)),
-        };
-
-        internal void Spend(AccountExecution execution, SmartAccountGasPool pool, long amount)
-        {
-            switch (pool)
-            {
-                case SmartAccountGasPool.Validation: execution.ValidationRemaining -= amount; break;
-                case SmartAccountGasPool.Hook: execution.HookRemaining -= amount; break;
-                case SmartAccountGasPool.Completion: execution.CompletionRemaining -= amount; break;
-                default: throw new ArgumentOutOfRangeException(nameof(pool));
-            }
-        }
 
         private static void RequireAnchor(UInt160 contract, ExecutionContextState anchor)
         {
@@ -180,14 +162,22 @@ namespace Neo.SmartContract.Native
                 throw new ArgumentException("The grant must identify its loaded contract invocation.", nameof(anchor));
         }
 
+        internal void AssertModuleEntry(UInt160 accountId, UInt160 contract, SmartAccountCallbackPhase phase)
+        {
+            _ = RequireAccount(accountId);
+            RequireIdentity(contract);
+            if (phase == SmartAccountCallbackPhase.None || phase > SmartAccountCallbackPhase.Cleanup
+                || !Enum.IsDefined(phase)
+                || NativeContract.IsNative(contract) || contract == SmartAccountProtocol.ServiceHash)
+                throw new ArgumentException("The callback phase or module identity is invalid.");
+        }
+
         internal IDisposable EnterModule(UInt160 accountId, BigInteger moduleId, UInt160 contract,
             SmartAccountCallbackPhase phase, ExecutionContextState anchor)
         {
+            AssertModuleEntry(accountId, contract, phase);
             AccountLease account = RequireAccount(accountId);
             RequireAnchor(contract, anchor);
-            if (phase == SmartAccountCallbackPhase.None || phase > SmartAccountCallbackPhase.Cleanup
-                || NativeContract.IsNative(contract) || contract == SmartAccountProtocol.ServiceHash)
-                throw new ArgumentException("The callback phase or module identity is invalid.");
             AccountExecution execution = Execution(accountId);
             execution.Phase = (byte)phase;
             execution.ActiveModuleId = moduleId;
@@ -220,8 +210,8 @@ namespace Neo.SmartContract.Native
 
         /// <summary>
         /// Trigger gate of a writer phase: an application invocation may address
-        /// every phase it runs (validation preview, hooks, completion, lifecycle),
-        /// a verification invocation may only address the validation phase, and
+        /// every phase it runs (validation preview, completion, lifecycle), a
+        /// verification invocation may only address the validation phase, and
         /// the native persist triggers never address account state at all.
         /// </summary>
         private static bool AllowsPhase(ApplicationEngine engine, SmartAccountCallbackPhase phase) =>
@@ -243,7 +233,7 @@ namespace Neo.SmartContract.Native
             return ReferenceEquals(caller, target.Anchor);
         }
 
-        /// <summary>Closes the writer phase of an account without dropping its gas pools.</summary>
+        /// <summary>Closes the writer phase of an account.</summary>
         internal void ClosePhase(UInt160 accountId)
         {
             AccountExecution execution = Execution(accountId);
@@ -260,8 +250,7 @@ namespace Neo.SmartContract.Native
         /// <summary>
         /// True when the caller of this core invocation is the module instance
         /// that the current phase addresses. Used by the module-facing
-        /// <c>getAuthorizedModuleId</c> query and by the core's own callback
-        /// phase checks.
+        /// <c>getAuthorizedModuleId</c> query.
         /// </summary>
         internal bool IsModuleAuthorized(ApplicationEngine engine, UInt160 accountId, SmartAccountCallbackPhase phase)
         {

@@ -13,6 +13,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Neo.Extensions;
 using Neo.IO;
 using Neo.SmartContract;
+using Neo.SmartContract.Manifest;
 using Neo.SmartContract.Native;
 using Neo.VM;
 using Neo.VM.Types;
@@ -61,7 +62,8 @@ namespace Neo.UnitTests.SmartContract.Native
         private static Array Operation(BigInteger nonce = default) => new([
             new Integer(SmartAccountModuleProtocol.ModuleProtocolVersion), Service.ToArray(), "ping", new Array(),
             nonce, NonceSubkey, new BigInteger(1_700_000_000_000),
-            BigInteger.Zero, BigInteger.Zero, BigInteger.One, BigInteger.Zero,
+            // §4.1 [8]: the credential generation is 1-based; 0 is malformed.
+            BigInteger.Zero, BigInteger.One, BigInteger.One, BigInteger.Zero,
             Signature, new Array(),
         ]);
 
@@ -186,10 +188,15 @@ namespace Neo.UnitTests.SmartContract.Native
                 (5, new ByteString(Enumerable.Repeat((byte)1, 32).ToArray())),
                 (6, new BigInteger(1_700_000_000_001)),
                 (7, new Integer(1)),
-                (8, new Integer(1)),
+                // The baseline generation is 1, so a committed-field probe must
+                // move it to a different legal value (2), not to 0.
+                (8, new Integer(2)),
                 (9, new Integer(2)),
                 (10, new Integer(1)),
-                (12, new Array([new Array([new Integer(1), new ByteString(new byte[] { 7 })])])),
+                // Field 12 is module-defined but core-carried: the core checks the
+                // shape only, so a shape-valid proof array is digest-committed
+                // even though no hook runs in this core (§4.2 R-04-03).
+                (12, new Array([new Array([new Integer(1), new ByteString(new byte[] { 1 })])])),
             };
             foreach (var (field, value) in mutations)
                 Assert.AreNotEqual(baseline, DigestHex(Mutate(Operation(), field, value)), $"field {field}");
@@ -232,6 +239,7 @@ namespace Neo.UnitTests.SmartContract.Native
         [DataRow("deadline-bytes")]
         [DataRow("validator-negative")]
         [DataRow("generation-overflow")]
+        [DataRow("generation-zero")]
         [DataRow("epoch-bytes")]
         [DataRow("configuration-negative")]
         [DataRow("signature-long")]
@@ -239,13 +247,11 @@ namespace Neo.UnitTests.SmartContract.Native
         [DataRow("signature-buffer")]
         [DataRow("signature-null")]
         [DataRow("hooks-struct")]
-        [DataRow("hooks-count")]
-        [DataRow("hook-pair-shape")]
-        [DataRow("hook-id-zero")]
-        [DataRow("hook-id-order")]
-        [DataRow("hook-bytes")]
-        [DataRow("hook-proof-type")]
-        [DataRow("hook-proof-total")]
+        [DataRow("hooks-oversize")]
+        [DataRow("hooks-pair-shape")]
+        [DataRow("hooks-zero-id")]
+        [DataRow("hooks-unsorted")]
+        [DataRow("hooks-proof-type")]
         public void MalformedOperationIsRejectedBeforeDigest(string defect)
         {
             Array op = Operation();
@@ -276,31 +282,89 @@ namespace Neo.UnitTests.SmartContract.Native
                 case "deadline-bytes": op[SmartAccountModuleProtocol.OpDeadline] = new byte[] { 1 }; break;
                 case "validator-negative": op[SmartAccountModuleProtocol.OpValidatorId] = -1; break;
                 case "generation-overflow": op[SmartAccountModuleProtocol.OpCredentialGeneration] = BigInteger.One << 64; break;
+                // §4.1 [8]: the generation is 1-based, so 0 is malformed even
+                // though it fits the unsigned 64-bit range.
+                case "generation-zero": op[SmartAccountModuleProtocol.OpCredentialGeneration] = BigInteger.Zero; break;
                 case "epoch-bytes": op[SmartAccountModuleProtocol.OpAuthorityEpoch] = new byte[] { 1 }; break;
                 case "configuration-negative": op[SmartAccountModuleProtocol.OpConfigurationNonce] = -1; break;
                 case "signature-long": op[SmartAccountModuleProtocol.OpSignature] = new byte[SmartAccountModuleProtocol.SignatureBytesMax + 1]; break;
                 case "signature-empty": op[SmartAccountModuleProtocol.OpSignature] = ByteString.Empty; break;
                 case "signature-buffer": op[SmartAccountModuleProtocol.OpSignature] = new Buffer(1); break;
                 case "signature-null": op[SmartAccountModuleProtocol.OpSignature] = StackItem.Null; break;
+                // Field 12 is module-defined but core-carried: the core checks
+                // the shape of hookProofs and never interprets a proof (§4.2
+                // R-04-03), so every violation here is a shape defect.
                 case "hooks-struct": op[SmartAccountModuleProtocol.OpHookProofs] = new Struct(); break;
-                case "hooks-count": op[SmartAccountModuleProtocol.OpHookProofs] = new Array(
-                    Enumerable.Range(0, SmartAccountModuleProtocol.HookProofsEntriesMax + 1).Select(i =>
-                        (StackItem)new Array([new Integer(i + 1), new ByteString(new byte[] { 1 })]))); break;
-                case "hook-pair-shape": op[SmartAccountModuleProtocol.OpHookProofs] = new Array([new Array([new Integer(1)])]); break;
-                case "hook-id-zero": op[SmartAccountModuleProtocol.OpHookProofs] = new Array([new Array([new Integer(0), new ByteString(new byte[1])])]); break;
-                case "hook-id-order": op[SmartAccountModuleProtocol.OpHookProofs] = new Array([
-                    new Array([new Integer(2), new ByteString(new byte[] { 1 })]),
-                    new Array([new Integer(1), new ByteString(new byte[] { 2 })])]); break;
-                case "hook-bytes": op[SmartAccountModuleProtocol.OpHookProofs] = new Array([
-                    new Array([new Integer(1), new ByteString(new byte[SmartAccountModuleProtocol.HookProofBytesMax + 1])])]); break;
-                case "hook-proof-type": op[SmartAccountModuleProtocol.OpHookProofs] = new Array([new Array([new Integer(1), new Integer(1)])]); break;
-                case "hook-proof-total": op[SmartAccountModuleProtocol.OpHookProofs] = new Array([
-                    new Array([new Integer(1), new ByteString(new byte[3000])]),
-                    new Array([new Integer(2), new ByteString(new byte[2000])])]); break;
+                case "hooks-oversize": op[SmartAccountModuleProtocol.OpHookProofs] = new Array(
+                    Enumerable.Range(1, SmartAccountModuleProtocol.HookProofsEntriesMax + 1)
+                        .Select(id => (StackItem)new Array([new Integer(id), ByteString.Empty]))); break;
+                case "hooks-pair-shape": op[SmartAccountModuleProtocol.OpHookProofs] =
+                    new Array([new Array([new Integer(1)])]); break;
+                case "hooks-zero-id": op[SmartAccountModuleProtocol.OpHookProofs] =
+                    new Array([new Array([new Integer(0), ByteString.Empty])]); break;
+                case "hooks-unsorted": op[SmartAccountModuleProtocol.OpHookProofs] = new Array([
+                    new Array([new Integer(2), ByteString.Empty]),
+                    new Array([new Integer(1), ByteString.Empty])]); break;
+                case "hooks-proof-type": op[SmartAccountModuleProtocol.OpHookProofs] =
+                    new Array([new Array([new Integer(1), new Integer(7)])]); break;
                 default: Assert.Fail(defect); break;
             }
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SerializeCanonicalOperation(value));
-            if (value is Array operation) Assert.ThrowsExactly<FormatException>(() => Digest(operation));
+            FormatException fault = Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SerializeCanonicalOperation(value));
+            // Every rejection names a protocol symbol rather than prose, so the
+            // executor and the SDK can map the fault without parsing English.
+            Assert.StartsWith("SA_", fault.Message);
+            string symbol = defect switch
+            {
+                "short" or "long" => SmartAccountModuleProtocol.ErrorOperationFieldCount,
+                "version" => SmartAccountModuleProtocol.ErrorProtocolVersion,
+                "generation-zero" => SmartAccountModuleProtocol.ErrorOperationMalformed,
+                _ when defect.StartsWith("hooks-", StringComparison.Ordinal)
+                    => SmartAccountModuleProtocol.ErrorProofInvalid,
+                _ => null,
+            };
+            if (symbol != null) Assert.AreEqual(symbol, fault.Message);
+            if (value is Array operation)
+                Assert.ThrowsExactly<FormatException>(() => Digest(operation));
+        }
+
+        [TestMethod]
+        public void ModuleCodeIdentityIsSha256OfTheNefAlone()
+        {
+            NefFile nef = new()
+            {
+                Compiler = "code identity fixture",
+                Source = string.Empty,
+                Tokens = [],
+                Script = new byte[] { (byte)OpCode.RET }
+            };
+            nef.CheckSum = NefFile.ComputeChecksum(nef);
+            byte[] bytes = nef.ToArray();
+            byte[] digest = System.Security.Cryptography.SHA256.HashData(bytes);
+
+            ContractState first = new()
+            {
+                Id = 1,
+                UpdateCounter = 0,
+                Hash = UInt160.Zero,
+                Nef = NefFile.Parse(bytes, verify: true),
+                Manifest = ContractManifest.Parse("{\"name\":\"identity\",\"groups\":[],\"features\":{},\"supportedstandards\":[],\"abi\":{\"methods\":[{\"name\":\"probe\",\"parameters\":[],\"returntype\":\"Void\",\"safe\":false,\"offset\":0}],\"events\":[]},\"permissions\":[],\"trusts\":\"*\"}")
+            };
+            // Spec §3.6/§7.3: the module code identity is SHA-256 over the deployed
+            // NEF bytes only — the same 32 bytes the custom kernel records as
+            // CryptoLib.Sha256(contract.Nef). Manifest continuity is carried by the
+            // 0x52 profile digest, so a manifest change must not move this value.
+            Assert.AreSequenceEqual(digest, SmartAccountModulePolicy.CodeHash(first).ToArray());
+
+            ContractState second = new()
+            {
+                Id = 2,
+                UpdateCounter = 9,
+                Hash = UInt160.Parse("0x0101010101010101010101010101010101010101"),
+                Nef = NefFile.Parse(bytes, verify: true),
+                Manifest = ContractManifest.Parse("{\"name\":\"identity\",\"groups\":[],\"features\":{},\"supportedstandards\":[],\"abi\":{\"methods\":[{\"name\":\"other\",\"parameters\":[],\"returntype\":\"Void\",\"safe\":false,\"offset\":0}],\"events\":[]},\"permissions\":[],\"trusts\":\"*\"}")
+            };
+            Assert.AreSequenceEqual(digest, SmartAccountModulePolicy.CodeHash(second).ToArray(),
+                "the manifest is outside the code identity");
         }
 
         [TestMethod]
@@ -423,15 +487,8 @@ namespace Neo.UnitTests.SmartContract.Native
                 (SmartAccountModuleProtocol.PrefixAccountControl, () => SmartAccountProtocol.GetAccountControlKey(Account), 21),
                 (SmartAccountModuleProtocol.PrefixModuleInstance, () => SmartAccountProtocol.GetModuleInstanceKey(Account, ids[0]), 29),
                 (SmartAccountModuleProtocol.PrefixModuleIndex, () => SmartAccountProtocol.GetModuleIndexKey(Account, SmartAccountModuleProtocol.ModuleTypeCodeValidator, ids[0]), 30),
-                (SmartAccountModuleProtocol.PrefixHookOrder, () => SmartAccountProtocol.GetHookOrderKey(Account), 21),
-                (SmartAccountModuleProtocol.PrefixConfigIntent, () => SmartAccountProtocol.GetConfigIntentKey(Account, ids[0]), 29),
-                (SmartAccountModuleProtocol.PrefixConfigIntentIndex, () => SmartAccountProtocol.GetConfigIntentIndexKey(Account), 21),
                 (SmartAccountModuleProtocol.PrefixNonceCursor, () => SmartAccountProtocol.GetNonceCursorKey(Account, channel), 45),
                 (SmartAccountModuleProtocol.PrefixNonceNamespace, () => SmartAccountProtocol.GetNonceNamespaceKey(Account, channel), 45),
-                (SmartAccountModuleProtocol.PrefixMessageSubject, () => SmartAccountProtocol.GetMessageSubjectKey(Account), 21),
-                (SmartAccountModuleProtocol.PrefixCoreRecovery, () => SmartAccountProtocol.GetCoreRecoveryKey(Account), 21),
-                (SmartAccountModuleProtocol.PrefixMigrationState, () => SmartAccountProtocol.GetMigrationStateKey(Account), 21),
-                (SmartAccountModuleProtocol.PrefixThresholdPolicy, () => SmartAccountProtocol.GetThresholdPolicyKey(Account, ids[0]), 29),
             ];
             var seen = new System.Collections.Generic.HashSet<byte>();
             byte[] protocolKey = SmartAccountProtocol.GetProtocolKey();
@@ -445,14 +502,12 @@ namespace Neo.UnitTests.SmartContract.Native
                 Assert.AreSequenceEqual(Account.ToArray(), key[1..21]);
                 Assert.IsTrue(seen.Add(prefix), $"duplicate prefix {prefix:X2}");
             }
-            Assert.HasCount(13, seen);
+            Assert.HasCount(6, seen);
             // The id tail is big-endian and fixed width.
             Assert.AreSequenceEqual(new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 },
                 SmartAccountProtocol.GetModuleInstanceKey(Account, BigInteger.One)[21..]);
             Assert.AreSequenceEqual(Enumerable.Repeat((byte)0xFF, 8).ToArray(),
-                SmartAccountProtocol.GetThresholdPolicyKey(Account, ulong.MaxValue)[21..]);
-            Assert.AreSequenceEqual(Enumerable.Repeat((byte)0xFF, 8).ToArray(),
-                SmartAccountProtocol.GetConfigIntentKey(Account, ulong.MaxValue)[21..]);
+                SmartAccountProtocol.GetModuleInstanceKey(Account, ulong.MaxValue)[21..]);
             // Module index keys carry the type code between the account and the id.
             Assert.AreEqual((byte)SmartAccountModuleProtocol.ModuleTypeCodeValidator,
                 SmartAccountProtocol.GetModuleIndexKey(Account, SmartAccountModuleProtocol.ModuleTypeCodeValidator,
@@ -489,8 +544,8 @@ namespace Neo.UnitTests.SmartContract.Native
 
             byte[] channel = SmartAccountProtocol.DeriveChannel(digest);
             Assert.HasCount(SmartAccountModuleProtocol.NonceChannelSize, channel);
-            Assert.AreEqual(0, channel[0] & 0xFE);
-            Assert.AreEqual((byte)(digest[8] & 0x01), channel[0]);
+            Assert.AreEqual(0, channel[0] & 0x80);
+            Assert.AreEqual((byte)(digest[8] & 0x7F), channel[0]);
             Assert.AreSequenceEqual(digest[9..32], channel[1..]);
             Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.DeriveChannel(new byte[31]));
 

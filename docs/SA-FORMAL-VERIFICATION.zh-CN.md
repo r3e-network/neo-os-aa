@@ -4,6 +4,10 @@
 
 ## 状态
 
+### fixture 刷新（2026-11-21）
+
+2026-11-21 的 v4 规范一致性重建再次改动了 custom 核心（凭据代次从 1 起、核心级单一重入排斥、每个可写回调后与提交前的代码绑定连续性、`NefSha256` 统一为 `SHA256(NEF)`），因此工件身份移动到 NEF `397f96ab…` ／ manifest `4939cf01…`，script 为 44,833 字节。`formal/refinement/` 中的每条泳道常量、fixture 与回执都从这些字节重新导出：helper 仍是逐字节相同的 281 字节／116 条指令／52 个 opcode 的程序，整体平移 +272 到 `[36586,36867)`；initializer 为 `[44047,44833)`，786 字节／245 条指令；计费区间为 `[36696,36718)`；报销 `Storage.Put` 在 `36858`；initializer 的静态控制是 `PUSHDATA1` 数据字节 `44605` 与 `STSFLD` 槽操作数 `44609`。五形状 helper-gas 运行时捕获由其生产者测试重新捕获，而非编辑。有一条泳道控制需要重新锚定而不是平移：`gas_trace_proofs` 的哈希相等分支变异体原钉 PC 36126，该地址在移动后已不落在受限 helper 内的任何指令上（这是一个会抛出而不是拒绝的潜在缺陷），现锚定到复核过的 `36664` 分支，边为 `36666` ／ `36680`。刷新后的回执（`formal/refinement/fixtures/current-method-proof/method-proof.json`，SHA-256 `a4bd1854…`）对 `[36586,36867)` 记录 `kernelChecked: true`、`referenceRefinementVerified: true` 与 `fullImplementationVerified: false`，方法 `9aec81b7…`、证书 `f339b6ec…`、`CapMethodVm` 模型 `5ac5fa2c…`；111 条闭合假设全部枚举，6/6 条语义控制在 Rocq 9.0.1 上均被拒绝。重新锚定后该泳道的套件结果：`test_gas_trace` 22/22，`test_method_proofs` + `test_initializer_proofs` 32/32，`test_composition_proofs` + `test_context_proofs` + `test_public_pure_proofs` + `test_gas_proofs` 28/28。该作用域仍是有界的 helper／参考精化，不是整个实现的证明；initializer 的 `CapContext` 对 `UInt64Mask` 静态槽的覆盖缺口仍由 Task 26 处理。
+
 ### fixture 刷新（2026-11-16）
 
 2026-11-16 的设计阶段遗留兼容性清理改动了custom 核心源码（移除了遗留存储前缀回退、轮换迁移面与依赖
@@ -15,7 +19,20 @@
 manifest `a6533d47…`）重新生成。2026-11-19 的 v4 重建再次移动了工件，
 NEF 变为 `2887bad3…` ／ manifest 变为 `f44cddeb…`；本文档列出的每条泳道常量、fixture 与回执都已
 针对该工件重新固定或重新蒸馏，唯独归档的 helper-gas 运行时捕获仍然固定 `9f714866…`，因此在新捕获
-产生之前保持失败关闭。被退役的清理前 getter 形状已不复存在：`storage_getter_source.py`
+产生之前保持失败关闭。2026-11-20 的重建再次移动了工件，NEF 变为 `27e28aa0…` ／ manifest 变为
+`f0c6467b…`。该 pin 是从 live 字节重新锚定的，五形状 helper-gas 运行时捕获用其生产者测试重新捕获、
+而非编辑，因此 the archived method-refinement record (removed from the tree) 中的泳道常量与 `formal/refinement/fixtures/` 下的回执都
+命名这个工件。有两处模型绑定没有随这次移动而保留：报销键是静态槽 58（槽 38 现在是 `UInt64Mask`），
+编解码 token 是 `deserialize` 2 / `serialize` 3（而非 3 / 4）。两者均已在 `formal/refinement/` 中
+修正，并已在 Coq 8.18 主机上针对本工件重新检查。刷新后的回执
+（`formal/refinement/fixtures/current-method-proof/method-proof.json`，SHA-256
+`98711714…`）对 helper `[36314,36595)`（281 字节 / 116 条指令）记录
+`kernelChecked: true`、`referenceRefinementVerified: true` 与
+`fullImplementationVerified: false`，方法 `9aec81b7…`、证书 `f339b6ec…`、`CapMethodVm` 模型
+`5ac5fa2c…`；`coqc` 与 `coqchk -silent` 干净，111 条闭合假设全部枚举，5/5 组合测试通过。该
+作用域仍是有界的 helper／参考精化，不是整个实现的证明。initializer 的 `CapContext` 仍未覆盖建立
+v4 `UInt64Mask` 静态槽的 `PUSHINT8`/`SHL`/`SUB` 写入，该泳道由 Task 26 处理中、尚未闭环。归档的
+改名前捕获按设计继续失败关闭。被退役的清理前 getter 形状已不复存在：`storage_getter_source.py`
 不再携带 `legacy_symbol` / `inline-fallback` 形式，该泳道的源码级语义控制现在改为前缀／默认绑定
 变异体，遗留的读取顺序控制已从泳道、闭合门禁与回归套件中移除。
 
@@ -90,12 +107,12 @@ NeoExpress 回执同样与源码运行时绑定：它记录 PASS 源码构建回
 ### 分层实现精化（2026-10-13）
 
 [实现门禁](SA-IMPLEMENTATION-REFINEMENT.md)现在默认请求四条证明泳道：原始算术区域、
-[数值强制转换](SA-METHOD-REFINEMENT.md#numeric-coercion-refinement)、
-[预留算术](SA-METHOD-REFINEMENT.md#reservation-arithmetic-refinement)，以及
-[完整报销 helper 参考精化](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-reference-refinement)。
-最后一条泳道使用[类型化源码投影](SA-METHOD-REFINEMENT.md#full-helper-source-projection)与
-[完整指令清单](SA-METHOD-REFINEMENT.md#whole-helper-refinement-inventory)。
-[固定引擎运行时检查](SA-METHOD-REFINEMENT.md#complete-reimbursement-helper-runtime-checks)提供
+`数值强制转换`、
+`预留算术`，以及
+`完整报销 helper 参考精化`。
+最后一条泳道使用`类型化源码投影`与
+`完整指令清单`。
+`固定引擎运行时检查`提供
 独立的有限证据，包括存储与故障行为。这些泳道单独都不验证整份合约或公开协议激活。
 
 在仓库根目录用一个新的或空的输出目录运行默认门禁：
@@ -622,18 +639,18 @@ manifest-group 签名，或整个 NeoVM。
 
 ### 重命名与余量断言之后的源码固定刷新
 
-`formal/source-lock.json` 当前固定 61 个源码文件。下文的历史重命名刷新固定了 59 个源码文件。其中
+`formal/source-lock.json` 当前固定 56 个源码文件。下文的历史重命名刷新固定了 59 个源码文件。其中
 35 个固定值相对工作树已经陈旧，`formal/verify.py` 在运行任何 Coq 或 TLC 泳道之前就以
 `Source drift: Directory.Build.props` 故障即闭合。只有在把 35 个逐一分类之后才刷新了固定值：
 
 - **31 个文件只是重命名。** 在此前固定的内容中把 `SmartAccount` / `UnifiedSmartWallet` /
   `abstract-account` 替换为 `SmartAccount` / `smart-account`，即可逐字节复现当前文件，因此对应
   陈述未变。
-- **`contracts/custom/SmartAccount.Paymaster.cs`** 增加了 73 字节的 VM 整数余量断言（`vmMax` 加上
+- **`SmartAccount.Paymaster.cs` (retired custom kernel)** 增加了 73 字节的 VM 整数余量断言（`vmMax` 加上
   `budget.Reserved <= vmMax - settled`）。该断言位于完整上下文证书所建模的 helper 内部；精化泳道
   证明该守卫在合法域上成功（`legal_update_fits`、`vm_leb_margin_of_fits`），所以固定的对应关系
   对新文本仍然成立。
-- **`contracts/custom/SmartAccount.State.cs`** 只改变 `AccountImplementationId` 字符串常量，没有可执行
+- **`SmartAccount.State.cs` (retired custom kernel)** 只改变 `AccountImplementationId` 字符串常量，没有可执行
   逻辑。
 - **`formal/verify.py` 与 `scripts/verify_repo.sh`** 携带相同的重命名，以及针对被重命名模型的
   变异体表条目；该差异既不增加也不删除任何 `require(...)` 调用，因此没有放宽门禁断言。
@@ -689,6 +706,10 @@ MultiSig 模型另行证明有限策略层：非空、至多十、非零／不�
 任意第三方插件的诚实行为，或完整子调用精化。运行时套件在 2-of-2/1-of-2/原生见证向量之外增加域
 复用负例与配置后复验向量；这些仍是有界 VM 证据，而不是完整 NeoVM 或密码学证明。策略模型也证明
 其抽象的回调后名册是唯一、已配置且受阈值支持的；这仍与具体回调精化分开。
+原生侧的 threshold-policy 源码守卫及其有界配置／接受模型已于 2026-11-22 从本地门禁退役：
+阈值策略所有权已迁出原生内核、移至用户空间 `contracts/modules/ThresholdPolicyModule`，
+原生内核不再声明、存储或执行阈值、成员集或批准计数。抽象的 `MultiSigPolicy.v` Coq 模型
+仍仅作为 public/platform 的编译与变异证据；门禁不再主张任何活的原生 threshold-policy 源码对应。
 
 对于已部署的custom public/PLATFORM profile：
 

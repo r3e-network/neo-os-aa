@@ -586,7 +586,7 @@ public static void SetPublicKey(UInt160 accountId, BigInteger moduleId, ByteStri
 - **协议覆盖：** `docs/PROTOCOL_COMPLETENESS_AUDIT.md`
 - **模块协议：** [`docs/SA-MODULE-PROTOCOL.md`](SA-MODULE-PROTOCOL.md)
 - **模板：** [`contracts/plugins/templates/README.md`](../contracts/plugins/templates/README.md)
-- **核心合约：** `contracts/custom/SmartAccount.cs`
+- **核心合约：** `contracts/native/SmartAccount/SmartAccount.cs`
 - **Validator 示例：**
   - `contracts/plugins/validators/NeoWitnessValidator.cs`
   - `contracts/plugins/validators/MultiSigValidator.cs`

@@ -65,25 +65,21 @@ local package usability, not npm publication or deployed-contract compatibility.
 
 ## Recovery policy and the owner-only latch
 
-A v4 account has no escape-hatch payload and no plugin roots to remove. Its recovery authority is set
-by a `setRecoveryPolicy` action — `[8, recoveryAuthority, timelockMs, ownerOnly]` — inside a
-configuration intent, so it matures for 24 hours like every other intent. A new nonzero authority
-must also witness the proposal. `getAccount(accountId)` returns the resulting control record,
-including `recoveryAuthority`, `recoveryTimelockMs` and `ownerOnlyRecovery`.
+A v4 account has no escape-hatch payload and no plugin roots to remove. `getAccount(accountId)`
+returns the control record, including `recoveryAuthority`, `recoveryTimelockMs` and
+`ownerOnlyRecovery`. The core carries no action that sets a recovery authority: that slot is changed
+by a governance module, which runs its own maturity window before it submits the change.
 
 `ownerOnlyRecovery` is a legacy migration latch, monotonic and permanent: once set it never clears,
-and the core refuses every configuration action that touches the module model, so such an account can
-never install, configure or uninstall a module. Read it before planning any module work.
+and the core refuses every action that touches the module model, so such an account can never
+install, configure or uninstall a module. Read it before planning any module work.
 
 ```js
 const state = await client.getAccount(accountId);
 if (state.ownerOnlyRecovery) throw new Error('This account cannot change its modules');
-const pending = await client.getRecoveryStatus(accountId);
-// pending carries initiatedAt, matureAt and the custody the recovery would install.
 ```
 
-The SDK's ABI gate also pins the custom-only `isOwnerOnlyRecovery(Hash160) -> Boolean` member, so a
-deployment that answers the v4 core ABI but lacks it is refused at discovery rather than mid-flight.
-Recovery itself is the shared v4 procedure: `beginRecovery(accountId, newCustody)`, then the
-permissionless `executeRecovery(accountId)` once the timelock matures. It preserves account identity,
-the asset address and the nonce channels, and it deletes every installed module without calling them.
+Recovery belongs to the recovery module: `beginRecovery(accountId)`, then the permissionless
+`executeRecovery(accountId)` once the timelock the module read when the recovery started has passed.
+That module preserves account identity, the asset address and the nonce channels; the core exposes
+no recovery entry, so a caller that needs recovery targets the module's script hash.

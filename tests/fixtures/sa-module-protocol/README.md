@@ -2,9 +2,9 @@
 
 Fixture home for the shared SA module-protocol (v4) verification work. The
 specification is `docs/SA-MODULE-PROTOCOL.md`; the paired constants are
-`contracts/custom/SmartAccount.ModuleProtocol.cs` (custom, kernel #39) and
-`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`
-(native, kernel #40).
+`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` (kernel #40), the
+only kernel the repository still builds. The retired user-contract kernel (#39)
+these vectors were once paired against is archived under `docs/reports`.
 
 Every vector is **derived from the specification, not from either kernel**:
 `generate-vectors.py` reimplements the §4.2/§4.3 envelope, the §6 channel

@@ -110,7 +110,7 @@
                 {{ t("console.quickActionsHeading", "Quick Actions") }}
               </p>
               <h2 class="mt-2 text-2xl font-semibold text-slate-950">
-                {{ t("console.serviceWorkspaceTitle", "Account Workspace") }}
+                {{ t("console.serviceWorkspaceTitle", "Native Accounts") }}
               </h2>
               <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                 {{
@@ -121,7 +121,7 @@
                 }}
               </p>
             </div>
-            <router-link to="/app" class="btn-primary shrink-0">
+            <router-link to="/native" class="btn-primary shrink-0">
               {{ t("console.quickCreateAccount", "Create Account") }}
             </router-link>
           </div>
@@ -266,7 +266,6 @@ const blockHeight = computed(() => {
 const contractHashShort = computed(() =>
   formatHash(RUNTIME_CONFIG.smartAccountHash),
 );
-const marketHashShort = computed(() => formatHash(RUNTIME_CONFIG.addressMarketHash));
 const explorerUrl = computed(() =>
   runtimeNetwork === "mainnet"
     ? "https://explorer.onegate.space"
@@ -326,9 +325,8 @@ const onboardingSteps = computed(() => [
 ]);
 
 const workflowNav = computed(() => [
-  { label: t("console.serviceWorkspaceTitle", "Account Workspace"), to: "/app" },
+  { label: t("console.serviceWorkspaceTitle", "Native Accounts"), to: "/native" },
   { label: t("console.serviceIdentityTitle", "Identity & DID"), to: "/identity" },
-  { label: t("console.serviceMarketTitle", "Address Market"), to: "/market" },
   {
     label: t("console.servicePluginsTitle", "Plugins & Hooks"),
     to: { path: "/docs", query: { doc: "pluginGuide" } },
@@ -339,18 +337,18 @@ const workflowNav = computed(() => [
 const primaryActions = computed(() => [
   {
     title: t("console.quickCreateAccount", "Create Account"),
-    body: "Derive, register, and verify a deterministic SA account.",
-    to: "/app",
+    body: "Derive, register, and verify a deterministic v4 account.",
+    to: "/native",
   },
   {
     title: t("console.quickManageGovernance", "Manage Governance"),
     body: "Update verifier, hook, backup owner, and recovery settings.",
-    to: "/app",
+    to: "/native",
   },
   {
-    title: "Relay & Paymaster",
+    title: "Relay & Receipts",
     body: "Run preflight, submit through relay, and review receipts.",
-    to: "/app",
+    to: "/native",
   },
 ]);
 
@@ -362,11 +360,6 @@ const services = computed(() => [
       "Manage Web3Auth, NeoDID, and social recovery for your accounts",
     ),
     to: "/identity",
-  },
-  {
-    title: t("console.serviceMarketTitle", "Address Market"),
-    body: `${t("console.serviceMarketBody", "Browse, buy, and sell vanity SA addresses with on-chain escrow")} · ${marketHashShort.value}`,
-    to: "/market",
   },
   {
     title: t("console.servicePluginsTitle", "Plugins & Hooks"),

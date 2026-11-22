@@ -2,7 +2,7 @@ From Coq Require Import ZArith List Bool Lia.
 Require Import IntegerSemantics CapArithmetic CapMethodVm.
 Import ListNotations.
 Open Scope Z_scope.
-Definition artifact : list nat := [87%nat;8%nat;1%nat;65%nat;45%nat;81%nat;8%nat;48%nat;16%nat;206%nat;112%nat;95%nat;38%nat;65%nat;155%nat;246%nat;103%nat;206%nat;65%nat;146%nat;93%nat;232%nat;49%nat;113%nat;105%nat;11%nat;151%nat;38%nat;41%nat;16%nat;12%nat;32%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;18%nat;192%nat;34%nat;6%nat;105%nat;55%nat;4%nat;0%nat;114%nat;106%nat;16%nat;206%nat;104%nat;152%nat;38%nat;16%nat;104%nat;74%nat;106%nat;16%nat;81%nat;208%nat;69%nat;16%nat;74%nat;106%nat;17%nat;81%nat;208%nat;69%nat;65%nat;45%nat;81%nat;8%nat;48%nat;20%nat;206%nat;65%nat;45%nat;81%nat;8%nat;48%nat;21%nat;206%nat;158%nat;115%nat;17%nat;17%nat;107%nat;185%nat;159%nat;116%nat;16%nat;107%nat;106%nat;17%nat;206%nat;159%nat;186%nat;108%nat;120%nat;160%nat;158%nat;117%nat;109%nat;120%nat;185%nat;118%nat;110%nat;16%nat;183%nat;36%nat;42%nat;12%nat;37%nat;82%nat;101%nat;105%nat;109%nat;98%nat;117%nat;114%nat;115%nat;101%nat;109%nat;101%nat;110%nat;116%nat;32%nat;101%nat;120%nat;99%nat;101%nat;101%nat;100%nat;115%nat;32%nat;97%nat;99%nat;116%nat;117%nat;97%nat;108%nat;32%nat;103%nat;97%nat;115%nat;32%nat;99%nat;111%nat;115%nat;116%nat;224%nat;17%nat;1%nat;254%nat;0%nat;168%nat;17%nat;159%nat;17%nat;1%nat;254%nat;0%nat;168%nat;158%nat;119%nat;7%nat;106%nat;17%nat;206%nat;111%nat;7%nat;110%nat;159%nat;182%nat;36%nat;50%nat;12%nat;45%nat;82%nat;101%nat;105%nat;109%nat;98%nat;117%nat;114%nat;115%nat;101%nat;109%nat;101%nat;110%nat;116%nat;32%nat;98%nat;117%nat;100%nat;103%nat;101%nat;116%nat;32%nat;101%nat;120%nat;99%nat;101%nat;101%nat;100%nat;115%nat;32%nat;86%nat;77%nat;32%nat;105%nat;110%nat;116%nat;101%nat;103%nat;101%nat;114%nat;32%nat;108%nat;105%nat;109%nat;105%nat;116%nat;224%nat;106%nat;74%nat;17%nat;206%nat;110%nat;158%nat;78%nat;17%nat;80%nat;208%nat;69%nat;106%nat;55%nat;3%nat;0%nat;95%nat;38%nat;65%nat;155%nat;246%nat;103%nat;206%nat;65%nat;230%nat;63%nat;24%nat;132%nat;110%nat;34%nat;2%nat;64%nat].
+Definition artifact : list nat := [87%nat;8%nat;1%nat;65%nat;45%nat;81%nat;8%nat;48%nat;16%nat;206%nat;112%nat;95%nat;58%nat;65%nat;155%nat;246%nat;103%nat;206%nat;65%nat;146%nat;93%nat;232%nat;49%nat;113%nat;105%nat;11%nat;151%nat;38%nat;41%nat;16%nat;12%nat;32%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;0%nat;18%nat;192%nat;34%nat;6%nat;105%nat;55%nat;2%nat;0%nat;114%nat;106%nat;16%nat;206%nat;104%nat;152%nat;38%nat;16%nat;104%nat;74%nat;106%nat;16%nat;81%nat;208%nat;69%nat;16%nat;74%nat;106%nat;17%nat;81%nat;208%nat;69%nat;65%nat;45%nat;81%nat;8%nat;48%nat;20%nat;206%nat;65%nat;45%nat;81%nat;8%nat;48%nat;21%nat;206%nat;158%nat;115%nat;17%nat;17%nat;107%nat;185%nat;159%nat;116%nat;16%nat;107%nat;106%nat;17%nat;206%nat;159%nat;186%nat;108%nat;120%nat;160%nat;158%nat;117%nat;109%nat;120%nat;185%nat;118%nat;110%nat;16%nat;183%nat;36%nat;42%nat;12%nat;37%nat;82%nat;101%nat;105%nat;109%nat;98%nat;117%nat;114%nat;115%nat;101%nat;109%nat;101%nat;110%nat;116%nat;32%nat;101%nat;120%nat;99%nat;101%nat;101%nat;100%nat;115%nat;32%nat;97%nat;99%nat;116%nat;117%nat;97%nat;108%nat;32%nat;103%nat;97%nat;115%nat;32%nat;99%nat;111%nat;115%nat;116%nat;224%nat;17%nat;1%nat;254%nat;0%nat;168%nat;17%nat;159%nat;17%nat;1%nat;254%nat;0%nat;168%nat;158%nat;119%nat;7%nat;106%nat;17%nat;206%nat;111%nat;7%nat;110%nat;159%nat;182%nat;36%nat;50%nat;12%nat;45%nat;82%nat;101%nat;105%nat;109%nat;98%nat;117%nat;114%nat;115%nat;101%nat;109%nat;101%nat;110%nat;116%nat;32%nat;98%nat;117%nat;100%nat;103%nat;101%nat;116%nat;32%nat;101%nat;120%nat;99%nat;101%nat;101%nat;100%nat;115%nat;32%nat;86%nat;77%nat;32%nat;105%nat;110%nat;116%nat;101%nat;103%nat;101%nat;114%nat;32%nat;108%nat;105%nat;109%nat;105%nat;116%nat;224%nat;106%nat;74%nat;17%nat;206%nat;110%nat;158%nat;78%nat;17%nat;80%nat;208%nat;69%nat;106%nat;55%nat;3%nat;0%nat;95%nat;58%nat;65%nat;155%nat;246%nat;103%nat;206%nat;65%nat;230%nat;63%nat;24%nat;132%nat;110%nat;34%nat;2%nat;64%nat].
 Definition source : list Stmt := [(SLet 0%nat (EField ETransaction 0%nat));
  (SLet 1%nat (EGet EContext EKey));
  (SIf (EEq (ELocal 1%nat) (EVal VNull)) [(SLet 2%nat (ENew ArrayKind [(EVal (VBytes [0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat; 0%nat])); (EVal (VInt (0)%Z))]))] [(SLet 2%nat (EDeserialize (ELocal 1%nat)))]);
@@ -98,7 +98,7 @@ Ltac drive sf nf q r Heq Hstatic := repeat (first [ progress norm
    end
  ]).
 Theorem vm_same_hash_classified : forall hash old sf nf q r kind static_values,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q r ->
  integer_fits (r + charge_expression (sf+nf) q r) ->
  bytes_eqb old hash = true ->
@@ -121,7 +121,7 @@ Proof.
 Qed.
 Print Assumptions vm_same_hash_classified.
 Theorem vm_different_hash_classified : forall hash old sf nf q r kind static_values,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  bytes_eqb old hash = false ->
@@ -147,7 +147,7 @@ Print Assumptions vm_different_hash_classified.
 
 
 Theorem vm_absent_classified : forall hash sf nf q static_values,
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  cap_domain (sf+nf) q 0 ->
  integer_fits (0 + charge_expression (sf+nf) q 0) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q VNull static_values)) =
@@ -196,7 +196,7 @@ Qed.
 Print Assumptions source_method_classified.
 Theorem vm_method_classified : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  contract_observation hash sf nf q input.
 Proof.
@@ -219,7 +219,7 @@ Proof.
 Qed.
 Theorem complete_helper_reference_refinement : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  observe (run_source 48 source (initial_source hash sf nf q (stored_value input))).
 Proof. intros. rewrite vm_method_classified by assumption.
@@ -227,7 +227,7 @@ Proof. intros. rewrite vm_method_classified by assumption.
 
 Theorem complete_helper_no_fault_or_timeout : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  exists s, (exists result, run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Halt result s)
         \/ (exists message, run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values) = Aborted message s).
 Proof.
@@ -241,7 +241,7 @@ Proof.
 Qed.
 Theorem complete_helper_paid_exhaustion_aborts : forall hash sf nf q input static_values,
  legal_inputs hash sf nf q input ->
- static_values 38%nat = Some (VBuffer [33%nat]) ->
+ static_values 58%nat = Some (VBuffer [33%nat]) ->
  0 < sf+nf -> sf+nf <= effective_reserved hash input ->
  observe (run_vm 130 artifact (initial_vm hash sf nf q (stored_value input) static_values)) =
  Rejected method_error (stored_value input) (input_trace input).
@@ -254,7 +254,7 @@ Proof.
  rewrite E, Z.max_r by lia. rewrite Z.min_r by lia. reflexivity.
 Qed.
 
-Definition reviewed_statics (slot : nat) := if Nat.eqb slot 38 then Some (VBuffer [33%nat]) else None.
+Definition reviewed_statics (slot : nat) := if Nat.eqb slot 58 then Some (VBuffer [33%nat]) else None.
 Example actual_nonempty_success :
  observe (run_vm 130 artifact (initial_vm (repeat 1%nat 32) 50 10 90 VNull reviewed_statics)) =
  Returned (VInt 60) (VWire ArrayKind [VBytes (repeat 1%nat 32);VInt 60])

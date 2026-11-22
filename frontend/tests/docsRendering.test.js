@@ -9,8 +9,6 @@ import {
   shouldStripAttribute,
 } from "../src/features/docs/rendering.js";
 import { MORPHEUS_PUBLIC_REGISTRY } from "../src/config/generatedMorpheusRegistry.js";
-import { planCreateAccount } from "../src/features/studio/createAccountPlan.js";
-import { createCreateFormState } from "../src/features/studio/constants.js";
 
 const frontendRoot = fileURLToPath(new URL("..", import.meta.url));
 const read = (relativePath) =>
@@ -82,21 +80,21 @@ test("sdk doc references the canonical testnet SA core from the generated regist
   assert.doesNotMatch(sdkDoc, /0x5be915aea3ce85e4752d522632f0a9520e377aaf/i);
 });
 
-test("sdk paymaster docs track the current helper signatures", () => {
+test("sdk doc tracks the native helper surface and drops the retired paymaster wrapper", () => {
   const sdkDoc = read("src/assets/docs/sdk-usage.md");
 
-  // v4 reads the paymaster's own state instead of wrapping it, and builds the sponsored envelope
-  // itself; the v3 helpers (`querySponsorBalance`, `createSponsoredUserOpPayload`,
-  // `validatePaymasterOp({...})`) do not exist on the client any more.
-  assert.match(sdkDoc, /getSponsorDeposit\(sponsor\)/);
-  assert.match(sdkDoc, /buildSponsoredExecutionScript\({/);
-  assert.match(sdkDoc, /accountScriptHash|accountAddress/);
-  assert.match(sdkDoc, /executeSponsoredUserOp/);
-  assert.match(sdkDoc, /paymasterHash/);
-  assert.match(sdkDoc, /sponsorAddress/);
-  assert.match(
+  // v4 sponsorship is not a core feature: the client builds the account-creation and operation
+  // envelopes itself, and the v3 paymaster helpers (`getSponsorDeposit`, `querySponsorBalance`,
+  // `buildSponsoredExecutionScript`, `executeSponsoredUserOp`, `validatePaymasterOp({...})`) do
+  // not exist on the client any more - the native SDK exports none of them.
+  assert.match(sdkDoc, /buildCreateAccountScript\(\{/);
+  assert.match(sdkDoc, /client\.getAccount\(accountId\)/);
+  assert.match(sdkDoc, /buildUserOperationTypedData\(\{/);
+  assert.match(sdkDoc, /computeArgsHash/);
+  assert.match(sdkDoc, /executeUserOp/);
+  assert.doesNotMatch(
     sdkDoc,
-    /validatePaymasterOp\(sponsor, accountId, targetContract, method, reimbursementAmount\)/,
+    /getSponsorDeposit\(|querySponsorBalance\(|buildSponsoredExecutionScript\(|executeSponsoredUserOp\(|validatePaymasterOp\(/,
   );
 });
 
@@ -144,18 +142,6 @@ test("repo README includes a quickstart covering install build and test workflow
   assert.match(readme, /dotnet test/i);
   assert.match(readme, /npm (ci|install)/i);
   assert.match(readme, /npm run build/i);
-});
-
-test("custom module docs explain a module cannot bypass the core gate", () => {
-  const moduleDoc = read("src/assets/docs/custom-modules.md");
-
-  // v4 replaced the "custom verifier" binding with a module that runs behind the core gate: the
-  // callback surface is verified at install, and no module removes the timelock, the hook order or
-  // the recovery sweep. The doc must keep saying so.
-  assert.match(moduleDoc, /never bypasses/i);
-  assert.match(moduleDoc, /timelock|hook order|recovery/i);
-  assert.match(moduleDoc, /callback surface|onInstall/i);
-  assert.match(moduleDoc, /instance isolation|instance-isolated/i);
 });
 
 test("core explainer docs provide onboarding architecture workflow and boundary guidance", () => {
@@ -231,10 +217,6 @@ test("operations docs cover the app workspace, anonymous drafts, both broadcast 
   assert.match(
     read("src/assets/docs/module-guide.md"),
     /Choose In Layers/i,
-  );
-  assert.match(
-    read("src/assets/docs/address-market.md"),
-    /What A Listing Includes/i,
   );
   assert.match(sdkDoc, /VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY|relay/i);
   assert.match(sdkDoc, /Runtime Reference/i);
@@ -367,94 +349,6 @@ test("vite config aliases vm to a local browser shim instead of bundling vm-brow
   assert.match(read("src/shims/vm.js"), /runInThisContext/);
 });
 
-test("studio controller uses local neo helpers instead of Neon SDK bundles", () => {
-  const controllerSource = read("src/features/studio/useStudioController.js");
-
-  assert.match(controllerSource, /from '\@\/utils\/neo\.js'/);
-  assert.doesNotMatch(
-    controllerSource,
-    /await import\('@cityofzion\/neon-core'\)/,
-  );
-  assert.doesNotMatch(
-    controllerSource,
-    /await import\('@cityofzion\/neon-js'\)/,
-  );
-});
-
-test("studio account creation derives the v4 identity from custody and salt", () => {
-  const controllerSource = read("src/features/studio/useStudioController.js");
-  const panelSource = read(
-    "src/features/studio/components/CreateAccountPanel.vue",
-  );
-  const i18nSource = read("src/i18n/index.js");
-  const zhSource = read("src/i18n/zh-CN.js");
-
-  // The id is hash160(0xAA524704 || custody || salt), so both inputs must
-  // change it and the createAccount invocation must carry the same id. No
-  // verifier is chosen at creation: modules are installed by intent later.
-  const form = {
-    ...createCreateFormState(),
-    custody: `0x${"ab".repeat(20)}`,
-    salt: "11".repeat(16),
-  };
-  const coreHash = `0x${"22".repeat(20)}`;
-  const firstPlan = planCreateAccount(form, coreHash);
-  const saltedPlan = planCreateAccount({ ...form, salt: "33".repeat(16) }, coreHash);
-  const custodyPlan = planCreateAccount(
-    { ...form, custody: `0x${"cd".repeat(20)}` },
-    coreHash,
-  );
-  assert.notEqual(firstPlan.accountId, saltedPlan.accountId);
-  assert.notEqual(firstPlan.accountId, custodyPlan.accountId);
-  assert.equal(firstPlan.invocation.operation, "createAccount");
-  assert.equal(firstPlan.invocation.args[0].value, firstPlan.accountId);
-  assert.equal(firstPlan.invocation.args[1].value, firstPlan.custodyAddress);
-  assert.equal(firstPlan.invocation.args[2].value, `0x${form.salt}`);
-  assert.equal(firstPlan.invocation.args[3].value, String(firstPlan.recoveryTimelockMs));
-  assert.equal(
-    firstPlan.recoveryTimelockMs,
-    form.recoveryTimelockDays * 86_400_000,
-  );
-  assert.match(controllerSource, /from ['"]\.\/createAccountPlan\.js['"]/);
-  assert.doesNotMatch(controllerSource, /registerAccount/);
-  assert.doesNotMatch(panelSource, /backupOwner/);
-  assert.doesNotMatch(panelSource, /Account Seed \(UUID\)/);
-  assert.doesNotMatch(panelSource, /v-model="createForm\.accountId"/);
-  assert.match(panelSource, /:min="minRecoveryDays"/);
-  assert.match(panelSource, /:max="maxRecoveryDays"/);
-  assert.match(
-    i18nSource,
-    /Countdown before a recovery authority can take over \(7-90 days\)/,
-  );
-  assert.match(zhSource, /接管前的倒计时（7-90 天）/);
-});
-
-test("studio governance and permissions panels expect accountId hashes instead of legacy seeds", () => {
-  const managePanelSource = read(
-    "src/features/studio/components/ManageGovernancePanel.vue",
-  );
-  const permissionsPanelSource = read(
-    "src/features/studio/components/PermissionsLimitsPanel.vue",
-  );
-  const helpersSource = read("src/features/studio/helpers.js");
-
-  assert.doesNotMatch(
-    managePanelSource,
-    /Target Account Seed \/ AccountId Hash/,
-  );
-  assert.doesNotMatch(
-    permissionsPanelSource,
-    /Target Account Seed \/ AccountId Hash/,
-  );
-  assert.doesNotMatch(managePanelSource, /20-byte hash160 or raw seed/);
-  assert.doesNotMatch(permissionsPanelSource, /20-byte hash160 or raw seed/);
-  assert.doesNotMatch(helpersSource, /isEvmWallet/);
-  assert.doesNotMatch(
-    helpersSource,
-    /export function normalizeAccountId\(value, isEvmWallet\)/,
-  );
-});
-
 test("Neon is a declared server dependency and stays out of browser module imports", () => {
   const packageJson = readFrontendPackage();
 
@@ -483,49 +377,7 @@ test("HomeView keeps the first screen focused on SA operation entry", () => {
   assert.match(homeViewSource, /sa-home-focus/);
   assert.match(homeViewSource, /sa-home-step-link/);
   assert.match(homeViewSource, /Deployment reference/);
-  assert.match(homeViewSource, /to="\/app" class="btn-primary/);
+  assert.match(homeViewSource, /to="\/native" class="btn-primary/);
   assert.doesNotMatch(homeViewSource, /ArchitectureDiagram/);
   assert.doesNotMatch(homeViewSource, /defineAsyncComponent/);
-});
-
-test("SmartAccountTool lazy-loads heavy studio panels", () => {
-  const studioToolSource = read("src/components/SmartAccountTool.vue");
-
-  assert.match(studioToolSource, /defineAsyncComponent/);
-  assert.match(
-    studioToolSource,
-    /import\(["']@\/features\/studio\/components\/CreateAccountPanel\.vue["']\)/,
-  );
-  assert.match(
-    studioToolSource,
-    /import\(["']@\/features\/studio\/components\/ContractSourcePanel\.vue["']\)/,
-  );
-  assert.doesNotMatch(studioToolSource, /import CreateAccountPanel from/);
-});
-
-test("SmartAccountTool keeps wallet-gated tabs out of the keyboard order", () => {
-  const studioToolSource = read("src/components/SmartAccountTool.vue");
-
-  assert.match(
-    studioToolSource,
-    /:disabled="!studio\.walletConnected\.value"/,
-  );
-  assert.match(
-    studioToolSource,
-    /:aria-disabled="!studio\.walletConnected\.value"/,
-  );
-  assert.match(
-    studioToolSource,
-    /studio\.walletConnected\.value && studio\.activePanel\.value === tab\.key/,
-  );
-});
-
-test("SmartAccountTool does not present paymaster relay as operational before preflight", () => {
-  const studioToolSource = read("src/components/SmartAccountTool.vue");
-
-  assert.match(studioToolSource, /Runtime configuration detected/);
-  assert.match(studioToolSource, /Preflight required/);
-  assert.match(studioToolSource, /Relay Preflight/);
-  assert.doesNotMatch(studioToolSource, /Configured for live SA operations/);
-  assert.doesNotMatch(studioToolSource, /validationConfigured["'], "Configured"/);
 });

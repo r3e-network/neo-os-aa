@@ -54,7 +54,6 @@
 
 - [SA-EIP-712-SPEC.zh-CN.md](SA-EIP-712-SPEC.zh-CN.md) — 验证器在链上哈希的类型化数据布局（中 · [EN](SA-EIP-712-SPEC.md)）
 - [SA-IMPLEMENTATION-REFINEMENT.zh-CN.md](SA-IMPLEMENTATION-REFINEMENT.zh-CN.md) — 精化范围与验收条件（中 · [EN](SA-IMPLEMENTATION-REFINEMENT.md)）
-- [SA-METHOD-REFINEMENT.zh-CN.md](SA-METHOD-REFINEMENT.zh-CN.md) — 方法级精化全集，各条作用域互不叠加：工件清单、源码投影、参考 VM、运行时检查、算术、费用语义、公开方法体、syscall 准入、interop 转换与计费、异常身份（中 · [EN](SA-METHOD-REFINEMENT.md)）
 - [SA-PROXY-TRANSFERS.zh-CN.md](SA-PROXY-TRANSFERS.zh-CN.md) · [EN](SA-PROXY-TRANSFERS.md) — 直接代理见证的构造、费用策略、拒绝赞助
 - [SA-MODULE-PROTOCOL.zh-CN.md](SA-MODULE-PROTOCOL.zh-CN.md) · [EN](SA-MODULE-PROTOCOL.md) — 协议 v4 共享模块规范，两个内核共同遵循
 - [SA-MIGRATION-MANIFEST.zh-CN.md](SA-MIGRATION-MANIFEST.zh-CN.md) · [EN](SA-MIGRATION-MANIFEST.md) — 旧版到 v4 的迁移 manifest 与幂等规则
@@ -78,7 +77,6 @@
 - [action-sessions.zh-CN.md](action-sessions.zh-CN.md) · [EN](action-sessions.md) — 会话密钥的作用域、过期与重新授权
 - [MULTISIG_SDK.zh-CN.md](MULTISIG_SDK.zh-CN.md) · [MULTISIG_CHILD_CONFIGURATION.zh-CN.md](MULTISIG_CHILD_CONFIGURATION.zh-CN.md) — 多签打包与子配置证明（[EN](MULTISIG_SDK.md) · [EN](MULTISIG_CHILD_CONFIGURATION.md)）
 - [PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md](PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md) · [EN](PENDING_CONFIG_UPDATE_READ_ABI.md) — 配置更新的读取面
-- [CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md](CUSTOM_ACCOUNT_WORKSPACE.zh-CN.md) · [EN](CUSTOM_ACCOUNT_WORKSPACE.md) — custom 账户工作区
 - [mainnet-validation-runbook.zh-CN.md](mainnet-validation-runbook.zh-CN.md) · [EN](mainnet-validation-runbook.md) — 只读的主网校验
 - [TESTNET_QUICKSTART.zh-CN.md](TESTNET_QUICKSTART.zh-CN.md) · [EN](TESTNET_QUICKSTART.md) — 真实测试网校验之前先跑的两条命令
 - [testnet-validation-runbook.zh-CN.md](testnet-validation-runbook.zh-CN.md) · [EN](testnet-validation-runbook.md) — 先干跑再上链的测试网校验

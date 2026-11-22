@@ -1,8 +1,8 @@
 /**
  * The v4 protocol codec, bound to Node's hash primitives.
  *
- * One instance is shared by every entry point (the custom client, the native
- * client, the operation builder and the threshold tools) so that the bytes a
+ * One instance is shared by every entry point (the native client, the operation
+ * builder and the threshold tools) so that the bytes a
  * signature covers and the bytes the chain recomputes can never come from two
  * implementations that drifted apart.
  */

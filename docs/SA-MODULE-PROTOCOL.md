@@ -1,25 +1,26 @@
 # SA Module Protocol — Shared Specification (Protocol Version 4)
 
 This document is the **single shared specification** for the Neo Smart Account (SA)
-module model that the two kernel batches implement:
+module model implemented by the native kernel batch:
 
-- custom (user-contract) kernel — task #39 (`contracts/`)
 - native kernel — task #40 (`contracts/native/SmartAccount/`)
+- retired custom (user-contract) kernel — task #39, archived delivery record
 
 The DTOs, profiles, storage layout, limits, error codes, events and gas budget
-defined here are **common to both versions**. Neither kernel may deviate from or
-independently re-design anything in this document. Where a difference between the
-two runtimes is unavoidable (e.g. caller/phase enforcement mechanics), it is
-explicitly listed as a disclosed capability difference, never as a divergent DTO.
+defined here are the contract between the core and every module. No
+implementation may deviate from or independently re-design anything in this
+document. Where a runtime difference is unavoidable (e.g. caller/phase
+enforcement mechanics), it is explicitly listed as a disclosed capability
+difference, never as a divergent DTO.
 
-Status: **specification + shared constants + fixtures + both kernels delivered.**
-`contracts/custom` and `contracts/native/SmartAccount` implement the surface
-described here; `tests/SmartAccount.Contracts.Tests` and
-`tests/SmartAccount.Native.Tests` cover them, and both assert the shared vectors in
-`tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json`.
-`tests/SmartAccount.Contracts.Tests/CrossCoreVectorTests.cs` is that assertion on
-the custom side. Nothing here claims on-chain deployment of this source, and the
-formal models are reported separately in `docs/SA-FORMAL-VERIFICATION.md`.
+Status: **specification + shared constants + fixtures + native kernel delivered.**
+`contracts/native/SmartAccount` implements the surface described here;
+`tests/SmartAccount.Native.Tests` covers it and asserts the shared vectors in
+`tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json`. The second
+kernel that once implemented the same surface has been retired, so this document
+and its vectors are the single shared contract. Nothing here claims on-chain
+deployment of this source, and the formal models are reported separately in
+`docs/SA-FORMAL-VERIFICATION.md`.
 
 Companion documents:
 
@@ -28,10 +29,8 @@ Companion documents:
 - `docs/SA-MIGRATION-MANIFEST.md` — legacy→v4 migration manifest design (§14).
 - `tests/fixtures/sa-module-protocol/README.md` — golden-vector / rejection
   fixture formats and the kernel verification matrix.
-- `contracts/custom/SmartAccount.ModuleProtocol.cs` and
-  `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` — the
-  paired constant files carrying every numeric value in this spec (§15). Both
-  files MUST carry identical values at all times.
+- `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` — the constant
+  file carrying every numeric value in this spec (§15).
 
 ## 1. Scope and terminology migration
 
@@ -199,6 +198,11 @@ The `version`, `validatorId` and `credentialGeneration` fields appear both in
 the array and the domain; the domain copy is authoritative for signature
 binding, the array copy for execution routing.
 
+`credentialGeneration` has **no default**. §6.1 states which generation a route
+binds; a client that substitutes 1, or 2, derives a domain and a channel the
+core never validates, and the failure mode is a signature bound to a namespace
+the account does not use rather than a recoverable nonce mismatch.
+
 ## 5. Signature DTO structure
 
 The `signature` field is a validator-defined DTO (opaque bytes to the core),
@@ -243,8 +247,8 @@ a second pass.
   nonceSubkey )`.
 - The channel is **derived, not chosen**. The 64 low bits of `nonce` are the
   sequence; they must equal the stored cursor (or the exhaustion sentinel).
-- Channel bytes in storage keys are 24 bytes, right-aligned big-endian, top 7
-  bits zero.
+- Channel bytes in storage keys are 24 bytes, big-endian, `channel[0] =
+  digest[8] & 0x7F` (only the top bit cleared: a 191-bit channel).
 - The **full 256-bit derivation digest** is persisted per channel (0x5C); if a
   second, different derivation maps to an already-used 191-bit channel, the
   operation is rejected (truncation-collision fail-closed), never silently
@@ -263,6 +267,42 @@ on every committed security configuration, credential revocation,
 freeze/unfreeze, recovery and custody change; operation consumption and quota
 counters never advance it; cleanup, uninstall and market sale never reset it.
 
+### 6.1 Which generation a route binds
+
+`credentialGeneration` is not a global counter: it identifies the routing
+subject's current credential set, and the core resolves it from the route (it is
+never a caller-supplied default, and no ABI method publishes it for the built-in
+route).
+
+| Route | Bound generation | Record |
+| --- | --- | --- |
+| built-in (`validatorId` = 0) | the account's `SubjectRevision` | 0x57 |
+| installed validator instance | that instance's `CredentialGeneration` | 0x52 |
+| active threshold policy | the policy's `CredentialGeneration` | 0x5B |
+
+Consequences that hold in both kernels:
+
+- The built-in generation is **not** a fixed 1. Every subject change advances
+  `SubjectRevision` (§8.3), and a client that hard-codes 1 derives a channel the
+  core can never reproduce once the revision has moved. An account with no 0x57
+  subject record is still at generation 1.
+- An installed instance starts at generation 1 and advances on
+  `revokeCredentials` only — a custody-authorized, callback-free revocation that
+  retires every signature bound to the old generation at once. Rebinding a
+  module's code advances `moduleRevision`, not the credential generation.
+- A threshold policy's generation is monotonic across rewrites (a new policy is
+  written at generation 1, every reshape carries the previous value forward and
+  bumps it), so a reshaped policy kills the channels of its previous generation
+  and never resets to 1.
+- Because the generation is inside the §4.3 domain, a stale value is not a
+  retryable nonce mismatch. An installed-validator or threshold-policy route
+  faults with `SA_CREDENTIAL_STALE`; the built-in route rejects the message with
+  its invalid-signature result instead, because the generation is compared
+  against `SubjectRevision` before any subject is examined.
+- `getNonce` resolves the generation internally and returns the channel the core
+  would use. A caller may cross-check it against its own derivation, but the
+  core's answer is authoritative.
+
 ## 7. Storage layout plan
 
 ### 7.1 Shared 0x50–0x5F region (both kernels, identical key bytes)
@@ -280,7 +320,7 @@ fixed-width big-endian. 0x5F is reserved and unallocated.
 | 0x54 | +acctId | core-owned hookOrder list + hookOrderRevision |
 | 0x55 | +acctId+intentId[8 BE] | configuration intent record |
 | 0x56 | +acctId+channel[24 BE] | nonce cursor (new encoding) |
-| 0x57 | +acctId | built-in message signer subjects (≤16 P-256 keys, threshold) + subjectRevision |
+| 0x57 | +acctId | built-in message signer subjects (≤16 20- or 32-byte subjects, threshold) + subjectRevision (§8.1) |
 | 0x58 | +acctId | application callback/execution context (phase + re-entrancy state) |
 | 0x59 | +acctId | core recovery & emergency invalidation records (Market escape path, §7.5) |
 | 0x5A | +acctId | migration state & legacy state digest (§14) |
@@ -407,33 +447,86 @@ payload and `originalSender`; execution quota hooks never apply to opaque
 message hashes. SessionKey and Subscription validators **do not** declare
 arbitrary-message capability by default.
 
+### 8.1 The two 0x57 keys
+
+The subject store occupies two keys per account, and they are different widths on
+purpose:
+
+| Key | Bytes | Meaning |
+| --- | --- | --- |
+| `0x57 ‖ accountId` | 21 | the canonical subject row: `MessageSubjectRecord` (≤16 subjects, threshold, `SubjectRevision`) |
+| `0x57 ‖ accountId ‖ 0x01` | 22 | an internal provenance marker, never a second row |
+
+The canonical row stays **21 bytes**: widening it to 22 would move every existing
+account's record and turn a reviewed key into a different one. The marker reuses
+the canonical prefix plus a one-byte suffix instead of allocating another
+protocol prefix, and it is written and deleted only by the core.
+
+### 8.2 Subject matching
+
+A subject entry binds the signer's **script**, and two widths are accepted:
+
+- a 32-byte subject is the raw `SHA256` of the signer's verification script and
+  must equal it exactly;
+- a 20-byte subject is the signer's account address (`RIPEMD160(SHA256(script))`,
+  the N3 script hash) and must equal it exactly.
+
+Any other width matches nothing. Both forms verify the same ECDSA check over
+`messageDigest`, so an account may mix them; the 20-byte form is what registration
+writes, because the canonical P-256 custody script hashes back to exactly the
+custody address and that key can therefore sign built-in messages immediately
+without waiting out the 24-hour subject intent.
+
+### 8.3 Custody-derived subjects and provenance
+
+Registration writes `Subjects = [custody]`, threshold 1, `SubjectRevision` 1, and
+sets the 22-byte provenance marker. On a custody rotation the core rewrites the
+subject set to the new custody and advances `SubjectRevision` **only when that
+marker is present**:
+
+- a missing marker means the provenance is unknown: the subject set may have been
+  configured deliberately (through the subject intent), or the account may predate
+  the marker and still carry its historical default subject state. The runtime
+  makes no inference in either direction — it simply does not rewrite — and a
+  subject that happens to equal the old custody address is never read as
+  evidence of explicit delegation: address equality is never used to infer
+  provenance;
+- a marker that is present but carries an unexpected value is an integrity fault,
+  not a signal to rotate;
+- the rotation emits the subject-update event with the new revision, so the built-in
+  credential generation advances together with the subject set. Escape (§7.5) and
+  account teardown delete both keys.
+
 ## 9. Public interface (identical naming in both kernels)
 
-Queries: `getProtocolInfo`, `getAccount(accountId)`, `supportsModuleType(type)`,
+Queries: `getProtocolInfo`, `getAccount(accountId)`,
+`getAccountAddress(accountId)`, `supportsModuleType(type)`,
 `supportsExecutionMode(mode)`, `getModules(accountId, type, cursor, limit)`
 (limit 1–32; returns next cursor and current configurationNonce; cursor is
 moduleId-based), `getModule(accountId, moduleId)`,
 `isModuleInstalled(accountId, type, moduleHash, additionalContext)`,
-`getHookOrder(accountId)`, `getPendingConfiguration(accountId, intentId)`,
+`getAuthorizedModuleId(accountId, phase)`, `getAccountAddress(accountId)`,
 `getNonce(accountId, validatorId, nonceSubkey)` (packed),
 `getNonceSequence(accountId, channel)`,
-`getOperationDigest(accountId, operation)`,
-`isValidSignature(accountId, hash, signatureEnvelope)`.
+`getOperationDigest(accountId, operation)`.
 
-Configuration: `proposeConfiguration(accountId, actions, readSet)`,
-`confirmConfiguration(accountId, intentId, actions)`,
-`cancelConfiguration(accountId, intentId)`.
+Configuration: `installModule(accountId, moduleType, moduleContractHash, initData)` and
+`removeModule(accountId, moduleId, deInitData)`, each authorised by the custody witness or by the
+witness of an already installed validator instance, and each advancing the configuration nonce. The
+core keeps no intent record, no maturity window and no cancellation path: those belong to a
+governance module, which submits the matured call through these two methods.
 
-Actions: `installModule`, `uninstallModule`, `configureModule`,
-`setHookOrder`, `setDefaultPolicy`, `rebindModuleCode`, `setThresholdPolicy`,
-`setRecoveryPolicy`. A multi-action intent is one atomic proposal — never a
-timelock bypass.
+Actions: the core executes exactly two action codes, `installModule` and `uninstallModule`, and
+registration runs them through the same executor the two module methods use. Every other code a v3
+kernel carried is removed — a script that still assembles one is rejected with
+SA_OPERATION_MALFORMED rather than silently ignored.
 
 Execution: `validateUserOp(accountId, operation)` (read-only, real
 verification, structured result), `executeUserOp(accountId, operation)`,
 `executeUserOps(accountId, operations)`, `freezeAccount(accountId)`,
-`unfreezeAccount(accountId)`, `beginRecovery(...)`, `cancelRecovery(accountId)`,
-`executeRecovery(accountId)`.
+`unfreezeAccount(accountId)`. Recovery is a module: `beginRecovery`,
+`cancelRecovery` and `executeRecovery` are that module's methods, so the core
+exposes none of them.
 
 The immutable-identity witness entry `verify(accountId)` (embedded in the proxy
 script) remains a real witness gate, not a legacy API alias. The old
@@ -559,7 +652,10 @@ re-requires a custody witness; a new control subject additionally needs that
 subject's witness.
 
 Freeze semantics: custody witness can freeze; frozen accounts expose only
-read queries, recovery/escape, and unfreeze; freeze advances the epoch (old
+read queries, recovery/escape, and unfreeze; `freezeAccount` is immediate, while
+`unfreezeAccount` only proposes the unfreeze intent that `confirmConfiguration`
+executes after the uniform 24 h delay — an account under `MigrationRequired` can
+never thaw; freeze advances the epoch (old
 signatures and intents die). Last-validator rule: the built-in route always
 exists but is gated by the default policy — uninstalling the last validator
 must enable the built-in route within the same 24 h intent, and existing hooks
@@ -616,15 +712,14 @@ try-and-continue.
 
 ### 11.1 Where the numbers live and what they cover
 
-Both kernels pin the per-call caps as private constants in their protocol
-constant files (`contracts/custom/SmartAccount.ModuleProtocol.cs` and
-`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`):
+The kernel pins the per-call caps as private constants in its protocol constant
+file (`contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`):
 `ValidationPerCallGasLimit = 100_000_000`, `CompletionPerCallGasLimit =
 100_000_000`, `HookCallbackGasLimit = 250_000_000`, `LifecycleCallbackGasLimit
 = 250_000_000`. The two validator aggregates are computed from those caps and
 `MaxThresholdPolicyMembers` (`ValidationAggregateGasLimit()` /
-`CompletionAggregateGasLimit()` in the custom kernel's module section; the hook
-aggregate is `HookAggregateGasBudget()`).
+`CompletionAggregateGasLimit()` in the kernel's module section; the hook aggregate
+is `HookAggregateGasBudget()`).
 
 Bounds that shape the worst case are pinned in the same files: `HookDataBytesMax
 = 512`, `ModuleProfileBytesMax = 2048`, `ArgsCountMax = 64`,
@@ -691,8 +786,8 @@ Each module keeps its canonical bytes twice, and both copies are checked:
 `scripts/sync-module-profiles.mjs` rewrites non-canonical files, patches the
 literal from the `.profile.json`, verifies the module declares the callbacks its
 profile claims, and supports `--check` (exit 1 on STALE/ERROR).
-`contracts/compile.sh` runs `--check` before compiling, so a drifted literal can
-never reach an artifact.
+`scripts/sync-module-profiles.mjs --check` fails on STALE/ERROR; run it before building, because
+the retired `contracts/compile.sh` no longer chains it into a compile.
 
 Binding order and failure modes (custom and native kernels alike):
 
@@ -764,27 +859,30 @@ never authorization sources.
 
 | Artifact | Path |
 | --- | --- |
-| custom constants | `contracts/custom/SmartAccount.ModuleProtocol.cs` (partial `SmartAccount`) |
+
 | native constants | `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` (internal static `SmartAccountModuleProtocol`, synced to neo-native-core via `scripts/sync_native_smartaccount.py`) |
 | fixture skeletons | `tests/fixtures/sa-module-protocol/` (README + schemas + templates) |
 
-Both constant files carry identical numeric values for: protocol version 4;
+The constant file carries, for: protocol version 4;
 module type codes 1/4; all §3 limits; 13-field envelope field indices; nonce
 sizes (32-byte subkey, 24-byte channel); serialized-size caps (4096/8192/4096/
 16384/65536); delays (86 400 000 / 604 800 000 / 7 776 000 000 ms); gas budgets
 (100 000 000 / 250 000 000 datoshi); ERC-1271 magic (0x1626ba7e / 0xffffffff);
 domain strings ("NeoSmartAccount/UserOperation", "NeoSmartAccount/Message");
 storage prefixes 0x50–0x5E; the §10 error-code strings; §10bis event display
-names; and the fixed-width big-endian key-suffix encoding (both files provide
-the same key builders: `UInt64ToBigEndian`, per-prefix composite key builders).
+names; and the fixed-width big-endian key-suffix encoding (`UInt64ToBigEndian`,
+per-prefix composite key builders).
 
-## 16. Kernel implementation mapping (tasks #39 / #40)
+## 16. Kernel implementation mapping
 
-### 16.1 Custom kernel (#39, shares its batch with #25)
+> The #39 table below is the archived delivery record of the retired custom kernel;
+> the #40 mapping is the one that still describes this repository.
+
+### 16.1 Retired custom kernel (#39, archived delivery record)
 
 | Spec section | Custom files to create/modify |
 | --- | --- |
-| §2/§3/§7 constants | consume `contracts/custom/SmartAccount.ModuleProtocol.cs` (already added; add to `SmartAccount.csproj` — done in this batch) |
+| §2/§3/§7 constants | consume the constant file that shipped with the retired custom kernel (`SmartAccount.ModuleProtocol.cs`) |
 | §7.1/§7.4 prefixes | extend the STORAGE PREFIX MAP comment in `SmartAccount.cs` with the 0x50–0x5E rows; add `SmartAccount.ModuleProtocol.cs` to `WalletPartials` in `tests/SmartAccount.Contracts.Tests/StoragePrefixMapTests.cs` **together with first key usages** (DeriveShape requires usage) |
 | §4/§5 envelope + digest | `SmartAccount.Execution.cs` (13-field decode, digest, batch), new `SmartAccount.Intents.cs` if split |
 | §6 nonce | `SmartAccount.Internal.cs`/new nonce partial (0x56/0x5C, merge with legacy 0x03) |
@@ -798,8 +896,8 @@ the same key builders: `UInt64ToBigEndian`, per-prefix composite key builders).
 | plugins | `contracts/plugins/validators/` — 9 validators (`P256Validator`, `Web3AuthValidator`, `TeeKeyValidator`, `NeoWitnessValidator`, `DelegatedIdentityValidator`, `MultiSigValidator`, `SessionKeyValidator`, `SubscriptionValidator`, `ZKEmailVerifier`) plus the shared layer `ModuleOperation.cs`, `ValidatorAuthority.cs`, `ValidatorPayload.cs`, `ValidatorClock.cs`, `ValidatorModels.cs`, `SignerDomain.cs` |
 | hooks | `contracts/plugins/hooks/` — `DailyLimitHook`, `TokenRestrictedHook`, `WhitelistHook`, `NeoDIDCredentialHook`, retired `MultiHook` (installation rejected), shared `HookAuthority.cs` |
 | recovery split | `contracts/plugins/recovery/ActionSessionValidator.cs` (validator module) and `contracts/plugins/recovery/SocialRecoveryService.*.cs` (service contract); each ships a canonical profile |
-| profile sources | `<Name>.profile.json` next to every module, literal embedded as `ModuleProfileJson`, kept in sync by `scripts/sync-module-profiles.mjs` and gated by `contracts/compile.sh` (§12.1) |
-| build layout | `contracts/compile.sh` emits `contracts/bin/public` for the core, services and mocks, `bin/public/validators`, `bin/public/hooks`; nccs compiles every project in the directory it is given |
+| profile sources | `<Name>.profile.json` next to every module, literal embedded as `ModuleProfileJson`, kept in sync by `scripts/sync-module-profiles.mjs` (run `--check` before building) |
+| build layout | the retired custom build emitted `contracts/bin/public` for the core, services and mocks, `bin/public/validators`, `bin/public/hooks`; the native kernel builds through MSBuild into each project's `bin/Release/net10.0/`, and `scripts/build_native_modules.py` writes the six native-profile modules to its `--output` |
 
 ### 16.2 Native kernel (#40, shares its batch with #29)
 

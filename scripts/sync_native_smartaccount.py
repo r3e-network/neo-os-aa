@@ -3,7 +3,7 @@
 
 `contracts/native/SmartAccount/` in neo-os-sa is the only editable
 home of the SmartAccount native contract. The neo-native-core checkout needs
-its own copies of those ten files to build the node standalone, so it carries
+its own copies of those nine files to build the node standalone, so it carries
 generated ones: this script rewrites them, byte-deterministically, from the
 true source (each copy is headed with a GENERATED marker).
 
@@ -24,15 +24,13 @@ import os
 import sys
 from pathlib import Path
 
-# The twelve contract files that have generated copies in the core checkout.
+# The nine contract files that have generated copies in the core checkout.
+# Intent, key, message and canonical-JSON surfaces are user-space module
+# concerns in the minimal core; they no longer have native copies.
 SYNCED_FILES = [
     "SmartAccount.cs",
     "SmartAccount.Execution.cs",
-    "SmartAccount.Intents.cs",
-    "SmartAccount.Keys.cs",
-    "SmartAccount.Message.cs",
     "SmartAccount.Modules.cs",
-    "SmartAccountCanonicalJson.cs",
     "SmartAccountEnvelope.cs",
     "SmartAccountInvocationContext.cs",
     "SmartAccountModulePolicy.cs",
@@ -56,6 +54,10 @@ TRUE_SOURCE_BLOCK = (
 
 SA_TRUE_SOURCE_DIR = Path("contracts/native/SmartAccount")
 NC_NATIVE_DIR = Path("src/Neo/SmartContract/Native")
+SA_RUNTIME = Path("contracts/native/Runtime/ApplicationEngine.Runtime.cs")
+NC_RUNTIME = Path("src/Neo/SmartContract/ApplicationEngine.Runtime.cs")
+RUNTIME_METHOD = "        protected internal bool CheckWitnessInternal(UInt160 hash)"
+RUNTIME_ORDINARY_WITNESS = "            if (hash.Equals(CallingScriptHash)) return true;"
 
 # Suffix of the staged files a regeneration swaps in; it keeps them out of the
 # `SmartAccount*.cs` set the core build and core_synced_set() pick up.
@@ -81,6 +83,39 @@ def generate_nc_content(sa_text: str) -> str:
     if GENERATED_MARKER in sa_text:
         raise ValueError("true source must not contain the GENERATED marker")
     return sa_text.replace(TRUE_SOURCE_BLOCK, GENERATED_MARKER, 1)
+
+
+def generate_runtime_content(sa_text: str, core_text: str) -> str:
+    """Replace only the SA witness prelude, preserving every other core byte."""
+    def bounds(text: str) -> tuple[int, int]:
+        if text.count(RUNTIME_METHOD) != 1 or text.count(RUNTIME_ORDINARY_WITNESS) != 1:
+            raise ValueError("runtime witness anchors must each occur exactly once")
+        method = text.index(RUNTIME_METHOD)
+        method_end = text.index("\n", method) + 1
+        start = text.index("\n", method_end) + 1
+        if (text[method:method_end].rstrip("\r\n") != RUNTIME_METHOD
+                or text[method_end:start].strip() != "{"):
+            raise ValueError("runtime witness method opening is malformed")
+        end = text.index(RUNTIME_ORDINARY_WITNESS)
+        if end <= start or text[end - 1] != "\n" or "\n        }" in text[start:end]:
+            raise ValueError("runtime witness prelude boundaries are malformed")
+        return start, end
+
+    source = normalize(sa_text)
+    start, end = bounds(source)
+    core_start, core_end = bounds(core_text)
+    prelude = source[start:end]
+    if "accountContext.IsWitnessAuthorized(this, hash)" not in prelude:
+        raise ValueError("runtime true source lacks the SmartAccount witness guard")
+    newline = "\r\n" if "\r\n" in core_text else "\n"
+    return core_text[:core_start] + prelude.replace("\n", newline) + core_text[core_end:]
+
+
+def runtime_copy(sa_root: Path, core_root: Path) -> bytes:
+    return generate_runtime_content(
+        (sa_root / SA_RUNTIME).read_bytes().decode("utf-8"),
+        (core_root / NC_RUNTIME).read_bytes().decode("utf-8"),
+    ).encode("utf-8")
 
 
 def core_synced_set(nc_native_dir: Path) -> set[str]:
@@ -138,6 +173,11 @@ def sync(sa_root: Path, core_root: Path) -> list[str]:
             continue
         generated[name] = content.encode("utf-8")
 
+    try:
+        generated["../ApplicationEngine.Runtime.cs"] = runtime_copy(sa_root, core_root)
+    except (OSError, ValueError) as exc:
+        problems.append(f"runtime witness prelude: {exc}")
+
     if not problems:
         write_copies(nc_dir, generated)
     return problems
@@ -171,6 +211,12 @@ def check(sa_root: Path, core_root: Path) -> list[str]:
             continue
         if read_text(nc_path) != expected_nc:
             problems.append(f"drift between true source and core copy: {name}")
+
+    try:
+        if (core_root / NC_RUNTIME).read_bytes() != runtime_copy(sa_root, core_root):
+            problems.append(f"drift in runtime witness prelude: {NC_RUNTIME}")
+    except (OSError, ValueError) as exc:
+        problems.append(f"runtime witness prelude: {exc}")
 
     # A copy must carry its marker exactly once.
     for name in SYNCED_FILES:
@@ -228,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print(f"smartaccount sync {'in sync' if args.check else 'regenerated'}: "
-          f"{len(SYNCED_FILES)} copies under {core_root / NC_NATIVE_DIR}")
+          f"{len(SYNCED_FILES)} copies under {core_root / NC_NATIVE_DIR} and runtime witness prelude")
     return 0
 
 

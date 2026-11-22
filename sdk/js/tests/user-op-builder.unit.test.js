@@ -60,7 +60,7 @@ function builder(vector = vectors) {
     .setArgs([])
     .setRouting({
       validatorId: 0,
-      credentialGeneration: 0,
+      credentialGeneration: 1,
       authorityEpoch: 1,
       configurationNonce: 0,
     })
@@ -76,7 +76,7 @@ test('the builder reproduces the golden vector byte for byte', () => {
   const operation = op.build();
   assert.equal(operation.nonce, '0');
   assert.equal(operation.validatorId, '0');
-  assert.equal(operation.credentialGeneration, '0');
+  assert.equal(operation.credentialGeneration, '1');
   assert.equal(operation.authorityEpoch, '1');
   assert.equal(operation.configurationNonce, '0');
   assert.equal(Object.isFrozen(operation), true);
@@ -101,7 +101,7 @@ test('every routing field is bound into both the body and the domain', () => {
   const base = builder();
   const variants = {
     validatorId: 1,
-    credentialGeneration: 1,
+    credentialGeneration: 2,
     authorityEpoch: 2,
     configurationNonce: 1,
   };
@@ -152,7 +152,7 @@ test('required fields fail closed with the SDK vocabulary', () => {
       .setNonceSubkey(ZERO_SUBKEY)
       .setNonce(0)
       .setDeadline(DEADLINE);
-    const routing = { validatorId: 0, credentialGeneration: 0, authorityEpoch: 1, configurationNonce: 0 };
+    const routing = { validatorId: 0, credentialGeneration: 1, authorityEpoch: 1, configurationNonce: 0 };
     for (const [field, value] of Object.entries(routing)) {
       if (field !== omit) op.setRouting({ [field]: value });
     }
@@ -164,6 +164,7 @@ test('required fields fail closed with the SDK vocabulary', () => {
     ['nonce', routed().setNonce(undefined), 'SDK_008', null],
     ['deadline', routed().setDeadline(undefined), 'SDK_009', null],
     ['subkey', routed().setNonceSubkey(undefined), 'SDK_011', /nonce subkey is required/],
+    ['generation', routed('credentialGeneration'), 'SDK_011', /credential generation is required/],
     ['epoch', routed('authorityEpoch'), 'SDK_011', /authority epoch is required/],
     ['configuration', routed('configurationNonce'), 'SDK_011', /configuration nonce is required/],
     ['nonce width', routed().setNonce(codec.composeNonce(0, 0) + (1n << 300n)), 'SDK_011', /nonce/],
@@ -171,6 +172,41 @@ test('required fields fail closed with the SDK vocabulary', () => {
   for (const [label, op, code, hint] of cases) {
     throws(() => op.build(), code, hint === null ? null : hint, label);
   }
+});
+
+test('the routing generation is supplied by the caller, never assumed', () => {
+  // The builder is offline, so it cannot read SubjectRevision or
+  // CredentialGeneration. A default here would be a namespace the core never
+  // validates, so an unset generation is the one failure the caller must fix.
+  const unset = new UserOperationBuilder({
+    networkMagic: NETWORK,
+    coreContractHash: CORE,
+    accountId: ACCOUNT_ID,
+  })
+    .setTarget(CUSTODY)
+    .setMethod('ping')
+    .setNonceSubkey(ZERO_SUBKEY)
+    .setNonce(0)
+    .setDeadline(DEADLINE)
+    .setRouting({ validatorId: 0, authorityEpoch: 1, configurationNonce: 0 });
+  assert.equal(unset.toJSON().credentialGeneration, undefined);
+  throws(() => unset.build(), 'SDK_011', /credential generation is required/);
+  // The channel derivation is refused for the same reason: the generation is
+  // one of the namespace inputs.
+  throws(() => unset.nonceChannel(), 'SDK_011', /credential generation/);
+  // An explicit value is used verbatim, but it stays 1-based: the core faults a
+  // zero generation with SA_OPERATION_MALFORMED, so the builder refuses it too.
+  for (const generation of ['1', '7']) {
+    const op = unset.clone().setRouting({ credentialGeneration: generation });
+    assert.equal(op.build().credentialGeneration, generation);
+  }
+  throws(
+    () => unset.clone().setRouting({ credentialGeneration: '0' }).build(),
+    'SDK_011',
+    /credentialGeneration must be >= 1/,
+  );
+  // The golden fixture carried an explicit 1, so its vector is unchanged.
+  assert.equal(builder().build().credentialGeneration, '1');
 });
 
 test('a composed nonce is channel << 64 | sequence, and both widths hold', () => {

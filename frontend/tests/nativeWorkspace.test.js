@@ -30,11 +30,8 @@ import {
   NATIVE_SMART_ACCOUNT_CONTRACT,
   NATIVE_STATUS_NAMES,
   NATIVE_THRESHOLD_LIMITS,
-  CONFIGURATION_INTENT_EXPIRY_MS,
   MAX_ACTIONS_PER_INTENT,
-  MAX_ACTIVE_INTENTS,
   MAX_OPERATIONS_PER_ENVELOPE,
-  MODULE_CHANGE_DELAY_MS,
   RECOVERY_TIMELOCK_MAX_MS,
   RECOVERY_TIMELOCK_MIN_MS,
 } from "../src/features/native/nativeWorkspace.js";
@@ -90,6 +87,10 @@ test("the workspace exports the v4 surface and no v3 alias", async () => {
     "buildMultiSigArguments",
     "NATIVE_MULTISIG_LIMITS",
     "NATIVE_VERIFIER_ACTIONS",
+    // The core has no configuration intent, so no intent window is exported.
+    "MODULE_CHANGE_DELAY_MS",
+    "CONFIGURATION_INTENT_EXPIRY_MS",
+    "MAX_ACTIVE_INTENTS",
   ])
     assert.equal(removed in module, false, `${removed} must not survive the v4 port`);
   assert.deepEqual(NATIVE_ACTION_CODES, {
@@ -109,66 +110,69 @@ test("the workspace exports the v4 surface and no v3 alias", async () => {
   assert.deepEqual(NATIVE_ACTIONS.map((entry) => entry.value), [
     "freezeAccount",
     "unfreezeAccount",
-    "beginRecovery",
-    "executeRecovery",
-    "cancelRecovery",
   ]);
   assert.deepEqual(
     NATIVE_ACTIONS.filter((entry) => entry.address).map((entry) => entry.value),
-    ["beginRecovery"],
+    [],
+    "no core action takes a new address: recovery lives in a module",
   );
 });
 
-test("configuration limits and delays track the contract source", () => {
-  const source = readFileSync(
-    new URL(
-      "../../contracts/native/SmartAccount/SmartAccountModuleProtocol.cs",
-      import.meta.url,
-    ),
-    "utf8",
+test("kernel limits track the contract source and the intent window is not promised here", () => {
+  const read = (path) =>
+    readFileSync(new URL("../../" + path, import.meta.url), "utf8");
+  const moduleProtocol = read(
+    "contracts/native/SmartAccount/SmartAccountModuleProtocol.cs",
   );
-  const constant = (name, type = "int") => {
+  const records = read("contracts/native/SmartAccount/SmartAccountRecords.cs");
+  const threshold = read(
+    "contracts/modules/ThresholdPolicyModule/ThresholdPolicyModule.cs",
+  );
+  const governance = read(
+    "contracts/modules/GovernanceModule/GovernanceModule.cs",
+  );
+  const constant = (source, name, type = "int") => {
     const match = new RegExp(`${type} ${name} = ([0-9_]+);`).exec(source);
     assert.ok(match, `${name} must stay an explicit constant`);
     return Number(match[1].replaceAll("_", ""));
   };
-  assert.equal(MODULE_CHANGE_DELAY_MS, constant("ModuleChangeDelayMs", "ulong"));
-  assert.equal(
-    CONFIGURATION_INTENT_EXPIRY_MS,
-    constant("ConfigurationIntentExpiryMs", "ulong"),
-  );
   assert.equal(
     RECOVERY_TIMELOCK_MIN_MS,
-    constant("RecoveryTimelockMinMs", "ulong"),
+    constant(records, "RecoveryTimelockMinMs", "ulong"),
   );
   assert.equal(
     RECOVERY_TIMELOCK_MAX_MS,
-    constant("RecoveryTimelockMaxMs", "ulong"),
+    constant(records, "RecoveryTimelockMaxMs", "ulong"),
   );
-  assert.equal(
-    MODULE_CHANGE_DELAY_MS,
-    86_400_000,
-    "a configuration intent matures after 24 hours",
-  );
-  assert.equal(CONFIGURATION_INTENT_EXPIRY_MS, 604_800_000, "matureAt + 7 days");
   assert.equal(RECOVERY_TIMELOCK_MIN_MS, 7 * 86_400_000);
   assert.equal(RECOVERY_TIMELOCK_MAX_MS, 90 * 86_400_000);
-  assert.equal(MAX_ACTIONS_PER_INTENT, constant("MaxActionsPerConfigurationIntent"));
-  assert.equal(MAX_ACTIVE_INTENTS, constant("MaxActiveConfigurationIntents"));
-  assert.equal(MAX_OPERATIONS_PER_ENVELOPE, constant("MaxOperationsPerEnvelope"));
+  assert.equal(
+    MAX_ACTIONS_PER_INTENT,
+    constant(moduleProtocol, "MaxActionsPerRegistration"),
+  );
+  assert.equal(
+    MAX_OPERATIONS_PER_ENVELOPE,
+    constant(moduleProtocol, "MaxOperationsPerEnvelope"),
+  );
   assert.deepEqual(NATIVE_MODULE_LIMITS, {
-    validator: constant("MaxValidatorModuleInstances"),
-    hook: constant("MaxHookModuleInstances"),
+    validator: constant(moduleProtocol, "MaxValidatorModuleInstances"),
+    hook: constant(moduleProtocol, "MaxHookModuleInstances"),
   });
   assert.deepEqual(NATIVE_MODULE_TYPES, {
-    validator: constant("ModuleTypeCodeValidator"),
-    hook: constant("ModuleTypeCodeHook"),
+    validator: constant(moduleProtocol, "ModuleTypeCodeValidator"),
+    hook: constant(moduleProtocol, "ModuleTypeCodeHook"),
   });
   assert.deepEqual(NATIVE_THRESHOLD_LIMITS, {
-    maxMembers: constant("MaxThresholdPolicyMembers"),
-    minValue: constant("MinThresholdPolicyValue"),
-    maxValue: constant("MaxThresholdPolicyValue"),
+    maxMembers: constant(threshold, "MaxPolicyMembers"),
+    minValue: 1,
+    maxValue: constant(threshold, "MaxPolicyMembers"),
   });
+  // The 24-hour proposal window is the governance module's constant now. It is
+  // asserted where it lives instead of being promised by the kernel workspace.
+  assert.match(
+    governance,
+    /ConfigurationMaturityMs = 24L \* 60 \* 60 \* 1000;/,
+  );
 });
 
 test("configuration actions serialize to the positional Arrays the core dispatches", () => {
@@ -380,10 +384,10 @@ test("discovery gates network magic, kernel identity, protocol version and imple
 
 test("discovery requires every v4 method and lifecycle event before any script runs", async () => {
   for (const change of [
-    (abi) => (abi.methods = abi.methods.filter((method) => method.name !== "proposeConfiguration")),
-    (abi) => (abi.methods = abi.methods.filter((method) => method.name !== "getHookOrder")),
+    (abi) => (abi.methods = abi.methods.filter((method) => method.name !== "installModule")),
+    (abi) => (abi.methods = abi.methods.filter((method) => method.name !== "getNonce")),
     (abi) => delete abi.events,
-    (abi) => (abi.events = abi.events.filter((event) => event.name !== "ConfigurationIntentExpired")),
+    (abi) => (abi.events = abi.events.filter((event) => event.name !== "ModuleInstalled")),
   ]) {
     const rpc = createNativeRpcFixture();
     const send = rpc.send;
@@ -423,8 +427,22 @@ test("load reads the account, modules, hook order and pending intents from the c
     registered: true,
     mutate: (state) => {
       state.modules = [
-        { moduleId: 1, moduleType: 1, contractHash: moduleHash, messageCapability: true },
-        { moduleId: 2, moduleType: 4, contractHash: "88".repeat(20) },
+        {
+          moduleId: 1,
+          moduleType: 1,
+          contractHash: moduleHash,
+          messageCapability: true,
+          // Reviewed fixture: a freshly registered account starts its installed
+          // validator at CredentialGeneration 1. The fixture never invents it.
+          credentialGeneration: "1",
+        },
+        {
+          moduleId: 2,
+          moduleType: 4,
+          contractHash: "88".repeat(20),
+          // Hooks carry no credential namespace, so the chain reports 0.
+          credentialGeneration: "0",
+        },
       ];
       state.hookOrder = [2];
       state.hookRevision = 3;
@@ -442,6 +460,7 @@ test("load reads the account, modules, hook order and pending intents from the c
   assert.equal(snapshot.protocol.migrationModeOpen, false);
   assert.deepEqual(snapshot.modules.validators.map((m) => m.moduleId), ["1"]);
   assert.equal(snapshot.modules.validators[0].moduleTypeName, "validator");
+  assert.equal(snapshot.modules.validators[0].credentialGeneration, "1");
   assert.deepEqual(snapshot.modules.hooks.map((m) => m.moduleId), ["2"]);
   assert.deepEqual(snapshot.hookOrder, { hookIds: ["2"], revision: "3" });
   assert.deepEqual(snapshot.pending, []);
@@ -649,13 +668,8 @@ test("a lost profile attestation during a later recheck revokes the verified sta
   assert.equal(workspace.profile, null);
 });
 
-test("account actions are custody or recovery gated and recovery is permissionless once mature", async () => {
-  const f = await connected({
-    registered: true,
-    mutate: (state) => {
-      state.recovery = recovery;
-    },
-  });
+test("only freeze and unfreeze are core account actions, and both are custody gated", async () => {
+  const f = await connected({ registered: true });
   const account = nativeTestIdentity.accountId;
 
   const freeze = await f.workspace.lifecycle({ accountId: account, action: "freezeAccount" });
@@ -671,295 +685,108 @@ test("account actions are custody or recovery gated and recovery is permissionle
     /not frozen/i,
   );
 
-  const begin = await f.workspace.lifecycle({
-    accountId: account,
-    action: "beginRecovery",
-    newCustody: "99".repeat(20),
-  });
-  assert.deepEqual(begin.requiredAuthorities, [custody, "99".repeat(20)]);
-  assert.equal(begin.submission, "native-sdk");
-  assert.equal(begin.walletSupported, false);
-  assert.deepEqual(begin.signers.map((signer) => signer.account), [
-    "0x" + custody,
-    "0x" + "99".repeat(20),
-  ]);
-
   f.rpc.state.status = 1;
-  assert.match(
-    actionBlockReason({ statusName: "Frozen", pendingRecovery: null }, "freezeAccount", 1),
-    /already frozen/,
-  );
   const unfreeze = await f.workspace.lifecycle({ accountId: account, action: "unfreezeAccount" });
   assert.deepEqual(unfreeze.requiredAuthorities, [custody]);
+  assert.equal(unfreeze.plan.method, "unfreezeAccount");
+  await assert.rejects(
+    () => f.workspace.lifecycle({ accountId: account, action: "freezeAccount" }),
+    /already frozen/i,
+  );
 });
 
-test("recovery may be started or cancelled by custody or the recovery authority only", async () => {
-  const now = Date.now();
+test("the recovery lifecycle stays a module concern and is never planned against the core", async () => {
   const f = await connected({
     registered: true,
     mutate: (state) => {
       state.recovery = recovery;
-      state.pendingRecovery = {
-        newCustody: stranger,
-        initiatedAt: now - 1000,
-        matureAt: now + 60_000,
-      };
+      state.pendingRecovery = { newCustody: stranger, matureAt: Date.now() + 60_000 };
     },
   });
   const account = nativeTestIdentity.accountId;
-  await assert.rejects(
-    () => f.workspace.lifecycle({ accountId: account, action: "beginRecovery", newCustody: "99".repeat(20) }),
-    /already pending/i,
-  );
-  const cancel = await f.workspace.lifecycle({ accountId: account, action: "cancelRecovery" });
-  assert.deepEqual(cancel.requiredAuthorities, [custody]);
-  const byRecovery = await f.workspace.lifecycle({
-    accountId: account,
-    action: "cancelRecovery",
-    feePayer: recovery,
-  });
-  assert.deepEqual(byRecovery.requiredAuthorities, [recovery]);
-  await assert.rejects(
-    () => f.workspace.lifecycle({ accountId: account, action: "cancelRecovery", feePayer: stranger }),
-    /recovery authority/i,
-  );
-  await assert.rejects(
-    () => f.workspace.lifecycle({ accountId: account, action: "executeRecovery" }),
-    /not matured/i,
-  );
+  // The core keeps the recovery slots for ABI stability, so the descriptor's
+  // own fact is reported; no new custody is invented from a module's state.
+  const state = await f.workspace.load(account);
+  assert.deepEqual(Object.keys(state.account.pendingRecovery), ["matureAt"]);
 
-  f.rpc.state.pendingRecovery = null;
-  await assert.rejects(
-    () => f.workspace.lifecycle({ accountId: account, action: "executeRecovery" }),
-    /no custody recovery is pending/i,
-  );
-  await assert.rejects(
-    () => f.workspace.lifecycle({ accountId: account, action: "cancelRecovery" }),
-    /no custody recovery is pending/i,
-  );
-});
-
-test("a mature recovery is executable by any fee payer with no authority scope", async () => {
-  const now = Date.now();
-  const f = await connected({
-    registered: true,
-    mutate: (state) => {
-      state.recovery = recovery;
-      state.pendingRecovery = {
-        newCustody: stranger,
-        initiatedAt: now - 8 * 86_400_000,
-        matureAt: now - 1000,
-      };
-    },
-  });
-  const review = await f.workspace.lifecycle({
-    accountId: nativeTestIdentity.accountId,
-    action: "executeRecovery",
-    feePayer: "77".repeat(20),
-  });
-  assert.deepEqual(review.requiredAuthorities, []);
-  assert.deepEqual(review.signers, [{ account: "0x" + "77".repeat(20), scopes: "CalledByEntry" }]);
-  assert.equal(review.walletSupported, true);
-  await assert.rejects(
-    () =>
-      f.workspace.lifecycle({
-        accountId: nativeTestIdentity.accountId,
-        action: "executeRecovery",
-        feePayer: nativeTestIdentity.accountAddress,
-      }),
-    /separate Neo wallet/i,
-  );
-});
-
-test("begin recovery refuses the current custody, the proxy and the core as the new custody", async () => {
-  const f = await connected({ registered: true });
-  for (const [newCustody, expected] of [
-    [custody, /different Neo account/i],
-    [nativeTestIdentity.accountAddress, /different Neo account/i],
-    [NATIVE_SMART_ACCOUNT_CONTRACT, /nonzero Neo authority/i],
-  ])
+  for (const action of ["beginRecovery", "executeRecovery", "cancelRecovery"])
     await assert.rejects(
-      () =>
-        f.workspace.lifecycle({
-          accountId: nativeTestIdentity.accountId,
-          action: "beginRecovery",
-          newCustody,
-        }),
-      expected,
+      () => f.workspace.lifecycle({ accountId: account, action }),
+      /supported account action/i,
     );
 });
 
-test("actionBlockReason reads the live state instead of a device clock", () => {
+test("actionBlockReason reads the live core state and never gates a module method", () => {
   const active = { statusName: "Active", pendingRecovery: null };
   const frozen = { ...active, statusName: "Frozen" };
   const migration = { ...active, statusName: "MigrationRequired" };
-  const pending = { ...active, pendingRecovery: { matureAt: "2000" } };
-  assert.equal(actionBlockReason(active, "freezeAccount", 1000), "");
-  assert.match(actionBlockReason(frozen, "freezeAccount", 1000), /already frozen/);
-  assert.match(actionBlockReason(active, "unfreezeAccount", 1000), /not frozen/);
-  assert.match(actionBlockReason(pending, "beginRecovery", 1000), /already pending/);
-  assert.equal(actionBlockReason(pending, "cancelRecovery", 1000), "");
-  assert.match(actionBlockReason(pending, "executeRecovery", 1000), /not matured/);
-  assert.match(actionBlockReason(active, "executeRecovery", 1000), /No custody recovery/);
-  assert.equal(actionBlockReason(pending, "executeRecovery", 2000), "");
-  assert.match(actionBlockReason(migration, "freezeAccount", 1000), /migration/i);
-  assert.match(actionBlockReason(null, "freezeAccount", 1000), /Load an account/);
+  assert.equal(actionBlockReason(active, "freezeAccount"), "");
+  assert.match(actionBlockReason(frozen, "freezeAccount"), /already frozen/);
+  assert.match(actionBlockReason(active, "unfreezeAccount"), /not frozen/);
+  assert.equal(actionBlockReason(frozen, "unfreezeAccount"), "");
+  assert.match(actionBlockReason(migration, "freezeAccount"), /migration/i);
+  assert.match(actionBlockReason(migration, "unfreezeAccount"), /migration/i);
+  assert.equal(actionBlockReason(null, "freezeAccount"), "Load an account first.");
+  // The recovery lifecycle is not a core action, so the core reports no block
+  // for it: a stale block reason here would re-invent a removed method.
+  for (const action of ["beginRecovery", "cancelRecovery", "executeRecovery"])
+    assert.equal(actionBlockReason(active, action), "");
 });
 
-test("a configuration proposal is one atomic intent and never a wallet invoke", async () => {
+test("module administration is an action inside a signed script, never a core intent", async () => {
   const f = await connected({ registered: true });
   const account = nativeTestIdentity.accountId;
-  const actions = [setDefaultPolicyAction({ operationAuthorization: false, messageAuthorization: true })];
-  const propose = await f.workspace.configuration({ kind: "propose", accountId: account, actions });
-  assert.equal(propose.plan.method, "proposeConfiguration");
-  assert.deepEqual(propose.requiredAuthorities, [custody]);
-  assert.equal(propose.submission, "native-sdk");
-  assert.equal(propose.walletSupported, false);
-  assert.equal(propose.request, null);
-  assert.match(propose.description, /24 hours/);
-  await assert.rejects(() => f.workspace.submit(propose), /exact-script/);
 
-  for (const invalid of [
-    { kind: "propose", accountId: account, actions: [] },
-    { kind: "propose", accountId: account, actions: Array(MAX_ACTIONS_PER_INTENT + 1).fill(actions[0]) },
-  ])
-    await assert.rejects(() => f.workspace.configuration(invalid), /1 to 16 actions/);
-
-  f.rpc.state.status = 1;
-  await assert.rejects(
-    () => f.workspace.configuration({ kind: "propose", accountId: account, actions }),
-    /frozen/i,
-  );
-  f.rpc.state.status = 2;
-  await assert.rejects(
-    () => f.workspace.configuration({ kind: "propose", accountId: account, actions }),
-    /migration/i,
-  );
-});
-
-function pendingIntent(fixture, overrides = {}) {
-  const now = fixture.rpc.state.time;
-  return {
-    intentId: 3,
-    proposedAt: now - 86_400_000,
-    matureAt: now - 1000,
-    expiresAt: now + 86_400_000,
-    authorityEpoch: 0,
-    actionDigest: { type: "ByteString", value: Buffer.from("ab".repeat(32), "hex").toString("base64") },
-    actions: [setDefaultPolicyAction({ operationAuthorization: true, messageAuthorization: true })],
-    ...overrides,
-  };
-}
-
-test("confirmation enforces maturity, expiry and the authority epoch of the intent", async () => {
-  const f = await connected({ registered: true });
-  const account = nativeTestIdentity.accountId;
-  const now = f.rpc.state.time;
-  f.rpc.state.intents = { 3: pendingIntent(f) };
-
-  f.rpc.state.intents = { 3: pendingIntent(f, { matureAt: now + 1000 }) };
-  await assert.rejects(
-    () => f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "3" }),
-    /not matured/i,
-  );
-  f.rpc.state.intents = { 3: pendingIntent(f, { matureAt: now - 1000, expiresAt: now - 1 }) };
-  await assert.rejects(
-    () => f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "3" }),
-    /expired/i,
-  );
-  f.rpc.state.intents = { 3: pendingIntent(f, { authorityEpoch: 5 }) };
-  await assert.rejects(
-    () => f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "3" }),
-    /earlier authority epoch/i,
-  );
-
-  f.rpc.state.intents = { 3: pendingIntent(f) };
-  const confirm = await f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "3" });
-  assert.equal(confirm.plan.method, "confirmConfiguration");
-  assert.deepEqual(confirm.requiredAuthorities, [custody]);
-  assert.equal(confirm.submission, "native-sdk");
-  assert.equal(confirm.intentId, "3");
-  assert.deepEqual(confirm.intentActions, pendingIntent(f).actions);
-  const exported = await f.workspace.exportReview(confirm);
-  assert.deepEqual(exported.recipe.input.actions, pendingIntent(f).actions);
-
-  await assert.rejects(
-    () => f.workspace.configuration({ kind: "confirm", accountId: account, intentId: "9" }),
-    /not pending/i,
-  );
-});
-
-test("a live intent needs custody to cancel, an expired one needs nobody", async () => {
-  const f = await connected({ registered: true });
-  const account = nativeTestIdentity.accountId;
-  const now = f.rpc.state.time;
-
-  f.rpc.state.intents = { 3: pendingIntent(f) };
-  const live = await f.workspace.configuration({ kind: "cancel", accountId: account, intentId: "3" });
-  assert.deepEqual(live.requiredAuthorities, [custody]);
-  assert.equal(live.plan.method, "cancelConfiguration");
-
-  f.rpc.state.intents = { 3: pendingIntent(f, { matureAt: now - 1, expiresAt: now - 1 }) };
-  const expired = await f.workspace.configuration({
-    kind: "cancel",
-    accountId: account,
-    intentId: "3",
+  // The core has no propose/confirm/cancel method: it encodes a configuration
+  // change as a positional action inside the script it signs. Those encoders
+  // must survive the slimming, because installModule/removeModule consume them.
+  const install = installModuleAction({
+    moduleType: "validator",
+    contractHash: "ab".repeat(20),
+    profileDigest: "cd".repeat(32),
   });
-  assert.deepEqual(expired.requiredAuthorities, []);
-  assert.deepEqual(expired.signers, [{ account: "0x" + custody, scopes: "None" }]);
-  assert.equal(expired.submission, "native-sdk", "exact script survives a permissionless cancel");
-  assert.match(expired.description, /expired intent can be cleaned by anyone/i);
-});
-
-test("a changed pending intent is refused before it can be confirmed or exported", async () => {
-  const f = await connected({ registered: true });
-  const account = nativeTestIdentity.accountId;
-  f.rpc.state.intents = { 3: pendingIntent(f) };
-  const inspected = await f.workspace.inspectConfiguration({ accountId: account });
-  assert.equal(inspected.intents.length, 1);
-  assert.equal(inspected.intents[0].mature, true);
-  assert.equal(inspected.intents[0].expired, false);
-  assert.deepEqual(inspected.intents[0].descriptions, ["Built-in route: operations on, messages on"]);
-
-  const review = await f.workspace.configuration({
-    kind: "confirm",
-    accountId: account,
-    intentId: "3",
-    expectedIntent: inspected.intents[0],
+  assert.equal(install.value.length, 5, "the install action is the 5-field vector");
+  assert.equal(install.value[0].value, String(NATIVE_ACTION_CODES.installModule));
+  assert.match(describeConfigurationAction(install), /^Install validator module /);
+  const uninstall = uninstallModuleAction({ moduleId: "7" });
+  assert.equal(uninstall.value[0].value, String(NATIVE_ACTION_CODES.uninstallModule));
+  assert.match(describeConfigurationAction(uninstall), /Uninstall module 7/);
+  const policy = setDefaultPolicyAction({
+    operationAuthorization: false,
+    messageAuthorization: true,
   });
-  const exported = await f.workspace.exportReview(review);
-  assert.equal(exported.recipe.method, "buildConfigurationScript");
-  assert.equal(exported.recipe.input.intentId, "3");
-  assert.deepEqual(await rebuildNativeReview(f.client, exported), review.plan);
+  assert.match(describeConfigurationAction(policy), /operations off, messages on/);
 
-  f.rpc.state.intents = {
-    3: pendingIntent(f, {
-      actions: [setDefaultPolicyAction({ operationAuthorization: false, messageAuthorization: false })],
-    }),
-  };
-  await assert.rejects(() => f.workspace.exportReview(review), /changed/i);
-  await assert.rejects(() => rebuildNativeReview(f.client, exported), /changed/i);
-  await assert.rejects(
-    () =>
-      f.workspace.configuration({
-        kind: "confirm",
-        accountId: account,
-        intentId: "3",
-        expectedIntent: inspected.intents[0],
-      }),
-    /pending intent changed/i,
-  );
+  // The core publishes no intent record, so the honest inspection is empty and
+  // every intent kind must refuse instead of inventing a core script.
+  const inspection = await f.workspace.inspectConfiguration({ accountId: account });
+  assert.equal(inspection.accountId, account);
+  assert.deepEqual(inspection.intents, []);
+  for (const kind of ["propose", "confirm", "cancel"])
+    await assert.rejects(
+      () =>
+        f.workspace.configuration({
+          kind,
+          accountId: account,
+          intentId: "3",
+          actions: [policy],
+        }),
+      /governance module/i,
+    );
 });
 
-test("inspection refuses to publish a stale pending card", async () => {
-  const f = await connected({ registered: true, mutate: (state) => (state.intents = {}) });
+test("a stale inspection is refused before it can publish a card", async () => {
+  const f = await connected({ registered: true });
   let finish;
   const gate = new Promise((resolve) => (finish = resolve));
-  f.client.getPendingConfigurationIntentIds = async () => {
+  const discover = f.client.discover.bind(f.client);
+  f.client.discover = async () => {
     await gate;
-    return [];
+    return discover();
   };
-  const inspection = f.workspace.inspectConfiguration({ accountId: nativeTestIdentity.accountId });
+  const inspection = f.workspace.inspectConfiguration({
+    accountId: nativeTestIdentity.accountId,
+  });
   f.workspace.clearReview();
   finish();
   await assert.rejects(() => inspection, /inputs changed/i);
@@ -1371,8 +1198,21 @@ test("the native workspace UI is bound to the v4 surface only", () => {
     "activatePolicy",
     "workspace.policy(",
     "pendingRecoveryAddress",
+    // The core keeps no proposal window, so the UI cannot offer one: the tab, its
+    // 24-hour copy and the eight encoders for codes the core refuses are gone.
+    "workspace.configuration(",
+    "workspace.inspectConfiguration(",
+    "MODULE_CHANGE_DELAY_MS",
+    "CONFIGURATION_INTENT_EXPIRY_MS",
+    "MAX_ACTIONS_PER_INTENT",
+    "configureModuleAction",
+    "setHookOrderAction",
+    "setDefaultPolicyAction",
+    "setThresholdPolicyAction",
+    "setRecoveryPolicyAction",
   ])
     assert.equal(source.includes(removed), false, `${removed} must not survive in the UI`);
-  assert.match(source, /workspace\.configuration\(/);
-  assert.match(source, /workspace\.inspectConfiguration\(/);
+  // What it must offer instead: the two action codes the core still executes.
+  assert.match(source, /installModuleAction\(/);
+  assert.match(source, /uninstallModuleAction\(/);
 });

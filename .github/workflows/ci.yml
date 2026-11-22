@@ -13,12 +13,26 @@ on:
 permissions:
   contents: read
 
+env:
+  # The reviewed core the native solution builds against; native-profile.yml pins the same SHA.
+  NATIVE_CORE_COMMIT: e7fcc132f6546c55ad7342f26d69081a71357be5
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          persist-credentials: false
+      # SmartAccount.sln is native-only, so the acceptance build and test gate needs the pinned
+      # core sources it compiles. Without this checkout verify_repo.sh reports the native build
+      # gate NOT RUN instead of silently passing it.
+      - name: Check out reviewed native core
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: neo-project/neo
+          ref: ${{ env.NATIVE_CORE_COMMIT }}
+          path: native-core
           persist-credentials: false
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
@@ -32,7 +46,7 @@ jobs:
             sdk/js/package-lock.json
       # Needs no packages, so it still runs when the gate below fails.
       - name: Repository hygiene and package-pin tests
-        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/fuzz_continuous.test.mjs scripts/source_map_js_pin.test.mjs scripts/verify_repo.test.mjs
+        run: node --test scripts/repo_hygiene.test.mjs scripts/check_neo_platform_packages.test.mjs scripts/source_map_js_pin.test.mjs scripts/verify_repo.test.mjs
       # Neo.SmartContract.Framework and Neo.SmartContract.Testing 3.10.1, the Neo packages they pull
       # in and every other NuGet package are published on nuget.org, which nuget.config makes the
       # only source. Directory.Build.props pins the framework and the packages.lock.json next to
@@ -41,8 +55,8 @@ jobs:
       # (docs/SA-REPRODUCIBLE-BUILD.md), instead of deep inside verify_repo.sh.
       - name: Check pinned Neo platform packages (framework 3.10.1)
         run: node scripts/check_neo_platform_packages.mjs
-      # The compiler is not a project dependency, so no lock file covers it. verify_repo.sh and
-      # contracts/compile.sh check that the installed nccs is this exact package.
+      # The compiler is not a project dependency, so no lock file covers it. verify_repo.sh
+      # checks that the installed nccs is this exact package before the first build.
       - name: Install Neo compiler (nccs 3.9.1)
         run: dotnet tool install -g neo.compiler.csharp --version 3.9.1
       - name: Install frontend dependencies
@@ -59,5 +73,10 @@ jobs:
       - name: Verify native account browser fixtures
         working-directory: frontend
         run: npm run test:native:browser
-      - name: Verify custom contracts and clients
-        run: ./scripts/verify_repo.sh --profile custom
+      # The native profile is the only acceptance path: the package/profile guards, the
+      # native-only solution build, the native unit tests and the module epoch VM fixture.
+      # The custom user-contract tree was deleted (Task #43), so no job here reads it.
+      - name: Verify native contracts and clients
+        env:
+          NEOOS_NATIVE_CORE_SOURCE: ${{ github.workspace }}/native-core
+        run: ./scripts/verify_repo.sh --profile native

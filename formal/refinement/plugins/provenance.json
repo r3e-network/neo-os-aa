@@ -108,35 +108,6 @@
       "permissions": 4
     },
     {
-      "name": "SAPlatformRegistrar",
-      "project": "contracts/custom/registrar/PlatformRegistrar.csproj",
-      "projectSha256": "1a904f50b17a93d7c1525b4849025804ce2bf14f725e7be10551aade688c2ac6",
-      "sources": [
-        {
-          "path": "contracts/custom/registrar/PlatformRegistrarAuthority.cs",
-          "sha256": "c1540950345e1ad867ac29018fe4b734335596604b049c8e3c6b076d7fb0a6ee"
-        },
-        {
-          "path": "contracts/custom/registrar/PlatformRegistrar.cs",
-          "sha256": "8ea38d8f1933be37f69e79971fe0fb5750c668ddbb6c7728e3fb181876671c1b"
-        }
-      ],
-      "artifacts": {
-        "nef": {
-          "file": "SAPlatformRegistrar.nef",
-          "sha256": "598a769f28539398c89f38c280f4d031d6308af8653b4ec9c8771ecf83fd2c1c"
-        },
-        "manifest": {
-          "file": "SAPlatformRegistrar.manifest.json",
-          "sha256": "58d19b545c4484eaa0c9ecebcd78f543556eddb79a6e3e297640ac0f4468df78"
-        }
-      },
-      "manifestName": "AAPlatformRegistrar",
-      "abiMethods": 22,
-      "permissions": 4,
-      "why": "Not a plugin. It is the caller side of the platform-registrar channel: the account only runs registerPlatformAccount, registerStablePlatformAccount and applyPlatformAccountOwnerRotation when the caller is the registrar it recorded, so measuring that channel means deploying the registrar service itself. The scenario points the service's authorizedCore back at the account and drives it as its own admin, and pinning its bytes is what makes the scenario's claim about who called the account a claim about an artifact."
-    },
-    {
       "name": "MockVerifierCore",
       "project": "tests/mocks/MockVerifierCore.csproj",
       "projectSha256": "d8e4363563ececd72ab5109f1747e44443406b497dca7bc4489558fabba9d03c",
@@ -160,35 +131,6 @@
       "abiMethods": 25,
       "permissions": "all",
       "why": "Not a plugin either: it is the caller this scenario uses as the market. It exposes forward(target, method, args) and is permitted to call anything, so a listing can be opened, cancelled and settled with the market itself as the calling script - which is the only shape those entries accept."
-    },
-    {
-      "name": "SAPaymaster",
-      "project": "contracts/custom/paymaster/Paymaster.csproj",
-      "projectSha256": "db4eb4f1980fcaf349d6ae42e081773bcb7d28187e3188275a263b2aeae7a89a",
-      "sources": [
-        {
-          "path": "contracts/custom/paymaster/Paymaster.cs",
-          "sha256": "3a7c95159bfe126e5b52c958d3d22951def46b7f866f92c1190ad0fad4880a27"
-        },
-        {
-          "path": "contracts/custom/paymaster/PaymasterAuthority.cs",
-          "sha256": "4a1c08f6b382a85f2561d0583f389dee50d762f5d93f7f120ec269040db9c355"
-        }
-      ],
-      "artifacts": {
-        "nef": {
-          "file": "SAPaymaster.nef",
-          "sha256": "07e6ad3983aa4f3e7d3ead0effd789edf8fcb7063a501c76365506a6b2492de1"
-        },
-        "manifest": {
-          "file": "SAPaymaster.manifest.json",
-          "sha256": "a066faf3ee31e9c1e716bf26f0ccfab74f1c9639adacb1adab0502b20918ca54"
-        }
-      },
-      "manifestName": "AAPaymaster",
-      "abiMethods": 25,
-      "permissions": 4,
-      "why": "The sponsor side of the sponsored paths. executeSponsoredUserOp asserts that the paymaster's authorizedCore points back at this account before it executes anything, so with a deployed paymaster the run reaches that assertion; re-pointing it is an admin call on the paymaster, which is why its signer is pinned here too."
     }
   ]
 }

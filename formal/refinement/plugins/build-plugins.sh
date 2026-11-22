@@ -23,7 +23,7 @@ REPO="$(cd "$HERE/../../.." && pwd)"
 OUT="${1:-$(mktemp -d "${TMPDIR:-/tmp}/sa-plugins.XXXXXX")}"
 NCCS_VERSION="3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"
 
-# contracts/compile.sh resolves this and refuses to run without it.
+# the retired contracts/compile.sh resolved this and refused to run without it.
 # shellcheck source=/dev/null
 source "$REPO/scripts/dotnet_env.sh"
 
@@ -46,17 +46,11 @@ echo "Building plugin artifacts with nccs $observed -> $OUT"
 build contracts/plugins/verifiers MultiSigVerifier     MultiSigVerifier
 build contracts/plugins/hooks     NeoDIDCredentialHook NeoDIDCredentialHook
 build contracts/plugins/hooks     MultiHook            MultiHook
-# Not a plugin: the caller side of the platform-registrar channel. The account
-# only runs registerPlatformAccount, registerStablePlatformAccount and the
-# platform owner-rotation apply when the caller is the registrar it recorded,
-# so that path deploys the registrar service contract itself, with its bytes
-# pinned like everything else in this directory.
-build contracts/custom/registrar PlatformRegistrar   SAPlatformRegistrar
-# Nor these two: the caller side of the market escrow (a forwarder with a
-# blanket permission, so the market's own cancel and settle calls have somebody
-# to come from) and the sponsor side of the sponsored paths.
+# The registrar/market/paymaster caller-side contracts were retired with the
+# custom user-contract kernel (native-only consolidation), so this directory
+# pins plugin bytecode only. The message-envelope vector's caller stub is still
+# built here because the native fixture deploys it as its forwarder.
 build tests/mocks                MockVerifierCore    MockVerifierCore
-build contracts/custom/paymaster Paymaster           SAPaymaster
 
 # Compare against the recorded hashes. python3 is used rather than shasum so the
 # comparison is byte-for-byte on binary files without depending on the coreutils
