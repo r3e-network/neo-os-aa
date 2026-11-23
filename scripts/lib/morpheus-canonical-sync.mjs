@@ -27,7 +27,7 @@ export const REQUIRE_SERVICES_ENV = 'NEOOS_REQUIRE_SERVICES_ARTIFACTS';
 // be reviewed (and the SDK round-trip test re-run) before the pin moves.
 export const CANONICAL_ENVELOPE_RELATIVE_PATH = 'packages/shared/src/confidential-envelope.js';
 export const CANONICAL_ENVELOPE_SHA256 =
-  'c93323b2696683fe355823921639a1f6495a876abf4d862ca4b6b4081e37f0a7';
+  '6071fcbe03f66281c9504a200a2505e12896c69ca2df305bb81c3ac91bf8ab5d';
 
 const CHECKOUT_HINT = `${ORACLE_ROOT_ENV} (else a sibling ../neo-os-services) must name a neo-os-services checkout`;
 

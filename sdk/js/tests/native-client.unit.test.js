@@ -265,6 +265,19 @@ test("identity derivation is custody plus salt, at this kernel's call flags", as
   assert.throws(() => f.client.deriveIdentity({ custodyAddress: ZERO, salt }), /custody/);
 });
 
+test("recovery plans distinguish a new recipient from a retained authority", async () => {
+  const f = fixture();
+  f.setAccount();
+  const input = { accountId: ACCOUNT, recoveryTimelockMs: "604800000" };
+  const retained = await f.client.buildRecoveryPolicyPlan({ ...input, recoveryAuthority: RECOVERY });
+  assert.deepEqual(retained.signers, [CUSTODY]);
+  const recipient = "71".repeat(20);
+  const changed = await f.client.buildRecoveryPolicyPlan({ ...input, recoveryAuthority: recipient });
+  assert.deepEqual(changed.signers, [CUSTODY, recipient]);
+  assert.notEqual(changed.script, retained.script);
+  await assert.rejects(() => f.client.buildRecoveryPolicyPlan({ ...input, recoveryAuthority: ZERO }));
+});
+
 test("the account descriptor is decoded exactly and refuses impossible state", async () => {
   const f = fixture();
   f.setAccount();

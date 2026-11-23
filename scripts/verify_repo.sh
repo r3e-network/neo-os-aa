@@ -116,11 +116,20 @@ if [[ $run_contracts -eq 1 ]]; then
   # core and the native test surface against the pinned core checkout.
   native_core_source="${NEOOS_NATIVE_CORE_SOURCE:-$ROOT_DIR/../neo-native-core}"
   if [[ -f "$native_core_source/src/Neo/Neo.csproj" && -f "$native_core_source/tests/AssemblyInfo.cs" ]]; then
-    native_core_args=(-p:NeoSourceRoot="$native_core_source/src" -p:NeoCoreRoot="$native_core_source/src/Neo" -p:NeoTestsRoot="$native_core_source/tests/Neo.UnitTests")
+    # This job executes tests, not the NuGet documentation packaging target.
+    native_core_args=(-p:GenerateDocumentationFile=false -p:NeoSourceRoot="$native_core_source/src" -p:NeoCoreRoot="$native_core_source/src/Neo" -p:NeoTestsRoot="$native_core_source/tests/Neo.UnitTests")
     echo "native build gate: SmartAccount.sln against the pinned core checkout at $native_core_source"
     dotnet build SmartAccount.sln -c Release --nologo "${native_core_args[@]}"
     echo "native unit-test gate: tests/SmartAccount.Native.Tests"
-    dotnet test tests/SmartAccount.Native.Tests/SmartAccount.Tests.csproj -c Release --nologo "${native_core_args[@]}"
+    standard_module_dir="$(mktemp -d "${TMPDIR:-/tmp}/sa-standard-modules.XXXXXX")"
+    trap 'rm -rf -- "$standard_module_dir"' EXIT
+    for module_project in contracts/modules/GovernanceModule/GovernanceModule.csproj \
+        contracts/modules/RecoveryModule/RecoveryModule.csproj contracts/plugins/native-profile/WhitelistHook.Native.csproj; do
+      "$NCCS_BIN" "$module_project" -o "$standard_module_dir"
+    done
+    node scripts/check_standard_recovery_nef.mjs "$standard_module_dir/RecoveryModule.nef"
+    dotnet test tests/SmartAccount.Native.Tests/SmartAccount.Tests.csproj -c Release --nologo \
+      "${native_core_args[@]}" -p:StandardModuleNefDir="$standard_module_dir"
   else
     mark_not_run "native-build"
     echo "native build gate: NOT RUN - no pinned core checkout at $native_core_source."

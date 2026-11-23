@@ -31,7 +31,7 @@ import { createProxyWitness } from "./proxyWitness.mjs";
 
 export const NATIVE_SIGNED_ARTIFACT_MAX_CHARS = 1048576;
 const MAX_TRANSACTION_BYTES = 102400;
-const PLAN_KINDS = ["registration", "execution", "account"];
+const PLAN_KINDS = ["registration", "execution", "account", "recovery"];
 // The account actions of the minimal core: freezing, thawing and the two
 // module-administration calls. Recovery, credential revocation and the
 // configuration intents are user-space module concerns, so their scripts are

@@ -278,6 +278,27 @@ namespace SmartAccount.Modules
             };
         }
 
+        // Bind a reviewed transaction to this instance's record and current core
+        // configuration. A cancellation/replacement or reinstallation must force a new review.
+        public static void CancelReviewedRecovery(UInt160 accountId, BigInteger nonce, BigInteger configurationNonce)
+        {
+            RequireReviewedRecord(accountId, nonce, configurationNonce);
+            CancelRecovery(accountId);
+        }
+
+        public static void ExecuteReviewedRecovery(UInt160 accountId, BigInteger nonce, BigInteger configurationNonce)
+        {
+            RequireReviewedRecord(accountId, nonce, configurationNonce);
+            ExecuteRecovery(accountId);
+        }
+
+        private static void RequireReviewedRecord(UInt160 accountId, BigInteger nonce, BigInteger configurationNonce)
+        {
+            ExecutionEngine.Assert(ModuleSupport.AccountConfigurationNonce(accountId) == configurationNonce,
+                ModuleProtocol.ErrEpochStale);
+            ExecutionEngine.Assert((BigInteger)RequirePending(accountId)[FieldNonce] == nonce, ModuleProtocol.ErrEpochStale);
+        }
+
         /// <summary>The nonce of the last executed recovery, or 0.</summary>
         [Safe]
         public static BigInteger GetExecutedRecoveryNonce(UInt160 accountId)

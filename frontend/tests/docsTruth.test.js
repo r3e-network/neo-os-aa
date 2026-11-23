@@ -1077,18 +1077,27 @@ test('CU-202: the ratchet reads inline-code spans and declares the boundary it d
 // are compared by value, so reformatting or re-quoting the configuration is free.
 // ---------------------------------------------------------------------------------------------
 const GITLEAKS_CONFIG = '.gitleaks.toml';
-// These 37 historical findings are public source/build digests in one immutable
-// report commit. Pin the entire fingerprint file, never the report path or rule.
+// Exact historical locations only. The reviewed matches are build hashes, nonce
+// vectors, published contract addresses, or a sentence naming the key encoder.
 const REVIEWED_GITLEAKS_IGNORE = {
   path: '.gitleaksignore',
-  sha256: '2e665bb7444285dcddb0fe507bd3a9a4e852fc22a1b8ab773fa13f3473cc82c3',
-  commit: 'da74a6f1870f2749899e60b5ec1b1f22476c6bc4',
-  // The path the fingerprints were produced against is the one that commit carried. A gitleaks
-  // fingerprint names the commit and the path AT that commit, so the later aa- -> sa- rename of the
-  // report file does not rewrite these bytes: the ignore entry still resolves to the historical
-  // finding and nowhere else.
+  sha256: 'ed3fd7f1543f2dc5067741f0e95b4944d42791d0557159e3c3839c15cb469f66',
+  findings: 133,
   report: 'docs/reports/aa-artifact-reproducibility-20261025.json',
-  findings: 37,
+  byCommitAndPath: {
+    '012a3b4c323e692f750c6d1115c68868cbac2d18:formal/refinement/fixtures/current-method-proof/method-proof.json': 15,
+    '012a3b4c323e692f750c6d1115c68868cbac2d18:tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json': 1,
+    '012a3b4c323e692f750c6d1115c68868cbac2d18:tests/fixtures/sa-module-protocol/golden-vectors/nonce-channel.json': 2,
+    '66b1715894f1eb38354ccc02f6cbdeb1c29911aa:docs/SDK.md': 1,
+    '9f6819c399df876b15db4143a146d35dc5cad42d:docs/SA-MODULE-PROTOCOL.md': 1,
+    '9f6819c399df876b15db4143a146d35dc5cad42d:docs/reports/sa-artifact-reproducibility-20261118.json': 37,
+    '9f6819c399df876b15db4143a146d35dc5cad42d:frontend/src/config/generatedMorpheusRegistry.js': 4,
+    '9f6819c399df876b15db4143a146d35dc5cad42d:frontend/src/config/generatedMorpheusRuntimeCatalog.js': 4,
+    'bdf41dd1cc5ee4fabcb14bad5a5add8c7fb47f5e:docs/reports/sa-artifact-reproducibility-20261118.json': 26,
+    'c315fe38b8765c6fefe693dde80c42369ac62606:tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json': 1,
+    'c315fe38b8765c6fefe693dde80c42369ac62606:tests/fixtures/sa-module-protocol/golden-vectors/nonce-channel.json': 4,
+    'da74a6f1870f2749899e60b5ec1b1f22476c6bc4:docs/reports/aa-artifact-reproducibility-20261025.json': 37,
+  },
 };
 // Every file name gitleaks resolves a configuration or an ignore set from, anywhere in the tree.
 const GITLEAKS_CONFIG_FILES = ['.gitleaks.toml', '.gitleaksignore'];
@@ -1325,9 +1334,10 @@ function digestReportInventoryAllowances() {
     // their three mirrored external native-core pins) were re-read through
     // formal/verify.py's own digest functions; no key was added or removed, so the
     // count stays 341 and the full-text hash moved.
+    // Native v4 also binds module projects, restored package locks, shared code and parameters.
     entry('sa-formal-source-lock-content-digests',
-      'formal/source-lock.json', 341,
-      'f9f6b8fc29d5464b0f7bc16196d24a3c8823f876551a183c87e1d9e4198908d4'),
+      'formal/source-lock.json', 358,
+      '0d15fbc0182594b56729e87359785f3a8e5349c3256c144d9aedef76f12593a8'),
     entry('sa-artifact-reproducibility-20261025-content-digests',
       'docs/reports/sa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
@@ -1602,11 +1612,13 @@ test('CU-202: every reviewed allowance stays attached to the one value it triage
   const fingerprints = ignoreText.trimEnd().split('\n');
   assert.equal(fingerprints.length, REVIEWED_GITLEAKS_IGNORE.findings);
   assert.equal(new Set(fingerprints).size, REVIEWED_GITLEAKS_IGNORE.findings);
+  const actualGroups = {};
   for (const fingerprint of fingerprints) {
-    const prefix = `${REVIEWED_GITLEAKS_IGNORE.commit}:${REVIEWED_GITLEAKS_IGNORE.report}:generic-api-key:`;
-    assert.ok(fingerprint.startsWith(prefix) && /^\d+$/.test(fingerprint.slice(prefix.length)),
-      'every reviewed fingerprint must bind the exact historical commit, report, rule and line');
+    const match = /^([0-9a-f]{40}:[^:]+):generic-api-key:\d+$/.exec(fingerprint);
+    assert.ok(match, 'an exception must identify a commit, path, rule and line');
+    actualGroups[match[1]] = (actualGroups[match[1]] ?? 0) + 1;
   }
+  assert.deepEqual(actualGroups, REVIEWED_GITLEAKS_IGNORE.byCommitAndPath);
   assert.ok(reviewedAllowlists().length > 0, 'the reviewed allowance inventory must not be empty');
   for (const entry of reviewedAllowlists()) {
     const where = entry.id;

@@ -211,7 +211,7 @@ namespace Neo.UnitTests.SmartContract.Native
 
             ContractState state = native.GetContractState(Settings, 1);
             string[] methods = state.Manifest.Abi.Methods.Select(m => m.Name).ToArray();
-            foreach (string method in new[]
+            string[] specifiedMethods =
             {
                 "createAccount", "createAccounts", "executeUserOp", "executeUserOps", "validateUserOp",
                 "getOperationDigest", "verify", "getNonce", "getNonceSequence",
@@ -219,8 +219,8 @@ namespace Neo.UnitTests.SmartContract.Native
                 "getModules", "getModule", "isModuleInstalled", "getAuthorizedModuleId",
                 "freezeAccount", "unfreezeAccount", "installModule", "removeModule",
                 "setRecoveryPolicy", "setBuiltinAuthorization", "revokeModuleCredentials", "resetAccount",
-            })
-                Assert.Contains(method, methods, method);
+            };
+            Assert.AreSequenceEqual(specifiedMethods.Order(StringComparer.Ordinal).ToArray(), methods.Order(StringComparer.Ordinal).ToArray(), "The active ABI must export exactly the specified entries.");
             // The advanced features live in user-space modules now; their ABI is
             // gone, not merely unmarked.
             foreach (string removed in new[]

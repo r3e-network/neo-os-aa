@@ -25,18 +25,16 @@ namespace Neo.SmartContract.Native
     /// module callback is authorized only while the recorded phase is the one
     /// that callback belongs to, for the exact active module instance.
     ///
-    /// The minimal core runs one validator callback per phase, so no aggregate
-    /// gas pool is tracked here: every callback carries its own hard VM gas
-    /// limit instead.
+    /// Each callback has a hard cap. Pre and post hooks also share one budget
+    /// per account and transaction, including calls through different envelopes.
     /// </summary>
     internal enum SmartAccountCallbackPhase : byte
     {
         None = 0,
         Validation = 1,
-        // 2 and 4 were the hook pre/post phases. The minimal core runs no
-        // hooks, so those values are retired and never defined again: a module
-        // asking for them is rejected instead of being granted an unused phase.
+        HookPre = 2,
         TargetDispatch = 3,
+        HookPost = 4,
         Completion = 5,
         Configuration = 6,
         Cleanup = 7,
@@ -48,6 +46,18 @@ namespace Neo.SmartContract.Native
         private readonly Dictionary<UInt160, AccountLease> _accounts = new();
         private readonly Dictionary<UInt160, AccountExecution> _executions = new();
         private readonly Stack<Lease> _scopes = new();
+        // One engine is one transaction, including separate direct invocations and batches.
+        private readonly Dictionary<UInt160, long> _hookGasSpent = new();
+
+        internal long HookGasRemaining(UInt160 accountId) =>
+            SmartAccountModuleProtocol.HookAggregateGasLimit - _hookGasSpent.GetValueOrDefault(accountId);
+
+        internal void ChargeHook(UInt160 accountId, long spent)
+        {
+            if (spent < 0 || spent > HookGasRemaining(accountId))
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
+            _hookGasSpent[accountId] = _hookGasSpent.GetValueOrDefault(accountId) + spent;
+        }
         private object _generation = new();
 
         internal sealed class AccountExecution

@@ -41,6 +41,7 @@ import {
   nativeTestCustody,
   nativeTestIdentity,
   nativeTestRecovery,
+  nativeTestRecoverySeat,
   nativeTestSalt,
 } from "./fixtures/nativeRpcFixture.js";
 
@@ -110,11 +111,12 @@ test("the workspace exports the v4 surface and no v3 alias", async () => {
   assert.deepEqual(NATIVE_ACTIONS.map((entry) => entry.value), [
     "freezeAccount",
     "unfreezeAccount",
+    "setRecoveryPolicy", "beginRecovery", "cancelRecovery", "executeRecovery",
   ]);
   assert.deepEqual(
     NATIVE_ACTIONS.filter((entry) => entry.address).map((entry) => entry.value),
-    [],
-    "no core action takes a new address: recovery lives in a module",
+    ["setRecoveryPolicy"],
+    "only policy administration takes a new authority address",
   );
 });
 
@@ -157,10 +159,12 @@ test("kernel limits track the contract source and the intent window is not promi
   assert.deepEqual(NATIVE_MODULE_LIMITS, {
     validator: constant(moduleProtocol, "MaxValidatorModuleInstances"),
     hook: constant(moduleProtocol, "MaxHookModuleInstances"),
+    recovery: constant(moduleProtocol, "MaxRecoveryModuleInstances"),
   });
   assert.deepEqual(NATIVE_MODULE_TYPES, {
     validator: constant(moduleProtocol, "ModuleTypeCodeValidator"),
     hook: constant(moduleProtocol, "ModuleTypeCodeHook"),
+    recovery: constant(moduleProtocol, "ModuleTypeCodeRecovery"),
   });
   assert.deepEqual(NATIVE_THRESHOLD_LIMITS, {
     maxMembers: constant(threshold, "MaxPolicyMembers"),
@@ -243,6 +247,7 @@ test("configuration actions reject unreachable, duplicate and out-of-range input
     () => setThresholdPolicyAction({ threshold: 1, memberIds: [1, 1] }),
     () => setThresholdPolicyAction({ threshold: 1, memberIds: Array(11).fill(0).map((_, index) => index + 1) }),
     () => setThresholdPolicyAction({ threshold: 1, memberIds: [1], active: false }),
+    () => setRecoveryPolicyAction({ recoveryAuthority: "00".repeat(20), recoveryTimelockMs: String(RECOVERY_TIMELOCK_MIN_MS) }),
     () => setRecoveryPolicyAction({ recoveryTimelockMs: "0" }),
     () => setRecoveryPolicyAction({ recoveryTimelockMs: String(RECOVERY_TIMELOCK_MAX_MS + 1) }),
   ];
@@ -668,7 +673,24 @@ test("a lost profile attestation during a later recheck revokes the verified sta
   assert.equal(workspace.profile, null);
 });
 
-test("only freeze and unfreeze are core account actions, and both are custody gated", async () => {
+test("rotating recovery preserves the existing delay and rebuilds with both authorities", async () => {
+  const f = await connected({ registered: true, mutate: state => {
+    state.recovery = recovery;
+    state.timelock = String(90 * 86400000);
+  } });
+  const input = { accountId: nativeTestIdentity.accountId, action: "setRecoveryPolicy", submission: "native-sdk" };
+  const rotated = await f.workspace.lifecycle({ ...input, recoveryAuthority: stranger });
+  assert.deepEqual(rotated.requiredAuthorities, [custody, stranger]);
+  const exported = await f.workspace.exportReview(rotated);
+  assert.equal(exported.recipe.input.recoveryTimelockMs, String(90 * 86400000));
+  assert.deepEqual(await rebuildNativeReview(f.client, exported), rotated.plan);
+  const retained = await f.workspace.lifecycle({ ...input, recoveryAuthority: recovery });
+  assert.deepEqual(retained.requiredAuthorities, [custody]);
+  f.rpc.state.recovery = stranger;
+  await assert.rejects(() => rebuildNativeReview(f.client, exported));
+});
+
+test("freeze and unfreeze are custody gated", async () => {
   const f = await connected({ registered: true });
   const account = nativeTestIdentity.accountId;
 
@@ -704,19 +726,31 @@ test("the recovery lifecycle stays a module concern and is never planned against
     },
   });
   const account = nativeTestIdentity.accountId;
-  // The core keeps the recovery slots for ABI stability, so the descriptor's
-  // own fact is reported; no new custody is invented from a module's state.
-  const state = await f.workspace.load(account);
-  assert.deepEqual(Object.keys(state.account.pendingRecovery), ["matureAt"]);
-
+  assert.equal((await f.workspace.load(account)).account.pendingRecovery, null);
   for (const action of ["beginRecovery", "executeRecovery", "cancelRecovery"])
-    await assert.rejects(
-      () => f.workspace.lifecycle({ accountId: account, action }),
-      /supported account action/i,
-    );
+    await assert.rejects(() => f.workspace.lifecycle({ accountId: account, action }), /no supported recovery module/i);
+  f.rpc.state.modules.push({ ...nativeTestRecoverySeat, nefSha256: "00".repeat(32) });
+  assert.equal((await f.client.getRecoverySeat(account)).supported, false, "a self-declared profile is not code identity");
+  f.rpc.state.modules[0] = { ...nativeTestRecoverySeat, liveUpdateCounter: 2 };
+  assert.equal((await f.client.getRecoverySeat(account)).supported, false, "an upgraded deployment requires a new binding");
+  f.rpc.state.modules[0] = nativeTestRecoverySeat;
+  const state = await f.workspace.load(account);
+  assert.equal(state.account.pendingRecovery.newCustody, stranger);
+  const cancel = await f.workspace.lifecycle({ accountId: account, action: "cancelRecovery", feePayer: stranger, authority: recovery });
+  assert.equal(cancel.plan.targetContract, nativeTestRecoverySeat.contractHash);
+  assert.equal(cancel.submission, "native-sdk");
+  assert.deepEqual(cancel.signers[1].allowedcontracts, ["0x" + nativeTestRecoverySeat.contractHash]);
+  assert.deepEqual(await rebuildNativeReview(f.client, await f.workspace.exportReview(cancel)), cancel.plan);
+  f.rpc.state.pendingRecovery.nonce = 2;
+  await assert.rejects(() => f.client.revalidatePlan(cancel.plan), /changed/);
+  f.rpc.state.pendingRecovery = null;
+  const begin = await f.workspace.lifecycle({ accountId: account, action: "beginRecovery", newCustody: stranger });
+  assert.deepEqual(begin.requiredAuthorities, [custody, stranger]);
+  assert.equal(begin.plan.targetContract, nativeTestRecoverySeat.contractHash);
+
 });
 
-test("actionBlockReason reads the live core state and never gates a module method", () => {
+test("actionBlockReason checks core status and recovery seat availability", () => {
   const active = { statusName: "Active", pendingRecovery: null };
   const frozen = { ...active, statusName: "Frozen" };
   const migration = { ...active, statusName: "MigrationRequired" };
@@ -727,10 +761,9 @@ test("actionBlockReason reads the live core state and never gates a module metho
   assert.match(actionBlockReason(migration, "freezeAccount"), /migration/i);
   assert.match(actionBlockReason(migration, "unfreezeAccount"), /migration/i);
   assert.equal(actionBlockReason(null, "freezeAccount"), "Load an account first.");
-  // The recovery lifecycle is not a core action, so the core reports no block
-  // for it: a stale block reason here would re-invent a removed method.
   for (const action of ["beginRecovery", "cancelRecovery", "executeRecovery"])
-    assert.equal(actionBlockReason(active, action), "");
+    assert.match(actionBlockReason(active, action), /no supported recovery module/i);
+
 });
 
 test("module administration is an action inside a signed script, never a core intent", async () => {

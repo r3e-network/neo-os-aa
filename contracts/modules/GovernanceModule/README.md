@@ -27,6 +27,7 @@ is that module.
 The module is installed as a **validator-type** instance (spec §11.1), so the
 core's admission gate requires the `getModuleProfile` reader plus the
 `validateUserOp`/`onUserOpComplete` routing pair; all three are exposed. The
+routing callback always declines ordinary UserOps; use a credential validator for spending. The
 profile declares no message domain, no threshold membership and no composition
 (`capabilities` all zero/false, `instanceIsolation: false` — policy state is
 keyed by account).

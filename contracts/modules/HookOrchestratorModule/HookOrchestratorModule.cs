@@ -9,47 +9,8 @@ using System.ComponentModel;
 namespace SmartAccount.Modules
 {
     /// <summary>
-    /// §14 hook-orchestration module (skeleton).
-    ///
-    /// A v4 operation carries a per-hook proof array (operation field 12) plus
-    /// the module id of every hook it names. The minimal native core shape-checks
-    /// that array and never interprets it; deciding which hooks run, in which
-    /// order, and whether a credential was revoked is orchestration, and
-    /// orchestration is this module.
-    ///
-    /// The module owns two account policies:
-    ///
-    ///   * the hook order — the ids a caller must satisfy in the order the
-    ///     account published, so a hook set is a reviewed list rather than
-    ///     whatever the operation happens to name;
-    ///   * the credential generation of an instance — revoking a credential
-    ///     raises the generation, and every proof bound to an older generation
-    ///     stops verifying without the hook being reinstalled.
-    ///
-    /// The module is a <b>validator-type</b> routing instance (spec §14.1: an
-    /// account routes an operation to it and it runs the pre-hook chain inside
-    /// its own validation callback and the post-hook chain inside its completion
-    /// callback), so the core admission gate requires the
-    /// <c>getModuleProfile</c> reader plus the
-    /// <c>validateUserOp</c>/<c>onUserOpComplete</c> routing pair. Both routing
-    /// callbacks stay fail-closed in this skeleton — inner-credential
-    /// verification and pre/post hook dispatch are the integrator's policy — so
-    /// an operation routed here is always rejected rather than approved without
-    /// a verified credential.
-    ///
-    /// Storage ownership (audit L-2):
-    ///   * the hook order is <b>account-level</b> — spec §14.3, table 29 fixes its
-    ///     key as one record per account (<c>0x54 ‖ accountId</c>, at most one per
-    ///     account) — so <see cref="OnUninstall"/> still clears the whole
-    ///     account's order record; that assumption is fixed here and in the
-    ///     profile (instanceIsolation false, the core refuses a second instance
-    ///     of this contract on the same account);
-    ///   * the credential generation is <b>instance-scoped</b> —
-    ///     <c>0x02 ‖ accountId ‖ moduleId(8 BE)</c> — so uninstall clears exactly
-    ///     the leaving instance's key, never the whole account prefix.
-    ///
-    ///   <c>0x01 ‖ accountId</c>             → serialized hook id list (account-level)
-    ///   <c>0x02 ‖ accountId ‖ moduleId(8 BE)</c> → current credential generation (instance-level)
+    /// Administration of hook order and credential revocation. All execution
+    /// routes use the core's hook index. This module never authorizes a UserOp.
     /// </summary>
     [DisplayName("HookOrchestratorModule")]
     [ContractPermission("*", "getAccount")]
@@ -60,18 +21,9 @@ namespace SmartAccount.Modules
     [ManifestExtra("Description", "Hook order and credential-revocation module (spec §14)")]
     public class HookOrchestratorModule : SmartContract
     {
-        // Canonical module capability profile (docs/SA-MODULE-PROTOCOL.md §12):
-        // keys sorted, no whitespace, no trailing newline. The core hashes these
-        // exact bytes into the install-time profile digest. The orchestrator is
-        // the one composition point of the account (§14: hooks run inside its
-        // routing callbacks), so it declares compositeLayer 1; it composes no
-        // message domain, is not a threshold member (§15.1 forbids members being
-        // the orchestration module), and the account-level hook order forces
-        // instanceIsolation false.
         private const string ModuleProfileJson =
-            "{\"callbacks\":[\"validateUserOp\",\"onUserOpComplete\"],\"capabilities\":{\"compositeLayer\":1,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"HookOrchestratorModule\",\"lifecycle\":[\"onInstall\",\"onUninstall\"],\"moduleType\":\"validator\",\"profileVersion\":1}";
+            "{\"callbacks\":[\"validateUserOp\",\"onUserOpComplete\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"HookOrchestratorModule\",\"lifecycle\":[\"onInstall\",\"onUninstall\"],\"moduleType\":\"validator\",\"profileVersion\":1}";
 
-        private static readonly byte[] Prefix_HookOrder = new byte[] { 0x01 };
         private static readonly byte[] Prefix_Credential = new byte[] { 0x02 };
 
         /// <summary>The per-operation hook proof array is bounded by spec §4.2.</summary>
@@ -117,53 +69,27 @@ namespace SmartAccount.Modules
         }
 
         /// <summary>
-        /// <c>onUninstall(accountId, moduleId, moduleType, deInitData)</c>: audit L-2 —
-        /// the two records leave at different scopes. The credential generation is
-        /// instance-scoped (<c>accountId ‖ moduleId</c>), so exactly the leaving
-        /// instance's key is deleted; another instance's revoked-credential history
-        /// survives an unrelated uninstall. The hook order is account-level by spec
-        /// §14.3 (one <c>order ‖ accountId</c> record per account), so that record
-        /// still leaves with the whole account — the assumption is pinned in the
-        /// profile (instanceIsolation false) and in the class documentation.
+        /// Discard the local credential history for the removed instance.
         /// </summary>
         public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             ModuleSupport.RequireCore();
             // Instance-scoped: the credential generation of THIS instance only.
             Storage.Delete(Storage.CurrentContext, ModuleSupport.Key(Prefix_Credential, accountId, moduleId));
-            // Account-level (spec §14.3): the shared order record of the account.
-            Storage.Delete(Storage.CurrentContext, ModuleSupport.Key(Prefix_HookOrder, accountId));
         }
 
         // ---- §14 routing callbacks (validator-type admission, fail-closed) ----
 
         /// <summary>
-        /// <c>validateUserOp(accountId, operationDigest, operation)</c>: the core
-        /// calls this when an operation is routed to this instance. Per spec §14.4
-        /// the orchestrator must, inside this one callback, verify the inner
-        /// credential and run the pre-hook chain over the order snapshot. This
-        /// skeleton implements neither, so it fails closed: every operation routed
-        /// here is rejected — an approval without a verified credential or the
-        /// pre-hook chain would be a validation hole, not a placeholder.
+        /// Management authority does not grant execution authority.
         /// </summary>
         [Safe]
         public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
         {
-            BigInteger moduleId = ModuleSupport.RequireValidationInstance(accountId);
-            object[] view = ModuleSupport.Copy(operation);
-            if (view.Length < 12) return false;
-            if ((BigInteger)view[7] != moduleId) return false;
-            // Inner credential verification and pre-hook dispatch (§14.4) are not
-            // implemented in this skeleton: reject rather than approve blindly.
+            ModuleSupport.RequireValidationInstance(accountId);
             return false;
         }
 
-        /// <summary>
-        /// <c>onUserOpComplete(accountId, operation, result)</c>: caller-validated
-        /// no-op. Per spec §14.4 the post-hook chain would run here, in reverse
-        /// order over the same snapshot; nothing the skeleton approved can reach
-        /// completion, so the gate stays without the dispatch.
-        /// </summary>
         public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)
             => ModuleSupport.RequireCore();
 
@@ -186,30 +112,17 @@ namespace SmartAccount.Modules
             ModuleSupport.RequireActiveAccount(accountId);
             ModuleSupport.RequireAccountAdministration(accountId);
 
-            // R-14-01: the order must be exactly the installed hook set.
-            object[] order = ModuleSupport.Copy(hookIds);
-            BigInteger[] installed = ModuleSupport.InstalledModuleIds(accountId, "hook", MaxHookProofs);
-            ExecutionEngine.Assert(installed.Length == order.Length,
-                ModuleProtocol.ErrOperationMalformed + " hook order must equal the installed hooks");
-            for (int i = 0; i < installed.Length; i++)
-            {
-                bool found = false;
-                for (int j = 0; j < order.Length && !found; j++)
-                    if ((BigInteger)order[j] == installed[i]) found = true;
-                ExecutionEngine.Assert(found,
-                    ModuleProtocol.ErrOperationMalformed + " hook order must equal the installed hooks");
-            }
-
             ApplyOrder(accountId, hookIds);
         }
 
-        /// <summary><c>getHookOrder(accountId) → hookIds[]</c>, or an empty array when none was published.</summary>
+        /// <summary>The effective order, including installations since the last administrative review.</summary>
         [Safe]
         public static object[] GetHookOrder(UInt160 accountId)
         {
-            ByteString? data = Storage.Get(Storage.CurrentContext, ModuleSupport.Key(Prefix_HookOrder, accountId));
-            if (data == null) return new object[0];
-            return (object[])StdLib.Deserialize(data!);
+            BigInteger[] ids = ModuleSupport.InstalledModuleIds(accountId, "hook", MaxHookProofs);
+            object[] order = new object[ids.Length];
+            for (int i = 0; i < ids.Length; i++) order[i] = ids[i];
+            return order;
         }
 
         // ---- §14 credential revocation ----
@@ -275,23 +188,10 @@ namespace SmartAccount.Modules
         private static void ApplyOrder(UInt160 accountId, object[] hookIds)
         {
             object[] order = ModuleSupport.Copy(hookIds);
-            // Table 45: SA_PROOF_INVALID covers proofs that are duplicated,
-            // unsorted or too long — the shared 8-entry capacity is the proof
-            // capacity this order lives under (§14.6).
-            ExecutionEngine.Assert(order.Length <= MaxHookProofs, ModuleProtocol.ErrProofInvalid);
-
-            BigInteger previous = BigInteger.Zero;
+            object[] effective = GetHookOrder(accountId);
+            ExecutionEngine.Assert(order.Length == effective.Length, ModuleProtocol.ErrOperationMalformed);
             for (int i = 0; i < order.Length; i++)
-            {
-                BigInteger hookId = (BigInteger)order[i];
-                // R-14-02: elements of 0 or negative are SA_OPERATION_MALFORMED.
-                ExecutionEngine.Assert(hookId > 0, ModuleProtocol.ErrOperationMalformed);
-                ExecutionEngine.Assert(hookId > previous, ModuleProtocol.ErrProofInvalid);
-                previous = hookId;
-            }
-
-            Storage.Put(Storage.CurrentContext, ModuleSupport.Key(Prefix_HookOrder, accountId),
-                StdLib.Serialize(order));
+                ExecutionEngine.Assert((BigInteger)order[i] == (BigInteger)effective[i], ModuleProtocol.ErrProofInvalid);
             OnHookOrderUpdated(accountId, order.Length);
         }
     }

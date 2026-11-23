@@ -30,7 +30,7 @@ namespace Neo.SmartContract.Native
     /// The native kernel is the minimal core: registration, freeze/unfreeze,
     /// operation execution, nonce cursors, digest derivation and the base
     /// module registry. Higher-level features (configuration intents,
-    /// recovery, message signatures, hook orchestration and threshold
+    /// recovery, message signatures and threshold
     /// policies) live in user-space modules and are NOT part of this surface.
     ///
     /// This file is the only carrier of the numeric values: a divergence against
@@ -103,7 +103,9 @@ namespace Neo.SmartContract.Native
         internal const int ArgsSerializedSizeMax = 4096;
         internal const int SignatureBytesMax = 8192;
         // Field 12 shape bounds (§4.2 R-04-03). The core bounds the array but
-        // never interprets a proof; HookOrchestratorModule is its only reader.
+        // checks the named hook ids; each hook interprets its own proof.
+        internal const int HookDataBytesMax = 512;
+        internal const string ErrorHookDataTooLarge = "SA_HOOK_DATA_TOO_LARGE";
         internal const int HookProofsEntriesMax = 8;
         internal const int HookProofBytesMax = 4096;
         internal const int OperationEncodedSizeMax = 16384;
@@ -114,6 +116,8 @@ namespace Neo.SmartContract.Native
         //    Unit: datoshi, 1 GAS = 100_000_000.
         // ------------------------------------------------------------------
 
+        internal const long HookCallbackGasLimit = 250_000_000;
+        internal const long HookAggregateGasLimit = HookCallbackGasLimit * MaxHookModuleInstances;
         internal const long ValidationPerCallGasLimit = 100_000_000;     // 1 GAS per validateUserOp
         internal const long CompletionPerCallGasLimit = 100_000_000;     // 1 GAS per onUserOpComplete
         internal const long LifecycleCallbackGasLimit = 250_000_000;     // 2.5 GAS per onInstall/onUninstall

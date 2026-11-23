@@ -1,7 +1,7 @@
 # Native SmartAccount implementation
 
-This directory holds the native SmartAccount ABI 2 implementation prepared for
-standard submission. The native builds of the shared plugins live in
+This directory holds the native SmartAccount v4 implementation. ABI 2 is an earlier
+external proposal. The native builds of the shared plugins live in
 [`../plugins/native-profile/`](../plugins/native-profile/), and the native SDK
 and UI stay with the rest of the client code; [`profile.json`](profile.json)
 records the canonical roots and the native-only verification commands.

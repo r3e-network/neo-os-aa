@@ -26,6 +26,10 @@
     <Compile Include="$(NeoTestsRoot)/**/*.cs"
              Exclude="$(NeoTestsRoot)/obj/**;$(NeoTestsRoot)/bin/**;$(NeoTestsRoot)/SmartContract/Native/UT_SmartAccount*.cs" />
     <Compile Include="*.cs" />
+    <Compile Include="Integration/*.cs" Condition="'$(StandardModuleNefDir)' != ''" />
+    <None Include="$(StandardModuleNefDir)/*.nef;$(StandardModuleNefDir)/*.manifest.json"
+          Condition="'$(StandardModuleNefDir)' != ''"
+          Link="StandardModules/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="$(NeoTestsRoot)/../AssemblyInfo.cs" Visible="false" />
   </ItemGroup>
 

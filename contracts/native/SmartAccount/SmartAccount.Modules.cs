@@ -216,6 +216,7 @@ namespace Neo.SmartContract.Native
 
             BigInteger moduleId = control.AllocateModuleId();
             SaveModuleInstance(engine, accountId, moduleId, module);
+            if (module.IsHook) control.HookOrderRevision = checked(control.HookOrderRevision + 1);
             // R-07-14: installing a module never rewrites the built-in
             // authorization switches. The first validator no longer implicitly
             // closes the built-in custody route — closing it is an explicit
@@ -226,7 +227,7 @@ namespace Neo.SmartContract.Native
 
             await CallModuleLifecycleAsync(engine, accountId, moduleId, module, "onInstall", initData);
             Notify(engine, SmartAccountModuleProtocol.EventNameModuleInstanceInstalled, accountId.ToArray(),
-                moduleId, new BigInteger(module.ModuleType), contractHash.ToArray(), module.ProfileSha256);
+                moduleId, new BigInteger(module.ModuleType), contractHash.ToArray(), new BigInteger(module.CredentialGeneration));
             Notify(engine, "ModuleInstalled", accountId.ToArray(),
                 SmartAccountModulePolicy.SmartAccountModuleTypeName(module.ModuleType), contractHash.ToArray());
             return moduleId;
@@ -243,6 +244,7 @@ namespace Neo.SmartContract.Native
             // phase authorization is meaningful; a fault reverts the removal.
             await CallModuleLifecycleAsync(engine, accountId, moduleId, module, "onUninstall", deInitData);
             DeleteModuleInstance(engine, accountId, moduleId, module);
+            if (module.IsHook) control.HookOrderRevision = checked(control.HookOrderRevision + 1);
             // R-08-08/R-11-12: removing a validator never rewrites the
             // built-in switches (R-07-14). An account whose operation switch
             // was closed explicitly keeps it closed here — but the custody can
@@ -461,11 +463,14 @@ namespace Neo.SmartContract.Native
             AssertAccountIdle(engine, accountId);
             RequireModuleAdministration(engine, accountId, control);
 
-            Require(recoveryAuthority != UInt160.Zero, SmartAccountModuleProtocol.ErrorOperationMalformed);
+            Require(recoveryAuthority != UInt160.Zero && recoveryAuthority != control.Custody, SmartAccountModuleProtocol.ErrorOperationMalformed);
             Require(recoveryTimelockMs >= AccountControl.RecoveryTimelockMinMs
                 && recoveryTimelockMs <= AccountControl.RecoveryTimelockMaxMs,
                 SmartAccountModuleProtocol.ErrorOperationMalformed);
 
+            RequireAuthorityAddress(engine, recoveryAuthority);
+            if (recoveryAuthority != control.RecoveryAuthority)
+                Require(Witness(engine, recoveryAuthority), SmartAccountModuleProtocol.ErrorUnauthorized);
             control.RecoveryAuthority = recoveryAuthority;
             control.RecoveryTimelockMs = (ulong)recoveryTimelockMs;
             control.OwnerOnlyRecovery = ownerOnlyRecovery;
@@ -569,12 +574,13 @@ namespace Neo.SmartContract.Native
             RequireAccountId(accountId);
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
-            _ = RequireActive(control);
+            if (control.Status != SmartAccountStatus.Frozen) _ = RequireActive(control);
             AssertAccountIdle(engine, accountId);
             // A recovery authority that was never configured names no recovery
             // to execute — the reset has no configuration to finish.
             Require(control.RecoveryAuthority != UInt160.Zero, SmartAccountModuleProtocol.ErrorAccountStatus);
             RequireRecoverySeat(engine, accountId);
+            if (newCustody != UInt160.Zero) RequireAuthorityAddress(engine, newCustody);
 
             // Step 1 (§12.5): remove every module instance record and its 0x53
             // index — validators, hooks and the recovery seat itself. No
@@ -594,6 +600,7 @@ namespace Neo.SmartContract.Native
                     if (module is not null) instances.Add((id, module));
                 }
             }
+            if (instances.Any(item => item.Module.IsHook)) control.HookOrderRevision = checked(control.HookOrderRevision + 1);
             foreach (var (id, module) in instances)
             {
                 DeleteModuleInstance(engine, accountId, id, module);
@@ -640,7 +647,7 @@ namespace Neo.SmartContract.Native
                          SmartAccountModuleProtocol.MaxRecoveryModuleInstances))
             {
                 ModuleInstance? module = TryModuleInstance(engine.SnapshotCache, accountId, moduleId);
-                if (module is not null && Witness(engine, module.ContractHash))
+                if (module is not null && engine.CallingScriptHash == module.ContractHash)
                 {
                     AssertModuleCodeBinding(engine.SnapshotCache, module);
                     return;
@@ -693,7 +700,7 @@ namespace Neo.SmartContract.Native
 
         /// <summary>
         /// Spec §7.3 "before commit": every instance that took part in this
-        /// operation — the routing validator and every hook-less module — must
+        /// operation — the routing validator and every dispatched hook — must
         /// still resolve to the code pinned when it was dispatched. A target that
         /// updates or destroys a participating module faults the whole operation.
         /// </summary>
@@ -719,21 +726,34 @@ namespace Neo.SmartContract.Native
             _ = EnsureExecution(engine, accountId, out bool ownedExecution);
             try
             {
+                bool isHook = phase is SmartAccountCallbackPhase.HookPre or SmartAccountCallbackPhase.HookPost;
+                if (isHook)
+                {
+                    budget = Math.Min(budget, context.HookGasRemaining(accountId));
+                    Require(budget > 0, SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
+                }
                 long before = engine.GasLeft;
-                var task = engine.CallFromNativeContractWithGasLimitAsync(SmartAccountProtocol.ServiceHash,
-                    module.ContractHash, method, flags, budget, arguments);
-                var anchor = engine.CurrentContext!.GetState<ExecutionContextState>();
-                StackItem result;
-                using (context.EnterModule(accountId, moduleId, module.ContractHash, phase, anchor))
-                    result = (await task)!;
-                // Spec §7.3: the binding must still hold AFTER the callback. A
-                // callback that updates or destroys its own code (directly or
-                // through a nested module) faults the whole attempt here.
-                AssertModuleCodeBinding(engine.SnapshotCache, module);
-                long spent = before - engine.GasLeft;
-                if (spent > budget)
-                    throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
-                return result;
+                try
+                {
+                    var task = engine.CallFromNativeContractWithGasLimitAsync(SmartAccountProtocol.ServiceHash,
+                        module.ContractHash, method, flags, budget, arguments);
+                    var anchor = engine.CurrentContext!.GetState<ExecutionContextState>();
+                    StackItem result;
+                    using (context.EnterModule(accountId, moduleId, module.ContractHash, phase, anchor))
+                        result = (await task)!;
+                    // Spec §7.3: the binding must still hold AFTER the callback. A
+                    // callback that updates or destroys its own code (directly or
+                    // through a nested module) faults the whole attempt here.
+                    AssertModuleCodeBinding(engine.SnapshotCache, module);
+                    if (before - engine.GasLeft > budget)
+                        throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
+                    return result;
+                }
+                finally
+                {
+                    // A callback that faults still consumed transaction GAS.
+                    if (isHook) context.ChargeHook(accountId, before - engine.GasLeft);
+                }
             }
             finally
             {
@@ -772,6 +792,34 @@ namespace Neo.SmartContract.Native
             if (reply is not Boolean approved)
                 throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorCallbackReturnType);
             return approved.GetBoolean();
+        }
+
+        private async ContractTask<byte[]> CallHookPreCheckAsync(ApplicationEngine engine, UInt160 accountId,
+            BigInteger moduleId, ModuleInstance module, Array operation)
+        {
+            StackItem reply = (await CallModuleAsync(engine, accountId, moduleId, module, "preCheck",
+                SmartAccountCallbackPhase.HookPre, CallFlags.All,
+                SmartAccountModuleProtocol.HookCallbackGasLimit,
+                new StackItem[] { accountId.ToArray(), BuildCanonicalOperationView(operation, engine) }))!;
+            if (reply is Null) return [];
+            if (reply is not ByteString hookData)
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorCallbackReturnType);
+            if (hookData.Size > SmartAccountModuleProtocol.HookDataBytesMax)
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorHookDataTooLarge);
+            return hookData.GetSpan().ToArray();
+        }
+
+        private async ContractTask CallHookPostCheckAsync(ApplicationEngine engine, UInt160 accountId,
+            BigInteger moduleId, ModuleInstance module, Array operation, StackItem result, byte[] hookData)
+        {
+            await CallModuleAsync(engine, accountId, moduleId, module, "postCheck",
+                SmartAccountCallbackPhase.HookPost, CallFlags.All,
+                SmartAccountModuleProtocol.HookCallbackGasLimit,
+                new StackItem[]
+                {
+                    accountId.ToArray(), BuildCanonicalOperationView(operation, engine),
+                    CloneValue(engine, result), hookData,
+                });
         }
 
         private async ContractTask CallValidatorCompletionAsync(ApplicationEngine engine, UInt160 accountId,

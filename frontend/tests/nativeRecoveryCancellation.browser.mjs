@@ -10,6 +10,7 @@ import {
   createNativeRpcFixture,
   nativeTestCustody,
   nativeTestRecovery,
+  nativeTestRecoverySeat,
   nativeTestIdentity,
 } from "./fixtures/nativeRpcFixture.js";
 import { getAddressFromScriptHash } from "../src/utils/neo.js";
@@ -31,6 +32,7 @@ test("recovery cancellation separates its payer and authority and invalidates st
   // v4 keeps the recovery authority in the account descriptor; a zero address
   // disables it, so the fixture must declare the separately controlled wallet.
   fixture.state.recovery = nativeTestRecovery;
+  fixture.state.modules.push(nativeTestRecoverySeat);
   fixture.state.time = 1900000000000;
   const maturity = fixture.state.time + 60000;
   fixture.state.pendingRecovery = {
@@ -138,7 +140,7 @@ test("recovery cancellation separates its payer and authority and invalidates st
     await page.getByRole("button", { name: "Review account action", exact: true }).click();
     await page
       .locator(".review-heading")
-      .getByText("cancelRecovery", { exact: true })
+      .getByText("cancelReviewedRecovery", { exact: true })
       .waitFor();
     assert.equal(
       (await page.getByTestId("native-required-authorities").innerText()).trim(),
@@ -178,8 +180,8 @@ test("recovery cancellation separates its payer and authority and invalidates st
     assert.deepEqual(recoveryReview.signers, [
       { account: "0x" + nativeTestRecovery, scopes: "CalledByEntry" },
     ]);
-    assert.equal(recoveryReview.request.operation, "cancelRecovery");
-    assert.equal(recoveryReview.request.scriptHash, "0x" + recoveryReview.profile.contract);
+    assert.equal(recoveryReview.request.operation, "cancelReviewedRecovery");
+    assert.equal(recoveryReview.request.scriptHash, "0x" + nativeTestRecoverySeat.contractHash);
     assert.equal(recoveryReview.simulation.state, "HALT");
     await writeFile(
       join(evidenceDir, `${evidenceStage}-recovery-authority-review.json`),
@@ -222,7 +224,7 @@ test("recovery cancellation separates its payer and authority and invalidates st
     await page.getByRole("button", { name: "Review account action", exact: true }).click();
     await page
       .locator(".review-heading")
-      .getByText("cancelRecovery", { exact: true })
+      .getByText("cancelReviewedRecovery", { exact: true })
       .waitFor();
     assert.equal(
       (await page.getByTestId("native-required-authorities").innerText()).trim(),
@@ -248,7 +250,7 @@ test("recovery cancellation separates its payer and authority and invalidates st
     await page.getByRole("button", { name: "Review account action", exact: true }).click();
     await page
       .locator(".review-heading")
-      .getByText("executeRecovery", { exact: true })
+      .getByText("executeReviewedRecovery", { exact: true })
       .waitFor();
     assert.match(
       (await page.getByTestId("native-required-authorities").innerText()).trim(),
@@ -269,12 +271,12 @@ test("recovery cancellation separates its payer and authority and invalidates st
     assert.deepEqual(completion.signers, [
       { account: "0x" + payer, scopes: "CalledByEntry" },
     ]);
-    assert.equal(completion.request.operation, "executeRecovery");
+    assert.equal(completion.request.operation, "executeReviewedRecovery");
     await page.getByRole("button", { name: "Send to wallet for approval", exact: true }).click();
     await page.getByRole("status").filter({ hasText: "Sent to wallet." }).waitFor();
     const invoked = simulations.filter((entry) => entry.invoked);
     assert.equal(invoked.length, 1);
-    assert.equal(invoked[0].invoked.operation, "executeRecovery");
+    assert.equal(invoked[0].invoked.operation, "executeReviewedRecovery");
     assert.deepEqual(invoked[0].invoked.signers, [
       { account: "0x" + payer, scopes: "CalledByEntry" },
     ]);

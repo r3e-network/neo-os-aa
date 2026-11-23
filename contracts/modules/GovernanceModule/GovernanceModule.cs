@@ -31,8 +31,7 @@ namespace SmartAccount.Modules
     ///
     /// The module is a <b>validator-type</b> instance (spec §11.1: installed with
     /// module type code 1 and registered as the account's governance-authorized
-    /// module): accounts route operations to it and it approves them through its
-    /// own validation callback. The core admission gate therefore requires the
+    /// module): it uses this type for administration, never for operation approval. The core admission gate therefore requires the
     /// <c>getModuleProfile</c> reader plus the
     /// <c>validateUserOp</c>/<c>onUserOpComplete</c> routing pair of the module
     /// ABI, and this contract exposes all three.
@@ -257,33 +256,13 @@ namespace SmartAccount.Modules
 
         // ---- §11 validation (the module is a validator-type instance, spec §11.1) ----
 
-        /// <summary>
-        /// <c>validateUserOp(accountId, operationDigest, operation)</c>: read-only
-        /// routing callback the core invokes when an operation names this module's
-        /// instance as its validator.
-        ///
-        /// Skeleton governance policy (§11.1): the account must be <c>Active</c> —
-        /// a frozen account approves nothing, its only way out is the unfreeze
-        /// intent — and the operation must have been signed against the account's
-        /// current authority epoch and configuration nonce, so a permission
-        /// change between signing and routing is refused. Every outcome this
-        /// skeleton cannot decide is <c>false</c>: validation fails closed.
-        /// </summary>
+        /// <summary>Configuration intents are authorized at proposal and confirmation.
+        /// This administration module never authorizes an ordinary operation.</summary>
         [Safe]
         public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
         {
-            BigInteger moduleId = ModuleSupport.RequireValidationInstance(accountId);
-            object[] view = ModuleSupport.Copy(operation);
-            if (view.Length < 12) return false;
-            // The routed instance must be the one this call is authenticated for.
-            if ((BigInteger)view[7] != moduleId) return false;
-
-            // Governance gate: not frozen, and the counters the operation was
-            // signed against are still the account's current counters.
-            if (ModuleSupport.AccountStatus(accountId) != ModuleProtocol.StatusActive) return false;
-            if ((BigInteger)view[9] != ModuleSupport.AccountAuthorityEpoch(accountId)) return false;
-            if ((BigInteger)view[10] != ModuleSupport.AccountConfigurationNonce(accountId)) return false;
-            return true;
+            ModuleSupport.RequireValidationInstance(accountId);
+            return false;
         }
 
         /// <summary>

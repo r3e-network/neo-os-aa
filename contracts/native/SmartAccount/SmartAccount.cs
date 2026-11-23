@@ -47,7 +47,7 @@ namespace Neo.SmartContract.Native
         /// </summary>
         internal const string ParameterDigest = "a19f919c57da04c9546e8db27913a6421b577273b1803545d92a7c4361d53635";
 
-        /// <summary>Legacy 0x11 index of registered native proxy addresses (read-only input).</summary>
+        /// <summary>Reverse index of registered native proxy addresses (including legacy entries).</summary>
         private const byte ProxyPrefix = 0x11;
 
         internal const string AccountImplementationId = "NativeSmartAccount/v4";
@@ -145,6 +145,15 @@ namespace Neo.SmartContract.Native
         private void Notify(ApplicationEngine engine, string name, params StackItem[] fields) =>
             engine.SendNotification(Hash, name, new Array(fields));
 
+        private static byte[] ProxyIndexKey(UInt160 address) =>
+            SmartAccountProtocol.Concat(new[] { ProxyPrefix }, address.ToArray());
+
+        private void RequireAuthorityAddress(ApplicationEngine engine, UInt160 address)
+        {
+            Require(!TryRead(engine.SnapshotCache, ProxyIndexKey(address), out _)
+                && address != Hash, SmartAccountModuleProtocol.ErrorUnauthorized);
+        }
+
         private static bool Witness(ApplicationEngine engine, UInt160 address) =>
             address != UInt160.Zero && engine.CheckWitnessInternal(address);
 
@@ -231,6 +240,7 @@ namespace Neo.SmartContract.Native
             RequireAccountId(accountId);
             SmartAccountProtocol.RequireIdentity(custody);
             Require(salt is not null, SmartAccountModuleProtocol.ErrorOperationMalformed);
+            RequireAuthorityAddress(engine, custody);
             Require(Witness(engine, custody), SmartAccountModuleProtocol.ErrorUnauthorized);
 
             using var locked = Context(engine).EnterAccount(accountId);
@@ -253,6 +263,10 @@ namespace Neo.SmartContract.Native
             foreach (StackItem action in actions)
                 ValidateActionShape(action);
 
+            UInt160 proxy = SmartAccountProtocol.GetAccountAddress(accountId);
+            Require(proxy != custody && !TryRead(engine.SnapshotCache, ProxyIndexKey(proxy), out _),
+                SmartAccountModuleProtocol.ErrorUnauthorized);
+            Write(engine, ProxyIndexKey(proxy), accountId.ToArray());
             AccountControl control = AccountControl.Create(custody, timelock);
             SaveControl(engine, accountId, control);
 
@@ -282,7 +296,7 @@ namespace Neo.SmartContract.Native
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             RequireCustody(engine, control);
             AssertAccountIdle(engine, accountId);
-            Require(control.Status != SmartAccountStatus.Frozen, SmartAccountModuleProtocol.ErrorAccountFrozen);
+            _ = RequireActive(control);
 
             control.Status = SmartAccountStatus.Frozen;
             control.AuthorityEpoch += 1;

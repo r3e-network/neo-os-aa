@@ -135,6 +135,30 @@ test("only the fee payer may carry the None scope; an authority is scoped to the
   assert.equal(descriptors(prepared)[0].scopes, "None");
 });
 
+test("a fee payer that is also custody receives the actual core witness scope", async () => {
+  const node = createNode();
+  const custody = spyWallet();
+  node.setAccount({ custody: custody.account });
+  const { plan, recipe } = build.account(node, { method: "freezeAccount" });
+  const prepared = await prepare(node, plan, options(custody, { recipe }));
+  assert.deepEqual(descriptors(prepared), [{ account: "0x" + custody.account,
+    scopes: "CustomContracts", allowedcontracts: ["0x" + node.client.contractHash] }]);
+});
+
+test("a recovery policy review signs with custody and the newly introduced wallet", async () => {
+  const node = createNode();
+  const custody = spyWallet(), recipient = spyWallet();
+  node.setAccount({ custody: custody.account });
+  const recipe = { method: "buildRecoveryPolicyPlan", input: { accountId: ACCOUNT,
+    recoveryAuthority: recipient.account, recoveryTimelockMs: "604800000" } };
+  const plan = await node.client.buildRecoveryPolicyPlan(recipe.input);
+  await assert.rejects(prepare(node, plan, options(custody, { recipe })), /missing authority/);
+  const prepared = await prepare(node, plan, options(custody, { recipe, authorizers: [recipient] }));
+  assert.deepEqual(descriptors(prepared), [custody, recipient].map(({ account }) => ({
+    account: "0x" + account, scopes: "CustomContracts", allowedcontracts: ["0x" + node.client.contractHash]
+  })));
+});
+
 test("registration asks for the custody witness and refuses any other", async () => {
   const node = createNode();
   const custody = spyWallet();

@@ -22,11 +22,13 @@ class VerificationGateTests(unittest.TestCase):
         self.assertNotEqual(verify.coq_mutation_label('NativeAuthorityEpoch.v', 'recovery-retains-verifier'),
                             verify.coq_mutation_label('CustomRecovery.v', 'recovery-retains-verifier'))
 
-    def test_current_custom_receipt_is_tracked_and_source_bound(self):
+    def test_archived_custom_receipt_is_tracked_and_source_bound(self):
+        # c7fd0a1 archived these bytes; 9f6819c renamed the file without changing it.
+        # These assertions validate the October archive, not the current native kernel.
         receipt_path = verify.ROOT.parent / 'docs/reports/sa-formal-gate-20261031.json'
         self.assertTrue(receipt_path.exists())
         self.assertEqual(
-            '456af189c4249307f5c6706345a06a855d0c55f1b35c5ddbe3d5c691c7af5c08',
+            '0e4d67450a326c318f971ddd7c31c6c5383fe097d5aa9a33ef48b2e814088198',
             hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
         )
         receipt = json.loads(receipt_path.read_text())

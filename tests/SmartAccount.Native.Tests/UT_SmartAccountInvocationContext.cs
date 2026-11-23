@@ -52,6 +52,23 @@ namespace Neo.UnitTests.SmartContract.Native
         private static readonly BigInteger ModuleId = new(7);
 
         [TestMethod]
+        public void HookGasFollowsTheAccountAcrossEnvelopesUntilTheTransactionEnds()
+        {
+            var authority = new SmartAccountInvocationContext();
+            long limit = SmartAccountModuleProtocol.HookAggregateGasLimit;
+            authority.OpenExecution(Account);
+            authority.ChargeHook(Account, limit - 1);
+            authority.CloseExecution(Account);
+            authority.OpenExecution(Account);
+            Assert.AreEqual(1L, authority.HookGasRemaining(Account));
+            Assert.ThrowsExactly<InvalidOperationException>(() => authority.ChargeHook(Account, 2));
+            authority.ChargeHook(Account, 1);
+            Assert.AreEqual(0L, authority.HookGasRemaining(Account));
+            Assert.AreEqual(limit, authority.HookGasRemaining(OtherAccount));
+            Assert.AreEqual(limit, new SmartAccountInvocationContext().HookGasRemaining(Account));
+        }
+
+        [TestMethod]
         public void AccountLockRejectsReentryAndOwnsIdentity()
         {
             var authority = new SmartAccountInvocationContext();
@@ -252,11 +269,11 @@ namespace Neo.UnitTests.SmartContract.Native
                 SmartAccountCallbackPhase.None, state));
             Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId, Root,
                 (SmartAccountCallbackPhase)99, state));
-            // 2 and 4 were the retired hook phases: never a legal grant again.
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId, Root,
-                (SmartAccountCallbackPhase)2, state));
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId, Root,
-                (SmartAccountCallbackPhase)4, state));
+            foreach (var phase in new[] { SmartAccountCallbackPhase.HookPre, SmartAccountCallbackPhase.HookPost })
+            {
+                using var hook = authority.EnterModule(Account, ModuleId, Root, phase, state);
+                Assert.AreEqual((byte)phase, authority.Execution(Account).Phase);
+            }
             Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId,
                 NativeContract.GAS.Hash, SmartAccountCallbackPhase.Validation, state));
             Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId, Child,

@@ -117,8 +117,8 @@ combinations (10 threshold members, 8 hooks, maximum proofs) must be measured
 against the gas budget (§11) before any release claim; passing "over-limit is
 rejected" alone is not acceptance.
 
-**Hook ordering.** The core owns one `hookOrder` list per account: the ordered
-list of installed hook moduleIds, length ≤ 8. During execution:
+**Hook ordering.** The core derives `hookOrder` from the account’s installed hook index (0x53),
+in ascending moduleId order, length ≤ 8. Every authorization route uses it. During execution:
 
 - `preCheck` runs in **ascending list order** (forward);
 - `postCheck` runs over the **same snapshot in reverse list order**.
@@ -127,6 +127,8 @@ The order is snapshot-based: a re-entrant configuration change during execution
 does not alter the in-flight sequence. Signatures bind the hook-proof digest
 (§5), so a signer cannot be shown a different hook set than the one that will
 run.
+
+The recovery policy write requires the existing administrator and, when the recipient changes, a witness from the new nonzero recovery authority. Retaining the same authority needs no second consent. The core admits only the installed, code-bound recovery contract as the direct reset caller. The standard seat obtains the incoming custody witness at proposal, and a mature record can be completed in Active or Frozen, never in MigrationRequired. Its reviewed cancellation and completion methods bind the record nonce and current core configuration nonce. A third-party seat must separately establish its admission and delay guarantees.
 
 ## 4. Operation envelope — canonical encoding
 
@@ -317,7 +319,7 @@ fixed-width big-endian. 0x5F is reserved and unallocated.
 | 0x51 | +acctId | account control metadata (§7.2) |
 | 0x52 | +acctId+moduleId[8 BE] | module instance record (type[1], contractHash, contractId, updateCounter, nefSha256, profileSha256, moduleRevision, credentialGeneration, capability flags, activePolicyId) |
 | 0x53 | +acctId+type[1]+moduleId[8 BE] | installed-instance enumeration index (marker rows; per-type ascending-moduleId scan) |
-| 0x54 | +acctId | core-owned hookOrder list + hookOrderRevision |
+| 0x54 | +acctId | reserved; effective hook order is the 0x53 hook index, revision is in 0x51 |
 | 0x55 | +acctId+intentId[8 BE] | configuration intent record |
 | 0x56 | +acctId+channel[24 BE] | nonce cursor (new encoding) |
 | 0x57 | +acctId | built-in message signer subjects (≤16 20- or 32-byte subjects, threshold) + subjectRevision (§8.1) |

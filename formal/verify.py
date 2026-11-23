@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-ARTIFACTS = {"coq/SmartAccountSA.v", "coq/MultiSigPolicy.v",
+ARTIFACTS = {"coq/NativeV4Admission.v", "coq/SmartAccountSA.v", "coq/MultiSigPolicy.v",
              "coq/ProxyWitnessScript.v",
              # Archived historical models of the retired custom kernel. Their C#
              # source correspondence retired with that kernel in Phase 3, so the
@@ -43,6 +43,8 @@ RUNTIME_PROFILES = {
            "verifierCall": "System.Contract.Call", "verifierChildBudgetEnforced": False},
     "platform": {"artifactDirectory": "contracts/bin/platform", "define": "PLATFORM",
                  "verifierCall": "System.Contract.CallWithGasLimit", "verifierChildBudgetEnforced": True},
+    "native-v4": {"abiVersion": 4, "identityVersion": 4, "implementationVerified": False,
+                  "scope": "authority admission, recovery status and hook order policy model"},
     "native": {"artifactDirectory": "explicit native build output", "define": "SMARTACCOUNT_NATIVE",
                "core": "SmartAccount", "abiVersion": 2, "identityVersion": 1,
                "verifierCall": "bounded native callback", "verifierChildBudgetEnforced": True,
@@ -56,6 +58,7 @@ PUBLIC_MODELS = {"coq/SmartAccountSA.v", "coq/ProxyWitnessScript.v", "coq/MultiS
 MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
                          ["public", "platform"] if name in PUBLIC_MODELS else ["native"])
                   for name in sorted(ARTIFACTS)}
+MODEL_PROFILES["coq/NativeV4Admission.v"] = ["native-v4"]
 # The core checkout is external: no host path is committed or trusted as identity.
 # Hash the full selected Neo source graph, not only SmartAccount partials.
 NATIVE_CORE_REQUIRED_FILES = {
@@ -100,6 +103,11 @@ SOURCE_FILES = {*NATIVE_KERNEL_SOURCES,
                 "docs/proposals/smartaccount-native-profile-v2-vectors.json",
                 "scripts/native_module_profile.py", "scripts/build_native_modules.py",
                 "contracts/plugins/native-profile/profiles.json"}
+SOURCE_FILES.update({"contracts/modules/Shared/ModuleSupport.cs",
+                     "docs/proposals/smartaccount-native-profile-v4-parameters.json"})
+for _module in ("GovernanceModule", "RecoveryModule", "HookOrchestratorModule", "SigningModule", "ThresholdPolicyModule"):
+    for _file in (_module + ".cs", _module + ".csproj", "packages.lock.json"):
+        SOURCE_FILES.add(f"contracts/modules/{_module}/{_file}")
 SOURCE_FILES.update({"Directory.Build.props", "nuget.config", "contracts/neo-platform-packages.json",
                      "scripts/verify_repo.sh", "scripts/check_neo_platform_packages.mjs",
                      "formal/verify.py", "formal/verify-in-docker.sh", "formal/Dockerfile",
@@ -782,6 +790,13 @@ NATIVE_AUTHORITY_EPOCH_MUTATIONS["execution-envelope-arity-bypass"] = (
     "true && authorized maximum s domain valid_signature.")
 
 COQ_MODULES = {
+    "NativeV4Admission.v": {
+        "omit-incoming-consent": ("(negb changed || consent)", "(negb changed || true)"),
+        "reject-frozen-recovery": ("| Active | Frozen =>", "| Frozen => false\n  | Active =>"),
+        "omit-recovery-maturity": ("configured && mature &&", "configured && true &&"),
+        "admit-migration": ("| MigrationRequired => false", "| MigrationRequired => true"),
+        "post-order-forward": ("hooks ++ rev hooks", "hooks ++ hooks"),
+    },
     "NativeAuthorityEpoch.v": NATIVE_AUTHORITY_EPOCH_MUTATIONS,
     "NativeCompositePhase.v": NATIVE_COMPOSITE_PHASE_MUTATIONS,
     "NativeRestrictedPolicy.v": NATIVE_RESTRICTED_COQ_MUTATIONS,

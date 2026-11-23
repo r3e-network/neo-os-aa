@@ -55,6 +55,7 @@ const SA_ERRORS = {
   SA_ACCOUNT_FROZEN: 'The account is frozen',
   SA_ACCOUNT_STATUS: 'The account status does not permit this action',
   SA_REENTRANCY_FORBIDDEN: 'The call re-enters the core in a forbidden phase',
+  SA_HOOK_DATA_TOO_LARGE: 'The hook returned more than 512 bytes of state',
   SA_GAS_BUDGET_EXCEEDED: 'The bounded execution gas budget was exhausted',
   SA_MIGRATION_REQUIRED: 'The account must complete migration before this action',
   SA_UNAUTHORIZED: 'The caller is not authorized for this action',

@@ -2,7 +2,7 @@
 
 这是仓库 `README.md` 的中文入口版，帮助中文读者快速找到当前可用的文档和工作流。
 
-## 功能
+## 历史用户合约 v4 功能
 
 - **确定性账户**：每个账户以 20 字节 `accountId` 为键（由托管密钥与盐值派生），解析为稳定的 Neo 虚拟地址，无需为每个用户单独部署钱包合约。
 - **验证器模块授权**：可为每个账户实例安装 Web3Auth、TEE、P-256、会话密钥、订阅、委托身份、见证或多签等验证器模块。
@@ -43,7 +43,7 @@ Neo core 仓库。
 
 ## 项目结构
 
-- `contracts/native/`：原生 ABI 2 标准提交实现，包含原生共识 `SmartAccount` 服务的真源与编译它的 Neo core 叠加工程，当前为 draft/unactivated。
+- `contracts/native/`：原生 ABI 4 标准提交候选实现，包含原生共识 `SmartAccount` 服务的真源与编译它的 Neo core 叠加工程，当前为 draft/unactivated。
 - `contracts/plugins/`：原生核心安装的模块合约。
 - `contracts/plugins/validators/`：验证器模块（Web3Auth、NeoWitness、P256、TeeKey、SessionKey、Subscription、DelegatedIdentity、MultiSig，以及被禁用的 ZKEmail 模板）。
 - `contracts/plugins/hooks/`：钩子模块（DailyLimit、Whitelist、TokenRestricted、NeoDIDCredential；MultiHook 已退役）。
@@ -58,7 +58,7 @@ Neo core 仓库。
 
 ## 部署配置
 
-链上 Paymaster 合约已随 custom 实现移除，本仓库不再提供赞助策略引擎。部署配置现由 `contracts/native/profile.json` 与 `contracts/plugins/native-profile/profiles.json` 描述：它们给出规范源码根、六个 native-profile 模块、ABI 2 权威与各验证命令消费的产物。原生激活仍属于运行时属性，选择某个 RPC 端点无法将其开启。
+链上 Paymaster 合约已随 custom 实现移除，本仓库不再提供赞助策略引擎。部署配置现由 `contracts/native/profile.json` 与 `contracts/plugins/native-profile/profiles.json` 描述：它们给出规范源码根、六个 native-profile 模块、原生 ABI 4 参数与各验证命令消费的产物。原生激活仍属于运行时属性，选择某个 RPC 端点无法将其开启。
 
 当前状态补充：
 

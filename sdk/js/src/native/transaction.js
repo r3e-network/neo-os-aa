@@ -138,20 +138,10 @@ function createNativeTransactionTools(c) {
     });
   }
 
-  /** An authorizer is recognized by the core it calls, and by nothing else. */
-  function authorizer(client, input, role) {
-    return wallet(input, role, { contracts: [client.contractHash] });
-  }
-
-  /**
-   * The witnesses the core will check for this plan. v4 has no authority list
-   * in the plan: the account state is the authority. The minimal core
-   * administers an account through its custody witness or through the witness
-   * of an installed validator, so an account action is custody-gated here.
-   * Recovery and configuration transitions are user-space module concerns, so
-   * there is no permissionless native action.
-   */
+  /** Resolve the witnesses for the independently rebuilt plan. */
   async function requiredWitnesses(client, plan) {
+    if (plan.kind === "recovery" || plan.method === "setRecoveryPolicy")
+      return { all: [...plan.signers], any: [] };
     if (plan.kind === "registration")
       return { all: [c.hex(required(plan.custodyAddress, "registration custody"), 20)], any: [] };
     if (plan.kind === "execution") return { all: [], any: [] };
@@ -168,6 +158,8 @@ function createNativeTransactionTools(c) {
       return client.buildCreateAccountScript(recipe.input);
     if (recipe.method === "buildExecutionScript")
       return client.buildExecutionScript(recipe.input);
+    if (recipe.method === "buildRecoveryModulePlan") return client.buildRecoveryModulePlan(recipe.input);
+    if (recipe.method === "buildRecoveryPolicyPlan") return client.buildRecoveryPolicyPlan(recipe.input);
     if (recipe.method === "buildAccountActionScript")
       return client.buildAccountActionScript(recipe.input);
     fail(`unsupported review recipe ${String(recipe.method)}`);
@@ -200,12 +192,16 @@ function createNativeTransactionTools(c) {
     };
     if (!Array.isArray(plan?.signers) || typeof plan?.script !== "string")
       fail("malformed plan");
-    const rebuilt = rebuild(client, recipe);
+    const rebuilt = await rebuild(client, recipe);
     if (
       rebuilt.kind !== plan.kind ||
       rebuilt.accountId !== plan.accountId ||
       rebuilt.script !== plan.script ||
       rebuilt.method !== plan.method ||
+      ((rebuilt.kind === "recovery" || rebuilt.method === "setRecoveryPolicy") &&
+        (JSON.stringify(rebuilt.signers) !== JSON.stringify(plan.signers) ||
+         rebuilt.targetContract !== plan.targetContract || rebuilt.configurationNonce !== plan.configurationNonce ||
+         rebuilt.nefSha256 !== plan.nefSha256 || rebuilt.moduleId !== plan.moduleId)) ||
       (plan.kind === "execution" &&
         (rebuilt.batch !== plan.batch ||
           rebuilt.proxyCallFlags !== plan.proxyCallFlags))
@@ -214,11 +210,14 @@ function createNativeTransactionTools(c) {
     client.prepare(plan);
     await client.revalidatePlan(plan);
 
-    const payer = wallet(feePayer, "fee payer");
+    const needs = await requiredWitnesses(client, rebuilt);
+    const scope = rebuilt.kind === "recovery" ? rebuilt.targetContract : client.contractHash;
+    const payerAccount = c.hex(required(feePayer?.account, "fee payer account"), 20);
+    const payer = wallet(feePayer, "fee payer", { contracts: needs.all.includes(payerAccount) ? [scope] : [] });
     const extras = [];
     const seen = new Map([[payer.account, payer.verification]]);
     for (const [index, input] of authorizers.entries()) {
-      const signer = authorizer(client, input, `authorizer ${index + 1}`);
+      const signer = wallet(input, `authorizer ${index + 1}`, { contracts: [scope] });
       const prior = seen.get(signer.account);
       if (prior !== undefined && prior !== signer.verification)
         fail("conflicting wallet identity for one account");
@@ -255,7 +254,6 @@ function createNativeTransactionTools(c) {
       seen.set(artifacts.signer.account, artifacts.witness.verificationScript);
     }
 
-    const needs = await requiredWitnesses(client, plan);
     for (const account of needs.all)
       if (!seen.has(account))
         fail(`missing authority witness for ${account}`);

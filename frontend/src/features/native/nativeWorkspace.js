@@ -66,8 +66,8 @@ export const RECOVERY_TIMELOCK_MAX_MS = 7776000000; // 90 days
 // limits, so no intent window is promised here.
 export const MAX_ACTIONS_PER_INTENT = 16;
 export const MAX_OPERATIONS_PER_ENVELOPE = 32;
-export const NATIVE_MODULE_TYPES = freeze({ validator: 1, hook: 4 });
-export const NATIVE_MODULE_LIMITS = freeze({ validator: 32, hook: 8 });
+export const NATIVE_MODULE_TYPES = freeze({ validator: 1, hook: 4, recovery: 5 });
+export const NATIVE_MODULE_LIMITS = freeze({ validator: 32, hook: 8, recovery: 1 });
 export const NATIVE_THRESHOLD_LIMITS = freeze({
   maxMembers: 10,
   minValue: 1,
@@ -367,8 +367,8 @@ function moduleTypeCode(value) {
   const name = String(value ?? "").toLowerCase();
   const code =
     typeof value === "number" ? value : NATIVE_MODULE_TYPES[name];
-  if (![NATIVE_MODULE_TYPES.validator, NATIVE_MODULE_TYPES.hook].includes(code))
-    fail("Only validator (1) and hook (4) modules can be installed.");
+  if (!Object.values(NATIVE_MODULE_TYPES).includes(code))
+    fail("Choose a validator (1), hook (4) or recovery (5) module.");
   return code;
 }
 
@@ -495,16 +495,17 @@ export function setThresholdPolicyAction({
 }
 
 export function setRecoveryPolicyAction({
-  recoveryAuthority = ZERO_HASH,
+  recoveryAuthority,
   recoveryTimelockMs: timelock,
   ownerOnlyRecovery = false,
 }) {
-  const authority = nativeCodec.hex(recoveryAuthority, 20);
+  const delay = recoveryTimelockMs(timelock);
+  const authority = nativeAddress(recoveryAuthority);
   return freeze(
     A([
       I(NATIVE_ACTION_CODES.setRecoveryPolicy),
       nativeCodec.hashValue(authority),
-      I(recoveryTimelockMs(timelock)),
+      I(delay),
       { type: "Boolean", value: ownerOnlyRecovery === true },
     ]),
   );
@@ -515,7 +516,7 @@ function moduleTypeName(code) {
     ? "validator"
     : code === NATIVE_MODULE_TYPES.hook
       ? "hook"
-      : `type ${code}`;
+      : code === NATIVE_MODULE_TYPES.recovery ? "recovery" : `type ${code}`;
 }
 
 function shortHash(item) {
@@ -577,10 +578,26 @@ export const NATIVE_ACTIONS = freeze([
     detail:
       "Custody witness. Only a frozen account can be unfrozen, and the authority epoch advances again.",
   },
+  {
+    value: "setRecoveryPolicy", label: "Set recovery authority", address: true,
+    detail: "Custody approves the policy. A newly appointed recovery wallet must also sign.",
+  },
+  { value: "beginRecovery", label: "Start recovery", recipient: true, detail: "Custody or recovery signs; a new custody wallet also signs." },
+  { value: "cancelRecovery", label: "Cancel pending recovery", detail: "Custody or the recovery authority signs for the reviewed record." },
+  { value: "executeRecovery", label: "Complete mature recovery", detail: "Anyone can pay to complete the reviewed recovery once mature." },
 ]);
 
 export function actionBlockReason(state, action) {
   if (!state) return "Load an account first.";
+  if (["beginRecovery", "cancelRecovery", "executeRecovery"].includes(action)) {
+    if (state.statusName === "MigrationRequired") return "This account must complete migration first.";
+    if (state.recoveryAuthority === ZERO_HASH) return "Configure a recovery authority first.";
+    if (!state.recoverySeat?.supported) return "No supported recovery module is installed.";
+    if (action === "beginRecovery" && state.pendingRecovery) return "A recovery is already pending.";
+    if (action !== "beginRecovery" && !state.pendingRecovery) return "No pending recovery.";
+  }
+  if (action === "setRecoveryPolicy" && state.statusName !== "Active")
+    return "Recovery policy can only be changed on an active account.";
   // Migration outranks the freeze state: a migrating account cannot run either
   // transition, and "not frozen" would be a misleading reason for a frozen one.
   if (
@@ -631,18 +648,10 @@ async function chainTime(client) {
 async function readState(client, accountId) {
   const account = await client.getAccount(accountId);
   if (!account) fail("This native account is not registered.");
-  return freeze({
-    ...account,
-    statusName: NATIVE_STATUS_NAMES[account.status] ?? "Unknown",
-    // The core publishes recoveryPending/recoveryMatureAt only so its
-    // descriptor stays ABI-stable; the recovery lifecycle lives in a module, so
-    // the core answers the inactive value. Nothing is invented here: a legacy
-    // kernel that still reports a pending recovery exposes its maturity (the
-    // one fact the core publishes) and no new custody.
-    pendingRecovery: account.recoveryPending
-      ? { matureAt: account.recoveryMatureAt }
-      : null,
-  });
+  const recoverySeat = account.recoveryAuthority === ZERO_HASH ? null : await client.getRecoverySeat(accountId);
+  return freeze({ ...account, statusName: NATIVE_STATUS_NAMES[account.status] ?? "Unknown",
+    recoverySeat, pendingRecovery: recoverySeat?.pending ?? null });
+
 }
 
 async function readModules(client, accountId) {
@@ -655,8 +664,8 @@ async function readModules(client, accountId) {
     }
     return modules;
   };
-  const [validators, hooks] = await Promise.all([page("validator"), page("hook")]);
-  return freeze({ validators, hooks });
+  const [validators, hooks, recovery] = await Promise.all([page("validator"), page("hook"), page("recovery")]);
+  return freeze({ validators, hooks, recovery });
 }
 
 function sdkSigners(client, plan, actor, authorities) {
@@ -668,7 +677,7 @@ function sdkSigners(client, plan, actor, authorities) {
       ? {
           account: "0x" + account,
           scopes: "CustomContracts",
-          allowedcontracts: ["0x" + client.contractHash],
+          allowedcontracts: ["0x" + (plan.targetContract ?? client.contractHash)],
         }
       : { account: "0x" + account, scopes: "None" };
   const signers = [descriptor(actor)];
@@ -715,6 +724,10 @@ export async function rebuildNativeReview(client, exported) {
   let plan;
   if (recipe?.method === "buildCreateAccountScript")
     plan = client.buildCreateAccountScript(recipe.input);
+  else if (recipe?.method === "buildRecoveryModulePlan")
+    plan = await client.buildRecoveryModulePlan(recipe.input);
+  else if (recipe?.method === "buildRecoveryPolicyPlan")
+    plan = await client.buildRecoveryPolicyPlan(recipe.input);
   else if (recipe?.method === "buildAccountActionScript")
     plan = client.buildAccountActionScript(recipe.input);
   else if (recipe?.method === "buildExecutionScript")
@@ -749,6 +762,7 @@ export async function rebuildNativeReview(client, exported) {
 async function expectedAuthorities(client, plan, exported) {
   if (plan.kind === "registration") return [plan.custodyAddress];
   if (plan.kind === "execution") return [];
+  if (plan.kind === "recovery" || plan.method === "setRecoveryPolicy") return [...plan.signers];
   const state = await readState(client, plan.accountId);
   if (plan.method === "freezeAccount" || plan.method === "unfreezeAccount") {
     if (exported.authority !== undefined) custodyOnly(state, exported.authority);
@@ -960,7 +974,7 @@ export function createNativeWorkspace({
       walletSupported: submissionRequested,
       request: submissionRequested
         ? {
-            scriptHash: "0x" + c.contractHash,
+            scriptHash: "0x" + (plan.targetContract ?? c.contractHash),
             operation: plan.method,
             args,
             signers,
@@ -1104,7 +1118,7 @@ export function createNativeWorkspace({
         submission: input.submission,
         actor: input.feePayer || normalized.custodyAddress,
         description: normalized.actions.length
-          ? "Register with the initial module install executed atomically, no timelock. The first validator disables the built-in custody route."
+          ? "Register with the initial module install executed atomically, no timelock. Installing a validator leaves the built-in custody route unchanged."
           : "Register with the built-in custody route. Validators and hooks are administered afterwards by installModule/removeModule; the core has no proposal window.",
       });
     },
@@ -1123,7 +1137,32 @@ export function createNativeWorkspace({
       const actor = nativeAddress(
         input.feePayer || input.authority || state.custodyAddress,
       );
+      if (["beginRecovery", "cancelRecovery", "executeRecovery"].includes(action)) {
+        const policy = { accountId, action,
+          ...(action !== "executeRecovery" ? { authority: nativeAddress(input.authority || actor) } : {}),
+          ...(action === "beginRecovery" ? { newCustody: input.newCustody ? nativeAddress(input.newCustody) : ZERO_HASH } : {}) };
+        const plan = await c.buildRecoveryModulePlan(policy);
+        const args = [RPC_HASH(accountId), ...(action === "beginRecovery" ? [RPC_HASH(policy.newCustody)]
+          : [{ type: "Integer", value: plan.pending.nonce }, { type: "Integer", value: plan.configurationNonce }])];
+        return reviewPlan({ version, c, intent, plan, actor, authorities: plan.signers, args,
+          extra: { ...(action === "executeRecovery" ? {} : { authority: policy.authority }),
+            newCustody: (action === "beginRecovery" ? plan.newCustody : plan.pending?.newCustody) || ZERO_HASH },
+          description: NATIVE_ACTIONS.find(a => a.value === action).detail,
+          recipe: { method: "buildRecoveryModulePlan", input: policy }, submission: input.submission });
+      }
       custodyOnly(state, actor);
+      if (action === "setRecoveryPolicy") {
+        const recipient = nativeAddress(input.recoveryAuthority);
+        const delay = recoveryTimelockMs(input.recoveryTimelockMs ?? state.recoveryTimelockMs).toString();
+        const policy = { accountId, recoveryAuthority: recipient, recoveryTimelockMs: delay,
+          ownerOnlyRecovery: state.ownerOnlyRecovery };
+        const plan = await c.buildRecoveryPolicyPlan(policy);
+        return reviewPlan({ version, c, intent, plan, actor,
+          authorities: plan.signers, description: "Set recovery authority and timelock.",
+          args: [RPC_HASH(accountId), RPC_HASH(recipient), { type: "Integer", value: delay },
+            { type: "Boolean", value: policy.ownerOnlyRecovery }],
+          recipe: { method: "buildRecoveryPolicyPlan", input: policy }, submission: input.submission });
+      }
       const args = [RPC_HASH(accountId)];
       const vmArgs = [];
       const plan = c.buildAccountActionScript({

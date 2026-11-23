@@ -193,9 +193,9 @@ test('faults and malformed descriptors cannot become an account context', async 
   assert.equal((await read({ ...config, accountIdHex: account })).accountIdHex, account);
 });
 
-test('identity resolver names and signatures match the built v4 core ABI', () => {
+test('identity resolver names and signatures match the archived custom v4 core ABI', () => {
   const manifest = JSON.parse(
-    fs.readFileSync(new URL('../../contracts/bin/public/SmartAccount.manifest.json', import.meta.url)),
+    fs.readFileSync(new URL('./fixtures/retired-custom-v4/SmartAccount.manifest.json', import.meta.url)),
   );
   const methods = new Map(manifest.abi.methods.map((entry) => [entry.name, entry]));
   const expected = {

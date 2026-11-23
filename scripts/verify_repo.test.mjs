@@ -26,9 +26,9 @@ function dispatch(t, args = [], failMatch = '', envOverrides = {}) {
   fs.writeFileSync(path.join(nativeCore, 'src/Neo/Neo.csproj'), '<Project />\n');
   fs.writeFileSync(path.join(nativeCore, 'tests/AssemblyInfo.cs'), '\n');
   fs.copyFileSync(new URL('./verify_repo.sh', import.meta.url), path.join(root, 'scripts/verify_repo.sh'));
-  fs.writeFileSync(path.join(root, 'scripts/dotnet_env.sh'), 'export NCCS_BIN=/test/compiler\n');
+  fs.writeFileSync(path.join(root, 'scripts/dotnet_env.sh'), 'export NCCS_BIN=nccs\n');
   const stub = '#!/bin/bash\nprintf "%s %s\\n" "${0##*/}" "$*" >> "$VERIFY_TRACE"\nif [[ "$*" == *"tests/localchain/run.py"* ]]; then printf "selected-NEOXP %s\\n" "$NEOXP" >> "$VERIFY_TRACE"; fi\nif [[ -n "$VERIFY_FAIL_MATCH" && "$*" == *"$VERIFY_FAIL_MATCH"* ]]; then exit 41; fi\n';
-  for (const command of ['node', 'python3', 'dotnet', 'npm']) {
+  for (const command of ['node', 'python3', 'dotnet', 'npm', 'nccs']) {
     fs.writeFileSync(path.join(root, 'commands', command), stub, { mode: 0o755 });
   }
   const trace = path.join(root, 'commands.log');
@@ -62,7 +62,7 @@ test('native is the default and never selects the retired custom gates', (t) => 
   assert.doesNotMatch(result.trace, /--include-custom/);
   assert.match(result.trace, /dotnet build SmartAccount\.sln -c Release/);
   assert.match(result.trace, /dotnet test tests\/SmartAccount\.Native\.Tests\/SmartAccount\.Tests\.csproj/);
-  assert.match(result.trace, /native_epoch_probe\.py --compiler \/test\/compiler/);
+  assert.match(result.trace, /native_epoch_probe\.py --compiler nccs/);
   assert.match(result.trace, /npm run test:native:browser/);
   assert.doesNotMatch(result.trace, /compile-public|contracts\/custom|test:custom:browser|test:operator-recovery:browser/);
 });
@@ -103,9 +103,14 @@ test('native contract validation selects its required guards, native build and e
   assert.match(result.trace, /node --test scripts\/implementation_profiles\.test\.mjs/);
   assert.match(result.trace, /dotnet build SmartAccount\.sln -c Release/);
   assert.match(result.trace, /dotnet test tests\/SmartAccount\.Native\.Tests\/SmartAccount\.Tests\.csproj/);
+  assert.deepEqual(result.trace.split('\n').filter(line => line.startsWith('nccs ')).map(line => line.split(' ')[1]), [
+    'contracts/modules/GovernanceModule/GovernanceModule.csproj', 'contracts/modules/RecoveryModule/RecoveryModule.csproj',
+    'contracts/plugins/native-profile/WhitelistHook.Native.csproj',
+  ]);
+  assert.match(result.trace, /node scripts\/check_standard_recovery_nef\.mjs .*RecoveryModule\.nef/);
   assert.match(result.trace, /validate-native-smartaccount-profile\.py/);
   assert.match(result.trace, /test_native_\*\.py/);
-  assert.match(result.trace, /native_epoch_probe\.py --compiler \/test\/compiler/);
+  assert.match(result.trace, /native_epoch_probe\.py --compiler nccs/);
   assert.doesNotMatch(result.trace, /compile-public|tests\/SmartAccount\.Contracts\.Tests|npm /);
 });
 

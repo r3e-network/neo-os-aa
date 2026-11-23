@@ -212,6 +212,7 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     for (const [type, code] of [
       ["validator", 1],
       ["hook", 4],
+      ["recovery", 5],
     ])
       add(
         "getModules",
@@ -226,6 +227,14 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
           I(state.config),
         ]),
       );
+    for (const seat of state.modules.filter(m => m.moduleType === 5)) {
+      map.set(c.dynamicCall(seat.contractHash, "authorizedCore", [], 5), H(CORE));
+      const p = state.pendingRecovery;
+      map.set(c.dynamicCall(seat.contractHash, "getRecoveryStatus", [id], 5), !p ? A([]) : A([
+        I(p.nonce ?? 1), H(state.custody), I(p.initiatedAt ?? state.time - 1000), I(p.matureAt), I(1),
+        H(p.newCustody ?? "66".repeat(20)), I(p.authorityEpochAtInit ?? state.epoch)
+      ]));
+    }
     for (const module of state.modules)
       add("getModule", [id, I(module.moduleId)], moduleRecord(module));
     add(
@@ -238,6 +247,10 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
   async function send(method, params) {
     state.calls.push({ method, params });
     if (method === "getversion") return { protocol: { network: state.magic } };
+    if (method === "getcontractstate" && params[0] !== "0x" + CORE) {
+      const module = state.modules.find(m => "0x" + m.contractHash === params[0]);
+      return module ? { hash: params[0], id: module.contractId ?? 7, updatecounter: module.liveUpdateCounter ?? module.updateCounter ?? 1 } : null;
+    }
     if (method === "getcontractstate")
       return { id: state.nativeId, hash: "0x" + CORE, manifest: manifest() };
     if (method === "getblockcount") return 10;
@@ -267,3 +280,5 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
   }
   return { state, send, answers, add, manifest, record };
 }
+
+export const nativeTestRecoverySeat = Object.freeze({ nefSha256: "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e", moduleType: 5, moduleId: 17, contractHash: "ef".repeat(20), credentialGeneration: 1, profileSha256: "9e3aa360fd7b9bc1d04d368140639e44985a07045f338a3036df3e0859e536e6" });

@@ -91,11 +91,8 @@ namespace Neo.SmartContract.Native
         /// <summary>
         /// The callback surface the core itself calls (spec §7.1 table 10). The
         /// profile reader and both lifecycle callbacks are required of every
-        /// instance kind; the two routing callbacks only of a validator, because
-        /// a hook — and likewise a recovery seat (§7.1/§12.5) — is never routed:
-        /// the hook's preCheck/postCheck belong to the HookOrchestratorModule
-        /// and the seat's executeRecovery belongs to the RecoveryModule; the
-        /// core neither calls nor checks either surface.
+        /// instance kind. Validators must provide the routing callbacks; hooks
+        /// must provide preCheck and postCheck. Recovery seats are not routed.
         /// A missing-method fault is not catchable, so the whole shape is
         /// checked before the instance is bound. Validation must be declared
         /// safe: it can then never write, whatever call flags a caller passes.
@@ -110,6 +107,14 @@ namespace Neo.SmartContract.Native
             RequireMethod(contract, "onUninstall", ContractParameterType.Void, null,
                 ContractParameterType.Hash160, ContractParameterType.Integer,
                 ContractParameterType.Integer, ContractParameterType.Array);
+            if (module.IsHook)
+            {
+                RequireMethod(contract, "preCheck", ContractParameterType.ByteArray, null,
+                    ContractParameterType.Hash160, ContractParameterType.Array);
+                RequireMethod(contract, "postCheck", ContractParameterType.Void, null,
+                    ContractParameterType.Hash160, ContractParameterType.Array,
+                    ContractParameterType.Any, ContractParameterType.ByteArray);
+            }
             if (!module.IsValidator) return;
             RequireMethod(contract, "validateUserOp", ContractParameterType.Boolean, true,
                 ContractParameterType.Hash160, ContractParameterType.ByteArray, ContractParameterType.Array);

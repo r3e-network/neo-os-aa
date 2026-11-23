@@ -106,6 +106,14 @@ namespace Neo.UnitTests.SmartContract.Native
                 Method(lifecycle, ContractParameterType.Void, false, _ => { },
                     ContractParameterType.Hash160, ContractParameterType.Integer,
                     ContractParameterType.Integer, ContractParameterType.Array);
+            if (hook)
+            {
+                Method("preCheck", ContractParameterType.ByteArray, false,
+                    builder => builder.EmitPush(new byte[] { 17 }), ContractParameterType.Hash160, ContractParameterType.Array);
+                Method("postCheck", ContractParameterType.Void, false,
+                    builder => builder.Emit(OpCode.LDARG3).EmitPush(new byte[] { 17 }).Emit(OpCode.EQUAL).Emit(OpCode.ASSERT),
+                    ContractParameterType.Hash160, ContractParameterType.Array, ContractParameterType.Any, ContractParameterType.ByteArray);
+            }
             if (!hook && !recovery)
             {
                 // The routing callbacks belong to validators only; a hook — and
@@ -204,8 +212,15 @@ namespace Neo.UnitTests.SmartContract.Native
                 [id, validatorType, module.Hash, new object[0]], signers: [ForeignCustody]))
                 Assert.AreEqual(VMState.FAULT, foreign.State, "Only the custody witness may install a module.");
 
-            BigInteger moduleId = UT_SmartAccount.Success(snapshot, "installModule",
-                [id, validatorType, module.Hash, new object[0]], signers: [UT_SmartAccount.Custody]).GetInteger();
+            using var install = UT_SmartAccount.Invoke(snapshot, "installModule",
+                [id, validatorType, module.Hash, new object[0]], signers: [UT_SmartAccount.Custody]);
+            Assert.AreEqual(VMState.HALT, install.State, install.FaultException?.ToString());
+            var installed = install.Notifications.Single(n => n.EventName == "ModuleInstanceInstalled").State;
+            Assert.HasCount(5, installed);
+            Assert.AreEqual(StackItemType.Integer, installed[4].Type);
+            Assert.AreEqual(BigInteger.One, installed[4].GetInteger());
+            BigInteger moduleId = install.ResultStack.Peek().GetInteger();
+            install.SnapshotCache.Commit();
             Assert.AreEqual(BigInteger.One, moduleId);
 
             Array descriptor = Descriptor(snapshot, id, moduleId);
@@ -731,8 +746,12 @@ namespace Neo.UnitTests.SmartContract.Native
             }
 
             BigInteger nonceBefore = Control(snapshot, id)[5].GetInteger();
+            using (var unaccepted = UT_SmartAccount.Invoke(snapshot, "setRecoveryPolicy", Args(min, true),
+                signers: [UT_SmartAccount.Custody]))
+                Assert.AreEqual(VMState.FAULT, unaccepted.State, "The incoming authority must consent.");
+            Assert.AreEqual(nonceBefore, Control(snapshot, id)[5].GetInteger());
             UT_SmartAccount.Success(snapshot, "setRecoveryPolicy", Args(min, true),
-                signers: [UT_SmartAccount.Custody]);
+                signers: [UT_SmartAccount.Custody, authority]);
             Array landed = Control(snapshot, id);
             Assert.AreEqual(authority, new UInt160(landed[3].GetSpan()));
             Assert.AreEqual(min, landed[6].GetInteger());
@@ -867,7 +886,7 @@ namespace Neo.UnitTests.SmartContract.Native
             }
 
             UT_SmartAccount.Success(snapshot, "setRecoveryPolicy", [id, authority, min, false],
-                signers: [UT_SmartAccount.Custody]);
+                signers: [UT_SmartAccount.Custody, authority]);
             using (var early = UT_SmartAccount.Invoke(snapshot, "resetAccount",
                 [id, UInt160.Zero], signers: [UT_SmartAccount.Custody]))
             {
@@ -934,6 +953,7 @@ namespace Neo.UnitTests.SmartContract.Native
                         refused.FaultException!.ToString());
                 }
 
+            UT_SmartAccount.Success(snapshot, "freezeAccount", [id], signers: [UT_SmartAccount.Custody]);
             Array before = Control(snapshot, id);
             UT_SmartAccount.Success(snapshot, "adminReset", [id, ForeignCustody],
                 signers: [], target: seat.Hash);
@@ -997,7 +1017,7 @@ namespace Neo.UnitTests.SmartContract.Native
             BigInteger min = AccountControl.RecoveryTimelockMinMs;
             UInt160 authority = UInt160.Parse("0x0505050505050505050505050505050505050505");
             UT_SmartAccount.Success(snapshot, "setRecoveryPolicy", [id, authority, min, false],
-                signers: [UT_SmartAccount.Custody]);
+                signers: [UT_SmartAccount.Custody, authority]);
 
             ContractState validator = DeployModule(snapshot, 940);
             BigInteger validatorId = UT_SmartAccount.Success(snapshot, "installModule",

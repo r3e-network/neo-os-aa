@@ -174,7 +174,7 @@ namespace Neo.SmartContract.Native
         internal bool DefaultOperationAuthorization;
         internal bool DefaultMessageAuthorization;       // reserved
         internal ulong RecoveryTimelockMs;
-        internal ulong HookOrderRevision;                // reserved
+        internal ulong HookOrderRevision;
         internal ulong DefaultPolicyRevision;            // reserved
         internal ulong ControlRevision;
         internal bool OwnerOnlyRecovery;                 // reserved

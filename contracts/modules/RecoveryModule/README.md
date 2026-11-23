@@ -82,3 +82,6 @@ no other contract can start one.
   no-op fault rather than a second transition.
 * `onUninstall` clears both prefixes: an unfinished recovery must not survive the
   module it was recorded under.
+
+The reviewed entrypoints are absent from the published user-contract ABI. In the [native candidate module](RecoveryModule.cs), wallets reviewing a pending record can use `cancelReviewedRecovery` and `executeReviewedRecovery`. Each takes the account ID, pending record nonce and core configuration nonce, in that order. Both fail if the record or the core configuration has changed since review. The existing authorization and timelock checks still apply.
+The SDK offers this flow only for the compiled standard module: the installed NEF digest, current deployment id and update counter, and the configured core must match.

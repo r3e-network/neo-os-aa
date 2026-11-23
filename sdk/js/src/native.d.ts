@@ -321,7 +321,7 @@ export interface SimulationResult {
 }
 
 export interface PlanBase {
-  readonly kind: "registration" | "execution" | "account";
+  readonly kind: "registration" | "execution" | "account" | "recovery";
   readonly method: string;
   readonly script: string;
   readonly signers: readonly string[];
@@ -362,11 +362,21 @@ export interface AccountActionPlan extends PlanBase {
   readonly accountAddress: string;
 }
 
+export interface RecoveryModulePlan extends PlanBase {
+  readonly kind: "recovery";
+  readonly accountId: string;
+  readonly targetContract: string;
+  readonly moduleId: string;
+  readonly configurationNonce: string;
+  readonly nefSha256: string;
+}
+
 export type NativePlan =
   | RegistrationPlan
   | BatchRegistrationPlan
   | ExecutionPlan
-  | AccountActionPlan;
+  | AccountActionPlan
+  | RecoveryModulePlan;
 
 /** The method that built a reviewed plan, and the input that rebuilds it. */
 export interface PlanRecipe {
@@ -607,6 +617,9 @@ export interface SmartAccountKernel {
   ): Promise<OperationValidation>;
   buildCreateAccountScript(input: CreateAccountInput): RegistrationPlan;
   buildExecutionScript(input: ExecutionInput): ExecutionPlan;
+  getRecoverySeat(accountId: string): Promise<{ readonly seat: { readonly contractHash: string; readonly moduleId: string }; readonly supported: boolean; readonly pending?: { readonly nonce: string; readonly matureAt: string; readonly newCustody: string } | null } | null>;
+  buildRecoveryModulePlan(input: { accountId: string; action: "beginRecovery" | "cancelRecovery" | "executeRecovery"; authority?: string; newCustody?: string }): Promise<RecoveryModulePlan>;
+  buildRecoveryPolicyPlan(input: { accountId: string; recoveryAuthority: string; recoveryTimelockMs: VMInteger; ownerOnlyRecovery?: boolean }): Promise<AccountActionPlan & { readonly recoveryAuthority: string; readonly configurationNonce: string }>;
   buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
     plan: NativePlan,
@@ -694,6 +707,9 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
   ): Promise<OperationValidation>;
   buildCreateAccountScript(input: CreateAccountInput): RegistrationPlan;
   buildExecutionScript(input: ExecutionInput): ExecutionPlan;
+  getRecoverySeat(accountId: string): Promise<{ readonly seat: { readonly contractHash: string; readonly moduleId: string }; readonly supported: boolean; readonly pending?: { readonly nonce: string; readonly matureAt: string; readonly newCustody: string } | null } | null>;
+  buildRecoveryModulePlan(input: { accountId: string; action: "beginRecovery" | "cancelRecovery" | "executeRecovery"; authority?: string; newCustody?: string }): Promise<RecoveryModulePlan>;
+  buildRecoveryPolicyPlan(input: { accountId: string; recoveryAuthority: string; recoveryTimelockMs: VMInteger; ownerOnlyRecovery?: boolean }): Promise<AccountActionPlan & { readonly recoveryAuthority: string; readonly configurationNonce: string }>;
   buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
     plan: NativePlan,

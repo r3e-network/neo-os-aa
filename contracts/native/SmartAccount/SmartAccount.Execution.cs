@@ -37,14 +37,14 @@ namespace Neo.SmartContract.Native
     /// <summary>
     /// Operation execution kernel of the native core (spec §4/§5/§6/§3.6/§11).
     ///
-    /// Execution order: validate → consume nonce → close module authorization →
-    /// dispatch target → close target authorization → validator completion →
+    /// Execution order: validate → consume nonce → pre-hooks → close module authorization →
+    /// dispatch target → close target authorization → reverse post-hooks → validator completion →
     /// success event. Any validation rejection, lifecycle fault, code-identity
     /// change or gas overrun faults the whole transaction; a target Boolean
     /// false is a normal result and still runs completion.
     ///
-    /// The core runs no hooks and holds no threshold policy: a validator module
-    /// is either approved (Boolean true) or the operation is rejected.
+    /// Every approved route runs the installed hooks around the target. The
+    /// routing validator alone decides credential validity.
     /// </summary>
     public sealed partial class SmartAccount
     {
@@ -54,6 +54,19 @@ namespace Neo.SmartContract.Native
         private sealed class ValidationOutcome
         {
             internal ModuleInstance? Module;
+            internal BigInteger[] HookIds = [];
+        }
+
+        private ValidationOutcome ResolveOperationRouting(IReadOnlyStore snapshot, UInt160 id,
+            AccountControl control, BigInteger validatorId, BigInteger generation, Array operation)
+        {
+            var outcome = ResolveRouting(snapshot, id, control, validatorId, generation);
+            outcome.HookIds = [.. EnumerateModuleIds(snapshot, id, SmartAccountModuleProtocol.ModuleTypeCodeHook,
+                BigInteger.Zero, SmartAccountModuleProtocol.MaxHookModuleInstances)];
+            foreach (Array proof in (Array)operation[SmartAccountModuleProtocol.OpHookProofs])
+                Require(System.Array.IndexOf(outcome.HookIds, proof[0].GetInteger()) >= 0,
+                    SmartAccountModuleProtocol.ErrorProofInvalid);
+            return outcome;
         }
 
         // ========================================================================
@@ -351,6 +364,7 @@ namespace Neo.SmartContract.Native
             RequireAccountId(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             Array op = SmartAccountProtocol.ValidateUserOperation(operation);
+            RequireOperationEncodedSize(op);
 
             BigInteger validatorId = op[SmartAccountModuleProtocol.OpValidatorId].GetInteger();
             BigInteger credentialGeneration =
@@ -380,8 +394,8 @@ namespace Neo.SmartContract.Native
                         SmartAccountModuleProtocol.ErrorNonceInvalid);
                     AssertOperationNonceAcceptable(engine.SnapshotCache, accountId, channel, namespaceDigest,
                         SmartAccountProtocol.SequenceFromNonce(nonce));
-                    outcome = ResolveRouting(engine.SnapshotCache, accountId, control, validatorId,
-                        credentialGeneration);
+                    outcome = ResolveOperationRouting(engine.SnapshotCache, accountId, control, validatorId,
+                    credentialGeneration, operation);
                 }
                 catch
                 {
@@ -514,8 +528,8 @@ namespace Neo.SmartContract.Native
                 Require(configurationNonce == new BigInteger(control.ConfigurationNonce),
                     SmartAccountModuleProtocol.ErrorConfigurationNonceStale);
 
-                ValidationOutcome outcome = ResolveRouting(engine.SnapshotCache, accountId, control, validatorId,
-                    credentialGeneration);
+                ValidationOutcome outcome = ResolveOperationRouting(engine.SnapshotCache, accountId, control, validatorId,
+                    credentialGeneration, op);
 
                 byte[] namespaceDigest = SmartAccountProtocol.ComputeNonceNamespaceDigest(accountId, Hash,
                     authorityEpoch, validatorId, credentialGeneration,
@@ -536,6 +550,19 @@ namespace Neo.SmartContract.Native
                 // ---- Nonce consumption (validation passed) ----
                 ConsumeOperationNonce(engine, accountId, channel, namespaceDigest, sequence);
 
+                // ---- Phase: HookPre (snapshot order) ----
+                int hookCount = outcome.HookIds.Length;
+                byte[][] hookData = new byte[hookCount][];
+                ModuleInstance[] hookModules = new ModuleInstance[hookCount];
+                for (int i = 0; i < hookCount; i++)
+                {
+                    BigInteger hookId = outcome.HookIds[i];
+                    ModuleInstance hook = RequireModuleInstance(engine.SnapshotCache, accountId, hookId);
+                    hookModules[i] = hook;
+                    hookData[i] = (await CallHookPreCheckAsync(engine, accountId, hookId, hook, op))!;
+                }
+                context.ClosePhase(accountId);
+
                 // ---- Phase: TargetDispatch (all module authorization closed) ----
                 UInt160 target = new(op[SmartAccountModuleProtocol.OpTarget].GetSpan());
                 string method = Utility.StrictUTF8.GetString(op[SmartAccountModuleProtocol.OpMethod].GetSpan());
@@ -548,6 +575,12 @@ namespace Neo.SmartContract.Native
                     result = (await task) ?? StackItem.Null;
                 context.ClosePhase(accountId);
 
+                // ---- Phase: HookPost (reverse snapshot order, original set) ----
+                for (int i = hookCount - 1; i >= 0; i--)
+                    await CallHookPostCheckAsync(engine, accountId, outcome.HookIds[i], hookModules[i], op, result,
+                        hookData[i]);
+                context.ClosePhase(accountId);
+
                 // ---- Phase: Completion (the routed validator only) ----
                 if (outcome.Module is not null)
                     await CallValidatorCompletionAsync(engine, accountId, validatorId, outcome.Module, op, result);
@@ -555,6 +588,7 @@ namespace Neo.SmartContract.Native
 
                 // ---- Code-binding continuity before commit (spec §7.3) ----
                 AssertCodeBindingsAtCommit(engine.SnapshotCache, outcome);
+                foreach (ModuleInstance hook in hookModules) AssertModuleCodeBinding(engine.SnapshotCache, hook);
 
                 Notify(engine, "UserOpExecuted", accountId.ToArray(), target.ToArray(), method, nonce);
                 return result;
@@ -625,8 +659,8 @@ namespace Neo.SmartContract.Native
                     SmartAccountModuleProtocol.ErrorEpochStale);
                 Require(configurationNonce == new BigInteger(control.ConfigurationNonce),
                     SmartAccountModuleProtocol.ErrorConfigurationNonceStale);
-                ValidationOutcome outcome = ResolveRouting(engine.SnapshotCache, accountId, control, validatorId,
-                    credentialGeneration);
+                ValidationOutcome outcome = ResolveOperationRouting(engine.SnapshotCache, accountId, control, validatorId,
+                    credentialGeneration, op);
 
                 byte[] namespaceDigest = SmartAccountProtocol.ComputeNonceNamespaceDigest(accountId, Hash,
                     authorityEpoch, validatorId, credentialGeneration,

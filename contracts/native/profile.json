@@ -65,8 +65,8 @@
   ],
   "localAuthorityAdmission": {
     "status": "implemented-in-local-candidate",
-    "scope": "Registered native proxies are rejected in current and pending authority slots; each newly introduced nonzero address requires a witness, while retained pending promotion remains permissionless.",
-    "parameterSource": "docs/proposals/smartaccount-native-profile-v2-parameters.json#authorityAdmission",
+    "scope": "The core checks custody at registration and a changed recovery authority at policy update. The standard recovery seat checks a new custody witness at proposal; completing the mature record is permissionless. An installed third-party recovery seat is trusted to enforce its own admission and delay.",
+    "parameterSource": "docs/SA-MODULE-PROTOCOL.md#3-set-limits-and-ordering-semantics",
     "evidenceBoundary": "Current-digest runtime builds, module packaging and deployed-byte readback must be verified independently. Earlier digests and receipts remain historical; local remediation does not establish public activation or complete formal refinement."
   }
 }

@@ -1,5 +1,5 @@
 // GENERATED from neo-os-services/packages/shared/src/confidential-envelope.js.
-// Source sha256: c93323b2696683fe355823921639a1f6495a876abf4d862ca4b6b4081e37f0a7. Re-run scripts/sync_morpheus_registry.mjs after a reviewed canonical change.
+// Source sha256: 6071fcbe03f66281c9504a200a2505e12896c69ca2df305bb81c3ac91bf8ab5d. Re-run scripts/sync_morpheus_registry.mjs after a reviewed canonical change.
 // Do not edit manually; import this module through morpheusEncryption.js.
 
 /**
@@ -30,7 +30,7 @@
  * Known downstream copies that vendor this wire format and must stay
  * byte-compatible with the golden vector in confidential-envelope.test.mjs:
  * - neo-os-devpack/shared/utils/morpheus-confidential-envelope.ts
- * - neo-os-sa/frontend/src/utils/morpheusEncryption.js
+ * - neo-abstract-account/frontend/src/utils/morpheusEncryption.js
  * - apps/web/lib/browser-encryption.ts, examples/* in this repo
  *
  * The module is environment-agnostic (Node >= 22 or a browser with

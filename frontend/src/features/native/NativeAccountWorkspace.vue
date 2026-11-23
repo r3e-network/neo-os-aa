@@ -238,13 +238,19 @@
             <p v-if="action === 'executeRecovery'" class="small">
               {{ L("Completing recovery removes every module, pending intent and nonce cursor, advances the epoch and re-enables the built-in route. Any fee payer can submit it once mature.", "完成恢复会移除所有模块、待生效意图与 nonce 游标，推进权限代际并重新启用内置通道。成熟后任何付费者都可提交。") }}
             </p>
+            <label v-if="selectedAction.recipient">{{ L("New custody (leave blank to retain custody)", "新托管地址（留空保留原托管方）") }}
+              <input v-model.trim="actionAddress" spellcheck="false" placeholder="0x…" />
+            </label>
             <label v-if="selectedAction.address"
-              >{{ L("New custody Neo address / script hash", "新托管 Neo 地址 / 脚本哈希") }}<input
+              >{{ L("Recovery wallet address / script hash", "恢复钱包地址 / 脚本哈希") }}<input
                 v-model.trim="actionAddress"
                 spellcheck="false"
                 placeholder="0x…"
             /></label>
-            <p v-if="selectedAction.address" class="small">{{ L("The new custody wallet must also witness this recovery start. Maturation follows this account's recovery timelock; completing the recovery is permissionless once mature.", "新的托管钱包也必须为本次恢复发起提供 witness。成熟时间取决于该账户的恢复延迟；成熟后任何人可完成恢复。") }}</p>
+            <label v-if="selectedAction.address">{{ L("Recovery delay (days)", "恢复延迟（天）") }}
+              <input :placeholder="L('Keep current delay', '保留现有延迟')" v-model.number="policyDays" type="number" min="7" max="90" step="1" />
+            </label>
+            <p v-if="selectedAction.address" class="small">{{ L("Changing the recovery wallet requires signatures from both custody and the new wallet.", "更换恢复钱包需要托管方和新恢复钱包共同签署。") }}</p>
             <p v-if="actionBlocked" class="small">{{ actionBlocked }}</p>
             <button
               :disabled="
@@ -297,8 +303,8 @@
           <p class="small">
             {{
               L(
-                "The creation call sets no recovery authority: the core has no action that sets one, so naming another recovery authority is a governance module change. Use a separately controlled Neo wallet for custody and keep the recovery timelock short enough to practise.",
-                "创建调用不设置恢复权限：核心没有设置它的动作，因此另行指定恢复权限属于治理模块的变更。请使用独立保管的 Neo 钱包作为托管，并把恢复延迟设在你能够演练的范围内。",
+                "After creation, install a recovery seat and use Set recovery authority. Both custody and the new recovery wallet must approve.",
+                "创建后，安装恢复模块，再选择设置恢复权限。托管钱包与新恢复钱包必须共同签署。",
               )
             }}
           </p><label
@@ -321,8 +327,9 @@
             <label>{{ L("Module type", "模块类型") }}<select v-model="initialInstall.moduleType" :aria-label="L('Module type', '模块类型')">
               <option value="validator">{{ L("Validator", "验证模块") }}</option>
               <option value="hook">{{ L("Hook", "策略模块") }}</option>
+              <option value="recovery">{{ L("Recovery seat", "恢复模块") }}</option>
             </select></label>
-            <p class="small">{{ L("Only a validator can be installed at registration, and the first validator disables the built-in custody route on this account. Hooks and later validators are installed with installModule.", "注册时只能安装验证模块；首个验证模块会关闭该账户的内置托管通道。策略模块及后续验证模块都必须通过 installModule 安装。") }}</p>
+            <p class="small">{{ L("The built-in custody route stays active when you install a module. Review the installed validator before explicitly disabling that route.", "安装模块不会关闭内置托管通道。只有在核实新的验证模块后，才应显式关闭该通道。") }}</p>
           </details>
           <div v-if="derived" class="account-summary">
             <dl>
@@ -378,7 +385,7 @@
               <template v-for="entry in installedModules" :key="entry.moduleId">
                 <dt>{{ L("Module", "模块") }} #{{ entry.moduleId }}</dt>
                 <dd>
-                  {{ entry.typeName ?? entry.moduleType }} ·
+                  {{ entry.moduleTypeName ?? entry.moduleType }} ·
                   {{ entry.contractHash }}
                 </dd>
               </template>
@@ -403,6 +410,7 @@
                 >
                   <option value="validator">{{ L("validator (1)", "验证器（1）") }}</option>
                   <option value="hook">{{ L("hook (4)", "钩子（4）") }}</option>
+                  <option value="recovery">{{ L("recovery (5)", "恢复（5）") }}</option>
                 </select></label
               >
               <label
@@ -574,6 +582,10 @@
             </dd>
             <dt>{{ L("Account ID", "账户 ID") }}</dt>
             <dd class="mono">0x{{ review.plan.accountId }}</dd>
+            <template v-if="review.plan.targetContract">
+              <dt>{{ L("Recovery module", "恢复模块") }}</dt>
+              <dd class="mono">0x{{ review.plan.targetContract }}</dd>
+            </template>
             <dt>{{ L("Fee payer", "付费者") }}</dt>
             <dd class="mono">0x{{ review.feePayer }}</dd>
             <template v-if="review.authority">
@@ -582,7 +594,7 @@
             </template>
             <template v-if="review.newCustody">
               <dt>{{ L("New custody", "新托管方") }}</dt>
-              <dd class="mono">0x{{ review.newCustody }}</dd>
+              <dd class="mono">{{ review.newCustody === ZERO_HASH ? L("Keep current custody", "保留现有托管方") : "0x" + review.newCustody }}</dd>
             </template>
             <template v-if="review.intentId">
               <dt>{{ L("Intent", "意图") }}</dt>
@@ -853,7 +865,7 @@ const operation = reactive({
   operations: "[]",
 });
 const action = ref("freezeAccount"),
-  actionAddress = ref("");
+  actionAddress = ref(""), policyDays = ref("");
 const workspace = createNativeWorkspace({
   wallet: createNativeWalletAdapter(walletService),
 });
@@ -966,6 +978,7 @@ watch(
     () => ({ ...operation }),
     action,
     actionAddress,
+    policyDays,
     feePayer,
     signingPath,
     tab,
@@ -973,6 +986,7 @@ watch(
   clearReview,
   { flush: "sync" },
 );
+watch(action, () => { actionAddress.value = ""; policyDays.value = ""; }, { flush: "sync" });
 watch(
   accountId,
   () => {
@@ -1118,7 +1132,9 @@ async function reviewAction() {
         accountId: accountId.value,
         action: action.value,
         submission: signingPath.value,
-        newCustody: selectedAction.value?.address ? actionAddress.value : undefined,
+        newCustody: selectedAction.value?.recipient ? actionAddress.value : undefined,
+        recoveryAuthority: selectedAction.value?.address ? actionAddress.value : undefined,
+        recoveryTimelockMs: selectedAction.value?.address && policyDays.value !== "" ? String(policyDays.value * 86400000) : undefined,
         feePayer: feePayer.value,
       }),
     ),
@@ -1137,6 +1153,7 @@ const moduleReview = shallowRef(null);
 const installedModules = computed(() => [
   ...(snapshot.value?.modules?.validators ?? []),
   ...(snapshot.value?.modules?.hooks ?? []),
+  ...(snapshot.value?.modules?.recovery ?? []),
 ]);
 const numberList = (text) => String(text).split(/[\s,]+/).filter(Boolean);
 function buildModuleAction() {

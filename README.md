@@ -13,7 +13,7 @@ the [user guide book](docs/GUIDE.md). The service uses stable account
 identity, explicitly scoped authorization, bounded module callbacks, independent fee payment, and
 recovery that revokes old modules without calling them.
 
-The native track implements the unactivated ABI 2 draft associated with
+The native candidate implements ABI 4 and remains unactivated. The earlier ABI 2 draft is associated with
 [proposal #243](https://github.com/neo-project/proposals/pull/243) and
 [discussion #242](https://github.com/neo-project/proposals/issues/242).
 Selecting a public RPC endpoint cannot enable it. The workspace verifies native
@@ -29,7 +29,7 @@ Runtime and deployment boundaries:
 
 - This repository ships protocol version 4 for the public deployments listed below, alongside the native `SmartAccount` implementation; the deployed contract keeps the `SmartAccountV3` manifest label so existing indexers keep resolving it.
 - v4 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus validator and hook modules installed through configuration intents.
-- The `public` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
+- The `public` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 4 identity and activation boundary; neither compatibility build enables it.
 - [System capability boundaries](docs/ARCHITECTURE.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
 - The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
 - The canonical shared testnet SA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
@@ -57,7 +57,7 @@ checked by the architecture source-coverage gate.
 Proposed v2 binding: in `neo-os-web/docs/workspace/neoos-target-architecture.v2.json` (status `PROPOSED`, validated by `npm run check:architecture:v2` in `neo-os-web`) this repository is v2 layer L1 (chain-protocol) and owns C03 account. The v1 binding above remains the enforced contract until the v2 adoption procedure completes.
 
 
-## Protocol v4 features
+## Deployed-contract v4 features (historical track)
 - **Deterministic accounts**: Each account is keyed by a 20-byte `accountId` derived from a custody key and salt, and resolves to a stable Neo virtual address without deploying per-user wallet logic.
 - **Validator Module Authorization**: Install Web3Auth, TEE, P-256, session-key, subscription, delegated-identity, witness or multi-signature validator modules per account instance.
 - **Hook Module Policy Enforcement**: Attach hook modules for daily limits, token restrictions, credential gates and post-execution controls; the core owns the hook order that runs them.
@@ -83,7 +83,7 @@ For a Vercel deployment, set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VIT
 If you deploy the bundled server routes, keep `SUPABASE_SERVICE_ROLE_KEY` and `SA_RELAY_WIF` on the server, prefer `SA_RELAY_RPC_URL` for the relay backend, pin `SA_RELAY_ALLOWED_HASH` to the intended SA contract, and leave `SA_RELAY_ALLOW_RAW_FORWARD=0` unless you explicitly want raw passthrough in `frontend/api/relay-transaction.js`.
 For local setup, start from `frontend/.env.example` and copy the values you need into `frontend/.env.local` or your hosting provider's environment-variable dashboard.
 
-The chain-side paymaster contract was removed with the custom track, so this repository no longer ships a sponsorship policy engine. Deployment configuration now comes from `contracts/native/profile.json` and `contracts/plugins/native-profile/profiles.json`: they name the canonical source roots, the six native-profile modules, the ABI 2 authority and the artifacts each verification command consumes. Native activation remains a runtime property that selecting an RPC endpoint cannot enable.
+The chain-side paymaster contract was removed with the custom track, so this repository no longer ships a sponsorship policy engine. Deployment configuration now comes from `contracts/native/profile.json` and `contracts/plugins/native-profile/profiles.json`: they name the canonical source roots, the six native-profile modules, the native ABI 4 parameters and the artifacts each verification command consumes. Native activation remains a runtime property that selecting an RPC endpoint cannot enable.
 
 Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/SDK.md#proxy-transfers).
 

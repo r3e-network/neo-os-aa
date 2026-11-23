@@ -74,6 +74,9 @@ export function parseNativeRpcFees(result, requireMinimum = false) {
   };
 }
 
+// Exact NEF built from the standard recovery seat with the repository compiler.
+export const NATIVE_STANDARD_RECOVERY_NEF_SHA256 = "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e";
+
 export const NATIVE_REQUIRED_ABI = {
   verify: requiredMethod(account, "Boolean", true),
   getAccountImplementationId: requiredMethod([], "String", true),
@@ -624,6 +627,11 @@ export function createNativeClientClass(codec, {
       return decode(result.stack[0]);
     }
 
+    async _readModule(contract, method, args) {
+      if (codec.hex(contract, 20) === this.contractHash) error("a module read cannot target the core");
+      return this._read(method, args, contract);
+    }
+
     async discover() {
       if (this._discovery) return this._discovery;
       const request = this._discover();
@@ -958,7 +966,98 @@ export function createNativeClientClass(codec, {
       });
     }
 
+    async getRecoverySeat(accountId) {
+      const id = codec.hex(accountId, 20);
+      const page = await this.getModules(id, "recovery");
+      if (!page.moduleIds.length) return null;
+      if (page.moduleIds.length !== 1 || page.nextCursor !== "0") error("invalid recovery roster");
+      const seat = await this.getModule(id, page.moduleIds[0]);
+      if (!seat || seat.moduleType !== 5 || seat.moduleId !== page.moduleIds[0]) error("invalid recovery seat");
+      // A third-party seat can have different operations and a different record layout.
+      if (seat.profileSha256 !== "9e3aa360fd7b9bc1d04d368140639e44985a07045f338a3036df3e0859e536e6") return freeze({ seat, supported: false });
+      if (seat.nefSha256 !== NATIVE_STANDARD_RECOVERY_NEF_SHA256) return freeze({ seat, supported: false });
+      const live = await this._send("getcontractstate", ["0x" + seat.contractHash]);
+      if (codec.hex(live?.hash, 20) !== seat.contractHash || String(live.id) !== seat.contractId ||
+          String(live.updatecounter) !== seat.updateCounter) return freeze({ seat, supported: false });
+      const core = hash(await this._readModule(seat.contractHash, "authorizedCore", []));
+      if (core !== this.contractHash) return freeze({ seat, supported: false });
+      const result = array(await this._readModule(seat.contractHash, "getRecoveryStatus", [H(id)]), undefined, "recovery record");
+      if (!result.length) return freeze({ seat, supported: true, pending: null });
+      if (result.length !== 7) error("invalid recovery record");
+      const status = uint(result[4], 8, "recovery status");
+      if (!["1","2"].includes(status)) error("unknown recovery status");
+      const pending = status === "1" ? {
+        nonce: uint(result[0], 64, "recovery nonce"), custody: hash(result[1]),
+        initiatedAt: uint(result[2], 64, "recovery start"), matureAt: uint(result[3], 64, "recovery maturity"),
+        newCustody: hash(result[5]), authorityEpochAtInit: uint(result[6], 64, "recovery epoch")
+      } : null;
+      return freeze({ seat, supported: true, pending });
+    }
+
+    async buildRecoveryModulePlan({ accountId, action, authority, newCustody }) {
+      const id = codec.hex(accountId, 20);
+      const state = await this.getAccount(id);
+      if (!state || state.status === 2 || state.recoveryAuthority === ZERO) error("recovery is not configured");
+      const route = await this.getRecoverySeat(id);
+      if (!route?.supported) error("no supported recovery seat installed");
+      if (!["beginRecovery", "cancelRecovery", "executeRecovery"].includes(action)) error("unsupported recovery operation");
+      const { seat, pending } = route;
+      const signers = [];
+      const args = [H(id)];
+      let method = action;
+      if (action !== "executeRecovery") {
+        const actor = codec.hex(authority, 20);
+        if (![state.custodyAddress, state.recoveryAuthority].includes(actor))
+          error("Only custody or the recovery authority can start or cancel recovery.");
+        signers.push(actor);
+      }
+      if (action === "beginRecovery") {
+        if (pending) error("a recovery is already pending");
+        const recipient = codec.hex(newCustody ?? ZERO, 20);
+        if ([state.accountAddress, this.contractHash].includes(recipient)) error("invalid new custody");
+        if (recipient !== ZERO && !signers.includes(recipient)) signers.push(recipient);
+        args.push(H(recipient));
+      } else {
+        if (!pending) error("no pending recovery");
+        if (action === "executeRecovery") {
+          if (pending.authorityEpochAtInit !== state.authorityEpoch) error("pending recovery epoch is stale");
+          const count = await this._send("getblockcount", []);
+          if (!Number.isSafeInteger(count) || count < 1) error("invalid block height");
+          const header = await this._send("getblockheader", [count - 1, true]);
+          if (!Number.isSafeInteger(header?.time) || header.time < 0 || BigInt(header.time) < BigInt(pending.matureAt))
+            error("the recovery timelock has not matured");
+        }
+        method = action === "cancelRecovery" ? "cancelReviewedRecovery" : "executeReviewedRecovery";
+        args.push(I(pending.nonce), I(state.configurationNonce));
+      }
+      return freeze({ kind: "recovery", method, action, accountId: id, accountAddress: state.accountAddress,
+        targetContract: seat.contractHash, moduleId: seat.moduleId, nefSha256: seat.nefSha256,
+        configurationNonce: state.configurationNonce, pending, signers, args,
+        newCustody: action === "beginRecovery" ? codec.hex(newCustody ?? ZERO, 20) : null,
+        script: codec.dynamicCall(seat.contractHash, method, args) });
+    }
+
+    async buildRecoveryPolicyPlan({ accountId, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery = false }) {
+      const id = codec.hex(accountId, 20);
+      const recipient = codec.hex(recoveryAuthority, 20);
+      const delay = codec.unsigned(recoveryTimelockMs, 64, "recovery timelock");
+      if (delay < 604800000n || delay > 7776000000n || typeof ownerOnlyRecovery !== "boolean")
+        error("invalid recovery policy");
+      const state = await this.getAccount(id);
+      if (!state || state.status !== 0) error("account is not active");
+      if ([ZERO, state.custodyAddress, this.contractHash, state.accountAddress].includes(recipient))
+        error("invalid recovery authority");
+      const signers = recipient === state.recoveryAuthority ? [state.custodyAddress] : [state.custodyAddress, recipient];
+      return freeze({
+        kind: "account", method: "setRecoveryPolicy", accountId: id, accountAddress: state.accountAddress,
+        recoveryAuthority: recipient, configurationNonce: state.configurationNonce, signers,
+        script: codec.dynamicCall(this.contractHash, "setRecoveryPolicy",
+          [H(id), H(recipient), I(delay), { type: "Boolean", value: ownerOnlyRecovery }]),
+      });
+    }
+
     buildAccountActionScript({ method, accountId, args = [] }) {
+      if (method === "setRecoveryPolicy") error("use buildRecoveryPolicyPlan to resolve the required signers");
       if (!NATIVE_REQUIRED_ABI[method]) error(`unknown account action ${method}`);
       const id = codec.hex(accountId, 20);
       return freeze({
@@ -1019,6 +1118,18 @@ export function createNativeClientClass(codec, {
 
     async revalidatePlan(plan) {
       if (!this._plans.has(plan)) error("unprepared plan");
+      if (plan.kind === "recovery") {
+        const current = await this.buildRecoveryModulePlan({ accountId: plan.accountId, action: plan.action,
+          authority: plan.signers[0], newCustody: plan.newCustody });
+        if (JSON.stringify(current) !== JSON.stringify(plan)) error("recovery record or authority changed; review again");
+        return true;
+      }
+      if (plan.method === "setRecoveryPolicy") {
+        const state = await this.getAccount(plan.accountId);
+        if (!state || state.status !== 0 || state.configurationNonce !== plan.configurationNonce)
+          error("recovery policy changed; review the required signers again");
+        return true;
+      }
       if (plan.kind !== "execution") return true;
       const state = await this.getAccount(plan.accountId);
       if (!state || state.status !== 0)

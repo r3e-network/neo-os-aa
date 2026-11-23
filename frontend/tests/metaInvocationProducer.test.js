@@ -1,7 +1,7 @@
 // CU-209 gate: the client may not build, stage or select an invocation naming an entrypoint the
 // built Smart Account ABI does not export.
 //
-// The oracle is the built manifest itself (contracts/bin/public/SmartAccount.manifest.json), never a
+// The oracle is the built manifest itself (the archived custom-v4 build fixture), never a
 // hand-written list. Two halves:
 //   1. an inventory of every exported function on the client's execution surface, so a new producer
 //      cannot be added without appearing here;
@@ -11,17 +11,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import * as metaTx from '../src/features/operations/metaTx.js';
 import * as execution from '../src/features/operations/execution.js';
 import * as signedInvocation from '../src/features/operations/signedInvocation.js';
 import { EC } from '../src/config/errorCodes.js';
 
-const FRONTEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// contracts/build/ holds the artefacts already deployed; the v4 client targets the build output.
-const MANIFEST_PATH = path.resolve(FRONTEND_ROOT, '..', 'contracts', 'bin', 'public', 'SmartAccount.manifest.json');
+const MANIFEST_PATH = new URL('./fixtures/retired-custom-v4/SmartAccount.manifest.json', import.meta.url);
 const CLIENT_SURFACE = { metaTx, execution, signedInvocation };
 
 // The exported functions of the three client modules that can carry an invocation between them.
@@ -154,7 +150,7 @@ test('the client execution-surface list is exactly the built ABI execution surfa
   assert.deepEqual(
     signedInvocation.DEPLOYED_ENTRYPOINTS.slice().sort(),
     entrypoints,
-    'the client list drifted from the built ABI: derive it from contracts/bin/public/SmartAccount.manifest.json',
+    'the client list drifted from the built ABI: derive it from the archived custom-v4 build fixture',
   );
   for (const name of entrypoints) {
     assert.equal(signedInvocation.isDeployedEntrypoint(name), true, `${name} must be accepted`);

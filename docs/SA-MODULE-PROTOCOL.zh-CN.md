@@ -102,14 +102,18 @@ Profile 上限（协议级，两 kernel 强制，数值钉扎于 §15 常量文�
 这些是协议上限，**不是**性能保证：合法最坏组合（10 阈值成员、8 hook、最大 proof）
 必须先对照 gas 预算（§11）测量，才能做任何发布声明；仅验证“超限被拒绝”不算验收。
 
-**hook 顺序。** 核心为每账户持有一份 `hookOrder`：已安装 hook moduleId 的有序
-列表，长度 ≤ 8。执行时：
+**hook 顺序。** 核心从账户已安装的 hook 索引（0x53）按 moduleId 升序取得 `hookOrder`，
+最多 8 项。所有授权路径都执行这份列表。执行时：
 
 - `preCheck` 按**列表正序**执行；
 - `postCheck` 对**同一快照按逆序**执行。
 
 顺序基于快照：执行期间重入的配置变更不会改变在途序列。签名绑定 hook proof 摘要
 （§5），签名者看到的 hook 集合与实际运行的集合不可能不一致。
+
+设置恢复策略需要现管理方签署。更换非零恢复地址时，新地址也须签署；保留原恢复地址不需要重复同意。恢复席位可在 Active 或 Frozen 完成已成熟的恢复，MigrationRequired 不可恢复。
+
+原生重置只接受已安装、代码绑定仍有效的恢复模块直接调用。标准恢复模块在提议时要求新托管方提供见证；钱包确认的取消和执行还绑定待办编号与核心配置 nonce。第三方恢复模块需要独立证明准入与延迟规则。
 
 ## 4. 操作 envelope —— canonical 编码
 
@@ -265,7 +269,7 @@ unfreeze、恢复与 custody 变更都单调推进；操作消费与额度计数
 | 0x51 | +acctId | 账户控制元数据（§7.2） |
 | 0x52 | +acctId+moduleId[8 BE] | 模块实例记录（type[1]、contractHash、contractId、updateCounter、nefSha256、profileSha256、moduleRevision、credentialGeneration、能力标志、activePolicyId） |
 | 0x53 | +acctId+type[1]+moduleId[8 BE] | 安装实例枚举索引（marker 行；按类型升序 moduleId 扫描） |
-| 0x54 | +acctId | 核心持有 hookOrder 列表 + hookOrderRevision |
+| 0x54 | +acctId | 保留；有效顺序取自 0x53 的 hook 索引，修订号在 0x51 |
 | 0x55 | +acctId+intentId[8 BE] | 配置意图记录 |
 | 0x56 | +acctId+channel[24 BE] | nonce 游标（新编码） |
 | 0x57 | +acctId | 内建消息签名主体（≤16 个 20 或 32 字节主体，阈值）+ subjectRevision（§8.1） |

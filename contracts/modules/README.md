@@ -7,7 +7,7 @@ the core as validator or hook instances, and they keep their own policy state in
 their own storage.
 
 They are *not* part of the native core. The minimal core (§7) publishes
-registration, freeze/unfreeze, execution and module administration — 21 ABI
+registration, freeze/unfreeze, execution and module administration — 25 ABI
 methods — and deliberately publishes no governance, recovery, message-signing,
 hook-order or threshold policy. Those five concerns live here.
 
