@@ -1,103 +1,56 @@
-# 文档索引
 
 > 中文版本与 `docs/INDEX.md` 同构。若两者冲突，以英文版本为准。
 
 产品名是 **Neo Smart Account —— SA**。"AA" 只保留在指以太坊账户抽象（ERC-4337/7579/7702/7715）时。协议字符串切换已完成：EIP-712 domain 名为 `"Neo Smart Account"`，`sa_contract` / `sa_proxy` 线上键使用 SA 前缀；切换前的旧域票据在本次切换时截止失效。下列所有文档都称本系统为 SA。
 
-先读根目录 [README](../README.md)；本索引是地图，不是手册。
+先读根目录 [README](../README.md)；本索引是地图，不是手册。原先平铺的主题页已 在文档角色化重组第一阶段并入六本按读者的“书”，七份过程文档则在第二阶段合并为 [engineering/](engineering/) 下的两本工程书；每本书开头带章节目录。`frontend/src/assets/docs/` 下的前端帮助页由这些书切片生成：修改某本书后，在 `frontend/` 运行 `npm run sync:docs`（或 `node scripts/sync-frontend-docs.mjs`）重新生成。
+
+## 按角色导航
+
+| 读者 | 读这里 | 它回答什么 |
+| --- | --- | --- |
+| 普通用户与钱包操作员 | [GUIDE.zh-CN.md](GUIDE.zh-CN.md) · [EN](GUIDE.md) | 端到端心智模型与运营者 / 签名方实操指南、快速参考、交易生命周期与提交流程、原生账户工作台、交易守卫、恢复与操作会话、阈值恢复、已签名交易导入（合并自 HOW_IT_WORKS、QUICK_REFERENCE、WORKFLOWS、四份 NATIVE_ACCOUNT_* 页面与 RECOVERY_AND_SESSIONS） |
+| DApp / SDK 开发者 | [SDK.zh-CN.md](SDK.zh-CN.md) · [EN](SDK.md) | 原生 SDK 使用、阈值会话、EIP-712 签名、代理转账、待处理配置更新读取（合并自 NATIVE_SDK、MULTISIG_SDK、SA-EIP-712-SPEC、SA-PROXY-TRANSFERS、PENDING_CONFIG_UPDATE_READ_ABI） |
+| 模块（插件）开发者 | [SA-MODULE-PROTOCOL.zh-CN.md](SA-MODULE-PROTOCOL.zh-CN.md) · [EN](SA-MODULE-PROTOCOL.md) | 协议 v4 共享模块规范（双内核共同遵循），文末附录 "Appendix: Module developer guide"（仅英文）收录插件安全、生命周期与清理 |
+| 架构师 | [ARCHITECTURE.zh-CN.md](ARCHITECTURE.zh-CN.md) · [EN](ARCHITECTURE.md) —— 以及 —— [SECURITY.zh-CN.md](SECURITY.zh-CN.md) · [EN](SECURITY.md) | 架构书：技术架构、原生系统架构、仓库布局与验证地图、系统状态与能力边界、数据流与存储、与以太坊 AA 对比（合并自 architecture、NATIVE_SYSTEM_ARCHITECTURE、ORGANIZATION、SA-SYSTEM-STATUS、DATA_FLOW 与 ETHEREUM_AA_COMPARISON）；安全书：当前威胁模型与信任假设，含协议完备性审计（附录 A）与前端依赖安全评估（附录 B） |
+| 节点与运维 | [OPERATIONS.zh-CN.md](OPERATIONS.zh-CN.md) · [EN](OPERATIONS.md) | 先干跑再上链的测试网校验与只读的主网校验 runbook、部署后的前端冒烟清单、实测的原生预算与费用行为（合并自 validation-runbooks、POST_DEPLOY_SMOKE_TEST 与 NATIVE_ACCOUNT_PERFORMANCE） |
+| 协议规范全文 | [Neo-Smart-Account-Documentation-zh-CN.pdf](Neo-Smart-Account-Documentation-zh-CN.pdf) | 完整规范手稿（中文，PDF） |
 
 ## 语言策略
 
-英文文本是规范文本。本索引中的每篇文档都有名为 `<name>.zh-CN.md` 的中文对照；两侧保持结构一致，中文文件在首段声明冲突时以英文为准。覆盖范围包括阅读路径、原生系列、账户操作、安全模型、运行时规范、闭合与形式化章节、构建与打包，以及参考资料（指南、runbook 与审计）。[SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md) 仍是本章节集合的中文导读。
+英文文本是规范文本。六本角色书与本索引都有名为 `<name>.zh-CN.md` 的中文对照，两侧保持结构一致，中文文件在首段声明冲突时以英文为准。过程 / 验证 / 审计 / 交接层——闭合门禁、形式化验证、逐入口点闭合、前端对应关系、迁移 manifest、合约交接、构建复现记录与未锁的 proposals——仅提供英文：这些章节随每次门禁运行变化，过期的译文会误述证据。[SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md) 仍是这一层的中文导读。
 
 | 覆盖情况 | 涉及文档 | 说明 |
 | --- | --- | --- |
-| 双语（EN + `.zh-CN.md`） | 协议、架构、账户、闭合与参考文档 | 56 对；`reports/` 下四份带日期的快照仍仅英文 |
+| 双语（EN + `.zh-CN.md`） | 六本角色书、模块协议书、本索引、根 README、四份原生 proposals | 12 对 |
+| 仅英文 | [engineering/](engineering/) 下的两本工程书与未锁的 proposals | 5 篇；本索引保留条目并标注“仅英文” |
 
-## 从这里开始
+## 工程师与过程记录
 
-| 文档 | 它回答什么 | 语言 |
-| --- | --- | --- |
-| [SA-SYSTEM-STATUS.zh-CN.md](SA-SYSTEM-STATUS.zh-CN.md) | 已建成、已部署、已验证的部分，以及尚未成立的部分 | 中 · [EN](SA-SYSTEM-STATUS.md) |
-| [HOW_IT_WORKS.zh-CN.md](HOW_IT_WORKS.zh-CN.md) | 端到端心智模型与使用指南 | 中 · [EN](HOW_IT_WORKS.md) |
-| [USER_GUIDE.zh-CN.md](USER_GUIDE.zh-CN.md) | 运营者 / 签名方的实际操作步骤 | 中 · [EN](USER_GUIDE.md) |
-| [QUICK_REFERENCE.zh-CN.md](QUICK_REFERENCE.zh-CN.md) | 命令与速查 | 中 · [EN](QUICK_REFERENCE.md) |
-| [WORKFLOWS.zh-CN.md](WORKFLOWS.zh-CN.md) | 交易生命周期与提交流程 | 中 · [EN](WORKFLOWS.md) |
-| [DATA_FLOW.zh-CN.md](DATA_FLOW.zh-CN.md) | 浏览器 / Supabase / 中继 / 链 的边界 | 中 · [EN](DATA_FLOW.md) |
-| [architecture.zh-CN.md](architecture.zh-CN.md) | 技术架构细节 | 中 · [EN](architecture.md) |
-| [NEOOS_ARCHITECTURE.zh-CN.md](NEOOS_ARCHITECTURE.zh-CN.md) | 本仓库在 NeoOS 工作区架构中的位置（指针） | 中 · [EN](NEOOS_ARCHITECTURE.md) |
-| [ORGANIZATION.zh-CN.md](ORGANIZATION.zh-CN.md) | 仓库结构与验证地图 | 中 · [EN](ORGANIZATION.md) |
-| [SA-IMPLEMENTATION-STRATEGY.zh-CN.md](SA-IMPLEMENTATION-STRATEGY.zh-CN.md) | 两条实现路径与各自的交付边界 | 中 · [EN](SA-IMPLEMENTATION-STRATEGY.md) |
+过程层（仅英文）随每次门禁运行变化。文档重组第二阶段已把七份原过程文档合并为 [engineering/](engineering/) 下的两本书，每本开头带章节目录：
 
-## 原生 SmartAccount
+- [engineering/VERIFICATION-AND-GATES.md](engineering/VERIFICATION-AND-GATES.md) —— SA 形式化验证（有界 Coq 模型、运行时对应关系、未覆盖边界）、可复现构建（固定工具链、逐字节重建、pin 升级）、决定某个入口点能否算作已验证的集成精化闭合门禁、逐入口点闭合清单，以及旧版到 v4 的迁移 manifest 与幂等规则
+- [engineering/HANDOFF-RECORDS.md](engineering/HANDOFF-RECORDS.md) —— 合约内部交接的内核检查结论（第十八号闭合作用域）与源码前端与编译器的对应关系记录
+- 这一层的中文导读：[SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md)
+- 构建打包：[../sdk/js/PACKAGING.md](../sdk/js/PACKAGING.md) 与经审计的 Neo 平台包固定值 [../contracts/neo-platform-packages.json](../contracts/neo-platform-packages.json)（SA 可复现构建章的依据）
 
-- [NATIVE_SYSTEM_ARCHITECTURE.zh-CN.md](NATIVE_SYSTEM_ARCHITECTURE.zh-CN.md) · [EN](NATIVE_SYSTEM_ARCHITECTURE.md) — 身份、权限、执行、恢复、费用、激活
-- [NATIVE_SDK.zh-CN.md](NATIVE_SDK.zh-CN.md) · [EN](NATIVE_SDK.md) — ABI 发现、账户计划、签名交易
-- [NATIVE_ACCOUNT_WORKSPACE.zh-CN.md](NATIVE_ACCOUNT_WORKSPACE.zh-CN.md) · [EN](NATIVE_ACCOUNT_WORKSPACE.md) — 发现、注册、备份、钱包边界
-- [NATIVE_ACCOUNT_USER_GUIDE.zh-CN.md](NATIVE_ACCOUNT_USER_GUIDE.zh-CN.md) · [EN](NATIVE_ACCOUNT_USER_GUIDE.md) — 备份、权限矩阵、密钥丢失时的决策
-- [NATIVE_ACCOUNT_TRANSACTION_GUARDS.zh-CN.md](NATIVE_ACCOUNT_TRANSACTION_GUARDS.zh-CN.md) · [EN](NATIVE_ACCOUNT_TRANSACTION_GUARDS.md) — 精确脚本取消守卫
-- [NATIVE_ACCOUNT_THRESHOLD_RECOVERY.zh-CN.md](NATIVE_ACCOUNT_THRESHOLD_RECOVERY.zh-CN.md) · [EN](NATIVE_ACCOUNT_THRESHOLD_RECOVERY.md) — 把门限钱包当作守护者、托管方或付款方
-- [NATIVE_SIGNED_TRANSACTION_IMPORT.zh-CN.md](NATIVE_SIGNED_TRANSACTION_IMPORT.zh-CN.md) · [EN](NATIVE_SIGNED_TRANSACTION_IMPORT.md) — 可移植的已签名工件与回执恢复
-- [NATIVE_ACCOUNT_PERFORMANCE.zh-CN.md](NATIVE_ACCOUNT_PERFORMANCE.zh-CN.md) · [EN](NATIVE_ACCOUNT_PERFORMANCE.md) — 实测预算与费用行为
-- [proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) — ABI 2 规范草案（Neo proposals #242/#243）
-- [proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md) — 六个原生工件、打包、形式化边界
-- [proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-MULTISIG.md) — 组合验证器、瞬态批准回执、参数隔离
-- [proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md) — 模块生命周期与恢复撤销
-- [proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md) — 源码构建运行时、代理、配置与恢复证据
-- [proposals/smartaccount-native-profile-v2-vectors.json](proposals/smartaccount-native-profile-v2-vectors.json) — 当前的授权与执行向量
-- [proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.zh-CN.md](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.zh-CN.md) · [EN](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md) — 必需的协议章节、证据、未决的激活门禁
-- [reports/sa-native-open-boundaries-20261008.json](reports/sa-native-open-boundaries-20261008.json) — 本地测试与模型证明都没有确立的主张
+闭合回执是刻意失败关闭的：`status: NO-GO` 且已验证入口点为零，是诚实状态，不是回归。当前集成回执：[reports/sa-closure-gate-20261117.json](reports/sa-closure-gate-20261117.json)。
+
+## 原生 SmartAccount 设计记录（proposals）
+
+- [proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) —— ABI 2 规范草案（Neo proposals #242/#243）
+- [proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md) —— 六个原生工件、打包、形式化边界
+- [proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-MULTISIG.md) —— 组合验证器、瞬态批准回执、参数隔离
+- [proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md) —— 模块生命周期与恢复撤销
+- [proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md)（仅英文）—— 源码构建运行时、代理、配置与恢复证据
+- [proposals/smartaccount-native-profile-v2-vectors.json](proposals/smartaccount-native-profile-v2-vectors.json) —— 当前的授权与执行向量
+- [proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md)（仅英文）—— 必需的协议章节、证据、未决的激活门禁
+- [proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md)（仅英文）—— NeoVM / DevPack 验证器预算扩展
+- [proposals/nep-smartaccount-entry-verifier.mediawiki](proposals/nep-smartaccount-entry-verifier.mediawiki) —— 入口验证器的 NEP 草案
+- [contracts/plugins/templates/](../contracts/plugins/templates/) —— 最小验证器 / 钩子起点（目录内有 `README.md`）
+- [reports/sa-native-open-boundaries-20261008.json](reports/sa-native-open-boundaries-20261008.json) —— 本地测试与模型证明都没有确立的主张
 
 早期的原生回执只描述它记录的源码与运行时。它们不校验当前 ABI 2 信封；某份回执若不在本检出中，就不是当前发布证据。
-
-## SA 运行时规范
-
-- [SA-EIP-712-SPEC.zh-CN.md](SA-EIP-712-SPEC.zh-CN.md) — 验证器在链上哈希的类型化数据布局（中 · [EN](SA-EIP-712-SPEC.md)）
-- [SA-IMPLEMENTATION-REFINEMENT.zh-CN.md](SA-IMPLEMENTATION-REFINEMENT.zh-CN.md) — 精化范围与验收条件（中 · [EN](SA-IMPLEMENTATION-REFINEMENT.md)）
-- [SA-PROXY-TRANSFERS.zh-CN.md](SA-PROXY-TRANSFERS.zh-CN.md) · [EN](SA-PROXY-TRANSFERS.md) — 直接代理见证的构造、费用策略、拒绝赞助
-- [SA-MODULE-PROTOCOL.zh-CN.md](SA-MODULE-PROTOCOL.zh-CN.md) · [EN](SA-MODULE-PROTOCOL.md) — 协议 v4 共享模块规范，两个内核共同遵循
-- [SA-MIGRATION-MANIFEST.zh-CN.md](SA-MIGRATION-MANIFEST.zh-CN.md) · [EN](SA-MIGRATION-MANIFEST.md) — 旧版到 v4 的迁移 manifest 与幂等规则
-- [SA-CONTRACT-HANDOFF.zh-CN.md](SA-CONTRACT-HANDOFF.zh-CN.md) · [SA-FRONTEND-CORRESPONDENCE.zh-CN.md](SA-FRONTEND-CORRESPONDENCE.zh-CN.md) — 合约 / SDK / 前端的约定记录（[EN](SA-CONTRACT-HANDOFF.md) · [EN](SA-FRONTEND-CORRESPONDENCE.md)）
-- 本章节集合的中文导读：[SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md)
-
-## 闭合与形式化验证
-
-- [SA-CLOSURE-GATE.zh-CN.md](SA-CLOSURE-GATE.zh-CN.md) — 决定某个入口点能否算作已验证的门禁（中 · [EN](SA-CLOSURE-GATE.md)）
-- [SA-ENTRYPOINT-CLOSURE.zh-CN.md](SA-ENTRYPOINT-CLOSURE.zh-CN.md) — 逐入口点的闭合规则（中 · [EN](SA-ENTRYPOINT-CLOSURE.md)）
-- [SA-FORMAL-VERIFICATION.zh-CN.md](SA-FORMAL-VERIFICATION.zh-CN.md) — 有界的 Coq 模型、运行时对应关系与未覆盖边界（中 · [EN](SA-FORMAL-VERIFICATION.md)）
-- [reports/sa-closure-gate-20261117.json](reports/sa-closure-gate-20261117.json) — 当前集成回执：作用域内 PASS，完整实现为 **NO-GO**
-
-闭合回执是刻意失败关闭的：`status: NO-GO` 且已验证入口点为零，是诚实状态，不是回归。
-
-## 账户、恢复与运维
-
-- [ACCOUNT_RECOVERY_AND_IDENTITY.zh-CN.md](ACCOUNT_RECOVERY_AND_IDENTITY.zh-CN.md) · [EN](ACCOUNT_RECOVERY_AND_IDENTITY.md) — 恢复边界与规范身份读取
-- [OPERATOR_KEY_RECOVERY.zh-CN.md](OPERATOR_KEY_RECOVERY.zh-CN.md) · [EN](OPERATOR_KEY_RECOVERY.md) — 加密的运营者备份与浏览器恢复
-- [MORPHEUS_PRIVATE_ACTIONS.zh-CN.md](MORPHEUS_PRIVATE_ACTIONS.zh-CN.md) · [EN](MORPHEUS_PRIVATE_ACTIONS.md) — 恢复验证器与私有操作
-- [action-sessions.zh-CN.md](action-sessions.zh-CN.md) · [EN](action-sessions.md) — 会话密钥的作用域、过期与重新授权
-- [MULTISIG_SDK.zh-CN.md](MULTISIG_SDK.zh-CN.md) · [MULTISIG_CHILD_CONFIGURATION.zh-CN.md](MULTISIG_CHILD_CONFIGURATION.zh-CN.md) — 多签打包与子配置证明（[EN](MULTISIG_SDK.md) · [EN](MULTISIG_CHILD_CONFIGURATION.md)）
-- [PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md](PENDING_CONFIG_UPDATE_READ_ABI.zh-CN.md) · [EN](PENDING_CONFIG_UPDATE_READ_ABI.md) — 配置更新的读取面
-- [mainnet-validation-runbook.zh-CN.md](mainnet-validation-runbook.zh-CN.md) · [EN](mainnet-validation-runbook.md) — 只读的主网校验
-- [TESTNET_QUICKSTART.zh-CN.md](TESTNET_QUICKSTART.zh-CN.md) · [EN](TESTNET_QUICKSTART.md) — 真实测试网校验之前先跑的两条命令
-- [testnet-validation-runbook.zh-CN.md](testnet-validation-runbook.zh-CN.md) · [EN](testnet-validation-runbook.md) — 先干跑再上链的测试网校验
-- [POST_DEPLOY_SMOKE_TEST.zh-CN.md](POST_DEPLOY_SMOKE_TEST.zh-CN.md) · [EN](POST_DEPLOY_SMOKE_TEST.md) — 部署后的前端冒烟清单
-
-## 安全、审计与对比
-
-- [SECURITY_MODEL.zh-CN.md](SECURITY_MODEL.zh-CN.md) · [EN](SECURITY_MODEL.md) — 当前的威胁模型与信任假设
-- [PROTOCOL_COMPLETENESS_AUDIT.zh-CN.md](PROTOCOL_COMPLETENESS_AUDIT.zh-CN.md) · [EN](PROTOCOL_COMPLETENESS_AUDIT.md) — 协议覆盖范围与已知边界
-- [ETHEREUM_AA_COMPARISON.zh-CN.md](ETHEREUM_AA_COMPARISON.zh-CN.md) · [EN](ETHEREUM_AA_COMPARISON.md) — 与以太坊 AA（4337/7702/7579/7715）的对齐点与刻意分歧
-- [FRONTEND_DEPENDENCY_SECURITY.zh-CN.md](FRONTEND_DEPENDENCY_SECURITY.zh-CN.md) · [EN](FRONTEND_DEPENDENCY_SECURITY.md) — 前端依赖的暴露面
-- [PLUGIN_DEVELOPER_GUIDE.zh-CN.md](PLUGIN_DEVELOPER_GUIDE.zh-CN.md) · [EN](PLUGIN_DEVELOPER_GUIDE.md) — 受支持的验证器 / 钩子插件、生命周期与清理
-- [contracts/plugins/templates/](../contracts/plugins/templates/) — 最小验证器 / 钩子起点（目录内有 `README.md`）
-- [proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.zh-CN.md](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.zh-CN.md) · [EN](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md) — NeoVM / DevPack 验证器预算扩展
-- [proposals/nep-smartaccount-entry-verifier.mediawiki](proposals/nep-smartaccount-entry-verifier.mediawiki) — 入口验证器的 NEP 草案
-
-## 构建与打包
-
-- [SA-REPRODUCIBLE-BUILD.zh-CN.md](SA-REPRODUCIBLE-BUILD.zh-CN.md) — 固定工具链、逐字节重建、pin 升级（中 · [EN](SA-REPRODUCIBLE-BUILD.md)）
-- [NEO-PLATFORM-PACKAGES.zh-CN.md](NEO-PLATFORM-PACKAGES.zh-CN.md) · [EN](NEO-PLATFORM-PACKAGES.md) · [../contracts/neo-platform-packages.json](../contracts/neo-platform-packages.json) — 由 `scripts/check_neo_platform_packages.mjs` 强制执行的已审计平台包 pin
-- [../sdk/js/PACKAGING.md](../sdk/js/PACKAGING.md) — 可独立安装的 SDK 包
 
 ## 证据回执
 
@@ -111,7 +64,7 @@
 | [sa-neoexpress-validation-20261031.json](reports/sa-neoexpress-validation-20261031.json) | 私有链部署与回读 |
 | [sa-ordinary-candidate-compatibility-20261116.json](reports/sa-ordinary-candidate-compatibility-20261116.json) | custom 账户候选兼容矩阵 |
 
-历史与已被取代的回执，只在某道守卫或某个形式化作用域固定它时才保留。[reports/testnet-validation-v1v2-2026-03.md](reports/testnet-validation-v1v2-2026-03.md) 是归档的 V3 前状态。
+历史与已被取代的回执，只在某道守卫或某个形式化作用域固定它时才保留。
 
 ## Matrix 域
 

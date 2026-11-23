@@ -25,13 +25,10 @@
 完整地图见 [docs/INDEX.zh-CN.md](docs/INDEX.zh-CN.md)。最短路径：
 
 1. [README.md](README.md)（英文规范版）
-2. [docs/HOW_IT_WORKS.zh-CN.md](docs/HOW_IT_WORKS.zh-CN.md) —— 端到端心智模型
-3. [docs/WORKFLOWS.zh-CN.md](docs/WORKFLOWS.zh-CN.md) —— 交易生命周期与提交流程
-4. [docs/DATA_FLOW.zh-CN.md](docs/DATA_FLOW.zh-CN.md) —— 浏览器 / Supabase / 中继 / 链 的边界
-5. [docs/architecture.zh-CN.md](docs/architecture.zh-CN.md) —— 技术架构
-6. [docs/SA-SYSTEM-STATUS.zh-CN.md](docs/SA-SYSTEM-STATUS.zh-CN.md) —— 已建成、已部署、已验证，以及尚未成立的部分
-7. [docs/SECURITY_MODEL.zh-CN.md](docs/SECURITY_MODEL.zh-CN.md) —— 威胁模型与信任假设
-8. [docs/SA-SPEC.zh-CN.md](docs/SA-SPEC.zh-CN.md) —— 仅有英文的规范与形式化章节导读
+2. [docs/GUIDE.zh-CN.md](docs/GUIDE.zh-CN.md) —— 用户指南书：端到端心智模型、实操指南与交易生命周期（合并自 HOW_IT_WORKS、QUICK_REFERENCE、WORKFLOWS 等 8 个主题）
+3. [docs/ARCHITECTURE.zh-CN.md](docs/ARCHITECTURE.zh-CN.md) —— 架构书：技术架构、原生系统架构、系统状态与数据流（合并自 architecture、NATIVE_SYSTEM_ARCHITECTURE、ORGANIZATION、SA-SYSTEM-STATUS、DATA_FLOW、ETHEREUM_AA_COMPARISON）
+4. [docs/SECURITY.zh-CN.md](docs/SECURITY.zh-CN.md) —— 威胁模型与信任假设
+5. [docs/SA-SPEC.zh-CN.md](docs/SA-SPEC.zh-CN.md) —— 仅有英文的规范与形式化章节导读
 
 同一主分支只保留一个实现：[原生 SmartAccount 提交实现](contracts/native/README.md)
 （`contracts/native/`）。原 C# 用户合约实现及其 paymaster、地址市场与

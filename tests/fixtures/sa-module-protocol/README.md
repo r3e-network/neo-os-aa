@@ -37,7 +37,7 @@ python tests/fixtures/sa-module-protocol/generate-vectors.py
   transitions (status codes, legacyModuleCount, invalidation declaration,
   idempotent replay, different-digest rejection).
 - `migration-manifest.template.json` — the batch-scan record for a real legacy
-  export (`docs/SA-MIGRATION-MANIFEST.md` §5); it stays a template because the
+  export (`docs/engineering/VERIFICATION-AND-GATES.md`, SA Migration Manifest chapter §5); it stays a template because the
   53/407 account exports do not exist in this repository.
 
 Rules:

@@ -215,7 +215,7 @@
         "ImplementationRefinementGasRuntimeTests.ActualBudgetAtMeasuredCeilingHaltsAndOneDatoshiLessFaults"
       ],
       "native": [],
-      "note": "the custom public build meters after the fact and rolls back; the platform build is the Plan B lane (see docs/SA-FORMAL-VERIFICATION.md)"
+      "note": "the custom public build meters after the fact and rolls back; the platform build is the Plan B lane (see docs/engineering/VERIFICATION-AND-GATES.md)"
     },
     {
       "id": "M-1",

@@ -23,7 +23,8 @@ namespace SmartAccount.Validators
     /// <remarks>
     /// One instance holds one secp256k1 public key. A routed operation carries a
     /// 64-byte compact <c>r‖s</c> signature over the EIP-712-style payload of
-    /// docs/SA-EIP-712-SPEC.md: the typed struct shows the wallet the readable
+    /// the "EIP-712 signing" chapter of docs/SDK.md (formerly
+    /// docs/SA-EIP-712-SPEC.md): the typed struct shows the wallet the readable
     /// fields (target, method, args hash, nonce, deadline) and commits to the core
     /// operation digest, which binds every remaining protocol v4 field
     /// (docs/SA-MODULE-PROTOCOL.md §4.3, §5). The instance also answers

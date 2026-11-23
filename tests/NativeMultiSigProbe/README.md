@@ -42,7 +42,7 @@ a diagnostic receipt reports `FAIL` and must never be used as an acceptance gate
 
 ## Repeatable local execution measurements
 
-See [the recorded performance comparison](../../docs/NATIVE_ACCOUNT_PERFORMANCE.md)
+See [the recorded performance comparison](../../docs/OPERATIONS.md)
 for measured results, build provenance and remaining limits.
 
 Use a Release build and add `--benchmark` to emit a separate

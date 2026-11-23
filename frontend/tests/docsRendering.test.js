@@ -34,28 +34,68 @@ test("shouldStripAttribute removes inline handlers and javascript urls", () => {
 
 test("supplemental root docs are preserved and indexable", () => {
   const docsIndex = readRepo("docs/INDEX.md");
-  const howItWorks = readRepo("docs/HOW_IT_WORKS.md");
-  const userGuide = readRepo("docs/USER_GUIDE.md");
-  const workflows = readRepo("docs/WORKFLOWS.md");
-  const dataFlow = readRepo("docs/DATA_FLOW.md");
-  const quickReference = readRepo("docs/QUICK_REFERENCE.md");
-  const smokeTest = readRepo("docs/POST_DEPLOY_SMOKE_TEST.md");
+  // The eight former user-guide topics (HOW_IT_WORKS, QUICK_REFERENCE, WORKFLOWS,
+  // the four NATIVE_ACCOUNT_* pages and RECOVERY_AND_SESSIONS) merged into
+  // GUIDE.md, and the six former architecture topics (architecture,
+  // NATIVE_SYSTEM_ARCHITECTURE, ORGANIZATION, SA-SYSTEM-STATUS, DATA_FLOW,
+  // ETHEREUM_AA_COMPARISON) merged into ARCHITECTURE.md (docs role-based
+  // reorganization phase 1).
+  const guide = readRepo("docs/GUIDE.md");
+  const architectureBook = readRepo("docs/ARCHITECTURE.md");
+  const smokeTest = readRepo("docs/OPERATIONS.md"); // post-deploy smoke test is a chapter of the operations book
   const readmeZh = readRepo("README.zh-CN.md");
 
-  assert.match(docsIndex, /HOW_IT_WORKS\.md/);
-  assert.match(docsIndex, /POST_DEPLOY_SMOKE_TEST\.md/);
-  assert.match(docsIndex, /USER_GUIDE\.md/);
-  assert.match(docsIndex, /WORKFLOWS\.md/);
-  assert.match(docsIndex, /DATA_FLOW\.md/);
-  assert.match(docsIndex, /QUICK_REFERENCE\.md/);
-  assert.match(howItWorks, /How It Works|Usage Guide/i);
-  assert.match(userGuide, /User Guide/i);
-  assert.match(workflows, /Workflow|Lifecycle/i);
-  assert.match(dataFlow, /Data Flow|Storage/i);
-  assert.match(quickReference, /Quick Reference/i);
+  assert.match(docsIndex, /GUIDE\.md/);
+  assert.match(docsIndex, /OPERATIONS\.md/);
+  assert.match(docsIndex, /ARCHITECTURE\.md/);
+  assert.match(guide, /How It Works|Usage Guide/i);
+  assert.match(guide, /Recommended Reading Order|Via SDK/i);
+  assert.match(guide, /Workflow|Lifecycle/i);
+  assert.match(guide, /Quick Reference/i);
+  assert.match(architectureBook, /Data Flow|Storage/i);
   assert.match(smokeTest, /Post-Deploy Smoke Test/i);
   assert.match(smokeTest, /Wallet Detection/i);
   assert.match(readmeZh, /README\.md/);
+});
+
+test("the seven process documents merged into two engineering books (docs reorganization phase 2)", () => {
+  const docsIndex = readRepo("docs/INDEX.md");
+  const verificationBook = readRepo("docs/engineering/VERIFICATION-AND-GATES.md");
+  const handoffBook = readRepo("docs/engineering/HANDOFF-RECORDS.md");
+
+  // The index routes engineers to the two books instead of the seven former
+  // standalone process documents, and those former files stay gone.
+  assert.match(docsIndex, /engineering\/VERIFICATION-AND-GATES\.md/);
+  assert.match(docsIndex, /engineering\/HANDOFF-RECORDS\.md/);
+  const formerProcessDocs = [
+    "SA-CLOSURE-GATE.md",
+    "SA-ENTRYPOINT-CLOSURE.md",
+    "SA-FORMAL-VERIFICATION.md",
+    "SA-MIGRATION-MANIFEST.md",
+    "SA-CONTRACT-HANDOFF.md",
+    "SA-FRONTEND-CORRESPONDENCE.md",
+    "SA-REPRODUCIBLE-BUILD.md",
+  ];
+  for (const former of formerProcessDocs) {
+    assert.ok(!docsIndex.includes(`(${former})`), `INDEX.md still links the deleted ${former}`);
+    assert.ok(
+      !fs.existsSync(path.join(frontendRoot, "..", "docs", former)),
+      `docs/${former} must not come back as a standalone file`,
+    );
+  }
+
+  // Each book opens with a chapter table of contents and carries the demoted
+  // chapter headings of its former documents (heading levels follow the phase-1
+  // appendix precedent: the former document title became a ## chapter).
+  assert.match(verificationBook, /^## Contents$/m);
+  assert.match(verificationBook, /^## SA Formal Verification$/m);
+  assert.match(verificationBook, /^## SA contracts: reproducible build from published packages$/m);
+  assert.match(verificationBook, /^## Integrated refinement closure gate$/m);
+  assert.match(verificationBook, /^## Public entrypoint closure inventory$/m);
+  assert.match(verificationBook, /^## SA Migration Manifest — Legacy → Protocol v4 \(Design\)$/m);
+  assert.match(handoffBook, /^## Contents$/m);
+  assert.match(handoffBook, /^## Contract-internal handoff \(kernel-checked, eighteenth gate scope\)$/m);
+  assert.match(handoffBook, /^## SA — Source front end and compiler correspondence$/m);
 });
 
 test("docs registry uses the repo README as the overview source of truth", () => {
@@ -100,7 +140,7 @@ test("sdk doc tracks the native helper surface and drops the retired paymaster w
 
 test("repo docs describe a hardened policy-gated execution surface", () => {
   const readme = readRepo("README.md");
-  const architectureDoc = readRepo("docs/architecture.md");
+  const architectureDoc = readRepo("docs/ARCHITECTURE.md");
 
   assert.match(readme, /policy-gated/i);
   assert.match(architectureDoc, /policy-gated/i);
@@ -178,12 +218,14 @@ test("operations docs cover the app workspace, anonymous drafts, both broadcast 
   const sdkDoc = read("src/assets/docs/sdk-usage.md");
   const readme = readRepo("README.md");
 
-  assert.match(workflowDoc, /app workspace/i);
+  // The workflow page is a generated slice of the GUIDE book's "Smart Account Workflow
+  // Lifecycle" chapter, which names the operator surface the home operations workspace.
+  assert.match(workflowDoc, /home operations workspace/i);
   assert.match(workflowDoc, /client-side broadcast/i);
   assert.match(workflowDoc, /relay broadcast/i);
   assert.match(workflowDoc, /localStorage|local-only fallback/i);
   assert.match(workflowDoc, /NEP-17 transfer|Multisig Draft|Generic Invoke/i);
-  assert.match(workflowDoc, /accountId hash|UserOperation/i);
+  assert.match(workflowDoc, /enter the SA address or derive/i);
   assert.match(workflowDoc, /100 activity entries/i);
   assert.match(workflowDoc, /12 submission receipts/i);
   assert.match(readme, /100 activity entries/i);

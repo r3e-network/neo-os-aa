@@ -20,13 +20,13 @@ Status: **specification + shared constants + fixtures + native kernel delivered.
 kernel that once implemented the same surface has been retired, so this document
 and its vectors are the single shared contract. Nothing here claims on-chain
 deployment of this source, and the formal models are reported separately in
-`docs/SA-FORMAL-VERIFICATION.md`.
+`docs/engineering/VERIFICATION-AND-GATES.md` (the SA formal verification chapter).
 
 Companion documents:
 
 - `docs/SA-MODULE-PROTOCOL.zh-CN.md` — Chinese counterpart (authoritative together
   with this file; on any divergence the newer revision of both wins).
-- `docs/SA-MIGRATION-MANIFEST.md` — legacy→v4 migration manifest design (§14).
+- `docs/engineering/VERIFICATION-AND-GATES.md` — the SA migration manifest chapter (legacy→v4 design; §14 summarizes).
 - `tests/fixtures/sa-module-protocol/README.md` — golden-vector / rejection
   fixture formats and the kernel verification matrix.
 - `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` — the constant
@@ -41,7 +41,7 @@ v4 adopts the ERC-7579 term **validator**; `hook` keeps its name. The contract
 API, storage, events and error codes use `validator`/`Validator` exclusively; the
 old `verifier`/`Verifier` names are removed without aliases (the identity-only
 witness entry `verify(accountId)` survives because the proxy script embeds it —
-see `docs/SA-EIP-712-SPEC.md` and §13).
+see `docs/SDK.md` and §13).
 
 Module kinds (one-byte type code, ERC-7579 numbering):
 
@@ -222,7 +222,7 @@ the binding requirements are auditable against this list):
 | SessionKeyValidator | session credential id, delegated grant digest, expiry; generation-bound (revoke ⇒ generation bump ⇒ old signatures dead) |
 | MultiSigValidator (as policy) | member identifier + per-member signature list; bound to policyId and member generations; policy members are never independently routable |
 | TeeKeyValidator | enclave key id + attested signature blob |
-| Web3AuthValidator | EIP-712-style typed payload per `docs/SA-EIP-712-SPEC.md` (domain name `"Neo Smart Account"`), signature 64-byte compact |
+| Web3AuthValidator | EIP-712-style typed payload per `docs/SDK.md` (domain name `"Neo Smart Account"`), signature 64-byte compact |
 | P256Validator (was WebAuthn) | raw P-256 `r‖s` (64 bytes) against the instance's configured key |
 | DelegatedIdentityValidator (was ZkLogin) | configured P-256 signer signature + identity commitment |
 | built-in (validatorId = 0) | §8 message profile reused in operation mode: canonical P-256 script + signature, threshold per 0x57 |
@@ -844,7 +844,7 @@ protocol compatibility:**
 Wording rule for all docs/UI: "responsibility- and security-model-aligned Neo
 profile", never "fully ERC-4337/ERC-7579 compatible".
 
-## 14. Migration manifest (summary — full design in docs/SA-MIGRATION-MANIFEST.md)
+## 14. Migration manifest (summary — full design in the SA migration manifest chapter of docs/engineering/VERIFICATION-AND-GATES.md)
 
 Per-account classification: `no-plugin`, `scalar-plugin`, `multihook`,
 `multisig`, `unknown-plugin`, `owner-only`, `market-locked`, `recovery-pending`.
@@ -1014,3 +1014,828 @@ order fixed):
 
 Every lifecycle transition emits exactly one event; install/uninstall failure
 throws (no partial-commit event pair).
+
+---
+
+## Appendix: Module developer guide
+
+> This appendix absorbs the former standalone module developer guide; it is English only (the Chinese counterpart carries a pointer instead of a translation), and its internal structure and numbering are preserved.
+
+### Executive Summary
+
+This guide is for developers building protocol v4 validator or hook modules for the Neo N3 Smart
+Account ecosystem. It covers security best practices, common vulnerabilities, and the interfaces the
+core enforces at install and call time.
+
+**Target Audience:** Smart contract developers
+**Prerequisites:** Familiarity with Neo N3, C#, and cryptographic primitives
+**Security Status:** Following these guidelines is required for plugin inclusion in the verified ecosystem.
+
+---
+
+### 0. Quick Start: From Template to Bound Plugin
+
+The fastest correct path is to copy a template, not to start from a blank file:
+
+```text
+contracts/plugins/templates/validator/  minimal validator (single-key secp256r1 authorization)
+contracts/plugins/templates/hook/       minimal hook (fail-closed per-instance target gate)
+```
+
+Each template compiles against the same shared layer the shipped modules use
+(`ValidatorAuthority` / `ValidatorPayload` / `ValidatorModels` / `SignerDomain` for
+validators, `HookAuthority` for hooks), exposes exactly the ABI the core's
+bind-time gate demands, and wires the timelocked governance rails (self-upgrade,
+admin rotation, core re-pointing). Copy the directory, rename the class,
+`DisplayName` and `ModuleProfileJson`, replace the marked policy method, and compile. The step-by-step
+walkthrough and the six rules that bite are in
+[`contracts/plugins/templates/README.md`](../contracts/plugins/templates/README.md).
+
+`node scripts/check_plugin_templates.mjs` recompiles both templates and asserts
+their manifests still satisfy the binding ABI; the repository verification gate
+runs it on every contract build, so a shared-layer change that would break a
+fresh plugin fails here first.
+
+---
+
+### 1. Plugin Architecture Overview
+
+#### 1.1 Two Plugin Types
+
+| Type | Responsibility | Security Focus | Examples |
+| --- | --- | --- | --- |
+| **Validator** | "Who is authorized?" | NeoWitness, MultiSig, SessionKey, P256, Web3Auth, TeeKey, DelegatedIdentity |
+| **Hook** | "What is allowed?" | Whitelist, DailyLimit, TokenRestricted, NeoDIDCredential |
+
+Both roles are installed as instances: the core assigns a `moduleId` per install and one
+module contract may serve several instances on the same account. Composition is
+core-owned — a threshold policy over validator instances and `hookOrder` over hook
+instances — so a module never calls another module.
+
+#### 1.2 Module Storage Is Instance-Scoped
+
+```csharp
+// GOOD: Stateless module
+public static ByteString getPublicKey(UInt160 accountId, BigInteger moduleId)
+{
+    byte[] key = ValidatorAuthority.InstanceKey(Prefix_PubKey, accountId, moduleId);
+    return Storage.Get(Storage.CurrentContext, key) ?? (ByteString)"";
+}
+
+// BAD: Stateful module with admin keys
+private static readonly byte[] Prefix_Admin = new byte[] { 0xFF };
+public static void SetAdmin(UInt160 newAdmin) // an admin setter is not part of any compliant module
+{
+    // Never allow admin keys in plugins!
+}
+```
+
+**Rule:** A module may keep instance-scoped policy state, but it must not have
+independent admin keys or privileged upgradability. Every key starts from
+`InstanceKey(prefix, accountId, moduleId)` because the same module may be installed
+several times on one account, and `OnUninstall` deletes each prefix with
+`DeleteInstancePrefix(prefix, accountId, moduleId)`. All configuration flows through
+the SA core's configuration intents.
+
+---
+
+### 2. Validator Module Security
+
+#### 2.1 Required Interface
+
+```csharp
+// Exported by every installable module, validator or hook.
+public interface IModuleLifecycle
+{
+    // Canonical, whitespace-free profile JSON; its SHA-256 is the profile
+    // digest the core recomputes and binds at install (spec §12).
+    string GetModuleProfile();
+
+    void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData);
+    void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData);
+    void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData);
+}
+
+public interface IValidatorModule : IModuleLifecycle
+{
+    // Read-only authorization over the core's canonical 13-field view.
+    bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation);
+
+    // Optional post-execution work for this instance; a no-op when unused.
+    void OnUserOpComplete(UInt160 accountId, object[] operation, object result);
+
+    // Declared only when the profile claims messageCapability.
+    object[] GetSignerDomains(UInt160 accountId, BigInteger moduleId);
+}
+
+public interface IHookModule : IModuleLifecycle
+{
+    // Runs before execution; returns at most 512 bytes of hook data.
+    ByteString PreCheck(UInt160 accountId, object[] operation);
+
+    // Receives the same instance's hook data after execution.
+    void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData);
+}
+```
+
+Binding is fail-closed at three layers. `getModuleProfile/0` must be a safe String method
+whose canonical bytes hash to the profile digest the core stores, the deployed manifest
+must expose the lifecycle callbacks `onInstall(Hash160, Integer, Integer, Array)`,
+`configure(Hash160, Integer, Integer, Array)` and `onUninstall(Hash160, Integer, Integer, Array)`,
+and it must expose the callback pair of its declared role —
+`validateUserOp(Hash160, ByteString, Array) -> Boolean` with `onUserOpComplete(Hash160, Array, Any)`
+for validators, or `preCheck(Hash160, Array) -> ByteString` with
+`postCheck(Hash160, Array, Any, ByteString)` for hooks. A module that declares a callback
+outside its role, or a profile the core cannot re-hash, is rejected before it is
+installed. Manifest presence proves only the callable surface; it does not prove the
+method's cryptographic or storage semantics, so new modules still require an audited
+implementation and concrete runtime/refinement evidence. Composition is core-owned:
+protocol v4 replaced composite verifiers with the core threshold policy and composite hooks
+with `hookOrder`, so `MultiSigValidator` validates one configured child signer and
+`MultiHook` rejects new installs. These checks are ABI/profile/lifecycle guards, not proofs
+of cryptographic independence or arbitrary future-module storage semantics.
+
+#### 2.2 Security Checklist for Validators
+
+| Check | Why | Implementation |
+| --- | --- | --- |
+| **Network ID in domain** | Prevent cross-chain replay | Sign `ValidatorPayload.SigningDigest`, which binds the core operation digest and its network domain |
+| **Account ID in domain** | Prevent account confusion | The same helper binds `accountId`, `moduleId` and the credential generation |
+| **Deadline in operation** | Prevent old signature use | `operation[6]` is covered by the core digest; check it against `Runtime.Time` when your policy has a window |
+| **No side effects** | Validation must be read-only | Use `CallFlags.ReadOnly` where applicable |
+| **Bounded gas** | *(CRITICAL)* Prevent DoS | The matching private SA artifact uses `System.Contract.CallWithGasLimit` for validator and hook callbacks; public-profile descendants inherit the callback's ancestor budget. Native activation and public deployment remain separate gates. |
+| **Signature length check** | Prevent malformed input | Assert `((ByteString)operation[11]).Length` against the expected value |
+| **Return boolean only** | Validation pattern | Don't throw on normal rejections |
+| **No state mutation** | Pure validation | Never write storage in `validateUserOp` |
+
+#### 2.3 Common Vulnerabilities
+
+The `PG-*` identifiers below are this guide's plugin-development checklist. The project's
+vulnerability ledger is a different namespace with its own `VULN-001` to `VULN-006`, kept in
+`docs/SECURITY.md` section 6.1; do not read a `PG-*` item as a ledger entry.
+
+##### PG-01: Missing Network ID
+
+**Severity:** Critical
+
+```csharp
+// VULNERABLE: a self-built digest that omits the network and the instance
+byte[] payload = Helper.Concat(accountId, targetContract, method, args, nonce, deadline);
+
+// SECURE: sign the shared binding, which carries the network domain, the core
+// operation digest, the canonical 13-field view and the module instance.
+ByteString digest = ValidatorPayload.SigningDigest(accountId, operationDigest, operation, moduleId);
+```
+
+##### PG-02: Mutable State in Validation
+
+**Severity:** High
+
+```csharp
+// VULNERABLE: State change during validation
+public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
+{
+    Storage.Put(Storage.CurrentContext, "lastValidated", Runtime.Time); // BAD!
+    return CryptoLib.Verify(...);
+}
+
+// SECURE: Pure validation
+public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
+{
+    return CryptoLib.Verify(...);
+}
+```
+
+##### PG-03: Unbounded Gas Consumption
+
+**Severity:** Critical
+
+```csharp
+// VULNERABLE: DoS vector
+public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
+{
+    // Loop can consume arbitrary gas
+    for (int i = 0; i < operation.Length; i++)
+    {
+        HeavyCryptoOperation(operation[i]);
+    }
+    return true;
+}
+
+// REDUCED INPUT RISK ONLY: Bound iterations and reject oversized inputs.
+// This does not replace a platform-enforced child budget.
+public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
+{
+    ExecutionEngine.Assert(operation.Length == 13, "Non-canonical operation");
+    object[] args = (object[])operation[3];
+    ExecutionEngine.Assert(args.Length <= 64, "Too many args");
+    for (int i = 0; i < args.Length; i++)
+    {
+        HeavyCryptoOperation(args[i]);
+    }
+    return true;
+}
+```
+
+##### PG-04: Signature Forgery via Length Extension
+
+**Severity:** Critical
+
+```csharp
+// VULNERABLE: Accepts any signature length
+public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
+{
+    ByteString sig = (ByteString)operation[11];
+    // Missing length check!
+    return CryptoLib.Verify(payload, pubKey, sig);
+}
+
+// SECURE: Enforce exact length
+public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
+{
+    ByteString sig = (ByteString)operation[11];
+    ExecutionEngine.Assert(sig.Length == 64, "Invalid signature length");
+    return CryptoLib.Verify(payload, pubKey, sig);
+}
+```
+
+---
+
+### 3. Hook Plugin Security
+
+#### 3.1 Required Interface
+
+```csharp
+public interface IHookModule : IModuleLifecycle
+{
+    // Runs before target execution and may reject; returns at most 512 bytes.
+    ByteString PreCheck(UInt160 accountId, object[] operation);
+
+    // Runs after target execution for the same instance; receives its own hookData.
+    void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData);
+}
+```
+
+The sketch above is written in the deployed spelling deliberately, because these are the names the SA
+core calls: the manifest your plugin deploys has to export them, and a method declared the way the
+sketch declares it exports exactly that name. The contracts build compiles with `nccs`, which
+lower-cases the first letter of every exported member, so a hook contract that declares the same
+callbacks as PreCheck, PostCheck, OnInstall, Configure and OnUninstall deploys the same names — the
+rule leaves a declaration that is already lower-case unchanged. The rule is stated for contract
+authors in `neo-os-contracts` `contracts/README.md` ("The deployed spelling of an exported member");
+writing the C# spelling in documentation is a claim about a name the deployment does not carry.
+
+Both callbacks receive the core's canonical 13-field operation view (§4.1 of
+[`docs/SA-MODULE-PROTOCOL.md`](SA-MODULE-PROTOCOL.md)), never a caller-supplied tuple:
+`operation[1]` is the target, `[2]` the method, `[3]` the argument array and `[12]` the hook
+proofs. `preCheck` returns the bytes its own `postCheck` needs (or an empty `ByteString`), and the
+core passes them back to the **same instance** in the same execution; a hook never reconstructs
+state from a caller-controlled value, and a hook that returns more than 512 bytes is rejected. The
+core's runtime suite verifies both the positive target path and rejection of an unlisted target
+through the real NeoVM callback path.
+
+`onUninstall(accountId, moduleId, generation, deInitData)` is a mandatory lifecycle method for both
+validator and hook modules. It must delete every instance-scoped key owned by the module
+(`HookAuthority.DeleteInstancePrefix` or `ValidatorAuthority.DeleteInstancePrefix` per prefix) and
+must fault on an internal cleanup failure. It must also be idempotent for an instance the module
+never configured, because the core calls it on every uninstall regardless. A module that omits the
+method never installs: the core's install-time gate checks the complete lifecycle ABI. Modules that
+custody user funds per instance (for example the recovery service's credit) must return them to the
+account owner in `onUninstall` rather than orphan them.
+
+**Transfer source is the proxy address, never the account id.** A virtual SA
+account holds its assets at the core-derived proxy script hash
+(`getProxyScriptHash(accountId)`), and that address is the only `from` a token's
+`CheckWitness` accepts during `executeUserOp`. Any validator or hook that pins,
+meters or allowlists a transfer source must compare against that address
+(`Contract.Call(core, "getProxyScriptHash", CallFlags.ReadOnly, accountId)`) and
+must declare `ContractPermission("*", "getProxyScriptHash")`. Comparing against
+the `accountId` authorizes a transfer that can never move funds and meters a
+balance that is always zero. The SA core treats a cleanup fault
+as a failed enclosing transition; it must not swallow the fault and hand a
+buyer or replacement module a potentially dirty account shell. This is
+fail-closed for known plugins, not a proof that an arbitrary future contract
+has no unrelated storage.
+
+**A witness you check inside a module needs a signer scope that reaches the module.**
+Validators and hooks execute as nested calls from the core, so `Runtime.CheckWitness`
+in a module only sees signers whose scope covers the module contract. A signer with
+`CalledByEntry` is visible to the core but not to the module: `SubscriptionValidator`
+rejects such a merchant pull with "merchant authorization required" and accepts it once
+the merchant signs with a scope that reaches the validator. Document the required scope
+for every witness your module checks, and prefer `CustomContracts` naming the module
+over `Global`.
+
+#### 3.2 Security Checklist for Hooks
+
+| Check | Why | Implementation |
+| --- | --- | --- |
+| **Authority validation** | Prevent unauthorized configuration | Each callback starts with `HookAuthority.RequireLifecycle(accountId, moduleId)`; the core records the writer phase and `getAuthorizedModuleId(accountId, phase)` resolves the instance |
+| **Context validation** | Ensure SA core is caller | `RequirePreCheck` / `RequirePostCheck` likewise refuse any caller that is not the configured core in the matching phase |
+| **Revert on reject** | Atomic rejection pattern | Throw `ExecutionEngine.Assert` |
+| **No external calls in pre** | Prevent reentrancy | Only inspect the operation view |
+| **Careful post logic** | No validation in post | Only cleanup and logging |
+| **State consistency** | Idempotent operations | Handle re-entrancy/timeout |
+| **onUninstall** | Cleanup on removal | `DeleteInstancePrefix` for every instance prefix |
+
+#### 3.3 Common Vulnerabilities
+
+##### PG-05: Reentrancy in preCheck
+
+**Severity:** High
+
+```csharp
+// VULNERABLE: Can call back into the SA
+public static ByteString PreCheck(UInt160 accountId, object[] operation)
+{
+    HookAuthority.RequirePreCheck(accountId, operation);
+
+    // Check limit in storage
+    BigInteger spent = getSpentAmount(accountId);
+    if (spent + amount > limit) return (ByteString)new byte[0];
+
+    // Call external contract (DANGEROUS!)
+    Contract.Call((UInt160)operation[1], "transfer", CallFlags.All, ...);
+
+    // Attacker re-enters with same operation!
+}
+
+// SECURE: No external calls in preCheck
+public static ByteString PreCheck(UInt160 accountId, object[] operation)
+{
+    HookAuthority.RequirePreCheck(accountId, operation);
+
+    BigInteger spent = getSpentAmount(accountId);
+    if (spent + amount > limit)
+    {
+        ExecutionEngine.Assert(false, "Limit exceeded");
+    }
+    Storage.Put(..., spent + amount);
+    return (ByteString)new byte[0];
+}
+
+public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)
+{
+    HookAuthority.RequirePostCheck(accountId, operation);
+    if (!DidExecutionSucceed(result)) return;
+
+    BigInteger pending = (BigInteger)Storage.Get(...);
+    Storage.Put(..., 0); // Consume
+}
+```
+
+##### PG-06: Double-Spend in postCheck
+
+**Severity:** High
+
+```csharp
+// VULNERABLE: Not checking if already consumed
+public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)
+{
+    // Attacker calls postCheck twice!
+    BigInteger current = getSpentAmount(accountId);
+    Storage.Put(..., current + amount);
+}
+
+// SECURE: Use idempotent operations keyed by the instance
+public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)
+{
+    HookAuthority.RequirePostCheck(accountId, operation);
+    if (!DidExecutionSucceed(result)) return;
+
+    byte[] pendingKey = InstanceKey(Prefix_Pending, accountId, moduleId);
+    ByteString? pending = Storage.Get(Storage.CurrentContext, pendingKey);
+
+    ExecutionEngine.Assert(pending != null, "Already consumed");
+
+    BigInteger amount = (BigInteger)pending;
+    Storage.Delete(Storage.CurrentContext, pendingKey);
+
+    BigInteger current = getSpentAmount(accountId);
+    Storage.Put(..., current + amount);
+}
+```
+
+##### PG-07: Incorrect Result Handling
+
+**Severity:** Medium
+
+```csharp
+// VULNERABLE: Falsy results treated as success
+public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)
+{
+    // result = 0 means failure, but we still spend!
+    Storage.Put(..., getSpentAmount(accountId) + amount);
+}
+
+// SECURE: Check for actual success
+private static bool DidExecutionSucceed(object result)
+{
+    if (result is bool asBool) return asBool;
+    if (result is BigInteger asInt) return asInt != 0;
+    if (result is ByteString asStr) return asStr.Length > 0;
+    return true;
+}
+
+public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)
+{
+    if (!DidExecutionSucceed(result)) return;
+    Storage.Put(..., getSpentAmount(accountId) + amount);
+}
+```
+
+---
+
+### 4. Configuration Security
+
+#### 4.1 Using ValidatorAuthority
+
+```csharp
+// REQUIRED at the head of every exported callback
+public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+{
+    ValidatorAuthority.RequireLifecycle(accountId, moduleId);
+    // ... actual storage, keyed by InstanceKey(prefix, accountId, moduleId) ...
+}
+
+public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
+{
+    BigInteger moduleId = ValidatorAuthority.RequireValidation(accountId, operation);
+    // ... authorize against the stored credential ...
+}
+```
+
+`RequireLifecycle` and `RequireValidation` read the module id from the core's recorded
+writer phase; never accept a module id the caller passes in.
+
+#### 4.2 Using HookAuthority
+
+```csharp
+// REQUIRED for both hook callbacks
+public static ByteString PreCheck(UInt160 accountId, object[] operation)
+{
+    HookAuthority.RequirePreCheck(accountId, operation);
+    // ... actual logic ...
+    return (ByteString)new byte[0];
+}
+
+public static void PostCheck(UInt160 accountId, object[] operation, object result, ByteString hookData)
+{
+    HookAuthority.RequirePostCheck(accountId, operation);
+    // ... actual cleanup ...
+}
+```
+
+#### 4.3 Common Misconfigurations
+
+| Misconfiguration | Risk | Fix |
+| --- | --- | --- |
+| **Skip authority check** | Unauthorized config | Start each callback with `RequireLifecycle` / `RequirePreCheck` / `RequirePostCheck` |
+| **Direct storage access** | Bypass core contract | Only access `Prefix_*` prefixed keys |
+| **Mutable verification** | Bypass timelock | Never make verification upgradable without the core's configuration intent |
+| **Shared state across instances** | Cross-instance leakage | Always derive keys from `InstanceKey(prefix, accountId, moduleId)` |
+
+---
+
+### 5. Cryptographic Best Practices
+
+#### 5.1 Canonical Payload Encoding
+
+```csharp
+// GOOD: Unambiguous encoding
+private static byte[] BuildPayload(...)
+{
+    return Helper.Concat(
+        ToUint256Word(network),
+        Helper.Concat(
+            accountId,  // Fixed 20 bytes
+            ToLengthPrefixed(method)  // Length + bytes
+        )
+    );
+}
+
+// BAD: Ambiguous concatenation
+private static byte[] BuildPayload(...)
+{
+    return Helper.Concat(accountId, method, args); // Collision possible!
+}
+```
+
+#### 5.2 Hash Function Selection
+
+| Use Case | Hash Function | Notes |
+| --- | --- | --- |
+| **Neo-native sigs** | SHA256 | Via `CryptoLib` |
+| **EVM compatibility** | Keccak256 | Via `NativeCryptoLib.Keccak256` |
+| **Payload binding** | Both | Match the validator's signature algorithm |
+
+#### 5.3 Public Key Validation
+
+```csharp
+// GOOD: Explicit validation
+public static void setPublicKey(UInt160 accountId, BigInteger moduleId, ByteString pubKey)
+{
+    ValidatorAuthority.RequireLifecycle(accountId, moduleId);
+
+    // Check length (secp256k1 uncompressed = 65, compressed = 33)
+    ExecutionEngine.Assert(
+        pubKey.Length == 65 || pubKey.Length == 33,
+        "Invalid public key length"
+    );
+
+    // Check valid point
+    ECPoint? point = TryParseECPoint(pubKey);
+    ExecutionEngine.Assert(point != null && point.IsValid, "Invalid public key");
+
+    Storage.Put(..., pubKey);
+}
+```
+
+---
+
+### 6. Testing & Audit Checklist
+
+#### 6.1 Before Submission
+
+- [ ] All authority checks present (`RequireLifecycle`, `RequireValidation`, `RequirePreCheck`, `RequirePostCheck`)
+- [ ] No mutable global state (no admin keys)
+- [ ] Canonical `getModuleProfile()` matches the published `<Name>.profile.json`
+- [ ] Operation digest signed through `ValidatorPayload.SigningDigest` (network, account, instance, generation)
+- [ ] Deadline and nonce window checked against `Runtime.Time` where the policy needs one
+- [ ] Signature length enforced
+- [ ] Gas bounds on loops/recursion
+- [ ] No external calls in `preCheck`
+- [ ] Idempotent `postCheck` operations
+- [ ] `onUninstall` deletes every instance prefix and is idempotent
+
+#### 6.2 Security Testing
+
+```bash
+# Test 1: Replay protection
+# Submit same operation twice - should fail on second attempt
+
+# Test 2: Cross-chain replay
+# Sign on mainnet, submit to testnet - should fail
+
+# Test 3: Signature forgery
+# Modify signature bytes - should fail
+
+# Test 4: Gas DoS
+# Pass large arrays - should reject or be bounded
+
+# Test 5: Reentrancy
+# Hook that calls the SA - should be rejected
+```
+
+#### 6.3 Audit Requirements
+
+For official plugin listing, provide:
+
+1. **Source code review** - Full codebase access
+2. **Test coverage** - Unit + integration tests
+3. **Formal verification** - (Optional) Mathematical proof
+4. **Gas analysis** - Worst-case gas consumption
+5. **Third-party audit** - (Recommended) Independent review
+
+---
+
+### 7. Deployment Checklist
+
+- [ ] Contract manifest includes required permissions
+- [ ] `ContractPermission("*", "getAuthorizedModuleId")` (validators and hooks)
+- [ ] `ContractPermission("*", "getModule")` and `getProxyScriptHash` where the module resolves its instance or the proxy address
+- [ ] `Safe` attributes on view functions
+- [ ] Events for state changes
+- [ ] Clear documentation of security assumptions
+- [ ] Testnet validation completed
+- [ ] Source code published
+- [ ] Address registered in ecosystem
+
+---
+
+### 8. Resources
+
+- **Security Model:** `docs/SECURITY.md`
+- **Ethereum Comparison:** the Ethereum AA comparison chapter of `docs/ARCHITECTURE.md`
+- **Protocol Coverage:** `docs/SECURITY.md` (Appendix A)
+- **Module Protocol:** [`docs/SA-MODULE-PROTOCOL.md`](SA-MODULE-PROTOCOL.md)
+- **Templates:** [`contracts/plugins/templates/README.md`](../contracts/plugins/templates/README.md)
+- **Core Contract:** `contracts/native/SmartAccount/SmartAccount.cs`
+- **Validator Examples:**
+  - `contracts/plugins/validators/NeoWitnessValidator.cs`
+  - `contracts/plugins/validators/MultiSigValidator.cs`
+  - `contracts/plugins/validators/SessionKeyValidator.cs`
+- **Hook Examples:**
+  - `contracts/plugins/hooks/WhitelistHook.cs`
+  - `contracts/plugins/hooks/DailyLimitHook.cs`
+  - `contracts/plugins/hooks/MultiHook.cs` (rejects new installs; kept as migration evidence)
+
+---
+
+### 9. Reporting Security Issues
+
+Found a vulnerability in an existing plugin? Report to:
+
+1. **Critical/High:** Email `security@smart-account.org`
+2. **Medium/Low:** Open GitHub issue with `[security]` label
+
+Include:
+- Affected plugin version
+- Vulnerability description
+- Exploit scenario
+- Recommended fix
+- Proof of concept (optional but helpful)
+
+---
+
+### 10. Summary: Security by Design
+
+| Principle | Implementation |
+| --- | --- |
+| **Least Privilege** | Plugins only access account-specific state |
+| **Defense in Depth** | Core → validator → hook layers |
+| **Fail Closed** | Reject unauthorized, don't allow |
+| **Economy of Mechanism** | Minimal gas, no unnecessary checks |
+| **Open Verification** | Signature logic is auditable |
+| **No Secrets** | All state is on-chain |
+
+Follow these principles, and your plugin will be a secure, auditable component of the Neo Smart Account ecosystem.
+
+## Frontend module chooser guide
+
+Protocol v4 installs **modules** into an account instead of binding a single `verifier` contract.
+The module whose job is to decide authorization is a **validator** (the ERC-7579 term the protocol
+now uses); the modules that narrow what the account may do are **hooks**. The old `verifier` binding
+surface is removed without an alias, and the identity-only witness entry `verify` survives because
+the proxy script embeds it.
+
+Module kinds are one-byte codes:
+
+| Type | Name | v4 |
+| --- | --- | --- |
+| 1 | validator | supported |
+| 2 | executor | rejected by `supportsModuleType` |
+| 3 | fallback handler | rejected by `supportsModuleType` |
+| 4 | hook | supported |
+
+### Choose In Layers
+
+Treat an SA policy stack as three layers, installed in this order:
+
+1. **Validator layer** — decides **who may authorize** an operation.
+   The built-in route (the custody witness) always exists and is gated by the default policy, so an
+   account with no validator module is not an owner-less account.
+   Shipped validators:
+   - `Web3AuthValidator`
+   - `SessionKeyValidator`
+   - `MultiSigValidator`
+   - `SubscriptionValidator`
+   - `NeoWitnessValidator`
+   - `P256Validator`
+   - `TeeKeyValidator`
+   - `DelegatedIdentityValidator`
+
+2. **Hook layer** — decides **what the account may do** once a validator (or the built-in route)
+   accepts the operation. Hooks are ordered by the account's `hookOrder` list: every `preCheck` runs
+   in ascending order and every `postCheck` runs over the same snapshot in reverse order.
+   Shipped hooks:
+   - `WhitelistHook`
+   - `DailyLimitHook`
+   - `TokenRestrictedHook`
+   - `NeoDIDCredentialHook`
+
+3. **Recovery path** — the core owns recovery: the custody witness can self-rescue, and an optional
+   recovery authority takes over only after the account's 7–90 day timelock. Recovery is not a
+   module; it removes modules and policies callback-free once it matures.
+
+`MultiHook` is retired: installing it is rejected, and the migrated hook order lives in the core
+`hookOrder` list instead. `ZKEmailVerifier` is a disabled template — every callback fails closed, so
+it is not an installable production validator.
+
+#### Validator notes
+
+- `MultiSigValidator` is a threshold *policy* now: one key per instance (`setMemberKey`), the member
+  set and threshold live in core state, and orchestration plus approval receipts are core-owned.
+  A threshold is 1–10 members over one layer — the members may share a key or a controller, so a
+  threshold counts modules, not independent humans.
+- `SessionKeyValidator` instances are isolated: each instance owns one credential set, granted with
+  `setSessionKey` and withdrawn with `clearSessionKey`. The cap is enforced on the `transfer` method
+  only, so a wildcard method with a zero cap is a value-uncapped delegation.
+- `DelegatedIdentityValidator` verifies a configured P-256 signer plus an identity binding. It does
+  not verify a general zero-knowledge proof, and it does not claim a remote attestation; the same
+  boundary applies to `TeeKeyValidator`.
+
+### Recommended Combinations
+
+#### Consumer Wallet
+
+- Validator: `Web3AuthValidator`
+- Hook: `DailyLimitHook`
+- Recovery: custody address plus a 7–30 day timelock
+
+#### Trading / Automation Wallet
+
+- Validator: `SessionKeyValidator` (one instance per bot)
+- Hook: `WhitelistHook`
+- Recovery: custody address plus an optional recovery authority
+
+#### High-Value Treasury
+
+- Validator: `MultiSigValidator` (threshold 2–10)
+- Hook: `TokenRestrictedHook`
+- Recovery: separate recovery authority with a 90 day timelock
+
+#### Membership / Recurring Billing
+
+- Validator: `SubscriptionValidator`
+- Hook: `DailyLimitHook`
+- Recovery: custody address
+
+### How To Configure
+
+Do not start from raw calldata. An install is either an atomic registration action or a call to the
+core:
+
+1. `installModule(accountId, moduleType, moduleContractHash, initData)` installs one instance in the
+   current transaction; `removeModule(accountId, moduleId, deInitData)` uninstalls it. Both accept the
+   custody witness or the witness of an already installed validator instance.
+2. A registration action is the positional vector `[1, moduleType, moduleHash, profileDigest,
+   initData]` — the install code, the module type, the module hash, the profile digest the core
+   compares and the install data. Its uninstall companion is `[2, moduleId, deInitData]`.
+3. The core executes no other action code. A delay, a maturity window and a multi-action batch belong
+   to a governance module, which collects them and then calls the two methods above; the core itself
+   applies each call atomically or not at all.
+
+A module instance is identified by `(accountId, moduleId)`, never by contract address. `moduleId` is
+allocated once per account from 1 (0 is the built-in route) and is never reused, so an uninstalled
+instance's signatures and pending intents can never re-attach to a new one. The same contract may be
+installed several times only when its capability profile declares instance isolation.
+
+Limits: 32 validator instances, 8 hook instances, 10 threshold members per policy, 16 actions per
+intent and 16 unresolved intents per account. Enumeration reads page at most 32 modules.
+
+### Module Commands
+
+Install data, configure data and uninstall data are `[command, ...args]` arrays. Each module owns its
+vocabulary; the core only enforces the array bound and the lifecycle gas budget.
+
+| Module | Commands |
+| --- | --- |
+| `P256Validator`, `Web3AuthValidator`, `TeeKeyValidator` | `setPublicKey` — 33-byte compressed or 65-byte uncompressed, stored compressed |
+| `NeoWitnessValidator` | `setSigners` — signer set plus threshold |
+| `MultiSigValidator` | `setMemberKey` — one key per instance |
+| `SessionKeyValidator` | `setSessionKey` — key, target, method, expiry, cap, subId; `clearSessionKey` |
+| `SubscriptionValidator` | `createSubscription` — key, payee, token, amount, period; `cancelSubscription` |
+| `DelegatedIdentityValidator` | `setConfig` — public key, provider, master nullifier |
+| `ActionSessionValidator` | `setRecoveryService`; `clearRecoveryService` |
+| `DailyLimitHook` | `setDailyLimit` — token, max amount, rolling-window flag; `clearDailyLimit` |
+| `TokenRestrictedHook` | `restrictToken`; `unrestrictToken` |
+| `WhitelistHook` | `allowTarget`; `denyTarget` |
+| `NeoDIDCredentialHook` | `requireCredential` — target, provider, claim type, commitment; `clearRequirement` |
+| `MultiHook` | none — retired, installation rejected |
+
+`DailyLimitHook` meters the account id, not the derived virtual address, and usage accrues only
+after a successful execution. `NeoDIDCredentialHook` stores no local credential flags: the credential
+must exist on the configured `NeoDIDRegistry`, and the commitment must be the 32-byte commitment
+registered for that provider and claim type.
+
+### Paymaster + Hook Combinations
+
+The on-chain `SAPaymaster` contract funds relay fees for an account but never authorizes execution.
+Validators and hooks still run independently, so sponsorship composes with any policy stack.
+
+#### Sponsored Consumer Wallet
+
+- Validator: `Web3AuthValidator`
+- Hook: `DailyLimitHook`
+- Paymaster: a global policy (account id of zero) targeting the dApp contract
+
+#### Sponsored Automation
+
+- Validator: `SessionKeyValidator`
+- Hook: `WhitelistHook`
+- Paymaster: a per-account policy with per-operation and daily budgets
+
+#### Key Principle
+
+The paymaster pays only after validation succeeds:
+
+- a sponsor cannot bypass a hook by paying for gas
+- a hook cannot raise a paymaster budget
+- reimbursement is settled inside the same sponsored execution, so there is no window where the
+  target runs but reimbursement fails
+
+### Market Readiness
+
+When listing an SA address in the market, publish at minimum:
+
+- the installed validator instances and their module ids
+- the hook set and its order
+- the recovery authority, timelock and whether the account is frozen
+- whether the buyer must install fresh modules after purchase
+
+Settlement is the buyer's clean slate: `settleMarketEscrow` sweeps modules and policies callback-free,
+sets custody to the buyer, clears the recovery authority, advances the authority epoch and
+configuration nonce, resets the default authorizations and re-initializes the message subjects.
+The buyer configures fresh modules in the app workspace after purchase.
+

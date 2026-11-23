@@ -61,7 +61,8 @@ nccs ./MyValidator.csproj -o build              # or compile standalone
    `hookOrder` and threshold policies are the only composition points, and
    `MultiHook` rejects new installs.
 
-The full security checklist, digest format and testing guidance live in
-[`docs/PLUGIN_DEVELOPER_GUIDE.md`](../../../docs/PLUGIN_DEVELOPER_GUIDE.md) and
-[`docs/SA-MODULE-PROTOCOL.md`](../../../docs/SA-MODULE-PROTOCOL.md). Manifests carry
+The full security checklist, digest format and testing guidance live in the
+"Appendix: Module developer guide" of
+[`docs/SA-MODULE-PROTOCOL.md`](../../../docs/SA-MODULE-PROTOCOL.md) and in the
+protocol chapters above it. Manifests carry
 camelCase method names; the templates already compile to that.

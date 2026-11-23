@@ -219,7 +219,6 @@ const MUST_NOT_BE_IGNORED = [
   "docs/reports/sa-native-ci-probe-consistency-20261009.json",
   "docs/reports/native-domain-copy-20261009/candidate-acceptance.json",
   "docs/reports/native-usability-20261009/private-runtime.json",
-  "docs/reports/testnet-validation-v1v2-2026-03.md",
 ];
 
 // A developer's global excludes file must not decide the outcome: only the

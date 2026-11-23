@@ -6,10 +6,10 @@ The protocol is implemented once on this branch, as the
 [native `SmartAccount` profile](contracts/native/README.md) in `contracts/native/`. The former C#
 user-contract delivery path and its paymaster, address-market and platform-registrar services were
 removed when the repository went native-only. Start with the
-[implementation strategy](docs/SA-IMPLEMENTATION-STRATEGY.md) and
-[capability boundaries](docs/SA-SYSTEM-STATUS.md), then the
-[native system architecture](docs/NATIVE_SYSTEM_ARCHITECTURE.md), [native SDK](docs/NATIVE_SDK.md) and
-[native account workspace](docs/NATIVE_ACCOUNT_WORKSPACE.md). The service uses stable account
+[capability boundaries](docs/ARCHITECTURE.md) (including the parallel
+implementation paths), then the
+[native system architecture](docs/ARCHITECTURE.md) (the "Native system architecture" chapter of the architecture book), the [SDK book](docs/SDK.md) and
+the [user guide book](docs/GUIDE.md). The service uses stable account
 identity, explicitly scoped authorization, bounded module callbacks, independent fee payment, and
 recovery that revokes old modules without calling them.
 
@@ -25,19 +25,12 @@ wire format, callback resources, recovery and sponsorship guarantees remain
 profile-specific; passing native profile checks does not reclassify a v4
 deployment as native.
 
-The [usability follow-up](docs/reports/sa-native-usability-20261009.md) covers
-guarded policy cancellation, standard wallet threshold recovery, signed-file
-submission and receipt restoration, and measured module costs. The earlier
-[consistency follow-up](docs/reports/sa-consistency-iteration-20261009.md)
-retains its original SDK/relay and private-chain checkpoint. Both distinguish
-local implementation evidence from the remaining protocol and activation gates.
-
 Runtime and deployment boundaries:
 
 - This repository ships protocol version 4 for the public deployments listed below, alongside the native `SmartAccount` implementation; the deployed contract keeps the `SmartAccountV3` manifest label so existing indexers keep resolving it.
 - v4 removes the old role-heavy / dome-heavy core wallet model and replaces it with a minimalist account core plus validator and hook modules installed through configuration intents.
 - The `public` build uses published Neo packages and standard contract calls. The separate `PLATFORM` build needs a private runtime with bounded child calls. Native SmartAccount uses its own ABI 2 identity and activation boundary; neither compatibility build enables it.
-- [System capability boundaries](docs/SA-SYSTEM-STATUS.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
+- [System capability boundaries](docs/ARCHITECTURE.md) distinguish supported source behavior, operational prerequisites, and work that still requires protocol changes. Repository tests do not establish parity with a deployed public contract.
 - The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
 - The canonical shared testnet SA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
 
@@ -69,7 +62,7 @@ Proposed v2 binding: in `neo-os-web/docs/workspace/neoos-target-architecture.v2.
 - **Validator Module Authorization**: Install Web3Auth, TEE, P-256, session-key, subscription, delegated-identity, witness or multi-signature validator modules per account instance.
 - **Hook Module Policy Enforcement**: Attach hook modules for daily limits, token restrictions, credential gates and post-execution controls; the core owns the hook order that runs them.
 - **Configuration Intents**: Installing, uninstalling, re-binding or re-configuring a module is staged as an intent that matures after 24 hours and expires seven days later; `proposeConfiguration`, `confirmConfiguration` and `cancelConfiguration` are the only write paths.
-- **Backup-Owner Recovery**: Every account can define a native Neo backup owner, and recovery is delegated to an installed recovery service; see [recovery boundaries](docs/ACCOUNT_RECOVERY_AND_IDENTITY.md).
+- **Backup-Owner Recovery**: Every account can define a native Neo backup owner, and recovery is delegated to an installed recovery service; see the [recovery and operational sessions](docs/GUIDE.md#recovery-and-operational-sessions) chapter of the user guide book.
 - **Trustless SA Address Escrow Market**: Deterministic SA addresses can be listed, escrow-locked, purchased with GAS, and transferred atomically on-chain.
 - **Cross-Chain EVM Compatibility**: v4 accepts secp256k1 / Keccak256 EIP-712 signatures through the delegated identity validator path.
 - **On-Chain Paymaster (Sponsored Transactions)**: The `SAPaymaster` contract enables trustless gasless execution — sponsors deposit GAS, create per-account or global sponsorship policies, and relays are reimbursed automatically after successful `UserOp` execution. Supports per-op limits, daily budgets, total budgets, target/method restrictions, and expiry timestamps.
@@ -92,7 +85,7 @@ For local setup, start from `frontend/.env.example` and copy the values you need
 
 The chain-side paymaster contract was removed with the custom track, so this repository no longer ships a sponsorship policy engine. Deployment configuration now comes from `contracts/native/profile.json` and `contracts/plugins/native-profile/profiles.json`: they name the canonical source roots, the six native-profile modules, the ABI 2 authority and the artifacts each verification command consumes. Native activation remains a runtime property that selecting an RPC endpoint cannot enable.
 
-Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/SA-PROXY-TRANSFERS.md).
+Proxy-held token transfers require an additional account witness. The supported relay path is direct execution with a configured scope target, an explicit network-fee reserve and fee ceilings. Sponsored proxy witnesses are rejected because settlement is outside the operation's hook boundary. See [proxy transfers](docs/SDK.md#proxy-transfers).
 
 If you want relay submission to request Morpheus off-chain sponsorship before broadcasting, also configure the server-side paymaster bridge:
 
@@ -171,8 +164,7 @@ Do not conflate the SA recovery service with the independent NeoDID registry:
 
 Current validation references:
 
-- `docs/SECURITY_MODEL.md` is the bounded-claim ledger for validator modules, hooks, recovery and paymaster paths.
-- `docs/PROTOCOL_COMPLETENESS_AUDIT.md` states protocol coverage and the deployment gates that remain open.
+- `docs/SECURITY.md` is the bounded-claim ledger for validator modules, hooks, recovery and paymaster paths; its Appendix A states protocol coverage and the deployment gates that remain open.
 - The on-chain `SAPaymaster` contract provides an alternative trustless sponsorship model without off-chain dependencies.
 
 For Morpheus / NeoDID production integration, also set:
@@ -214,7 +206,7 @@ If you want the clearest end-to-end explanation, read these docs in order:
 - **Data Flow & Storage** — what lives in the browser, Supabase, relay, and on-chain boundaries
 - **SDK Integration** — runtime variables, relay behavior, and deployment setup
 - **Mixed Multi-Sig (N3 + EVM)** — how combined native + EVM signing works in practice
-- **Morpheus Private Actions** — NeoDID / Web3Auth integration, session keys, and TEE validator private actions in `docs/MORPHEUS_PRIVATE_ACTIONS.md`
+- **Morpheus Private Actions** — NeoDID / Web3Auth integration, session keys, and TEE validator private actions in the "Recovery and operational sessions" chapter of `docs/GUIDE.md`
 
 ## Quickstart
 
@@ -228,12 +220,13 @@ If you want the clearest end-to-end explanation, read these docs in order:
 - access to nuget.org. Every contract and test project restores published packages pinned by
   `Directory.Build.props`, `nuget.config` and the `packages.lock.json` files;
   `node scripts/check_neo_platform_packages.mjs` checks the pins and
-  `docs/SA-REPRODUCIBLE-BUILD.md` is the restore, build, reproduce and bump recipe. The native
+  `docs/engineering/VERIFICATION-AND-GATES.md` (the SA reproducible-build chapter) is the
+  restore, build, reproduce and bump recipe. The native
   kernel and its six modules compile against the pinned core checkout and run in the public VM
   through the epoch probe; the retired `public`/`PLATFORM` artifacts are archival only
-  (`docs/NEO-PLATFORM-PACKAGES.md`).
+  (the "Neo platform packages and the verifier gas syscall" section of `docs/engineering/VERIFICATION-AND-GATES.md`).
 pinned MyGet Neo.VM package), builds native modules twice, and executes the measured composite
-matrix. This is host-VM evidence; the [native SDK integration](docs/NATIVE_SDK.md#browser-and-validation-boundaries)
+matrix. This is host-VM evidence; the [native SDK integration](docs/SDK.md#artifacts-and-browser-boundary)
 is the separate full-node gate. Neither lane activates a public network.
 
 ### Install
@@ -301,7 +294,7 @@ release-grade cross-repository switch that `verify_repo.sh` also honours) makes 
 
 ### Live Testnet Validation
 
-See [`docs/TESTNET_QUICKSTART.md`](docs/TESTNET_QUICKSTART.md) for the dry-run-first entry point.
+See [`docs/OPERATIONS.md`](docs/OPERATIONS.md) for the dry-run-first entry point.
 
 ```bash
 cd sdk/js
@@ -375,16 +368,6 @@ Production note:
 
 - `ZKEmailVerifier` is intentionally disabled until a real proof-verification implementation is added. It advertises no capability, so the core rejects installing it on an account; its validation path also fails closed as defense in depth. The previous placeholder behavior was not production-safe.
 
-### Historical V1/V2 Validation (archived)
-
-Earlier validation reports from **March 6-8, 2026** covered the pre-V3,
-role-based wallet generation (`executeUnified`, admins/managers/thresholds,
-dome/oracle unlock) and its `sdk/js/tests/sa_testnet_*` validators. That
-wallet model and those validators were removed in the V3 rewrite, so the
-reports no longer describe this repo's shipping surface. They are preserved
-verbatim in
-[`docs/reports/testnet-validation-v1v2-2026-03.md`](docs/reports/testnet-validation-v1v2-2026-03.md).
-
 ## Structure
 - `contracts/native/`: True source of the native consensus `SmartAccount` service and the overlay Neo core project that compiles it.
 - `contracts/plugins/`: Module contracts the native core installs.
@@ -403,4 +386,4 @@ verbatim in
 
 The repository verification gate requires **0 high/critical production vulnerabilities** in both the frontend and JavaScript SDK.
 
-The frontend still carries the upstream Web3Auth/Torus dependency chain for the active NeoDID/Web3Auth login flow. Both frontend audit modes accept only Elliptic advisory `GHSA-848j-6mx2-7j84` and deepmerge advisory `GHSA-gcqx-w48m-w2h4`, each at most low severity, including findings propagated through dependent packages. A new advisory on any package, any severity increase, and malformed or incomplete audit reports fail the gate. These remaining advisories have no patched release; passing the gate does not mean zero vulnerabilities. See [the dependency security assessment](docs/FRONTEND_DEPENDENCY_SECURITY.md) for exposure and upgrade constraints. The SDK runs a separate production-only audit so its smaller dependency surface cannot regress silently.
+The frontend still carries the upstream Web3Auth/Torus dependency chain for the active NeoDID/Web3Auth login flow. Both frontend audit modes accept only Elliptic advisory `GHSA-848j-6mx2-7j84` and deepmerge advisory `GHSA-gcqx-w48m-w2h4`, each at most low severity, including findings propagated through dependent packages. A new advisory on any package, any severity increase, and malformed or incomplete audit reports fail the gate. These remaining advisories have no patched release; passing the gate does not mean zero vulnerabilities. See [the dependency security assessment](docs/SECURITY.md#appendix-b-frontend-dependency-security-assessment) for exposure and upgrade constraints. The SDK runs a separate production-only audit so its smaller dependency surface cannot regress silently.

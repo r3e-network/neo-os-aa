@@ -15,13 +15,13 @@
 `tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json` 中的共享向量
 做断言。曾经实现同一表面的第二个 kernel 已退役，因此本文与其向量是唯一的共享契约。
 本文不声称该源码已在链上部署；形式化模型的状态单独记录在
-`docs/SA-FORMAL-VERIFICATION.zh-CN.md`。
+`docs/engineering/VERIFICATION-AND-GATES.md`（仅英文，SA 形式化验证章）。
 
 配套文档：
 
 - `docs/SA-MODULE-PROTOCOL.md` —— 英文对应版本（与本文共同权威；如有出入，以两份
   较新的修订为准）。
-- `docs/SA-MIGRATION-MANIFEST.md` —— 旧→新迁移 manifest 设计（§14）。
+- `docs/engineering/VERIFICATION-AND-GATES.md` —— SA 迁移 manifest 章（旧→新设计；§14 为摘要）。
 - `tests/fixtures/sa-module-protocol/README.md` —— golden 向量/拒绝回归 fixture
   格式与 kernel 验证矩阵。
 - `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` ——
@@ -34,7 +34,7 @@
 旧模型的授权决策模块名为 `verifier`。协议 v4 采用 ERC-7579 术语 **validator**；
 `hook` 名称不变。合约 API、存储、事件与错误码一律使用 `validator`/`Validator`；
 旧 `verifier`/`Verifier` 名称移除且不保留别名（仅身份决定的 witness 入口
-`verify(accountId)` 保留，因其嵌入代理脚本 —— 见 `docs/SA-EIP-712-SPEC.md` 与
+`verify(accountId)` 保留，因其嵌入代理脚本 —— 见 `docs/SDK.zh-CN.md` 与
 §13）。
 
 模块类型（一字节类型码，ERC-7579 编号）：
@@ -193,7 +193,7 @@ validator 签名格式**必须**在其自身 DTO 内、或通过哈希上述核�
 | SessionKeyValidator | session 凭证 id、委托授权摘要、期限；绑定 generation（撤销 ⇒ 代数推进 ⇒ 旧签名失效） |
 | MultiSigValidator（作为政策） | 成员标识 + 各成员签名列表；绑定 policyId 与成员代数；政策成员绝不可独立路由 |
 | TeeKeyValidator | enclave key id + attested 签名 blob |
-| Web3AuthValidator | EIP-712 风格 typed payload，见 `docs/SA-EIP-712-SPEC.md`（域名 `"Neo Smart Account"`），64 字节紧凑签名 |
+| Web3AuthValidator | EIP-712 风格 typed payload，见 `docs/SDK.zh-CN.md`（域名 `"Neo Smart Account"`），64 字节紧凑签名 |
 | P256Validator（原 WebAuthn） | 裸 P-256 `r‖s`（64 字节），对实例配置密钥 |
 | DelegatedIdentityValidator（原 ZkLogin） | 配置 P-256 signer 签名 + 身份承诺 |
 | 内建（validatorId = 0） | §8 消息 profile 复用于操作模式：canonical P-256 脚本 + 签名，阈值按 0x57 |
@@ -703,7 +703,7 @@ profile 是对象键排序、无空白、**末尾无换行**的 UTF-8 JSON 文�
 所有文档/UI 措辞规则：“职责与安全模型对齐的 Neo profile”，绝不写“完整兼容
 ERC-4337/ERC-7579”。
 
-## 14. 迁移 manifest（摘要 —— 完整设计见 docs/SA-MIGRATION-MANIFEST.md）
+## 14. 迁移 manifest（摘要 —— 完整设计见 docs/engineering/VERIFICATION-AND-GATES.md 的 SA 迁移 manifest 章）
 
 每账户分类：`no-plugin`、`scalar-plugin`、`multihook`、`multisig`、
 `unknown-plugin`、`owner-only`、`market-locked`、`recovery-pending`。未知插件绝不
@@ -859,3 +859,7 @@ MultiSig 阈值、nonce 与代际单调性、0x12/0x1C 失效、中断与重复�
 | `MigrationImported` | accountId, manifestDigest, classification |
 
 每个生命周期转换恰好发出一个事件；安装/卸载失败即抛出（无部分提交的事件对）。
+
+---
+
+> 附录（Appendix: Module developer guide，模块开发者指南）仅提供英文，见 [SA-MODULE-PROTOCOL.md](SA-MODULE-PROTOCOL.md) 文末。

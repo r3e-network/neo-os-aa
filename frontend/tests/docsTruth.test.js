@@ -68,34 +68,41 @@ const mirrorOf = (file) => file.replace(/\.md$/, '.zh-CN.md');
 // section 5 lists them and records why the rest of the V2-era documents are debt instead.
 const CURRENT_DOCS = [
   'README.md',
-  'docs/QUICK_REFERENCE.md',
-  'docs/architecture.md',
   'frontend/src/assets/docs/repo-readme.md',
   'frontend/src/assets/docs/sdk-usage.md',
   'frontend/src/assets/docs/evm-integration.md',
   'frontend/src/assets/docs/mixed-multisig.md',
   'frontend/src/assets/docs/architecture.md',
-  'docs/PLUGIN_DEVELOPER_GUIDE.md',
-  // The custom-account delivery track has a source-level ABI extension whose
-  // compatibility note intentionally distinguishes newly compiled artifacts
-  // from older public deployments. Keep these current workflow documents out
-  // of the historical dead-entrypoint ratchet.
-  'docs/PENDING_CONFIG_UPDATE_READ_ABI.md',
+  // The plugin developer guide merged into docs/SA-MODULE-PROTOCOL.md as its
+  // "Appendix: Module developer guide". The module protocol book keeps its ratchet
+  // class (its V2_DEBT entry still records the CallHook/CallVerifier removal
+  // spellings), and current-class and ratchet-class are mutually exclusive here,
+  // so the appendix is read by the fence and ratchet scans like the rest of the
+  // book; every name the guide carried is live, so the merge added no debt.
   // Current protocol and refinement documents introduced with the
   // SmartAccount rename. They describe the source ABI directly, so the
   // historical V2 dead-name ratchet must not classify their reviewed terms as
   // legacy deployment debt.
-  'docs/SA-CONTRACT-HANDOFF.md',
-  'docs/SA-ENTRYPOINT-CLOSURE.md',
-  'docs/SA-FRONTEND-CORRESPONDENCE.md',
+  //
+  // The docs reorganization phase 2 merged the three current-class process
+  // documents with the source-bridge scope into one book,
+  // docs/engineering/HANDOFF-RECORDS.md (the former SA-CONTRACT-HANDOFF and
+  // SA-FRONTEND-CORRESPONDENCE chapters; their "Pinned inputs" scope declaration
+  // moved with them verbatim). The class follows the book: the same source-only
+  // names stay readable through the source-bridge allowance below.
+  'docs/engineering/HANDOFF-RECORDS.md',
 ];
 
 // The custom delivery track has two additive reads in source that are deliberately not copied
-// into contracts/build until a release/deployment review publishes the new artifact. Keep this
-// allowlist file-scoped and caveat-scoped: it is an explicit source-versus-deployment boundary,
+// into contracts/build until a release/deployment review publishes the new artifact. The topic
+// that carried them (PENDING_CONFIG_UPDATE_READ_ABI.md) merged into docs/SDK.md, which the fence
+// and ratchet scans read (it is not a current-class document), so the boundary the caveat used to
+// enforce here is now recorded as the two `entrypoint:` ledger entries below: the reads stay
+// disclosed, and the document still carries the source-versus-deployment sentence verbatim. Keep
+// the map file-scoped and caveat-scoped: it is an explicit source-versus-deployment boundary,
 // not a general exemption for undocumented or unshipped entrypoints.
 const SOURCE_ONLY_CUSTOM_READS = new Map([
-  ['docs/PENDING_CONFIG_UPDATE_READ_ABI.md', {
+  ['docs/SDK.md', {
     names: new Set(['getPendingVerifierUpdate', 'getPendingHookUpdate']),
     caveat: /newly compiled source|Existing deployments|not evidence of a deployed upgrade/i,
   }],
@@ -115,16 +122,18 @@ const SOURCE_ONLY_CUSTOM_READS = new Map([
 // The class is not a suppression list. Every entry names a current document and a visible pinned-
 // source scope, and the source/external sets are derived or exact rather than inferred from shape.
 const SOURCE_BRIDGE_DOCS = new Map([
-  ['docs/SA-CONTRACT-HANDOFF.md', {
-    reason: 'Projects the pinned Neo Core contract-handoff path and records the current SA source implementation boundary beside its ABI consequences.',
-    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
-  }],
-  ['docs/SA-ENTRYPOINT-CLOSURE.md', {
-    reason: 'Maps current SA source entrypoints and helpers to the pinned NEF/VM dispatch corpus; helper names are source identities, not public ABI names.',
-    marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
-  }],
-  ['docs/SA-FRONTEND-CORRESPONDENCE.md', {
-    reason: 'Records source-to-artifact correspondence across the current SA tree, the pinned compiler, Neo Core and Neo VM, including private source members and runtime APIs.',
+  // Phase 2 of the docs reorganization merged the three source-bridge documents
+  // into docs/engineering/HANDOFF-RECORDS.md (SA-CONTRACT-HANDOFF and
+  // SA-FRONTEND-CORRESPONDENCE) and docs/engineering/VERIFICATION-AND-GATES.md
+  // (SA-ENTRYPOINT-CLOSURE, beside the former SA-FORMAL-VERIFICATION,
+  // SA-REPRODUCIBLE-BUILD, SA-CLOSURE-GATE and SA-MIGRATION-MANIFEST records).
+  // VERIFICATION-AND-GATES.md cites dozens of receipts that were never part of
+  // this checkout (a citation names the record, not a file you can open here),
+  // so it cannot join the current class, whose cited-receipt rule reads every
+  // `docs/...` code span; its former source-bridge chapter is scanned by the
+  // fence and ratchet rules like the rest of the book instead.
+  ['docs/engineering/HANDOFF-RECORDS.md', {
+    reason: 'Projects the pinned Neo Core contract-handoff path and records the current SA source implementation boundary beside its ABI consequences, and records source-to-artifact correspondence across the current SA tree, the pinned compiler, Neo Core and Neo VM, including private source members and runtime APIs.',
     marker: /\bPinned inputs \(neo\b|\bpinned (?:C#|artifact|source|sources|Neo|VM)\b/i,
   }],
 ]);
@@ -153,7 +162,7 @@ const NO_SNAPSHOT_AUDIT_DOCS = [];
 // Only these documents are read against that artefact; a name that merely coincides with a native
 // method (callVerifierChild was also defined in the since-deleted SmartAccount.VerifierChildren.cs
 // and absent from the deployed manifest) is still judged by the deployed ABI everywhere else.
-const NATIVE_PROFILE_DOCS = ['docs/NATIVE_SDK.md', 'docs/NATIVE_ACCOUNT_WORKSPACE.md'];
+const NATIVE_PROFILE_DOCS = ['docs/SDK.md', 'docs/GUIDE.md'];
 const nativeAbiNames = new Set([
   ...Object.keys(NATIVE_REQUIRED_ABI),
   ...Object.keys(NATIVE_ACCOUNT_ADDRESS_ABI),
@@ -175,17 +184,30 @@ const NO_NAMES = new Set();
 // are visible. The docs cleanup deleted the 2026-03-29 audit snapshot
 // (docs/SECURITY_AUDIT_RESULTS.md), the 2026-10-08 dependency record and both copies of the
 // March 11, 2026 audit, so their 50 entries left the ledger with them. Rewriting the rendered custom
-// module guide in v4 terms removed the last entry that described a verifier binding (`Admin`), so
-// 3 entries remain (all `spelling:`) across 2 files, each already justified by the reason its
-// document carries.
+// module guide in v4 terms removed the last entry that described a verifier binding (`Admin`). The
+// docs reorganization merged the SDK topics into one book, so the two source-only custom reads the
+// current-class exemption used to carry are now scanned by the ratchet and recorded below; 5
+// entries remain (3 `spelling:`, 2 `entrypoint:`) across 3 files, each already justified by the
+// reason its document carries.
 const V2_DEBT = {
-  'docs/ACCOUNT_RECOVERY_AND_IDENTITY.md': {
+  // The former user-guide topics (HOW_IT_WORKS, QUICK_REFERENCE, WORKFLOWS,
+  // NATIVE_ACCOUNT_WORKSPACE, NATIVE_ACCOUNT_TRANSACTION_GUARDS,
+  // NATIVE_ACCOUNT_THRESHOLD_RECOVERY, NATIVE_SIGNED_TRANSACTION_IMPORT and
+  // RECOVERY_AND_SESSIONS) were merged into GUIDE.md; the ClearAccount spelling
+  // debt sentences moved with them verbatim.
+  'docs/GUIDE.md': {
     names: ['spelling:ClearAccount->clearAccount'],
     reason: 'The sentences analyse how the recovery modules clean up (MultiSigVerifier.ClearAccount, MultiHook.ClearAccount) and qualify the name with a C# class that no manifest exports; the deployed ABI of those modules spells it clearAccount, so the name is the C# spelling of an exported member and stays recorded (DS-CU-212 section 4, verdict SOUND, recorded).',
   },
   'docs/SA-MODULE-PROTOCOL.md': {
     names: ['spelling:CallHook->callHook', 'spelling:CallVerifier->callVerifier'],
     reason: 'The sentence records that the v3 callVerifier/callHook surfaces are removed without aliases in both kernels: naming those spellings is what the removal statement is about, and both are the C# spelling of members the pinned v3 manifest exports as callVerifier/callHook, so the entry says what the artifact spelled and stays recorded (DS-CU-211, DEC-DS-5).',
+  },
+  // The pending-config-update read ABI topic merged into docs/SDK.md (chapter "Pending
+  // configuration update reads"); the boundary sentence moved with it verbatim.
+  'docs/SDK.md': {
+    names: ['entrypoint:getPendingHookUpdate', 'entrypoint:getPendingVerifierUpdate'],
+    reason: 'The two reads are defined in the custom track\'s source but no deployed manifest exports them: the chapter states that boundary itself (newly compiled source, existing deployments keep the older reads, contracts/bin/public is not evidence of a deployed upgrade), so the names are real source members the artifact does not carry yet and stay recorded.',
   },
 };
 
@@ -248,11 +270,13 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'obj', 'bin', 'dist', 'covera
 // list of the lanes seen so far: the list missed nuget-isolated-v and let third-party package
 // readmes into the ratchets below. Only a directory matches; no tracked path carries the prefix.
 const ISOLATED_NUGET_CACHE = /^nuget-isolated/;
-// `docs/_build_pdf.mjs` concatenates the Chinese documents into `docs/_merged-zh-CN.md` to render the
-// PDF, and the scratch file can survive into the window where the suites run. It is a concatenation of
-// documents already scanned below, not a document of its own: scanning it would report every claim a
-// second time under a path no reviewer opens, and its assertions would be keyed by file position in a
-// merge this guard cannot predict.
+// `docs/_merged-zh-CN.md` is the scratch file the retired `docs/_build_pdf.mjs` wrote when it
+// concatenated the Chinese documents to render the PDF (the 2026-11 docs cleanup removed the
+// script; the authoritative PDF is the manuscript build outside this tree). The scratch file
+// can still survive in a work tree from before the removal. It is a concatenation of documents
+// already scanned below, not a document of its own: scanning it would report every claim a
+// second time under a path no reviewer opens, and its assertions would be keyed by file position
+// in a merge this guard cannot predict.
 const PDF_MERGE_SCRATCH = '_merged-zh-CN.md';
 const skipped = (entry) => SKIP_DIRS.has(entry.name) || entry.name === PDF_MERGE_SCRATCH
   || (entry.isDirectory() && ISOLATED_NUGET_CACHE.test(entry.name));
@@ -503,7 +527,8 @@ function shapedLikeEntrypoint(name) {
 // reported and not recorded - it is simply gone:
 //
 //   * `collectChildProofs(context, operation)` and `childSigns()` in the fenced JavaScript
-//     example of docs/MULTISIG_SDK.md name nothing the repository contains (no `.cs`, `.js`,
+//     example of docs/SDK.md (the merged threshold-session chapter, formerly docs/MULTISIG_SDK.md)
+//     name nothing the repository contains (no `.cs`, `.js`,
 //     `.mjs`, `.ts` or `.py` file defines or calls either one; the example's real calls are
 //     `multisig.fetchContext`, `multisig.prepareOperation` and `multisig.validateBundle`);
 //   * neither is read by the shape rule, because the shape rule needs a capital after the
@@ -672,7 +697,8 @@ function isLiveName(name, file) {
 //
 // A COMMENT is not code position, so it asserts nothing (CU-210 R2/R3). Widening the vocabulary made
 // this visible: `// ~ paymaster.sponsorshipPolicy (time-based expiry)` in
-// docs/ETHEREUM_AA_COMPARISON.md is prose comparing two systems, and reading it as a claim invented
+// docs/ARCHITECTURE.md (the merged architecture book, whose Ethereum-comparison chapter came from
+// the former ETHEREUM_AA_COMPARISON topic) is prose comparing two systems, and reading it as a claim invented
 // a Neo entrypoint out of an Ethereum field name. Nothing else speaks for the fenced code around it,
 // so the claim that would have silenced a real finding stays silent (DEC-DS-9).
 //
@@ -1919,24 +1945,26 @@ test('CU-163: source-bridge scope is explicit and admits only current source or 
     assert.ok(used.has(name), `${name}: pinned runtime symbol is no longer cited by a source-bridge document`);
   }
 
-  assert.ok(isSourceBridgeName('docs/SA-ENTRYPOINT-CLOSURE.md', 'CallFromNativeContractAsync'));
-  assert.ok(isSourceBridgeName('docs/SA-FRONTEND-CORRESPONDENCE.md', 'ClearAccount'));
-  assert.ok(!isSourceBridgeName('docs/architecture.md', 'Register'),
+  assert.ok(isSourceBridgeName('docs/engineering/HANDOFF-RECORDS.md', 'CallFromNativeContractAsync'));
+  assert.ok(isSourceBridgeName('docs/engineering/HANDOFF-RECORDS.md', 'ClearAccount'));
+  assert.ok(!isSourceBridgeName('docs/ARCHITECTURE.md', 'Register'),
     'a source-bridge name escaped into a deployed-ABI document');
-  assert.ok(!isSourceBridgeName('docs/SA-CONTRACT-HANDOFF.md', 'ExecuteInjectedBridgeOp'),
+  assert.ok(!isSourceBridgeName('docs/engineering/HANDOFF-RECORDS.md', 'ExecuteInjectedBridgeOp'),
     'the source-bridge class admitted a name from neither permitted oracle');
 
   // The rule itself must be able to fail in the real scanner. Plant a call that exists in neither the
   // current contract source nor the reviewed pinned-runtime set and require the current-runtime gate
   // to report it, then restore the document for every later test.
-  const target = 'docs/SA-CONTRACT-HANDOFF.md';
+  const target = 'docs/engineering/HANDOFF-RECORDS.md';
   const absolute = path.join(repoRoot, target);
   // The plant and its checks run on LF-normalized content (the committed form), while the restore
   // writes the raw worktree bytes back, so an autocrlf checkout neither defeats the marker lookup
   // nor has its line endings rewritten by the test.
   const original = fs.readFileSync(absolute, 'utf8');
   const normalized = original.replace(/\r\n?/g, '\n');
-  const heading = normalized.split('\n').find((line) => line.startsWith('## Pinned inputs'));
+  // The merged book demoted the former SA-CONTRACT-HANDOFF.md chapter headings one
+  // step, so the pinned-source declaration is now a chapter section.
+  const heading = normalized.split('\n').find((line) => line.startsWith('### Pinned inputs'));
   assert.ok(heading, 'the planted-drift document lost its pinned-source marker');
   fs.writeFileSync(absolute,
     normalized.replace(heading, `${heading}\n\n\`ExecuteInjectedBridgeOp()\` is not in either oracle.`));
@@ -1954,8 +1982,8 @@ test('CU-163: source-bridge scope is explicit and admits only current source or 
 // carries no bounded call site the ledger must say the public state is open; if the artifact ever
 // gains the bounded call, this fails until the ledger is updated too.
 test('CU-163: the VULN-001 ledger agrees with the deployed artifact', () => {
-  const row = read('docs/SECURITY_MODEL.md').split('\n').find((line) => /\*\*VULN-001\*\*/.test(line));
-  assert.ok(row, 'docs/SECURITY_MODEL.md has no VULN-001 row');
+  const row = read('docs/SECURITY.md').split('\n').find((line) => /\*\*VULN-001\*\*/.test(line));
+  assert.ok(row, 'docs/SECURITY.md has no VULN-001 row');
   if (gasBoundedSites.length === 0) {
     assert.match(row, /open|not\b|pending/i,
       `the deployed core has no ${GAS_BOUNDED_SYSCALL} call site, so the ledger must not close VULN-001 for the public build`);
@@ -1965,8 +1993,8 @@ test('CU-163: the VULN-001 ledger agrees with the deployed artifact', () => {
 // VULN-002 has local source, scoped formal and private-chain evidence, but no public deployment.
 // Keep the ledger from collapsing those three states into an unsupported public-closure claim.
 test('CU-163: VULN-002 records local evidence without claiming public deployment', () => {
-  const row = read('docs/SECURITY_MODEL.md').split('\n').find((line) => /\*\*VULN-002\*\*/.test(line));
-  assert.ok(row, 'docs/SECURITY_MODEL.md has no VULN-002 row');
+  const row = read('docs/SECURITY.md').split('\n').find((line) => /\*\*VULN-002\*\*/.test(line));
+  assert.ok(row, 'docs/SECURITY.md has no VULN-002 row');
   assert.match(row, /source candidate/i);
   assert.match(row, /scoped Coq governance\/recovery models/i);
   assert.match(row, /private NeoExpress escape\/market scenarios verified/i);
@@ -1992,9 +2020,8 @@ test('CU-163: Web3Auth ERC-1271 documents its Huyao deployment requirement', () 
     'the message adapter no longer consumes the supplied digest directly');
 
   for (const file of [
-    'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
-    'docs/SECURITY_MODEL.md',
-    'docs/SA-FORMAL-VERIFICATION.md',
+    'docs/SECURITY.md',
+    'docs/engineering/VERIFICATION-AND-GATES.md',
   ]) {
     const text = read(file).replace(/\s+/g, ' ');
     assert.match(text, /Web3Auth\s+ERC-1271.*`?HF_Huyao`? or later/i,
@@ -2008,23 +2035,23 @@ test('CU-163: Web3Auth ERC-1271 documents its Huyao deployment requirement', () 
 // Bind each row to the model and private-chain scenario it cites so a later edit cannot widen a
 // bounded claim into arbitrary-plugin, private-key or public-deployment closure.
 test('CU-163: bounded security claims retain their explicit open boundaries', () => {
-  const ledger = read('docs/SECURITY_MODEL.md');
+  const ledger = read('docs/SECURITY.md');
   const row = (id) => ledger.split('\n').find((line) => new RegExp(`\\*\\*${id}\\*\\*`).test(line));
 
   const multisig = row('VULN-004');
-  assert.ok(multisig, 'docs/SECURITY_MODEL.md has no VULN-004 row');
+  assert.ok(multisig, 'docs/SECURITY.md has no VULN-004 row');
   assert.match(multisig, /571 VM tests/i);
   assert.match(multisig, /private-key independence/i);
   assert.match(multisig, /arbitrary future plugins/i);
 
   const orphan = row('VULN-005');
-  assert.ok(orphan, 'docs/SECURITY_MODEL.md has no VULN-005 row');
+  assert.ok(orphan, 'docs/SECURITY.md has no VULN-005 row');
   assert.match(orphan, /shipped MultiSig\/MultiHook/i);
   assert.match(orphan, /arbitrary future-plugin/i);
   assert.match(orphan, /remains open/i);
 
   const rotation = row('VULN-007');
-  assert.ok(rotation, 'docs/SECURITY_MODEL.md has no VULN-007 row');
+  assert.ok(rotation, 'docs/SECURITY.md has no VULN-007 row');
   assert.match(rotation, /delayed proposal\/confirmation\/cancellation/i);
   assert.match(rotation, /final source-built artifact passed private NeoExpress/i);
   assert.match(rotation, /new-owner witness/i);
@@ -2084,7 +2111,7 @@ test('CU-163: bounded security claims retain their explicit open boundaries', ()
 // The snapshot-audit presentation rule (a VULN-00N item had to sit under a heading that called the
 // snapshot historical, and the rendered copy had to equal the repository copy) retired with the
 // March 11, 2026 audit in the 2026-11 docs cleanup. The identifier rule below still holds for every
-// document: only docs/SECURITY_MODEL.md numbers issues.
+// document: only docs/SECURITY.md numbers issues.
 
 // The ledger is the only place that numbers an issue VULN-00N. A second document reusing an id
 // makes a reviewer read two different issues under one name (DS-CU-163 section 4.3 V4).
@@ -2209,13 +2236,24 @@ test('CU-163: a Chinese counterpart records exactly the debt of the document it 
 // spelling; the arrow of the correction is the other way round from the ratchet, so these are
 // recorded here and the guard fails if one disappears rather than if one appears. DS-CU-210 section 4.
 const V2_FENCE_MENTIONS = {
-  'docs/DATA_FLOW.md': {
-    names: ['CallCustom', 'HasID'],
-    reason: 'Bare mermaid node labels of the authorization flowchart (HasID is the account-id decision node, CallCustom the verifier branch), not calls; the underlying reads are named in the deployed ABI and the diagram is a picture of the flow, not an example a reader copies.',
+  'docs/ARCHITECTURE.md': {
+    names: ['CallCustom', 'HasID', 'ValidatePaymasterOp', 'ValidateSig', 'validateUserOpLogic'],
+    reason: 'Bare mermaid node labels of the merged architecture book (absorbing the former DATA_FLOW and ETHEREUM_AA_COMPARISON topics): HasID is the account-id decision node and CallCustom the verifier branch of the authorization flowchart, ValidatePaymasterOp the relay preflight node of the paymaster flow, and ValidateSig/validateUserOpLogic the Ethereum validation-path nodes of the ERC-4337 comparison; none is written as a call, the underlying reads are named in the deployed ABI, and the diagrams are pictures of the flow, not examples a reader copies.',
   },
-  'docs/ETHEREUM_AA_COMPARISON.md': {
-    names: ['ValidateSig', 'validateUserOpLogic'],
-    reason: 'Bare mermaid node labels in the diagram that maps the Ethereum validation path onto the Neo one (ValidateSig stands for the signature-check stage, validateUserOpLogic for the Ethereum validator logic); neither is written as a call, and the solidity blocks of the same document are already declared illustrative.',
+  // The frontend help pages below are generated slices of an authoritative book chapter
+  // (scripts/sync-frontend-docs.mjs), so a label the book justifies reappears here byte for
+  // byte. Each entry restates the source book's ledgered reason for the same diagram nodes.
+  'frontend/src/assets/docs/data-flow.md': {
+    names: ['CallCustom', 'HasID'],
+    reason: 'Generated slice of the "Data flow and storage" chapter of docs/ARCHITECTURE.md: HasID is the account-id decision node and CallCustom the verifier branch of the internal execution flowchart, the same ledgered labels as the source book, none written as a call, and the underlying reads are named in the deployed ABI.',
+  },
+  'frontend/src/assets/docs/data-flow.zh.md': {
+    names: ['CallCustom', 'HasID'],
+    reason: 'Generated slice of the "数据流与存储" chapter of docs/ARCHITECTURE.zh-CN.md: HasID is the account-id decision node and CallCustom the verifier branch of the internal execution flowchart, mirroring the ledgered labels of the English architecture book, and neither is written as a call.',
+  },
+  'frontend/src/assets/docs/architecture.zh.md': {
+    names: ['ValidatePaymasterOp'],
+    reason: 'Generated slice of the "Neo N3 Smart Account 架构" chapter of docs/ARCHITECTURE.zh-CN.md: ValidatePaymasterOp is the relay preflight node of the paymaster flow, the same ledgered label as the English architecture book, written as a bare mermaid label while the deployed ABI names the underlying read.',
   },
 };
 
@@ -2235,10 +2273,11 @@ test('CU-210: fenced blocks assert nothing the code does not, and the ratchet st
   // CU-210 R2 (the NO-GO fix forward). The four names below are the ones the claim side of this
   // oracle could not READ at the r1 head, so their drift was invisible to it while the test above
   // stayed green - a check that could not fail. Two are dead calls that the fenced examples really
-  // make (`collectChildProofs`, `childSigns` in docs/MULTISIG_SDK.md; F7 and F8 below), and two are
+  // make (`collectChildProofs`, `childSigns` in the threshold-session chapter of docs/SDK.md, formerly
+  // docs/MULTISIG_SDK.md; F7 and F8 below), and two are
   // live ABI members written the way the build spells an exported member (`transfer`, `forward`),
   // which the shape rule dropped without ever reaching the liveness rule.
-  assert.ok(!scan.claims['docs/MULTISIG_SDK.md']?.includes('collectChildProofs'),
+  assert.ok(!scan.claims['docs/SDK.md']?.includes('collectChildProofs'),
     'the dead call in the fenced MultiSig example is reported now; correct the document and move this name into the widening mutant');
   // The two live ABI members the review's mutant planted. They must be READABLE (the shape rule
   // cannot read either, which is why the oracle previously dropped them before the liveness rule)
@@ -2246,7 +2285,7 @@ test('CU-210: fenced blocks assert nothing the code does not, and the ratchet st
   // that made them fail would be rejecting the build's own spelling, not reading it.
   for (const live of ['transfer', 'forward']) {
     assert.ok(isReadableName(live), `${live} is a deployed ABI member the vocabulary cannot read`);
-    assert.ok(isLiveName(live, 'docs/DATA_FLOW.md'), `${live} is a deployed ABI member the oracle calls dead`);
+    assert.ok(isLiveName(live, 'docs/ARCHITECTURE.md'), `${live} is a deployed ABI member the oracle calls dead`);
   }
   assert.deepEqual(scan.claims, {},
     `a fenced block calls a name the repository does not define:\n${JSON.stringify(scan.claims, null, 2)}`);
@@ -2289,44 +2328,44 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
   const mutants = [
     {
       rule: 'a dead call inside a fenced code block is reported (the drift that was invisible before CU-210)',
-      file: 'docs/NATIVE_SDK.md',
+      file: 'docs/SDK.md',
       plant: (text) => text.replace("const install = client.buildAccountActionScript({", "const install = client.buildLegacyVerifierConfig({"),
       claim: 'buildLegacyVerifierConfig',
     },
     {
       rule: 'a fenced block cannot show a removed entrypoint as current, and a marked removal silences it',
-      file: 'docs/NATIVE_SDK.md',
+      file: 'docs/SDK.md',
       plant: (text) => text.replace("const install = client.buildAccountActionScript({", "const install = client.buildLegacyVerifierConfig({ // removed call, kept as the before example"),
       claim: null,
     },
     {
       rule: 'a definition in a fence is a claim even without a call site',
-      file: 'docs/SECURITY_MODEL.md',
+      file: 'docs/SECURITY.md',
       plant: (text) => text.replace('### 9.2 Security Properties', '```csharp\npublic static void InitiateLegacyRecovery(UInt160 accountId)\n```\n\n### 9.2 Security Properties'),
       claim: 'InitiateLegacyRecovery',
     },
     {
       rule: 'a bare identifier in a diagram is recorded as a mention rather than reported as a claim',
-      file: 'docs/DATA_FLOW.md',
+      file: 'docs/ARCHITECTURE.md',
       plant: (text) => text.replace('HasID{Account ID Valid?}', 'HasLegacyIdCheck{Account ID Valid?}'),
       claim: null,
       mention: 'HasLegacyIdCheck',
     },
     {
       rule: 'a dead call spelled the way the build spells an exported member is reported (the drift the camel-case filter made invisible; F7)',
-      file: 'docs/NATIVE_SDK.md',
+      file: 'docs/SDK.md',
       plant: (text) => text.replace("const install = client.buildAccountActionScript({", "const install = client.buildAccountActionScript({\n  preflight: await listDeployedVerifiers(masterContractHash),"),
       claim: 'listDeployedVerifiers',
     },
     {
       rule: 'the same widening reads a camel-case call in a fenced diagram label, not only in a code block (F8)',
-      file: 'docs/DATA_FLOW.md',
+      file: 'docs/ARCHITECTURE.md',
       plant: (text) => text.replace('HasID{Account ID Valid?}', 'HasID{bulkVerifySignatures(accountId)}'),
       claim: 'bulkVerifySignatures',
     },
     {
       rule: 'CONTROL: widening the vocabulary does not invent drift - a live camel-case spelling stays unreported, and a bare camel-case identifier in a diagram stays a mention',
-      file: 'docs/DATA_FLOW.md',
+      file: 'docs/ARCHITECTURE.md',
       plant: (text) => text.replace('HasID{Account ID Valid?}', 'HasID{transfer(accountId) and forward(target, args) are the deployed camel spellings}'),
       bare: (text) => text.replace('HasID{Account ID Valid?}', 'collectionActive{Account ID Valid?}'),
       liveUnreported: ['transfer', 'forward'],
@@ -2335,20 +2374,20 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
     },
     {
       rule: 'the same dead camel-case call is a claim in code position and silent inside a comment (F9)',
-      file: 'docs/MULTISIG_SDK.md',
+      file: 'docs/SDK.md',
       plant: (text) => text.replace('const session = createThresholdSession({ rpcUrl });', 'const session = createThresholdSession({ rpcUrl });\nconst packets = await gatherChildProofPackets(context, operation);'),
       claim: 'gatherChildProofPackets',
       commentedOut: (text) => text.replace('const session = createThresholdSession({ rpcUrl });', 'const session = createThresholdSession({ rpcUrl });\n// gatherChildProofPackets(context, operation)'),
     },
     {
       rule: 'the illustrative-language annotation must carry a reason, so it cannot be a bare silence',
-      file: 'docs/ETHEREUM_AA_COMPARISON.md',
+      file: 'docs/ARCHITECTURE.md',
       plant: (text) => text.replace('reason: the document compares Neo with Ethereum, so every solidity block lists the Ethereum interface (IValidator, IPaymaster, the ECDSA helper), not a Neo entrypoint.', 'reason: short.'),
       throws: /needs a reason/,
     },
     {
       rule: 'the illustrative-language annotation cannot be widened to a Neo language',
-      file: 'docs/ETHEREUM_AA_COMPARISON.md',
+      file: 'docs/ARCHITECTURE.md',
       plant: (text) => text.replace('no fence claims for solidity;', 'no fence claims for solidity, csharp;'),
       throws: /not an illustrative \(non-Neo\) language/,
     },
@@ -2467,7 +2506,7 @@ test('CU-210: each fenced rule is killed by its planted drift', () => {
   }
   // The mutants must leave the tree byte-identical to what they found. This is a stronger check
   // than looking for a planted name: `transfer` is a substring of `MaxTransferPrefix`, a key prefix
-  // docs/DATA_FLOW.md legitimately names, so a substring test on the name would fail on an untouched
+  // docs/ARCHITECTURE.md legitimately names, so a substring test on the name would fail on an untouched
   // tree, and a check that only lists the names it knows about cannot see a partial restore.
   for (const file of new Set(mutants.map((mutant) => mutant.file))) {
     assert.equal(fs.readFileSync(path.join(repoRoot, file), 'utf8'), pristine.get(file),
@@ -2744,16 +2783,16 @@ test('CU-211: the liveness oracle is case-aware in both directions', () => {
   assert.equal(deployedSpelling('CanExecuteHook'), 'canExecuteHook',
     'the VerifyContext member the finding names is no longer spelled canExecuteHook in a manifest');
   // The file argument only distinguishes the native-profile class (isLiveName step 4), so any other
-  // document asks the same oracle; the deleted March 11 audit is named as docs/SECURITY_MODEL.md now.
-  assert.equal(isLiveName('CanExecuteHook', 'docs/SECURITY_MODEL.md'), false,
+  // document asks the same oracle; the deleted March 11 audit is named as docs/SECURITY.md now.
+  assert.equal(isLiveName('CanExecuteHook', 'docs/SECURITY.md'), false,
     'the C# source spelling of an exported member is live again; the fence scan cannot see such a name');
-  assert.equal(isLiveName('canExecuteHook', 'docs/SECURITY_MODEL.md'), true,
+  assert.equal(isLiveName('canExecuteHook', 'docs/SECURITY.md'), true,
     'the manifest spelling of an exported member is not live');
   assert.ok(sourceDefinitions.has('RequirePinnedCore'),
     'the source-definition oracle lost RequirePinnedCore, a plugin guard no manifest exports');
   assert.equal(deployedSpelling('RequirePinnedCore'), undefined,
     'RequirePinnedCore is exported by a manifest now, so the live-as-source control is stale');
-  assert.equal(isLiveName('RequirePinnedCore', 'docs/SECURITY_MODEL.md'), true,
+  assert.equal(isLiveName('RequirePinnedCore', 'docs/SECURITY.md'), true,
     'a C# definition that no manifest exports is treated as dead; the oracle is rejecting names by shape, not by artifact');
   // The ledger keeps the two classes apart and says what the artifact exports, so a reader does not
   // have to open a manifest to know what a `spelling:` entry should have been.
@@ -2822,7 +2861,7 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
     'RequirePinnedCore is exported by a manifest now, so the live-as-source control is stale');
   assert.ok(!divergentSpellings.has('RequirePinnedCore'),
     'a source-only definition was pulled into the divergent class');
-  assert.equal(isLiveName('RequirePinnedCore', 'docs/SECURITY_MODEL.md'), true,
+  assert.equal(isLiveName('RequirePinnedCore', 'docs/SECURITY.md'), true,
     'a C# definition that no manifest exports is treated as dead; the oracle is rejecting names by shape, not by artifact');
 
   // 2. Both oracles read the class. The inline oracle is asked through `callableNames`, the fence
@@ -2850,9 +2889,9 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
     'the fence oracle cannot read the deployed spelling of an exported member');
   assert.ok(fenceClaims('OnNEP17Payment(accountId, amount, data)').includes('OnNEP17Payment'),
     'the fence oracle cannot read the source spelling of an exported member');
-  assert.equal(isLiveName('onNEP17Payment', 'docs/SECURITY_MODEL.md'), true,
+  assert.equal(isLiveName('onNEP17Payment', 'docs/SECURITY.md'), true,
     'the deployed spelling of the member is not live, so the oracle would report it as drift');
-  assert.equal(isLiveName('OnNEP17Payment', 'docs/SECURITY_MODEL.md'), false,
+  assert.equal(isLiveName('OnNEP17Payment', 'docs/SECURITY.md'), false,
     'the source spelling of an exported member is live again, so the class is invisible');
 
   // 3. The vocabulary is a union with the shape rule and not a replacement: names only the shape rule
@@ -2878,22 +2917,25 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
   assert.deepEqual(callableNames('call `clearSessionKey(accountId)`').map(({ name }) => name),
     [], 'the vocabulary reads a name the shape rule never read and no source definition carries');
 
-  // 4. The ledger this vocabulary produces: 3 `spelling:` entries and no `entrypoint:` entry in 2
-  //    files. It shrank from the 48/7/7 measurement this row was dispatched to report when the
+  // 4. The ledger this vocabulary produces: 3 `spelling:` entries and 2 `entrypoint:` entries (the
+  //    source-only custom reads the merged SDK book discloses) in 3 files. It shrank from the 48/7/7
+  //    measurement this row was dispatched to report when the
   //    documents cleanup retired docs/SECURITY_AUDIT_RESULTS.md and
   //    docs/DEPENDENCY-CONVERGENCE-20261008.md (28 names), and it shrank again when the same cleanup
   //    deleted both copies of the March 11, 2026 audit (22 names); the v4 migration then left one
   //    entrypoint (`validateUserOp`, now defined by the native core source) and one spelling
   //    (`VerifyExecution`/`VerifyAdmin`, whose modules were deleted) behind, and rewriting the
   //    rendered custom module guide dropped the `Admin` spelling with the verifier binding it
-  //    described. The vocabulary rules themselves are unchanged, so the r2 measurement of the same
-  //    corpus in section 7 below must agree with these numbers.
+  //    described. The docs reorganization then merged the pending-config-update read ABI topic into
+  //    docs/SDK.md, which the scans read, so its two disclosed source-only reads joined the ledger
+  //    as `entrypoint:` entries. The vocabulary rules themselves are unchanged, so the r2 measurement
+  //    of the same corpus in section 7 below must agree with these numbers.
   const found = ratchetDebt();
   const entries = Object.values(found).flat();
-  assert.equal(entries.length, 3, `the recorded ledger is not the widened one: ${entries.length} entries`);
+  assert.equal(entries.length, 5, `the recorded ledger is not the widened one: ${entries.length} entries`);
   assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 3, 'the spelling bucket changed size');
-  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 0, 'the entrypoint bucket changed size');
-  assert.equal(Object.keys(found).length, 2, 'the ledger no longer covers 2 files');
+  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 2, 'the entrypoint bucket changed size');
+  assert.equal(Object.keys(found).length, 3, 'the ledger no longer covers 3 files');
   // Every source-spelled occurrence in a scanned document is now read: the class has no blind spot.
   const missed = [];
   for (const file of Object.keys(found)) {
@@ -2915,7 +2957,8 @@ test('CU-212: the entrypoint vocabulary is derived from the build and both oracl
 // the reported set, never on an exit code, so an incidental failure elsewhere cannot count as a kill.
 // DS-CU-212 section 4.
 test('CU-212: each vocabulary rule is killed by its planted drift', () => {
-  const auditDoc = 'docs/PROTOCOL_COMPLETENESS_AUDIT.md';
+  // The former standalone audit doc was merged into SECURITY.md as Appendix A.
+  const auditDoc = 'docs/SECURITY.md';
   // The ledger a mutant writes, compared as the recorded list plus exactly the planted name: an
   // incidental entry elsewhere cannot pass for a kill, and a dropped recorded entry cannot hide.
   const ledgerWith = (planted) => {
@@ -3005,34 +3048,34 @@ test('CU-211: each case rule is killed by its planted drift', () => {
   const mutants = [
     {
       rule: 'a document that writes the C# source spelling of an exported member is reported (the drift that was invisible before CU-211)',
-      file: 'docs/ETHEREUM_AA_COMPARISON.md',
+      file: 'docs/ARCHITECTURE.md',
       plant: (text) => text.replace('RecoveryInitiated --> Configured: cancelRecovery(accountId)', 'RecoveryInitiated --> Configured: FinalizeEscape(accountId)'),
       claim: 'FinalizeEscape',
       notMention: 'FinalizeEscape',
     },
     {
       rule: 'the same rule reaches a fenced C# block, not only a diagram',
-      file: 'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
+      file: 'docs/SECURITY.md',
       plant: (text) => text.replace('ExecutionEngine.Assert(!isMarketEscrowActive(accountId)', 'ExecutionEngine.Assert(!IsMarketEscrowActive(accountId)'),
       claim: 'IsMarketEscrowActive',
     },
     {
       rule: 'a source spelling is ratchet debt exactly once, in the spelling bucket, never in the entrypoint bucket',
-      file: 'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
+      file: 'docs/SECURITY.md',
       plant: (text) => text.replace('### 6. Market Escrow', '`CanExecuteHook(accountId, caller, hook)` is asserted as live.\n\n### 6. Market Escrow'),
       recorded: 'spelling:CanExecuteHook->canExecuteHook',
       notRecorded: 'entrypoint:CanExecuteHook',
     },
     {
       rule: 'a call-shaped label in a diagram is a claim and is not also recorded as a justified mention',
-      file: 'docs/DATA_FLOW.md',
+      file: 'docs/ARCHITECTURE.md',
       plant: (text) => text.replace('HasID{Account ID Valid?}', 'InitiateLegacyThing(){Account ID Valid?}'),
       claim: 'InitiateLegacyThing',
       notMention: 'InitiateLegacyThing',
     },
     {
       rule: 'both halves of the decision stay live: a C# definition no manifest exports, and the manifest spelling of one that is exported',
-      file: 'docs/PROTOCOL_COMPLETENESS_AUDIT.md',
+      file: 'docs/SECURITY.md',
       plant: (text) => text.replace('### 6. Market Escrow', '```csharp\nGetThresholdPolicy(accountId, policyId);\ncanExecuteHook(accountId, callerContract, hookContract);\n```\n\n### 6. Market Escrow'),
       live: ['GetThresholdPolicy', 'canExecuteHook'],
     },
@@ -3105,7 +3148,7 @@ test('CU-212 R2: a call the sentence punctuates is read, and its drift is report
   //    sentence, planted in a scanned document, must be recorded. The ledger for that document is
   //    exactly that one entry - an incidental entry elsewhere could not pass for the kill, and a
   //    recorded entry that disappeared could not hide.
-  const auditDoc = 'docs/PROTOCOL_COMPLETENESS_AUDIT.md';
+  const auditDoc = 'docs/SECURITY.md';
   const target = path.join(repoRoot, auditDoc);
   const original = fs.readFileSync(target, 'utf8');
   const planted = original.replace('### 6. Market Escrow',
@@ -3171,15 +3214,16 @@ test('CU-212 R2: a call the sentence punctuates is read, and its drift is report
   assert.deepEqual(lost, [], `the punctuation rule dropped names the r1 parser read:\n${lost.join('\n')}`);
   assert.ok(linesScanned > 10000, `the direction check scanned only ${linesScanned} lines, so it proves little`);
 
-  // 7. On today's corpus the widening moves no entry: the ledger is 2 files / 3 names, the r1
+  // 7. On today's corpus the widening moves no entry: the ledger is 3 files / 5 names (3 `spelling:`
+  //    plus the 2 `entrypoint:` reads the merged SDK book records as source-only), the r1
   //    records minus the deleted snapshot documents and the v3-only members the v4 migration
   //    removed, so the fix adds enforcement rather than changing what is recorded.
   const found = ratchetDebt();
   const entries = Object.values(found).flat();
-  assert.equal(entries.length, 3, `the punctuated-call rule changed the ledger size: ${entries.length} entries`);
+  assert.equal(entries.length, 5, `the punctuated-call rule changed the ledger size: ${entries.length} entries`);
   assert.equal(entries.filter((entry) => entry.startsWith('spelling:')).length, 3, 'the spelling bucket changed size');
-  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 0, 'the entrypoint bucket changed size');
-  assert.equal(Object.keys(found).length, 2, 'the ledger no longer covers 2 files');
+  assert.equal(entries.filter((entry) => entry.startsWith('entrypoint:')).length, 2, 'the entrypoint bucket changed size');
+  assert.equal(Object.keys(found).length, 3, 'the ledger no longer covers 3 files');
   assert.ok(!entries.includes(`entrypoint:InitiateEscape`), 'the punctuated call was recorded in both buckets');
 });
 
@@ -3217,7 +3261,7 @@ test('SA integrated closure remains scoped, fail-closed, and bound to current ev
   }
   assert.equal(gate.maximumConcurrentLanes, 2);
 
-  const gateDoc = read('docs/SA-CLOSURE-GATE.md');
+  const gateDoc = read('docs/engineering/VERIFICATION-AND-GATES.md');
   assert.match(gateDoc, /sa-closure-gate-20261117\.json/);
   assert.doesNotMatch(gateDoc, /[A-Za-z]:\\Users\\/);
 });

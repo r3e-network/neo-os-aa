@@ -1,5 +1,5 @@
 // A package name is never a security exception. These two upstream advisories
-// have no patched release at review time; see docs/FRONTEND_DEPENDENCY_SECURITY.md.
+// have no patched release at review time; see docs/SECURITY.md Appendix B.
 const REVIEWED_ADVISORIES = new Map([
   ['GHSA-848j-6mx2-7j84', 'elliptic'],
   ['GHSA-gcqx-w48m-w2h4', 'deepmerge'],
