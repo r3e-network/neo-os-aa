@@ -1095,8 +1095,8 @@ const GITLEAKS_CONFIG = '.gitleaks.toml';
 // vectors, published contract addresses, or a sentence naming the key encoder.
 const REVIEWED_GITLEAKS_IGNORE = {
   path: '.gitleaksignore',
-  sha256: 'ed3fd7f1543f2dc5067741f0e95b4944d42791d0557159e3c3839c15cb469f66',
-  findings: 133,
+  sha256: '04863dc1da364917bc731d56182b308835e3926acd2535688c508bcf3150e096',
+  findings: 340,
   report: 'docs/reports/aa-artifact-reproducibility-20261025.json',
   byCommitAndPath: {
     '012a3b4c323e692f750c6d1115c68868cbac2d18:formal/refinement/fixtures/current-method-proof/method-proof.json': 15,
@@ -1111,6 +1111,20 @@ const REVIEWED_GITLEAKS_IGNORE = {
     'c315fe38b8765c6fefe693dde80c42369ac62606:tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json': 1,
     'c315fe38b8765c6fefe693dde80c42369ac62606:tests/fixtures/sa-module-protocol/golden-vectors/nonce-channel.json': 4,
     'da74a6f1870f2749899e60b5ec1b1f22476c6bc4:docs/reports/aa-artifact-reproducibility-20261025.json': 37,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/core-nep-model/result.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/gate-recheck/result.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/governed-config-formal.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/module-admission/result.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/module-configuration/policy-model.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/module-install-forms/result.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/module-removal/result.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/module-wire-types/typed-build.json': 8,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/native-nep/module-build.json': 8,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/native-nep/result.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/result.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/storage-getter-regression/result.json': 20,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:docs/reports/smartaccount-current-20261124/subscription-model/result.json': 17,
+    '56ad7f6c86e9bc307767377011ab0d4ebdb7bd65:formal/refinement/ordinary_query_references.py': 1,
   },
 };
 // Every file name gitleaks resolves a configuration or an ignore set from, anywhere in the tree.

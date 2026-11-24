@@ -1,6 +1,6 @@
 # SmartAccount 恢复协议裁决记录 · 2026-11-24
 
-本记录承接 [协议审计交接](SMARTACCOUNT-AUDIT-HANDOFF.zh-CN.md) 中“首先裁决的两个协议问题”。**总体验收结论不变，仍为 PARTIAL / NO-GO**：本次只闭合了两个被点名的问题，交接表中的完整行为证明、归档入口证明、成本测量和独立安全审计都没有推进。工作基线仍是分支 `codex/smartaccount-conformance`、HEAD `9e62ad3` 加未提交改动。
+本记录承接 [协议审计交接](SMARTACCOUNT-AUDIT-HANDOFF.zh-CN.md) 中“首先裁决的两个协议问题”。**总体验收结论不变，仍为 PARTIAL / NO-GO**：本次只闭合了两个被点名的问题，交接表中的完整行为证明、归档入口证明、成本测量和独立安全审计都没有推进。工作基线原为分支 `codex/smartaccount-conformance`、HEAD `9e62ad3` 加未提交改动；该工作树已随主体提交 `56ad7f6` 进入历史，后续状态以提交历史为准。
 
 ## 一、更换恢复人或延长等待期时，旧提案是否有效
 
