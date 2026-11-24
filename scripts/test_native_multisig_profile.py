@@ -16,7 +16,7 @@ class NativeMultiSigProfileTests(unittest.TestCase):
         }, set(profiles))
         self.assertNotIn('MultiHook', profiles)
         self.assertFalse((ROOT / 'contracts/plugins/native-profile/MultiHook.Native.csproj').exists())
-        draft = (ROOT / 'docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md').read_text(encoding='utf-8')
+        draft = (ROOT / 'docs/archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md').read_text(encoding='utf-8')
         self.assertIn('only native composite profile', draft)
         self.assertIn('ordinary-contract composition module', draft)
 

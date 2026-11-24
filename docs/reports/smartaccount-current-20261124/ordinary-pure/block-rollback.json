@@ -1,0 +1,143 @@
+{
+  "status": "PASS_SAMPLED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "engineSha256": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "result": {
+    "verificationOfImportedBlocks": false,
+    "marker": "0x1234567890abcdef1234567890abcdef12345678",
+    "eventLedgerStateAgreement": false,
+    "rows": [
+      {
+        "name": "getAccountImplementationId",
+        "block": 2,
+        "before": 0,
+        "after": 8,
+        "transactions": [
+          {
+            "hash": "0x5c2f3b08dfee8b1aeddf197472494236de425775b03fbc1872d15588f9844d24",
+            "outcome": "halt",
+            "state": "HALT",
+            "ledgerState": "NONE",
+            "fault": null,
+            "gasConsumed": 26466710
+          },
+          {
+            "hash": "0xd01d23c9bec06f233da6cc1cf90f9868fac01bac3f1a0d97ccccc7d6b418d14e",
+            "outcome": "abort",
+            "state": "FAULT",
+            "ledgerState": "NONE",
+            "fault": "ABORT is executed.",
+            "gasConsumed": 26466710
+          },
+          {
+            "hash": "0x239b408e60d9fc5e98edf7d46fa58fd6491122ac012efa71d5f5e2f4d249bd69",
+            "outcome": "halt",
+            "state": "HALT",
+            "ledgerState": "NONE",
+            "fault": null,
+            "gasConsumed": 26466710
+          }
+        ]
+      },
+      {
+        "name": "supportsExecutionMode",
+        "block": 3,
+        "before": 8,
+        "after": 16,
+        "transactions": [
+          {
+            "hash": "0x94c65ac24b4af0861e02d5073dc55ae76deec1488299eb80c4cac5b0664d543f",
+            "outcome": "halt",
+            "state": "HALT",
+            "ledgerState": "NONE",
+            "fault": null,
+            "gasConsumed": 26531150
+          },
+          {
+            "hash": "0x86c0fe09cc6b834b9f54b0a8c327855557e94d50f6bd4913776546b9fd675d2b",
+            "outcome": "abort",
+            "state": "FAULT",
+            "ledgerState": "NONE",
+            "fault": "ABORT is executed.",
+            "gasConsumed": 26531150
+          },
+          {
+            "hash": "0x17cfda79d06d63160cf7285b3f427c5f830a653abdc9708b9b36d693c3effee0",
+            "outcome": "unsupported",
+            "state": "FAULT",
+            "ledgerState": "NONE",
+            "fault": "ASSERTMSG is executed with false result. Reason: unsupported result rejected by caller",
+            "gasConsumed": 26532560
+          },
+          {
+            "hash": "0xe9a22fd319969f8a5ae165b1d2b9a20464eb4bb0c9ab6f4f20897adafc8746aa",
+            "outcome": "comparison",
+            "state": "FAULT",
+            "ledgerState": "NONE",
+            "fault": "The operand exceeds the maximum comparable size, 65537/65536.",
+            "gasConsumed": 26782820
+          },
+          {
+            "hash": "0xaa7eb4be5433a47936620eb44f490562a8afc675cc77349a5b858d45a4cb4513",
+            "outcome": "halt",
+            "state": "HALT",
+            "ledgerState": "NONE",
+            "fault": null,
+            "gasConsumed": 26531150
+          }
+        ]
+      },
+      {
+        "name": "supportsModuleType",
+        "block": 4,
+        "before": 16,
+        "after": 24,
+        "transactions": [
+          {
+            "hash": "0x3d80f9b318b078891af57e8b0502e1d99457098d622e45511388c71ea8946cdf",
+            "outcome": "halt",
+            "state": "HALT",
+            "ledgerState": "NONE",
+            "fault": null,
+            "gasConsumed": 26532320
+          },
+          {
+            "hash": "0x6d1173b37aa1044030693b3944db5d25d20e68752cc3f161e2f5af2b3ac8dbfd",
+            "outcome": "abort",
+            "state": "FAULT",
+            "ledgerState": "NONE",
+            "fault": "ABORT is executed.",
+            "gasConsumed": 26532320
+          },
+          {
+            "hash": "0x07b02f5fde0bf7934f06abe37063ff161743febcb2d0a93590b3d2424517aa09",
+            "outcome": "unsupported",
+            "state": "FAULT",
+            "ledgerState": "NONE",
+            "fault": "ASSERTMSG is executed with false result. Reason: unsupported result rejected by caller",
+            "gasConsumed": 26532560
+          },
+          {
+            "hash": "0x04b677a54ad0c9c82b3ec4e5ba97d2958d4dcc2f68a3fa5db16c04c9d17b024a",
+            "outcome": "comparison",
+            "state": "FAULT",
+            "ledgerState": "NONE",
+            "fault": "The operand exceeds the maximum comparable size, 65537/65536.",
+            "gasConsumed": 26782820
+          },
+          {
+            "hash": "0x304b2aac7d693c7be18f5450dc81f5cbd89c0e9c0d4e6098b991db7dbfba75b1",
+            "outcome": "halt",
+            "state": "HALT",
+            "ledgerState": "NONE",
+            "fault": null,
+            "gasConsumed": 26532320
+          }
+        ]
+      }
+    ]
+  }
+}

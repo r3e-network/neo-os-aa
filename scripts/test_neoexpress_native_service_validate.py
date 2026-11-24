@@ -74,7 +74,7 @@ class NativeContractReceiptTests(unittest.TestCase):
         import hashlib
         import json
         from pathlib import Path
-        parameters = json.loads((Path(__file__).resolve().parent.parent / 'docs/proposals/smartaccount-native-profile-v2-parameters.json').read_text())
+        parameters = json.loads((Path(__file__).resolve().parent.parent / 'docs/archive/native-research/smartaccount-native-profile-v2-parameters.json').read_text())
         canonical = json.dumps(parameters, sort_keys=True, separators=(',', ':'), ensure_ascii=True).encode()
         self.assertEqual(hashlib.sha256(b'NeoSmartAccount/Profile\x02' + canonical).hexdigest(), native.DIGEST)
         self.assertEqual('ae557647b63789c7af0a8c7816dc90d5c0d7e65afb78ce3c669de9a01ce3c91a', native.DIGEST)

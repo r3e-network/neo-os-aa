@@ -174,7 +174,6 @@ test('the operation route takes its generation from the chain, and follows an ad
                 { type: 'Boolean', value: false },
                 { type: 'Integer', value: '0' },
                 { type: 'Boolean', value: false },
-                { type: 'Boolean', value: false },
               ],
             },
           ],
@@ -282,7 +281,7 @@ test('fetchNonce refuses a missing account id before any chain read', async () =
   assert.equal(reads, 0);
 });
 
-test('assertAccountExists returns the 16-field control descriptor', async () => {
+test('assertAccountExists returns the 15-field control descriptor', async () => {
   const descriptor = [
     { type: 'Boolean', value: true },
     { type: 'Integer', value: '0' },
@@ -298,7 +297,6 @@ test('assertAccountExists returns the 16-field control descriptor', async () => 
     { type: 'Integer', value: '1' },
     { type: 'Boolean', value: false },
     { type: 'Integer', value: '0' },
-    { type: 'Boolean', value: false },
     { type: 'Boolean', value: false },
   ];
   const fetchImpl = async () => jsonResponse({ state: 'HALT', stack: [{ type: 'Array', value: descriptor }] });

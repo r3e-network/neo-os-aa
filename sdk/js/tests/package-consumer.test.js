@@ -126,11 +126,16 @@ test('the real npm tarball is a self-contained, reproducible production package'
       const command = buildSessionKeyInstallCommand({ publicKeyHex: '02' + '22'.repeat(32), targetContract: '33'.repeat(20), method: 'transfer', validUntilMs: '1900000000000', spendingLimitDatoshi: '1000' });
       assert.equal(command.length, 7);
       for (const entry of command) assert.ok(['ByteString', 'Integer'].includes(entry.type), entry.type);
-      const intent = client.buildConfigurationScript({
-        accountId, kind: 'propose',
-        actions: [{ type: 'Array', value: [{ type: 'Integer', value: '3' }, { type: 'Integer', value: '1' }, { type: 'Array', value: command }] }],
-      });
-      assert.equal(intent.method, 'proposeConfiguration');
+      const step = { method: 'installModule', moduleType: 1, moduleContractHash: '33'.repeat(20),
+        profileDigest: '55'.repeat(32), initData: command };
+      const script = client.buildConfigurationBatchScript({ accountId, actions: [step] });
+      const expected = codec.dynamicCall(context.coreContractHash, 'applyConfigurationActions', [
+        codec.hashValue(accountId), { type: 'Array', value: [{ type: 'Array', value: [
+          codec.integerValue(1), codec.integerValue(1), codec.hashValue(step.moduleContractHash),
+          codec.byteStringValue(step.profileDigest), { type: 'Array', value: command }
+        ] }] }
+      ]);
+      assert.equal(script, expected);
     `], consumer);
   });
 

@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="1cd873fa-f5c7-4d56-a5f0-b4398fd659ee" name="@Jinghuis-MacBook-Air 2026-11-24 05:19:03" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-11-24T05:19:03.0184560+08:00" queuing="2026-11-24T05:19:03.0184560+08:00" start="2026-11-24T05:18:57.7306920+08:00" finish="2026-11-24T05:19:03.0327830+08:00" />
+  <TestSettings name="default" id="f139a982-0af8-4738-a606-6a7646b23a73">
+    <Deployment runDeploymentRoot="_Jinghuis-MacBook-Air_2026-11-24_05_19_03" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="7dbaca80-ec2c-4bdc-b613-ee222484a15e" testId="11a0159b-9848-81dc-8b72-9f964783f390" testName="NativeDiscoveryReturnsWireValuesForEveryRequestedFlagSet" computerName="Jinghuis-MacBook-Air" duration="00:00:00.0800478" startTime="2026-11-24T05:19:02.1407810+08:00" endTime="2026-11-24T05:19:02.2304440+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="7dbaca80-ec2c-4bdc-b613-ee222484a15e" />
+    <UnitTestResult executionId="a14a218b-28ef-44f8-b194-f5fb0fc7e5f5" testId="1ace0a9e-7408-88c5-a875-c512be37bfc1" testName="EveryNativeWrapperResolvesItsDeclaredHandler" computerName="Jinghuis-MacBook-Air" duration="00:00:02.1277105" startTime="2026-11-24T05:18:59.9550150+08:00" endTime="2026-11-24T05:19:02.1320800+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="a14a218b-28ef-44f8-b194-f5fb0fc7e5f5" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="NativeDiscoveryReturnsWireValuesForEveryRequestedFlagSet" storage="/users/jinghuiliao/git/neo-os/neo-os-aa/tests/smartaccount.native.tests/bin/release/net10.0/neo.unittests.dll" id="11a0159b-9848-81dc-8b72-9f964783f390">
+      <Execution id="7dbaca80-ec2c-4bdc-b613-ee222484a15e" />
+      <TestMethod codeBase="/Users/jinghuiliao/git/neo-os/neo-os-aa/tests/SmartAccount.Native.Tests/bin/Release/net10.0/Neo.UnitTests.dll" adapterTypeName="executor://mstestadapter/v4" className="Neo.UnitTests.SmartContract.Native.UT_SmartAccount" name="NativeDiscoveryReturnsWireValuesForEveryRequestedFlagSet" />
+    </UnitTest>
+    <UnitTest name="EveryNativeWrapperResolvesItsDeclaredHandler" storage="/users/jinghuiliao/git/neo-os/neo-os-aa/tests/smartaccount.native.tests/bin/release/net10.0/neo.unittests.dll" id="1ace0a9e-7408-88c5-a875-c512be37bfc1">
+      <Execution id="a14a218b-28ef-44f8-b194-f5fb0fc7e5f5" />
+      <TestMethod codeBase="/Users/jinghuiliao/git/neo-os/neo-os-aa/tests/SmartAccount.Native.Tests/bin/Release/net10.0/Neo.UnitTests.dll" adapterTypeName="executor://mstestadapter/v4" className="Neo.UnitTests.SmartContract.Native.UT_SmartAccount" name="EveryNativeWrapperResolvesItsDeclaredHandler" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="11a0159b-9848-81dc-8b72-9f964783f390" executionId="7dbaca80-ec2c-4bdc-b613-ee222484a15e" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestEntry testId="1ace0a9e-7408-88c5-a875-c512be37bfc1" executionId="a14a218b-28ef-44f8-b194-f5fb0fc7e5f5" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="列表中未列出的结果" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="所有已加载的结果" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="2" executed="2" passed="2" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+  </ResultSummary>
+</TestRun>

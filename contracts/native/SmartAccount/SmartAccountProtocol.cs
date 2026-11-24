@@ -385,6 +385,9 @@ namespace Neo.SmartContract.Native
         internal static byte[] GetModuleIndexKey(UInt160 accountId, byte moduleType, BigInteger moduleId) =>
             Prefixed(SmartAccountModuleProtocol.PrefixModuleIndex,
                 SmartAccountModuleProtocol.ModuleIndexKeyContent(accountId, moduleType, UInt64(moduleId)));
+        internal static byte[] GetThresholdPolicyKey(UInt160 accountId, BigInteger policyId) =>
+            Prefixed(SmartAccountModuleProtocol.PrefixThresholdPolicy, SmartAccountModuleProtocol.ModuleInstanceKeyContent(accountId, UInt64(policyId)));
+        internal static byte[] GetMessageSubjectKey(UInt160 accountId) => Prefixed(0x57, accountId.ToArray());
         internal static byte[] GetNonceCursorKey(UInt160 accountId, ReadOnlySpan<byte> channel) =>
             Prefixed(SmartAccountModuleProtocol.PrefixNonceCursor,
                 SmartAccountModuleProtocol.NonceCursorKeyContent(accountId, channel));

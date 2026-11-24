@@ -1998,6 +1998,18 @@ def validate_storage_getter_files(report, evidence_directory):
             written.setdefault(sha(path.read_bytes()), []).append(path)
     declarations = report.get('closedDeclarations')
     require(isinstance(declarations, dict) and declarations, 'storage getter closed declarations missing')
+    models = {'IntegerSemantics', 'NumericCoercions', 'StorageGetter', 'StorageGetterVm'}
+    methods = report.get('storageGetterSourceVerified')
+    require(isinstance(methods, list) and methods and all(isinstance(n, str) and
+            re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', n) for n in methods)
+            and len(set(methods)) == len(methods), 'storage getter missing/invalid method list')
+    roots = ['StorageGetterArtifact'] + ['VmCert_' + n + '_vm' for n in sorted(methods)]
+    require(set(report.get('modelSha256', {})) == models and set(declarations) == models.union(roots),
+            'storage getter incomplete model or proof module inventory')
+    files = [directory/(name + '.v') for name in roots]
+    require(all(p.is_file() and p.resolve().parent == directory.resolve() for p in files)
+            and sha(b''.join(p.read_bytes() for p in files)) == report.get('certificateSha256'),
+            'storage getter written certificate content mismatch')
     for module_name, names in declarations.items():
         require(isinstance(module_name, str) and module_name and Path(module_name).name == module_name
                 and isinstance(names, list)

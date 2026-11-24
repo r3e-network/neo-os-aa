@@ -45,6 +45,16 @@ public class Fix_SessionKey_Tests
         (Neo.VM.Types.Array)h.CallDirect("getSessionKey", h.AccountId, h.ModuleId)!;
 
     [TestMethod]
+    public void RenewedSessionUsesCurrentDescriptorGeneration()
+    {
+        PluginModuleHarness h = NewHarness();
+        h.SetGeneration(3);
+        using P256SessionKey key = new();
+        SetSessionKey(h, key, "transfer", SpendingLimit);
+        Assert.AreEqual(h.Generation, SessionKey(h)[5].GetInteger());
+    }
+
+    [TestMethod]
     public void WildcardSessionKey_WithSpendingLimit_IsRejectedAtConfig()
     {
         PluginModuleHarness h = NewHarness();

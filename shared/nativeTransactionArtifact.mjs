@@ -24,6 +24,7 @@
 
 import {
   parseNativeRpcFees,
+  validateNativeApplicationExecution,
   validateNativeInvocationResult,
 } from "./nativeSmartAccountClient.mjs";
 import { PROTOCOL_VERSION } from "./nativeSmartAccount.mjs";
@@ -137,7 +138,7 @@ const accountHash = (value) => {
 
 /**
  * The discoverable v4 profile. `implementationId` is whatever the submitting
- * core answers (`NativeSmartAccount/v4` for the native core), and it is
+ * core answers (`NativeSmartAccount` for the native core), and it is
  * authenticated by the profile that both the review and the artifact must
  * agree on.
  *
@@ -346,6 +347,7 @@ export function validateNativeSignedPreflight(c, expected, result) {
     result?.network !== expected.networkMagic ||
     result?.verification !== "Succeed" ||
     result?.state !== "HALT" ||
+    result.exception != null ||
     result?.relayed !== false ||
     result?.mempoolChecked !== false
   )
@@ -468,7 +470,7 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
    */
   function reviewedPlan(review) {
     const plan = review?.plan;
-    if (!plan || !PLAN_KINDS.includes(plan.kind)) fail("review has no v4 plan");
+    if (!plan || !PLAN_KINDS.includes(plan.kind)) fail("review does not contain a supported SmartAccount plan");
     // A batch registration names its accounts as a list, so a single account id
     // is optional on registration plans; the script is not.
     const accountId =
@@ -490,7 +492,7 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
       return { plan: { kind: plan.kind, accountId, script }, payer, signers, proxy: null };
     }
     const accountAddress = hex(plan.accountAddress, 20);
-    if (!Number.isInteger(plan.proxyCallFlags) || plan.proxyCallFlags < -1 || plan.proxyCallFlags > 16)
+    if (plan.proxyCallFlags !== 5)
       fail("review must carry the proxy call flags the core derives with");
     const proxy = proxyArtifacts(
       c,
@@ -655,7 +657,14 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
     let plan;
     if (recipe.method === "buildCreateAccountScript" && prior.kind === "registration")
       plan = client.buildCreateAccountScript(args);
-    else if (recipe.method === "buildAccountActionScript" && prior.kind === "account") {
+    else if (["buildConfigurationBatchPlan", "buildRecoveryPolicyPlan"].includes(recipe.method) && prior.kind === "account") {
+      // Receipt restoration checks signed bytes after the configuration may already have changed.
+      const accountId = hex(args.accountId, 20);
+      const batch = recipe.method === "buildConfigurationBatchPlan";
+      plan = { kind: "account", method: batch ? "applyConfigurationActions" : "setRecoveryPolicy", accountId,
+        accountAddress: client.proxyAddress(accountId),
+        script: batch ? client.buildConfigurationBatchScript(args) : client.buildRecoveryPolicyScript(args), signers: [] };
+    } else if (recipe.method === "buildAccountActionScript" && prior.kind === "account") {
       if (!ACCOUNT_ACTIONS.includes(args.method))
         fail("unsupported archived account action");
       plan = client.buildAccountActionScript(args);
@@ -811,18 +820,11 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
       fail("confirmed transaction must have one Application execution");
     const execution = executions[0],
       failures = [];
-    if (execution.vmstate !== "HALT")
-      failures.push(`Application state is ${execution.vmstate ?? "unknown"}`);
-    else {
-      try {
-        for (const index of validateNativeInvocationResult(
-          imported.review.plan,
-          execution.stack,
-        ))
-          failures.push(`Token transfer ${index + 1} did not return Boolean true`);
-      } catch (error) {
-        failures.push(error.message);
-      }
+    try {
+      for (const index of validateNativeApplicationExecution(imported.review.plan, execution))
+        failures.push(`Token transfer ${index + 1} did not return Boolean true`);
+    } catch (error) {
+      failures.push(error.message);
     }
     return freeze({
       txid: imported.txid,

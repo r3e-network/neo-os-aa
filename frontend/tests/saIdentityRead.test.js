@@ -24,15 +24,14 @@ const digest = (hex) => ({ type: 'ByteString', value: Buffer.from(hex, 'hex').to
 // getAccount -> [exists, status, custody, recoveryAuthority, authorityEpoch,
 // configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
 // defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
-// controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive,
-// legacyRow]
+// controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive]
 function accountDescriptor({ exists = true, status = 0 } = {}) {
   return {
     type: 'Array',
     value: [
       bool(exists), int(status), uint160(custody), uint160(recoveryAuthority),
       int(0), int(4), int(604_800_000), bool(true), bool(true), bool(false),
-      int(2), int(9), bool(false), int(0), bool(false), bool(false),
+      int(2), int(9), bool(false), int(0), bool(false),
     ],
   };
 }

@@ -61,7 +61,10 @@ against the pinned digest. Only the exact set that was proposed executes:
 ```
 [1, moduleType, contractHash, profileDigest, initData[]]   install
 [2, moduleId, deInitData[]]                                uninstall
+[5, operationEnabled, messageEnabled]                     set built-in routes
+[7, policyId, threshold, memberInstanceIds[], active]       set threshold policy
 [8, recoveryAuthority, recoveryTimelockMs, ownerOnly]      set recovery policy
+[9, scriptIdentities[], threshold]                         set message subjects
 ```
 
 Install and uninstall are driven through `ModuleSupport.InstallModule` /
@@ -78,6 +81,13 @@ timelock inside the 7–90 day domain, and the `ownerOnly` flag — to the core'
 `setRecoveryPolicy` landing entry, which re-validates the domain and authority
 before writing the account's control record and emitting `RecoveryPolicySet`.
 
+For an intent containing multiple adjacent core actions (1, 2, 5, 7, 8 or 9), confirmation
+calls the core's `applyConfigurationActions` once. The original action order and install
+digest are preserved; failure leaves the original intent pending. The final account must
+retain an operation route. Module-defined actions may precede or follow one such group;
+interleaving two core groups with a module action is rejected at proposal. Confirmation
+also refuses to commit a net configuration nonce increase greater than one.
+
 ## Storage
 
 ```
@@ -90,14 +100,20 @@ before writing the account's control record and emitting `RecoveryPolicySet`.
 
 * **R-11-03** — a confirmed intent must be at least `configurationMaturity()`
   old and at most `configurationExpiryWindow()` (7 days) past maturity; an
-  expired intent fails confirmation and leaves the table only by cancel.
+  expired intent fails confirmation and can be cleaned by cancellation or the next proposal.
 * **R-11-04** — at most 16 pending intents per account; a full table refuses
   new proposals. Confirmed and cancelled intents are deleted (spec §11.4), so
   the slot is free again.
 * **R-11-05** — a proposal whose action digest equals a pending intent's is a
   duplicate and is refused.
-* **R-11-09** — the record pins the authority epoch and configuration nonce at
-  proposal time; a confirmation against a changed (epoch, nonce) fails.
+* **R-11-09/11** — the public receipt pins the original epoch, configuration nonce, actions
+  and time window. Separate proposals consisting only of built-in, threshold, recovery and message policies can
+  follow one another across a configuration increment: both must be current beforehand and
+  their resources must be disjoint. External changes, callbacks with unknown effects and legacy records
+  are never accepted as evidence of an independent policy transition. An epoch change
+  invalidates prior approvals.
+* Actions 6 (code rebind) and 10 (migration import) have no native landing method in this
+  profile. A proposal containing either faults before it receives an intent ID.
 * **H-2** — the `unfreeze` intent is the one path open to a `Frozen` account:
   both `unfreezeAccount` (propose) and its confirmation accept `Active` or
   `Frozen`; `MigrationRequired` never passes. All `configure` paths keep the
@@ -105,11 +121,9 @@ before writing the account's control record and emitting `RecoveryPolicySet`.
 
 ## Notes for integrators
 
-* Maturity (24h) and the confirmation window (7d) are constants in this
-  skeleton. A production deployment makes them per-account state and puts a
-  floor under them.
+* Maturity (24h) and the confirmation window (7d) are fixed in this implementation.
 * Confirmed and cancelled intents are deleted; an intent that expired without
-  confirmation stays until it is cancelled (it still occupies a pending slot).
+  confirmation occupies a slot until explicitly cleaned or the next proposal runs cleanup.
 * `onUninstall` deletes all three prefixes.
 * The digest is over raw serialized actions, not over a re-encoding, so a
   confirmation cannot be tricked by a semantically equal but differently ordered

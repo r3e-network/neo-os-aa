@@ -140,7 +140,7 @@ function createNativeTransactionTools(c) {
 
   /** Resolve the witnesses for the independently rebuilt plan. */
   async function requiredWitnesses(client, plan) {
-    if (plan.kind === "recovery" || plan.method === "setRecoveryPolicy")
+    if (plan.kind === "recovery" || plan.method === "setRecoveryPolicy" || plan.method === "applyConfigurationActions")
       return { all: [...plan.signers], any: [] };
     if (plan.kind === "registration")
       return { all: [c.hex(required(plan.custodyAddress, "registration custody"), 20)], any: [] };
@@ -159,6 +159,7 @@ function createNativeTransactionTools(c) {
     if (recipe.method === "buildExecutionScript")
       return client.buildExecutionScript(recipe.input);
     if (recipe.method === "buildRecoveryModulePlan") return client.buildRecoveryModulePlan(recipe.input);
+    if (recipe.method === "buildConfigurationBatchPlan") return client.buildConfigurationBatchPlan(recipe.input);
     if (recipe.method === "buildRecoveryPolicyPlan") return client.buildRecoveryPolicyPlan(recipe.input);
     if (recipe.method === "buildAccountActionScript")
       return client.buildAccountActionScript(recipe.input);
@@ -198,7 +199,7 @@ function createNativeTransactionTools(c) {
       rebuilt.accountId !== plan.accountId ||
       rebuilt.script !== plan.script ||
       rebuilt.method !== plan.method ||
-      ((rebuilt.kind === "recovery" || rebuilt.method === "setRecoveryPolicy") &&
+      ((rebuilt.kind === "recovery" || rebuilt.method === "setRecoveryPolicy" || rebuilt.method === "applyConfigurationActions") &&
         (JSON.stringify(rebuilt.signers) !== JSON.stringify(plan.signers) ||
          rebuilt.targetContract !== plan.targetContract || rebuilt.configurationNonce !== plan.configurationNonce ||
          rebuilt.nefSha256 !== plan.nefSha256 || rebuilt.moduleId !== plan.moduleId)) ||

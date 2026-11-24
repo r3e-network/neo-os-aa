@@ -48,6 +48,7 @@ namespace SmartAccount.Modules
     /// Storage is per account:
     ///   <c>0x01 ‖ accountId</c>        → serialized recovery record
     ///   <c>0x02 ‖ accountId</c>        → last executed recovery nonce
+    ///   <c>0x03 ‖ accountId</c>        → recovery authority + timelock snapshotted at begin
     /// </summary>
     [DisplayName("RecoveryModule")]
     [ContractPermission("*", "getAccount")]
@@ -67,6 +68,7 @@ namespace SmartAccount.Modules
 
         private static readonly byte[] Prefix_Recovery = new byte[] { 0x01 };
         private static readonly byte[] Prefix_Nonce = new byte[] { 0x02 };
+        private static readonly byte[] Prefix_Policy = new byte[] { 0x03 };
 
         // Recovery record layout (StdLib.Serialize of an object[]). The
         // trailing authorityEpochAtInit is the R-12-05 snapshot: the authority
@@ -129,6 +131,7 @@ namespace SmartAccount.Modules
             ModuleSupport.RequireCore();
             Storage.Delete(Storage.CurrentContext, ModuleSupport.Key(Prefix_Recovery, accountId));
             Storage.Delete(Storage.CurrentContext, ModuleSupport.Key(Prefix_Nonce, accountId));
+            Storage.Delete(Storage.CurrentContext, ModuleSupport.Key(Prefix_Policy, accountId));
         }
 
         // ---- §12 recovery lifecycle ----
@@ -142,8 +145,11 @@ namespace SmartAccount.Modules
         /// the matured reset will rotate to — must itself witness (R-12-02); a
         /// zero value keeps the current custody and needs no extra witness.
         /// The delay is the account's own recovery timelock, read from the core
-        /// at the moment the recovery starts, so a later account change cannot
-        /// shorten a recovery that is already running.
+        /// at the moment the recovery starts. Both that value and the current
+        /// recovery authority are snapshotted beside the record; execution
+        /// requires the live core policy to still match. A later authority or
+        /// timelock change therefore retires the running request instead of
+        /// silently changing what the old witnesses approved.
         ///
         /// R-12-14 (frozen escape): the begin gate accepts <c>Active</c> or
         /// <c>Frozen</c> — freezing must never seal an account shut, and a
@@ -182,6 +188,11 @@ namespace SmartAccount.Modules
             record[FieldAuthorityEpochAtInit] = ModuleSupport.AccountAuthorityEpoch(accountId);
             Storage.Put(Storage.CurrentContext, ModuleSupport.Key(Prefix_Recovery, accountId), StdLib.Serialize(record));
 
+            object[] policy = new object[2];
+            policy[0] = ModuleSupport.RecoveryAuthority(accountId);
+            policy[1] = ModuleSupport.RecoveryTimelockMs(accountId);
+            Storage.Put(Storage.CurrentContext, ModuleSupport.Key(Prefix_Policy, accountId), StdLib.Serialize(policy));
+
             OnRecoveryStarted(accountId, nonce, executableAt);
             return nonce;
         }
@@ -212,8 +223,13 @@ namespace SmartAccount.Modules
         /// begin time — a freeze, thaw or recovery in between advanced the
         /// epoch, meaning the configuration this recovery was proposed
         /// against is gone, so the recovery must be restarted
-        /// (<c>SA_EPOCH_STALE</c>). R-12-14: the gate accepts <c>Active</c> or
-        /// <c>Frozen</c>; <c>MigrationRequired</c> is refused.
+        /// (<c>SA_EPOCH_STALE</c>). The recovery authority and timelock snapshotted
+        /// at begin must also still equal the core's live policy; replacing the
+        /// authority (revocation), changing the delay (delay-only rewrite) or
+        /// any other effective policy change retires the pending request. An
+        /// idempotent rewrite of the same values leaves it intact. R-12-14: the
+        /// gate accepts <c>Active</c> or <c>Frozen</c>; <c>MigrationRequired</c>
+        /// is refused.
         /// The matured decision lands through the core's §12.5
         /// <c>resetAccount(accountId, newCustody)</c>: this contract's installed
         /// recovery seat is the one caller the core's reset entry accepts
@@ -236,6 +252,11 @@ namespace SmartAccount.Modules
             ExecutionEngine.Assert(
                 ModuleSupport.AccountAuthorityEpoch(accountId) == (BigInteger)record[FieldAuthorityEpochAtInit],
                 ModuleProtocol.ErrEpochStale);
+
+            // The decision was made under the policy the core recorded at begin.
+            // A new guardian or a different waiting period is a new decision;
+            // writing the same values again is not.
+            RequirePolicyUnchanged(accountId);
 
             BigInteger nonce = (BigInteger)record[FieldNonce];
             UInt160 recoveryAuthority = ModuleSupport.RecoveryAuthority(accountId);
@@ -276,6 +297,22 @@ namespace SmartAccount.Modules
                 record[FieldExecutableAt], record[FieldStatus], record[FieldNewCustody],
                 record[FieldAuthorityEpochAtInit],
             };
+        }
+
+        /// <summary>
+        /// <c>getRecoveryPolicySnapshot(accountId)</c> → <c>[authority, timelockMs]</c>,
+        /// or an empty array when no request is recorded. Clients compare this with
+        /// the core's live policy to tell whether a pending request is still
+        /// executable; a mismatch faults completion with <c>SA_EPOCH_STALE</c>.
+        /// </summary>
+        [Safe]
+        public static object[] GetRecoveryPolicySnapshot(UInt160 accountId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, ModuleSupport.Key(Prefix_Policy, accountId));
+            if (data == null) return new object[0];
+            object[] policy = (object[])StdLib.Deserialize(data!);
+            ExecutionEngine.Assert(policy.Length == 2, ModuleProtocol.ErrOperationMalformed);
+            return policy;
         }
 
         // Bind a reviewed transaction to this instance's record and current core
@@ -337,6 +374,23 @@ namespace SmartAccount.Modules
             ExecutionEngine.Assert((int)(BigInteger)record[FieldStatus] == StatusPending,
                 ModuleProtocol.ErrRecoveryPending);
             return record;
+        }
+
+        /// <summary>
+        /// The begin-time policy must still be the core's policy. Authority
+        /// replacement revokes old requests, a timelock change retires them,
+        /// and an idempotent rewrite of both values leaves them executable.
+        /// </summary>
+        private static void RequirePolicyUnchanged(UInt160 accountId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, ModuleSupport.Key(Prefix_Policy, accountId));
+            ExecutionEngine.Assert(data != null, ModuleProtocol.ErrOperationMalformed);
+            object[] policy = (object[])StdLib.Deserialize(data!);
+            ExecutionEngine.Assert(policy.Length == 2, ModuleProtocol.ErrOperationMalformed);
+            ExecutionEngine.Assert(
+                (UInt160)policy[0] == ModuleSupport.RecoveryAuthority(accountId) &&
+                (BigInteger)policy[1] == ModuleSupport.RecoveryTimelockMs(accountId),
+                ModuleProtocol.ErrEpochStale);
         }
     }
 }

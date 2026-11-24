@@ -1,0 +1,37 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+  "modelSha256": "5c1e6111e0bfebbdd85e634472f673c147d53a4568193117ffd1ef0da69e35f3",
+  "certificateSha256": "71e2dbf7a1a0518c8038c2e49da35998787525096788b533b8a46946eb80eedf",
+  "checkerSha256": "faf20fbfb4f3f5a3c5e2d5f2543b65d25bd42b3fbf1e5bf39c92ad47e0df8247",
+  "valueModelSha256": {
+    "IntegerSemantics": "b2d8cfb443115bdda59c52abc04022ebd4b0bbea0a13f122f12ec7a0b891425c",
+    "CapArithmetic": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "CapMethodVm": "cffee42ebb1dbacdf49a97c9213472026e3481fc122472f94911abda7e62dfb9",
+    "CapContext": "3fab1800231f6698890ac60ce74bd2514faca174ec4ed64e2be00cb403337995"
+  },
+  "probeSourceSha256": {
+    "InitializerProbe.csproj": "5244a4e970b7dc859cc7b01f1f1f18251c25ed1c45051e798ad927d612aaa839",
+    "packages.lock.json": "7f1a79dc260f6697fcf2ebe28d27febe0a193b983f61e6dabae2b7ae4b5732de",
+    "Program.cs": "3d143537ec84375c034e60c729a07b205e274953d5cc931008fc1018562ed1eb",
+    "QueryLimits.cs": "f40800ebc0efc31b283cab080ea7e9601acab9e6fe5c0bbf39224432c845a4e9",
+    "ReferenceLimits.cs": "d10cdbc3c859e6363d6b275df084f034095a45ba2f5ad7c07f636fcf2576bd1e"
+  },
+  "probeDllSha256": "7af2523750fed006366fd7d14ceb4192b58f3a1541047123f6da7215395b7ee9",
+  "maximumHealthyStartingReferences": 1980,
+  "initializerOffset": 24903,
+  "initializerSha256": "d4127f6b35d6f42db0f170e1ed35422deaf33012eb648fb29b15e0d5ea0bfb83",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "runtimeSha256": "383dc13a725f3d1525aa8893e0e5a704f3de3ae619c72688d236672c9b1582e4",
+  "coqchkPassed": true,
+  "ordinaryEntryCount": 98,
+  "instructionCount": 170,
+  "runtimeCases": 264,
+  "peakAdditionalReferences": 68,
+  "finalAdditionalReferences": 67,
+  "firstPeakRelativeOffset": 246,
+  "scope": "Post-instruction reference count of the fresh initialized frame only. The raw bytes produce the projected trace in the Coq value model; correspondence to the locked VM is independently trace-tested, not proved for the CLR. No method body, gas, transaction rollback or arbitrary heap interference claim."
+}

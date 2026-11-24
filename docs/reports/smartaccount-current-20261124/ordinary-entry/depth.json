@@ -1,0 +1,19 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "coqchkPassed": true,
+  "ordinaryEntries": 98,
+  "runtimeCases": 199,
+  "runtimeSha256": "1e94790ff063e8e0ec776d48b416dc47c37b351e39f6e274f0bbaf65308369de",
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "modelHashes": {
+    "EntryDispatch": "00aec4e4daded3fa2751d2698644d60c936a920eda4d8614d6d41a5700e6c94d",
+    "OrdinaryDepth": "9b0ffaa8d27bc5c7596e03e0c6311bae63d6bdb1ed0ffb3ad166e580f4ccd8d9"
+  },
+  "sourceHashes": {
+    "vm/engine": "ea906436ec48408abe92826547041859fb6195553f8e585816f1d96695663445",
+    "core/engine": "97b08bfe754bc51ed8418316b45d3805dccff76ef51fbd43ac9b663eacb4d5eb"
+  },
+  "scope": "Invocation depth after admission only. Fault rows describe frames loaded before the limit check failed, not rollback or final ledger state."
+}

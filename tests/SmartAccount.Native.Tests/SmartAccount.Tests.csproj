@@ -57,4 +57,8 @@
     <ProjectReference Include="../../contracts/native/Neo.csproj" />
     <ProjectReference Include="$(NeoSourceRoot)/Neo.Extensions/Neo.Extensions.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="../fixtures/sa-module-protocol/module-profile-vectors.json" Link="module-profile-vectors.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../fixtures/native-smartaccount.manifest.json" Link="native-smartaccount.manifest.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

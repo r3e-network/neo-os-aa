@@ -104,12 +104,18 @@ test('native contract validation selects its required guards, native build and e
   assert.match(result.trace, /dotnet build SmartAccount\.sln -c Release/);
   assert.match(result.trace, /dotnet test tests\/SmartAccount\.Native\.Tests\/SmartAccount\.Tests\.csproj/);
   assert.deepEqual(result.trace.split('\n').filter(line => line.startsWith('nccs ')).map(line => line.split(' ')[1]), [
-    'contracts/modules/GovernanceModule/GovernanceModule.csproj', 'contracts/modules/RecoveryModule/RecoveryModule.csproj',
+    'contracts/modules/GovernanceModule/GovernanceModule.csproj', 'contracts/modules/SigningModule/SigningModule.csproj',
+    'contracts/modules/ThresholdPolicyModule/ThresholdPolicyModule.csproj', 'contracts/plugins/native-profile/MultiSigValidator.Native.csproj',
+    'contracts/modules/RecoveryModule/RecoveryModule.csproj',
     'contracts/plugins/native-profile/WhitelistHook.Native.csproj',
   ]);
+  assert.match(result.trace, /node scripts\/check_standard_governance_artifacts\.mjs /);
   assert.match(result.trace, /node scripts\/check_standard_recovery_nef\.mjs .*RecoveryModule\.nef/);
   assert.match(result.trace, /validate-native-smartaccount-profile\.py/);
-  assert.match(result.trace, /test_native_\*\.py/);
+  assert.match(result.trace, /unittest discover -s scripts -p test_native_\*\.py/);
+  assert.match(result.trace, /unittest discover -s scripts -p test_neoexpress\*\.py/);
+  assert.match(result.trace, /check_module_neps\.py --compiler nccs --vm-getters --vm-commands/);
+  assert.doesNotMatch(result.trace, /unittest discover -s docs\/proposals/);
   assert.match(result.trace, /native_epoch_probe\.py --compiler nccs/);
   assert.doesNotMatch(result.trace, /compile-public|tests\/SmartAccount\.Contracts\.Tests|npm /);
 });
@@ -131,7 +137,8 @@ test('CI runs the native acceptance gate and the native VM workflow still owns t
   assert.match(ci, /run: \.\/scripts\/verify_repo\.sh --profile native/);
   assert.doesNotMatch(ci, /--profile custom/, 'the retired custom profile is never a CI acceptance path');
   assert.match(native, /\.\/scripts\/verify_repo\.sh --profile native --contracts-only/);
-  assert.match(native, /python3 scripts\/native_profile_ci\.py/);
+  assert.match(native, /python3 scripts\/build_native_modules\.py/);
+  assert.doesNotMatch(native, /python3 scripts\/native_profile_ci\.py/);
   assert.match(native, /'scripts\/verify_repo\*'/);
 });
 

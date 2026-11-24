@@ -1,0 +1,39 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "methods": {
+    "getAccountImplementationId": {
+      "offset": 17906,
+      "length": 43,
+      "sha256": "7f0d6aed59e3183468eed5ec8a1b1d7b31eb595079cc0715152eca82a53cba59"
+    },
+    "supportsExecutionMode": {
+      "offset": 17949,
+      "length": 51,
+      "sha256": "7b43387f81d4f1c41c56a72219ca776b4d0411828658ea325751d43c2b482cab"
+    },
+    "supportsModuleType": {
+      "offset": 18000,
+      "length": 49,
+      "sha256": "c3f1677427860fc622ae6b9dbb4f06fff27b1e45fe785309372cb679059c7941"
+    }
+  },
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "sourceSha256": "83d70a55943b3904587258e9fbed02953391c06e81b3477dbd5953d5928cd437",
+  "inventorySha256": "1504bf3c5c3a72821b40394aa00c4a929081b403a3954ece710c92eea453ae17",
+  "proofInputs": {
+    "IntegerSemantics": "b2d8cfb443115bdda59c52abc04022ebd4b0bbea0a13f122f12ec7a0b891425c",
+    "CapArithmetic": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "CapMethodVm": "cffee42ebb1dbacdf49a97c9213472026e3481fc122472f94911abda7e62dfb9",
+    "PublicPureMethods": "7ef6a29f7176b3c59cf1b417c0583f3354b45e5a08f84fa41760478520425f75",
+    "CapContext": "3fab1800231f6698890ac60ce74bd2514faca174ec4ed64e2be00cb403337995",
+    "OrdinaryReturn": "dcece848cb67a40fef524c02d5c2cefd896c4bce13005f6ae6cf279781f4248c",
+    "OrdinaryInitializerArtifact": "ce2be7f7097245d8b9e96dc6c18f95a23ebe4d5d40c8775cd91fd11e9755604e",
+    "OrdinaryPureArtifact": "ab7c868c1b6aa6121c264b4cef7fa1becd106a712e4234a0b94a4b9f798496c3",
+    "InitializedPure": "5c9b18bb5d6ca9d663884edf418ded6c310ec7c3a30125aa7e782b34586dd2fa"
+  },
+  "coqchkPassed": true,
+  "literalControlRejected": true,
+  "scope": "Initializer entry through normal nonvoid return to an arbitrary caller stack in the reference model. None means no normal result, not a rollback proof. Noninterfering unload callbacks, snapshot commit, reference bookkeeping and resources are assumed; excludes GAS, exceptional unwind and rollback."
+}

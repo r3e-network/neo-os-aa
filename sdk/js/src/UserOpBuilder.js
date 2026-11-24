@@ -102,12 +102,8 @@ class UserOperationBuilder {
    * current value; there is no unset, because a cleared routing field would
    * only be discovered as a missing field at build time.
    *
-   * `credentialGeneration` is required and never defaulted. The right value is
-   * a chain fact: the built-in validator (id 0) uses the account's 0x57
-   * SubjectRevision, and an installed validator or active threshold policy uses
-   * its CredentialGeneration. The builder is offline, so the caller must read
-   * that value first -- a guessed 1 would produce a digest the core rejects as
-   * ErrorCredentialStale the moment the revision has advanced.
+   * A custody operation uses generation 1. An installed validator or active
+   * threshold policy uses its on-chain credential generation.
    */
   setRouting({ validatorId, credentialGeneration, authorityEpoch, configurationNonce }) {
     if (validatorId !== undefined) this._state.validatorId = validatorId;
@@ -191,9 +187,7 @@ class UserOperationBuilder {
     if (credentialGeneration === undefined || credentialGeneration === null) {
       fail(EC.VALIDATION_OPTIONS_REQUIRED, {
         hint:
-          'credential generation is required: read it from the chain ' +
-          '(SubjectRevision for the built-in validator, CredentialGeneration for an ' +
-          'installed validator or active threshold policy); the builder never assumes one',
+          'credential generation is required: use 1 for custody operations or the current validator or policy generation',
       });
     }
     try {
@@ -204,6 +198,7 @@ class UserOperationBuilder {
         authorityEpoch: integer(authorityEpoch, 'authority epoch'),
       };
       const channel = codec.deriveNonceChannel(context, {
+        authorityEpoch: context.authorityEpoch,
         validatorId: integer(validatorId, 'validator id'),
         credentialGeneration: integer(credentialGeneration, 'credential generation'),
         nonceSubkey: codec.hex(nonceSubkey, 32),

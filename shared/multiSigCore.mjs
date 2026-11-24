@@ -41,6 +41,15 @@ const error = (message) => {
 };
 const hex = (value) => sanitizeHex(value);
 
+// An explicit empty byte string is an abstention. Missing inputs are errors.
+function memberSignature(value) {
+  if (value === '') return '';
+  if (typeof value !== 'string' || !/^(?:0x)?[0-9a-f]{128}$/i.test(value)) {
+    error('member signature must be 64 bytes or an explicit empty string');
+  }
+  return hex(value);
+}
+
 function contractHash(value, label) {
   const normalized = hex(value);
   if (!/^[0-9a-f]{40}$/.test(normalized) || /^0+$/.test(normalized)) {
@@ -84,7 +93,7 @@ function serializeInteger(value) {
 /**
  * Neo StdLib.Serialize of an Array of [memberModuleId, signature] pairs — the
  * v4 threshold-policy signature field. The core requires strictly ascending
- * member ids and 64-byte member signatures, so the encoder refuses any other
+ * member ids and a signature or empty bytes for each member, so the encoder refuses any other
  * shape instead of letting the chain reject it.
  */
 export function serializeMemberSignatures(entries) {
@@ -98,10 +107,7 @@ export function serializeMemberSignatures(entries) {
     const memberId = uint64(entry[0], 'member id');
     if (memberId <= previous) error('member ids must be strictly ascending positive integers');
     previous = memberId;
-    const bytes = hex(entry[1]);
-    if (!/^(?:[0-9a-f]{2})*$/.test(bytes) || bytes.length !== 128) {
-      error('member signature must be 64 bytes of hex');
-    }
+    const bytes = memberSignature(entry[1]);
     result += `4002${serializeInteger(memberId)}28${varInt(bytes.length / 2)}${bytes}`;
     if (result.length / 2 > MAX_BUNDLE_BYTES) error('member signature list exceeds 65535 bytes');
   }
@@ -213,8 +219,7 @@ export function createThresholdTools({ sha256 } = {}) {
   function assembleSignature({ members } = {}) {
     const normalized = normalizeMembers(members, 'threshold assembly');
     const entries = normalized.map((member) => {
-      const signature = hex(member.signature);
-      if (!/^[0-9a-f]{128}$/.test(signature)) error('member signature must be 64 bytes');
+      const signature = memberSignature(member.signature);
       return [member.moduleId, signature];
     });
     return serializeMemberSignatures(entries);
@@ -227,8 +232,7 @@ export function createThresholdTools({ sha256 } = {}) {
   function assembleOperationSignature({ operationDigest, members } = {}) {
     const prepared = prepareMembers({ operationDigest, members });
     const signed = members.map((member) => {
-      const signature = hex(member.signature);
-      if (!/^[0-9a-f]{128}$/.test(signature)) error('member signature must be 64 bytes');
+      const signature = memberSignature(member.signature);
       return { moduleId: member.moduleId, signature };
     });
     return Object.freeze({

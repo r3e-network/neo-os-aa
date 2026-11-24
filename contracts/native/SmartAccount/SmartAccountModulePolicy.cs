@@ -34,9 +34,8 @@ namespace Neo.SmartContract.Native
     /// surface the core itself calls, its canonical profile must be readable and
     /// it must retain its code identity for as long as it is installed.
     ///
-    /// Capability negotiation (message signatures, threshold membership,
-    /// composite layering) is a user-space module concern and is NOT part of
-    /// this admission gate.
+    /// Admission checks the declared format. Spending and recovery policy
+    /// remain the responsibility of the installed modules.
     /// </summary>
     internal static class SmartAccountModulePolicy
     {
@@ -77,7 +76,7 @@ namespace Neo.SmartContract.Native
         private static ContractMethodDescriptor? FindMethod(ContractState contract, string name, int arguments) =>
             contract.Manifest.Abi.Methods.FirstOrDefault(m => m.Name == name && m.Parameters.Length == arguments);
 
-        private static void RequireMethod(ContractState contract, string name, ContractParameterType result,
+        internal static void RequireMethod(ContractState contract, string name, ContractParameterType result,
             bool? safe, params ContractParameterType[] parameters)
         {
             var method = FindMethod(contract, name, parameters.Length)
@@ -116,6 +115,10 @@ namespace Neo.SmartContract.Native
                     ContractParameterType.Any, ContractParameterType.ByteArray);
             }
             if (!module.IsValidator) return;
+            if (module.MessageCapability)
+                RequireMethod(contract, "isValidSignature", ContractParameterType.Boolean, true,
+                    ContractParameterType.Hash160, ContractParameterType.Hash160, ContractParameterType.Integer,
+                    ContractParameterType.Integer, ContractParameterType.ByteArray, ContractParameterType.Array);
             RequireMethod(contract, "validateUserOp", ContractParameterType.Boolean, true,
                 ContractParameterType.Hash160, ContractParameterType.ByteArray, ContractParameterType.Array);
             RequireMethod(contract, "onUserOpComplete", ContractParameterType.Void, null,
@@ -144,7 +147,7 @@ namespace Neo.SmartContract.Native
                 || profileBytes.Size is 0 or > SmartAccountModuleProtocol.ModuleProfileBytesMax)
                 throw new InvalidOperationException("getModuleProfile must return a bounded String.");
             byte[] json = profileBytes.GetSpan().ToArray();
-            string profileJson = Encoding.UTF8.GetString(json);
+            string profileJson = new UTF8Encoding(false, true).GetString(json);
 
             JObject profile;
             try
@@ -162,15 +165,64 @@ namespace Neo.SmartContract.Native
             if (profile["moduleType"] is not JString moduleType
                 || moduleType.GetString() != SmartAccountModuleTypeName(module.ModuleType))
                 throw new InvalidOperationException("The module profile declares a different module type.");
-            if (profile["contractName"] is not JString name || name.GetString() != contract.Manifest.Name)
+            if (profile["contractName"] is not JString name || string.IsNullOrWhiteSpace(name.Value)
+                || name.Value != contract.Manifest.Name)
                 throw new InvalidOperationException("The module profile names a different contract.");
             if (profile["capabilities"] is not JObject capabilities)
                 throw new InvalidOperationException("The module profile has no capability object.");
             bool instanceIsolation = RequireCapability(capabilities, "instanceIsolation");
+            bool member = RequireCapability(capabilities, "thresholdMemberEligible");
+            bool message = RequireCapability(capabilities, "messageCapability");
+            if ((!module.IsValidator && (message || member)) || capabilities["compositeLayer"] is not JNumber layer
+                || (layer.Value != 0 && layer.Value != 1))
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleTypeUnsupported);
+
+            // All profile tokens except the manifest name come from a fixed grammar.
+            // Comparing the original text also rejects duplicate keys and alternate spellings.
+            bool configure = FindMethod(contract, "configure", 4) is not null;
+            string callbacks = module.IsHook ? "\"preCheck\",\"postCheck\"" : module.IsRecovery ? ""
+                : "\"validateUserOp\",\"onUserOpComplete\"" + (message ? ",\"isValidSignature\"" : "");
+            static string Flag(bool value) => value ? "true" : "false";
+            string canonical = "{\"callbacks\":[" + callbacks + "],\"capabilities\":{\"compositeLayer\":"
+                + (layer.Value == 0 ? "0" : "1") + ",\"instanceIsolation\":" + Flag(instanceIsolation)
+                + ",\"messageCapability\":" + Flag(message) + ",\"thresholdMemberEligible\":" + Flag(member)
+                + "},\"contractName\":\"" + EscapeProfileName(name.Value)
+                + "\",\"lifecycle\":[\"onInstall\",\"onUninstall\"" + (configure ? ",\"configure\"" : "")
+                + "],\"moduleType\":\"" + moduleType.Value + "\",\"profileVersion\":1}";
+            if (!string.Equals(profileJson, canonical, StringComparison.Ordinal))
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleCodeBindingMismatch);
+            if (configure)
+                RequireMethod(contract, "configure", ContractParameterType.Void, null,
+                    ContractParameterType.Hash160, ContractParameterType.Integer,
+                    ContractParameterType.Integer, ContractParameterType.Array);
 
             module.ProfileSha256 = SHA256.HashData(json);
             module.InstanceIsolation = instanceIsolation;
+            module.ThresholdMemberEligible = member;
+            module.MessageCapability = message;
+
             AssertCallbackAbi(contract, module);
+        }
+
+        // Encode only mandatory JSON escapes. In particular a non-ASCII manifest
+        // name is encoded as UTF-8, not as a sequence of optional Unicode escapes.
+        private static string EscapeProfileName(string name)
+        {
+            var text = new StringBuilder(name.Length);
+            foreach (char c in name)
+                switch (c)
+                {
+                    case '"': text.Append("\\\""); break;
+                    case '\\': text.Append("\\\\"); break;
+                    case '\b': text.Append("\\b"); break;
+                    case '\f': text.Append("\\f"); break;
+                    case '\n': text.Append("\\n"); break;
+                    case '\r': text.Append("\\r"); break;
+                    case '\t': text.Append("\\t"); break;
+                    case < ' ': text.Append("\\u").Append(((int)c).ToString("x4")); break;
+                    default: text.Append(c); break;
+                }
+            return text.ToString();
         }
 
         private static bool RequireCapability(JObject capabilities, string name)

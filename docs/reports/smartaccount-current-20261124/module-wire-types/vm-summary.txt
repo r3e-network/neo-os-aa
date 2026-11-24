@@ -1,0 +1,3 @@
+20 deployed module profile getters matched in NeoVM.
+20 named module commands accepted in NeoVM; 20 wrong arities and 14 wrong numeric field types rejected.
+20 module profiles verified against compiled manifests

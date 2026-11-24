@@ -32,7 +32,7 @@ const I255 = 1n << 255n;
 const CHANNEL_MASK = (1n << 191n) - 1n;
 const utf8 = new TextEncoder();
 const fail = (message) => {
-  throw new Error(`SmartAccount v4: ${message}`);
+  throw new Error(`SmartAccount: ${message}`);
 };
 export function nativeHex(value, bytes) {
   if (typeof value !== "string") fail("hex bytes must be a string");
@@ -139,6 +139,11 @@ const integerValue = (value) => ({
   value: integer(value).toString(),
 });
 const byteStringValue = (value) => ({ type: "ByteString", value: nativeHex(value) });
+function denseArray(value) {
+  for (let i = 0; i < value.length; i++)
+    if (!Object.hasOwn(value, i)) fail("sparse VM array");
+  return value;
+}
 function canonicalValue(item, seen = new Set(), depth = 0, maxDepth = ARGS_DEPTH_MAX) {
   if (!item || typeof item !== "object" || Array.isArray(item))
     fail("typed VM value required");
@@ -173,7 +178,7 @@ function canonicalValue(item, seen = new Set(), depth = 0, maxDepth = ARGS_DEPTH
   seen.add(value);
   return {
     type,
-    value: value.map((v) => canonicalValue(v, seen, depth + 1, maxDepth)),
+    value: denseArray(value).map((v) => canonicalValue(v, seen, depth + 1, maxDepth)),
   };
 }
 function serialize(item) {
@@ -232,7 +237,7 @@ function hashValue(value) {
   return { type: "ByteString", value: reverse(nativeHex(value, 20)) };
 }
 function hookProofsValue(proofs) {
-  if (proofs === undefined || proofs === null) return { type: "Array", value: [] };
+  if (proofs === undefined) return { type: "Array", value: [] };
   if (!Array.isArray(proofs) || proofs.length > HOOK_PROOFS_ENTRIES_MAX)
     fail(`hook proofs require 0..${HOOK_PROOFS_ENTRIES_MAX} entries`);
   let total = 0;
@@ -240,14 +245,17 @@ function hookProofsValue(proofs) {
   // with 0 makes the strictly-ascending check reject a zero id as well; a -1
   // cursor silently accepted it.
   let previous = 0n;
-  const entries = proofs.map((entry) => {
+  const entries = denseArray(proofs).map((entry) => {
+    if (Array.isArray(entry) && (entry.length !== 2 || !Object.hasOwn(entry, 0) || !Object.hasOwn(entry, 1)))
+      fail("hook proof tuple requires exactly two fields");
     const pair = Array.isArray(entry)
       ? { hookId: entry[0], proof: entry[1] }
       : { hookId: entry?.hookId, proof: entry?.proof };
     const hookId = unsigned(pair.hookId, 64, "hook id");
     if (hookId <= previous) fail("hook ids must be unique and strictly ascending");
     previous = hookId;
-    const proof = nativeHex(pair.proof ?? "");
+    if (typeof pair.proof !== "string") fail("hook proof bytes required");
+    const proof = nativeHex(pair.proof);
     total += proof.length / 2;
     return {
       type: "Array",
@@ -277,15 +285,8 @@ function operationValue(op, emptySignature = false) {
     fail("signature must contain 1..8192 bytes");
   const nonce = unsigned(op.nonce, 255, "nonce");
   const deadline = unsigned(op.deadline, 255, "deadline");
-  const validatorId = unsigned(op.validatorId, 64, "validator id");
-  const credentialGeneration = unsigned(
-    requireGeneration(op.credentialGeneration),
-    64,
-    "credential generation",
-  );
-  // §4.1 [8]: the generation is 1-based and the core faults a zero with
-  // SA_OPERATION_MALFORMED, so the codec refuses to encode one.
-  if (credentialGeneration < 1n) fail("credentialGeneration must be >= 1");
+  const validatorId = operationValidatorId(op);
+  const credentialGeneration = positiveGeneration(op.credentialGeneration);
   const authorityEpoch = unsigned(op.authorityEpoch, 64, "authority epoch");
   const configurationNonce = unsigned(
     op.configurationNonce,
@@ -337,27 +338,30 @@ function dynamicCall(contract, method, args, flags = 15) {
     "41627d5b52"
   );
 }
+function operationValidatorId(op) {
+  return unsigned(op.validatorId === undefined ? 0 : op.validatorId, 64, "validator id");
+}
 function operationSetting(op, name) {
   const value = unsigned(op?.[name], 64, name);
   return be(value, 8);
 }
 
-/// §4.3/§6/§8 generation word. There is no protocol default: the built-in
-/// validator's generation is the account's 0x57 SubjectRevision and an
-/// installed validator's is its CredentialGeneration, so a rule that silently
-/// substituted 1 (or 0) would bind every such digest to a namespace the core
-/// never validates. Only the caller -- or the chain, for the read paths --
-/// knows the value, so a missing one is a hard error here.
+// Operation route zero uses generation 1. Its message envelope instead uses
+// the current subject revision. Module routes bind the installed credential.
 const GENERATION_REQUIRED =
-  "credential generation is required: pass the routing generation read from " +
-  "the chain (SubjectRevision for the built-in validator, CredentialGeneration " +
-  "for an installed validator or threshold policy), never an assumed default";
+  "credential generation is required: use 1 for custody operations, the subject " +
+  "revision for built-in messages, or the current validator or policy generation";
 function requireGeneration(value) {
   if (value === undefined || value === null) fail(GENERATION_REQUIRED);
   return value;
 }
+function positiveGeneration(value) {
+  const n = unsigned(requireGeneration(value), 64, "credential generation");
+  if (n < 1n) fail("credentialGeneration must be >= 1");
+  return n;
+}
 function generationSetting(value) {
-  return be(unsigned(requireGeneration(value), 64, "credential generation"), 8);
+  return be(positiveGeneration(value), 8);
 }
 
 // ---------------------------------------------------------------------------
@@ -378,22 +382,24 @@ export const encodeDynamicCall = (contract, method, flagsOrArgs, maybeFlags) =>
   // Callers pass (contract, method, args, flags); a direct call without flags
   // keeps the native kernel's CallFlags.All default.
   dynamicCall(contract, method, flagsOrArgs, maybeFlags);
+export function nativeProxyVerificationScript(accountId, {
+  coreContractHash = NATIVE_SMART_ACCOUNT_CONTRACT, callFlags = 5,
+} = {}) {
+  if (callFlags !== 5) fail("proxy call flags must be ReadOnly (5)");
+  const account = nativeHex(accountId, 20);
+  const core = nativeHex(coreContractHash, 20);
+  if (/^0+$/.test(account)) fail("accountId must be nonzero");
+  if (/^0+$/.test(core)) fail("coreHash must be nonzero");
+  return dynamicCall(core, "verify", [hashValue(account)], 5);
+}
+
 export function createProtocolCodec({ sha256, hash160 }) {
   if (typeof sha256 !== "function" || typeof hash160 !== "function")
     fail("synchronous hex hash adapters required");
   const sha = (value) => nativeHex(sha256(value), 32);
   const hash = (value) => nativeHex(hash160(value), 20);
 
-  /// The account-bound proxy verification script: PUSHDATA1 20 accountId,
-  /// PUSH1 PACK <flags>, PUSHDATA1 6 "verify", PUSHDATA1 20 core,
-  /// SYSCALL System.Contract.Call. The native kernel builds PUSH5 =
-  /// CallFlags.ReadOnly, so 5 is the default here as well; the numeric flag is
-  /// still an explicit parameter, because the proxy address must be the one the
-  /// submitting core derives (spec §16.1).
-  const verificationScript = (
-    accountId,
-    { coreContractHash = NATIVE_SMART_ACCOUNT_CONTRACT, callFlags = 5 } = {},
-  ) => dynamicCall(coreContractHash, "verify", [hashValue(accountId)], callFlags);
+  const verificationScript = nativeProxyVerificationScript;
 
   /// §16.1 identity: Hash160(0xAA524704 ‖ custody ‖ salt), raw UInt160 storage
   /// order; the display form is the big-endian reversal of the same bytes.
@@ -431,7 +437,7 @@ export function createProtocolCodec({ sha256, hash160 }) {
       le(unsigned(context?.networkMagic, 32, "network magic"), 4),
       reverse(nativeHex(context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT, 20)),
       reverse(nativeHex(context?.accountId, 20)),
-      operationSetting(op, "validatorId"),
+      be(operationValidatorId(op), 8),
       generationSetting(op?.credentialGeneration),
       operationSetting(op, "authorityEpoch"),
       operationSetting(op, "configurationNonce"),
@@ -461,13 +467,13 @@ export function createProtocolCodec({ sha256, hash160 }) {
   /// §6 nonce namespace digest (the full 256-bit derivation), and the derived
   /// 191-bit channel taken from its low bits. The generation is part of the
   /// namespace, so it is supplied, never assumed.
-  const nonceNamespaceDigest = (context, { validatorId, credentialGeneration, nonceSubkey }) =>
+  const nonceNamespaceDigest = (context, { authorityEpoch, validatorId, credentialGeneration, nonceSubkey }) =>
     sha(
       join(
         le(PROTOCOL_VERSION, 1),
         reverse(nativeHex(context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT, 20)),
         reverse(nativeHex(context?.accountId, 20)),
-        be(unsigned(context?.authorityEpoch, 64, "authority epoch"), 8),
+        be(unsigned(authorityEpoch, 64, "authority epoch"), 8),
         be(unsigned(validatorId ?? 0, 64, "validator id"), 8),
         generationSetting(credentialGeneration),
         nativeHex(nonceSubkey, NONCE_SUBKEY_BYTES),
@@ -480,9 +486,13 @@ export function createProtocolCodec({ sha256, hash160 }) {
   /// serialized [4, 0, generation, [[canonicalP256Script, r‖s], ...]].
   const builtInSignature = ({ credentialGeneration, pairs }) => {
     if (!Array.isArray(pairs) || pairs.length < 1) fail("at least one signature pair required");
+    if (pairs.length > 16) fail("at most 16 built-in signature pairs");
+    const generation = positiveGeneration(credentialGeneration);
     const seen = new Set();
-    const value = pairs.map((pair) => {
+    const value = denseArray(pairs).map((pair) => {
       const script = nativeHex(pair.script);
+      if (!/^0c21(?:02|03)[0-9a-f]{64}4156e7b327$/.test(script))
+        fail("canonical P-256 verification script required");
       if (seen.has(script)) fail("signature scripts must be pairwise distinct");
       seen.add(script);
       return {
@@ -496,7 +506,7 @@ export function createProtocolCodec({ sha256, hash160 }) {
         value: [
           integerValue(PROTOCOL_VERSION),
           integerValue(0),
-          integerValue(credentialGeneration),
+          integerValue(generation),
           { type: "Array", value },
         ],
       }),
@@ -506,6 +516,7 @@ export function createProtocolCodec({ sha256, hash160 }) {
   /// Threshold route signature field: serialized [[memberModuleId, signature]].
   const thresholdSignature = (members) => {
     if (!Array.isArray(members) || members.length < 1) fail("at least one member signature required");
+    if (members.length > 10) fail("at most ten threshold members");
     // §5: members are module ids, so 0 is not a member. Seeding the cursor
     // with 0 makes the strictly-ascending check reject a zero id as well; a -1
     // cursor silently accepted it (ModuleOperation.cs seeds BigInteger.Zero).
@@ -514,6 +525,9 @@ export function createProtocolCodec({ sha256, hash160 }) {
       const moduleId = unsigned(member.moduleId, 64, "member module id");
       if (moduleId <= previous) fail("threshold members must be strictly ascending");
       previous = moduleId;
+      if (member.signature !== "" && (typeof member.signature !== "string" ||
+          !/^(?:0x)?[0-9a-f]{128}$/i.test(member.signature)))
+        fail("member signature must be 64 bytes or an explicit empty string");
       return {
         type: "Array",
         value: [
@@ -527,16 +541,19 @@ export function createProtocolCodec({ sha256, hash160 }) {
 
   /// §5 threshold member digest: SHA256("NeoSmartAccount/ThresholdMember" ‖
   /// U1(4) ‖ operationDigest ‖ U64BE(memberModuleId) ‖ U64BE(memberGeneration)).
-  const thresholdMemberDigest = (operationDigest, moduleId, credentialGeneration) =>
-    sha(
+  const thresholdMemberDigest = (operationDigest, moduleId, credentialGeneration) => {
+    const id = unsigned(moduleId, 64, "member module id");
+    if (id === 0n) fail("member module id must be positive");
+    return sha(
       join(
         strictText("NeoSmartAccount/ThresholdMember"),
         le(PROTOCOL_VERSION, 1),
         nativeHex(operationDigest, 32),
-        be(unsigned(moduleId, 64, "member module id"), 8),
-        be(unsigned(credentialGeneration, 64, "member credential generation"), 8),
+        be(id, 8),
+        generationSetting(credentialGeneration),
       ),
     );
+  };
 
   const serializeOperation = (op, emptySignature = false) =>
     serialize(operationValue(op, emptySignature));
@@ -553,7 +570,7 @@ export function createProtocolCodec({ sha256, hash160 }) {
       context?.accountId === undefined ||
       nativeHex(context.accountId, 20) === nativeHex(accountId, 20);
     if (!sameAccount) fail("execution context account mismatch");
-    const ops = operations.map((op) => operationValue(op));
+    const ops = denseArray(operations).map((op) => operationValue(op));
     const envelope = batch ? { type: "Array", value: ops } : ops[0];
     // §4.1 envelope cap: a batch of at most 32 operations encodes to 64 KiB.
     if (batch && serialize(envelope).length / 2 > ENVELOPE_ENCODED_SIZE_MAX)

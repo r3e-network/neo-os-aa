@@ -1,0 +1,192 @@
+{
+  "scope": "Local compiled named modules and native runtime; no network activation or whole-contract refinement.",
+  "inputs": {
+    "docs/proposals/nep-smartaccount-module-interface.mediawiki": "03742e5fa5b798f79ea44cd0bf9f741a08b54136fdce15dd0b607f78908236e8",
+    "docs/proposals/nep-smartaccount-module-profiles.mediawiki": "4d0835419794fd2b53b1db8835df6c2f95a699ef5c6b164488f49b019c3f5a5a",
+    "docs/proposals/smartaccount-named-module-interfaces.json": "c1295d4c90a7d8b380b98659569811fe7fab817fc45158c82db55c2dae16a941",
+    "docs/proposals/smartaccount-module-profile.schema.json": "3bdabca442da4f6922a55d638623b2bdacca5ddc1c356f78ca799a0269fd70fd",
+    "docs/proposals/smartaccount-module-abis.md": "cd75c262031e9578d2cdcd59aa2f0a68e3811ceed03199ed611eada7a1e9242f",
+    "scripts/check_module_neps.py": "42dba4854ea0c326c9639ebd698bbac10b10ff27147b139da4b740a96ec78c8b",
+    "tests/NativeEpochProbe/ModuleCommands.cs": "1b4d6b52bc2943f9f27a689a8d4404499cb15c447a6aee32140cf7b03af0b388",
+    "tests/NativeEpochProbe/contracts/NativeEpochCore.cs": "4e9f787e18cde16a061406f8c7fa697be74628afa9a7457011ec7ecabb0dac03",
+    "contracts/native/SmartAccount/SmartAccount.Execution.cs": "17a131a5b3417527fe65f63791a7d7494a1f39a0291d147f7c491735df066adc",
+    "tests/SmartAccount.Native.Tests/UT_SmartAccount.cs": "103886a9d1539cc185935fb8183da8db66f21c2261f9621a2891460b293bbc7b"
+  },
+  "compiledProfiles": {
+    "ActionSessionValidator": {
+      "nefSha256": "195f7c9e6a459ed0f09a52f9f2988309cab497b306b79e26acb5c29c98c779a2",
+      "manifestSha256": "4f27ad0e69c34175348179377ce0ab10f61102f8e004032aab7dd88f2ab798b8",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "DailyLimitHook": {
+      "nefSha256": "f153ebfd83eaa32ea78942f1fde943f90282b6bb4e116da14861414c407e4887",
+      "manifestSha256": "f8ea5822739193236d6491c6d89b62d5046ee92c39498c42f817eaee5374d45c",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "DelegatedIdentityValidator": {
+      "nefSha256": "b420fcdfe497131a87193f4c4d70fbab9a269675e374e5898d2122952c2ee64a",
+      "manifestSha256": "5c09efba33350b53406be57241e97f1fcaa648975d7425de5599f97185ab0acb",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "GovernanceModule": {
+      "nefSha256": "d604aa62813606b08a9f9aa4b780bbf4f5e3f19fa2e887a69fb3863613ca6410",
+      "manifestSha256": "02d1f0e4d8bbfb68c179c803920eb625567a8d4b4fe84815ed973b9b36883815",
+      "allowedInstallationShapes": [
+        "empty"
+      ]
+    },
+    "HookOrchestratorModule": {
+      "nefSha256": "bce4a630642f01bd0ba5479d20db646728bb18c084a34b6003d42af0d9c0ece0",
+      "manifestSha256": "5ad9529f549c6c33ae302f2ed0216919d3823ec229311dcb84adaeccce6f37f8",
+      "allowedInstallationShapes": [
+        "empty",
+        "hookOrder"
+      ]
+    },
+    "MultiHook": {
+      "nefSha256": "7b4e1aaf2c7ad5eba885f572e6dc53a9084349fc6685ec9a7b3b1a2bfac2bd2e",
+      "manifestSha256": "13f517625288bf4b123443922d7d8c10d94157ca76cc00c20ef8404a45d67595",
+      "allowedInstallationShapes": []
+    },
+    "MultiSigValidator": {
+      "nefSha256": "908a226009c775d4661b4d36b2225b7aad731180a5dc95be07c5e40b0c1d0a00",
+      "manifestSha256": "01ba484b1c29115a4eef446aa6b804ad351254297743c955e9d9f716d2730945",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "NeoDIDCredentialHook": {
+      "nefSha256": "87bf3adf99b650cf0e7d3d614aedd8e21d968f9920b3e7ed0eb0d2acf5d5d72c",
+      "manifestSha256": "62c91ae5ffa6a4c36ad153ff5b26337d3351a7f899d1212d8d8fa0df97e51185",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "NeoWitnessValidator": {
+      "nefSha256": "722dd2ca124d2a7f521235bc43b5bd91a9cf4df1576c8752177c64d462750b30",
+      "manifestSha256": "2cd409bb0ff8cb6d0077161ff67fc87420b6d8f3ccc51bd096a6b864826c47ab",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "P256Validator": {
+      "nefSha256": "01ee323c07fba4e1d824200ae1a1c10f80db21cfe83a1a6e38803688a992391a",
+      "manifestSha256": "72734fe216d72dff223e86d2e43b792a9421a6bbad1fd8244a039fab59b48eaf",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "RecoveryModule": {
+      "nefSha256": "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e",
+      "manifestSha256": "c703f946a35e8d6c977e18b01f32148ddf38e84b813465acc60d462cfab6c6d7",
+      "allowedInstallationShapes": [
+        "empty"
+      ]
+    },
+    "SessionKeyValidator": {
+      "nefSha256": "a1ff6f9c072cf82534c255921347757ff041b7613159bd0f3b6b952d4eaea206",
+      "manifestSha256": "63d4b464cec441474d5cf354deaf392c353c06d783de7483eb3300e777361a03",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "SigningModule": {
+      "nefSha256": "7ab23d9f36a0a144ac5c013a13db865ed6b865a2ad1e5bb0b83a3f8a3c45a972",
+      "manifestSha256": "f3fe8b156968856743bcb408b7fb71c1df73bfba845d46f5413116a1ed457517",
+      "allowedInstallationShapes": [
+        "empty"
+      ]
+    },
+    "SubscriptionValidator": {
+      "nefSha256": "3d7b4be60d6a7cc29baccb3064cba3688563d0a8d47471d9fa85ad738cd4efcc",
+      "manifestSha256": "888fab45479dae2fcc9bc65125a42fcdd14fefc00a92941277e883252ffc373b",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "TeeKeyValidator": {
+      "nefSha256": "7ad81d6d10829755abaababf322291de0e0a806ac3482504845a1cc2d8671029",
+      "manifestSha256": "60c69aed18571459e132c682bac4426e269743a4a7cefb26b373225990d71d1e",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "ThresholdPolicyModule": {
+      "nefSha256": "8b845c1bed140d5416cbfa9cb45748ad5b23400d68fa27cdda25553697c648c7",
+      "manifestSha256": "3f85972c4fbf9081f9a48b83fcf5d6ca17c854bd758e82a1e1cd1ce18c815e38",
+      "allowedInstallationShapes": [
+        "empty"
+      ]
+    },
+    "TokenRestrictedHook": {
+      "nefSha256": "3316ca80a68e0af297102df9a31c99b24876141f87d9c8d4b029c2e2935c6382",
+      "manifestSha256": "7de721279794933c20721d24a1ef1749c5ca47818b9cc5f570ffef10c3050a32",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "Web3AuthValidator": {
+      "nefSha256": "4b151897fcdc85335a49bb081b9eb7806afd9d6d1bf9b9b7e4d1373bd33b25c2",
+      "manifestSha256": "e8c9b452e871ac0daf5ab5f8b32445f1e61568b2cacd0e48f5f828ec62902d13",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "WhitelistHook": {
+      "nefSha256": "b36d1b243f33cc9db24ca808c5b15aedccd532f902f7a347dcce6418efa28dee",
+      "manifestSha256": "1ed7e9ee352254f4e436f39e6042db4de14e1a8044eb889e94a971530f0df8c5",
+      "allowedInstallationShapes": [
+        "empty",
+        "command"
+      ]
+    },
+    "ZKEmailVerifier": {
+      "nefSha256": "ed6ab22b5f3086e9ca9eea25fbb864139eeb936e97b4ec04729ba206c10dd86b",
+      "manifestSha256": "0e14c254a68b1612e643ac014293eafeab3c6c78c71f9b92fb717be3ad465431",
+      "allowedInstallationShapes": []
+    }
+  },
+  "deployedGetters": 20,
+  "configurationAndInstallProbe": "20 named installation profiles checked; 20 named module commands accepted in NeoVM; 20 wrong arities and 14 wrong numeric field types rejected.",
+  "signedOperationLimit": {
+    "atLimitBytes": 16384,
+    "firstRejectedBytes": 16385,
+    "beforeFixAtFirstRejectedSize": "HALT",
+    "afterFixAtFirstRejectedSize": "FAULT",
+    "testName": "DigestQueryEnforcesSignedWireLimitBeforeRemovingSignature",
+    "outcome": "Passed"
+  },
+  "currentNativeTests": {
+    "passed": 1739,
+    "failed": 0,
+    "trxSha256": "65d1c91ee2afef930baab0795bedd2204a2de383c68ae29692a0865672bdab76"
+  },
+  "nativePackageChecks": [
+    "DailyLimitHook: named ABI and deployed native getter verified; NEF 6dd52b356792fbe0b6f8cd056fdf8ad266c150e81cf1bfd54a08ad02cf473187",
+    "MultiSigValidator: named ABI and deployed native getter verified; NEF cb84aeb23a2ba2145dc2f264dbfac099112d7d1a92f2e2b695261612a734e8ca",
+    "NeoWitnessValidator: named ABI and deployed native getter verified; NEF 872c1ad4f4bd1ddf0c1182061c7616fbf76f389b0dfa7106c6301ff0889915df",
+    "SessionKeyValidator: named ABI and deployed native getter verified; NEF d14581a8a4df8c1e2b08c497150df229dbd08d235e040bfa658f6a6f2e81207f",
+    "TokenRestrictedHook: named ABI and deployed native getter verified; NEF 015c0aaae98f6ff6a9229dffff3a3231483ab757a676e8041e193a226f9ed8d9",
+    "WhitelistHook: named ABI and deployed native getter verified; NEF aa01fb79af3af5f01512755866ca588823ac5febde06fa3296b700bc9b85980e"
+  ],
+  "policyModelReceiptSha256": "3cd753c43608a0eb5c108c174e7811c5e0918d849006c4517aafb33051e828d9",
+  "implementationVerified": false
+}

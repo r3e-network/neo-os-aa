@@ -23,6 +23,7 @@ const {
   NATIVE_ACCOUNT_ADDRESS_ABI,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
+  NATIVE_PROFILE_PARAMETER_DIGEST,
   PROTOCOL_VERSION,
 } = require('../src/native');
 const { nativeAbi } = require('./helpers/nativeAbi');
@@ -56,14 +57,27 @@ function csharpSources(directory) {
     );
 }
 
+test('native client and core pin the canonical atomic-configuration parameters', () => {
+  const crypto = require('node:crypto');
+  const params = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/proposals/smartaccount-native-profile-parameters.json')));
+  const canonical = JSON.stringify(params, Object.keys(params).sort());
+  const digest = crypto.createHash('sha256').update('NeoSmartAccount/Profile').update(Buffer.from([4])).update(canonical).digest('hex');
+  assert.deepEqual(params.configurationCoreActions, [1, 2, 5, 8]);
+  assert.deepEqual(params.governanceOnlyCoreActions, [3, 7, 9]);
+  assert.equal(params.configurationActionsMax, 16);
+  assert.equal(NATIVE_PROFILE_PARAMETER_DIGEST, digest);
+  assert.ok(fs.readFileSync(path.join(repoRoot, nativeSource, 'SmartAccount.cs'), 'utf8').includes('ParameterDigest = "' + digest + '"'));
+});
+
 test('the native ABI is the minimal-core v4 surface', () => {
-  // The 25 exported entry points of the minimal core (spec §3, §7, §9, §10,
+  // The 29 exported entry points of the minimal core (spec §3, §7, §9, §10,
   // §12.5): the configuration family plus the four restricted landing
   // entries behind the module decisions.
   for (const name of [
     'computeAccountIdentity',
     'createAccount',
     'createAccounts',
+    'getMessageSubjects', 'getThresholdPolicy', 'isValidSignature',
     'getOperationDigest',
     'validateUserOp',
     'executeUserOp',
@@ -74,6 +88,7 @@ test('the native ABI is the minimal-core v4 surface', () => {
     'removeModule',
     'setRecoveryPolicy',
     'setBuiltinAuthorization',
+    'applyConfigurationActions',
     'revokeModuleCredentials',
     'resetAccount',
     'getModules',
@@ -91,7 +106,7 @@ test('the native ABI is the minimal-core v4 surface', () => {
     if (name === 'computeAccountIdentity') continue; // a pure helper, not a contract method
     assert.ok(abi.has(name), `missing v4 method ${name}`);
   }
-  assert.equal([...abi.keys()].length, 25, 'the minimal core exports exactly 25 methods');
+  assert.equal([...abi.keys()].length, 29, 'the minimal core exports exactly 29 methods');
   // Removed with the single-slot verifier/hook model, the platform services and
   // the features that moved to user-space modules. There is no alias, so an old
   // caller must fail to resolve rather than silently reach a renamed method.
@@ -143,7 +158,6 @@ test('the native ABI is the minimal-core v4 surface', () => {
     'cancelRecovery',
     'executeRecovery',
     'getRecoveryStatus',
-    'isValidSignature',
     'getHookOrder',
     'setHookOrder',
     'revokeCredentials',
@@ -151,9 +165,7 @@ test('the native ABI is the minimal-core v4 surface', () => {
     'supportsModuleType',
     'supportsExecutionMode',
     'setThresholdPolicy',
-    'getThresholdPolicy',
     'updateMessageSubject',
-    'getMessageSubjects',
   ]) {
     assert.equal(abi.has(name), false, `retired method ${name} is still in the ABI`);
   }
@@ -229,7 +241,7 @@ test('the operation argument is a compound the client always serializes as an Ar
   }
 });
 
-test('every operation event the client requires is declared by the native kernel', () => {
+test('wallet discovery and the native kernel declare exactly the same events', () => {
   // `[ContractEvent(hardfork, index, "Name", ...)]`: the name is the third
   // positional argument, there is no `Name =` property in the attribute.
   const declared = new Set(
@@ -238,7 +250,18 @@ test('every operation event the client requires is declared by the native kernel
     ])].map((match) => match[1]),
   );
   assert.ok(declared.size > 0, 'the native source declares no events');
-  for (const name of NATIVE_REQUIRED_EVENTS) assert.ok(declared.has(name), `missing event ${name}`);
+  assert.deepEqual([...NATIVE_REQUIRED_EVENTS].sort(), [...declared].sort());
+});
+
+test('both protocol event tables match the manifest emitted by the native build', () => {
+  const { abi } = require('../../../tests/fixtures/native-smartaccount.manifest.json');
+  const expected = abi.events.map(({ name, parameters }) =>
+    `| \`${name}\` | ${parameters.map(p => `\`${p.name}: ${p.type}\``).join(', ')} |`);
+  for (const doc of ['SA-MODULE-PROTOCOL.md', 'SA-MODULE-PROTOCOL.zh-CN.md']) {
+    const section = fs.readFileSync(path.join(repoRoot, 'docs', doc), 'utf8')
+      .split(/^## 18\. /m)[1].split(/^---$/m)[0];
+    assert.deepEqual(section.split('\n').filter(line => line.startsWith('| `')), expected, doc);
+  }
 });
 
 test('every operation string the SDK emits exists in the native ABI', () => {

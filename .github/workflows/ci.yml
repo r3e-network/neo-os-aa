@@ -59,6 +59,14 @@ jobs:
       # checks that the installed nccs is this exact package before the first build.
       - name: Install Neo compiler (nccs 3.9.1)
         run: dotnet tool install -g neo.compiler.csharp --version 3.9.1
+      - name: Verify subscription module behavior in NeoVM
+        run: |
+          export SMARTACCOUNT_ARTIFACT_DIR="$(mktemp -d)"
+          compiler="$HOME/.dotnet/tools/nccs"
+          "$compiler" tests/mocks/MockVerifierCore.csproj -o "$SMARTACCOUNT_ARTIFACT_DIR"
+          "$compiler" tests/mocks/MockTransferTarget.csproj -o "$SMARTACCOUNT_ARTIFACT_DIR"
+          "$compiler" contracts/plugins/validators/SubscriptionValidator.csproj -o "$SMARTACCOUNT_ARTIFACT_DIR/validators"
+          dotnet test tests/SmartAccount.Contracts.Tests --filter 'FullyQualifiedName~SubscriptionValidatorRuntimeTests|Name~NewScheduleWaitsForBothBookedWindows|Name~SubscriptionConfigurationRequiresIntegerFields|Name~SubscriptionIdsUseTheirFullBytes|Name~CancelKeepsTheLastChargedPeriodTombstone|Name~RenewedSubscriptionUsesCurrentDescriptorGeneration'
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci

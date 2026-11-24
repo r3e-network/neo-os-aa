@@ -18,6 +18,48 @@ using Neo.VM.Types;
 // docs/SA-MODULE-PROTOCOL.md §9 — caller authentication, per-(accountId, moduleId)
 // instance isolation, big-endian instance keys, fail-closed teardown — not native
 // recovery authorization or private-chain admission.
+if (args is ["--module-commands", var modules, var fixturePrefix, var catalog])
+    return ModuleCommands.Check(modules, fixturePrefix, catalog);
+static byte[] ReadModuleProfile(string nefPath, string manifestPath)
+{
+    var engine = new Neo.SmartContract.Testing.TestEngine { Fee = 500_00000000 };
+    engine.SetTransactionSigners(new Signer { Account = engine.ValidatorsAddress, Scopes = WitnessScope.Global });
+    byte[] nef = File.ReadAllBytes(nefPath);
+    string manifest = File.ReadAllText(manifestPath);
+    var hash = engine.GetDeployHash(NefFile.Parse(nef, verify: true), ContractManifest.Parse(manifest));
+    using var deploy = new ScriptBuilder();
+    deploy.EmitDynamicCall(NativeContract.ContractManagement.Hash, "deploy", nef, manifest,
+        UInt160.Parse("0x398dc3f0227d7efac5533ed5ce9937390c158084").ToArray());
+    engine.Execute(new Script(deploy.ToArray()));
+    using var read = new ScriptBuilder();
+    read.EmitDynamicCall(hash, "getModuleProfile", CallFlags.ReadStates);
+    engine.Fee = 5_00000000;
+    var reply = engine.Execute(new Script(read.ToArray()));
+    if (reply is not ByteString bytes || bytes.Size is 0 or > 2048)
+        throw new InvalidDataException("getModuleProfile must return 1 to 2048 bytes as ByteString.");
+    return bytes.GetSpan().ToArray();
+}
+if (args is ["--module-profile", var nefPath, var manifestPath, var profilePath])
+{
+    if (!ReadModuleProfile(nefPath, manifestPath).SequenceEqual(File.ReadAllBytes(profilePath)))
+        throw new InvalidDataException("getModuleProfile returned different bytes than the supplied profile.");
+    Console.WriteLine("Deployed module profile bytes matched in NeoVM.");
+    return 0;
+}
+if (args is ["--module-profiles", var directory, var json])
+{
+    var expected = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json)!;
+    if (expected.Count == 0) throw new ArgumentException("No module profiles supplied.");
+    foreach (var (name, digest) in expected)
+    {
+        string prefix = Path.Combine(directory, name, name);
+        byte[] value = ReadModuleProfile(prefix + ".nef", prefix + ".manifest.json");
+        if (!System.Security.Cryptography.SHA256.HashData(value).SequenceEqual(Convert.FromHexString(digest)))
+            throw new InvalidDataException(name + ": getModuleProfile returned unexpected bytes.");
+    }
+    Console.WriteLine($"{expected.Count} deployed module profile getters matched in NeoVM.");
+    return 0;
+}
 if (args.Length != 1) throw new ArgumentException("Pass the artifact directory.");
 string artifacts = Path.GetFullPath(args[0]);
 // The native profile pins every module to this core hash (NativeAuthority.SmartAccount).

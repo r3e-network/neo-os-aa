@@ -20,8 +20,7 @@
  *   PUSHDATA1 20 core | SYSCALL System.Contract.Call
  *
  * The native kernel pushes PUSH5 (CallFlags.ReadOnly = 5), which is this
- * module's default; the flag stays an explicit parameter because the account
- * address must be the one the submitting core derives.
+ * module's only accepted flag.
  *
  * Dependency-light by design: the hash160 primitive is injected, and the hex
  * helpers come from metaTxCore.mjs, so the SDK, the relay route and the wallet
@@ -29,6 +28,7 @@
  */
 
 import { sanitizeHex, reverseHex } from './metaTxCore.mjs';
+import { nativeProxyVerificationScript } from './nativeSmartAccount.mjs';
 
 /** Domain prefix of the v4 account identity (contract AccountIdentityDomainV4). */
 export const ACCOUNT_IDENTITY_DOMAIN_HEX = 'aa524704';
@@ -41,7 +41,6 @@ export const MIN_RECOVERY_TIMELOCK_MS = 604_800_000; // 7 days
 export const MAX_RECOVERY_TIMELOCK_MS = 7_776_000_000; // 90 days
 
 const ZERO_HASH160_HEX = '00'.repeat(20);
-const VERIFY_METHOD_HEX = '766572696679'; // "verify"
 
 function requireDisplayHash160(value, fieldName) {
   const sanitized = sanitizeHex(value);
@@ -63,15 +62,6 @@ function requireSaltHex(value) {
     );
   }
   return sanitized;
-}
-
-/** NeoVM constant push for the small call-flag values the proxy script uses. */
-function pushSmallInt(value) {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < -1 || n > 16) {
-    throw new Error('Invalid account identity: call flags must be -1..16');
-  }
-  return (n + 16).toString(16).padStart(2, '0');
 }
 
 /**
@@ -118,17 +108,7 @@ export function createRegistrationIdentityDeriver({ hash160 } = {}) {
   function deriveProxyScript({ accountId, coreContractHash, callFlags = 5 } = {}) {
     const account = requireDisplayHash160(accountId, 'accountId');
     const core = requireDisplayHash160(coreContractHash, 'coreContractHash');
-    return [
-      '0c14',
-      reverseHex(account),
-      '11c0',
-      pushSmallInt(callFlags),
-      '0c06',
-      VERIFY_METHOD_HEX,
-      '0c14',
-      reverseHex(core),
-      '41627d5b52',
-    ].join('').toLowerCase();
+    return nativeProxyVerificationScript(account, { coreContractHash: core, callFlags });
   }
 
   /**

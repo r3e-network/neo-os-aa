@@ -2,8 +2,8 @@
  * v4 native-kernel RPC fixture.
  *
  * The answers here are the exact stack shapes of `contracts/native/SmartAccount
- * /*`: a 16-field account descriptor, the 8-field intent record, the 12-field
- * module descriptor, [version, migrationModeOpen] from `getProtocolInfo`, and
+ * /*`: a 15-field account descriptor, the 8-field intent record, the 12-field
+ * module descriptor, [wire tag] from `getProtocolInfo`, and
  * the shipped implementation id. Anything the client does not gate on is left
  * out on purpose, so a new client read fails here instead of silently passing.
  */
@@ -13,6 +13,7 @@ import {
 } from "../../src/features/native/nativeWorkspace.js";
 import {
   NATIVE_ACCOUNT_ADDRESS_ABI,
+  NATIVE_PROFILE_PARAMETER_DIGEST,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
 } from "../../src/shared/nativeSmartAccountClient.mjs";
@@ -49,16 +50,17 @@ const RPC = (v) => {
   throw Error("fixture: unsupported canonical VM value");
 };
 
-export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountId } = {}) {
+export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountId, accountAddress = nativeTestIdentity.accountAddress } = {}) {
   const state = {
     registered: false,
+    defaultOperationAuthorization: true,
     magic: 123,
     malformed: false,
     protocolVersion: 4,
-    implementationId: "NativeSmartAccount/v4",
+    implementationId: "NativeSmartAccount",
     nativeId: -13,
     status: 0,
-    epoch: 0,
+    epoch: 1,
     config: 0,
     custody: nativeTestCustody,
     recovery: "00".repeat(20),
@@ -66,6 +68,7 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     pendingRecovery: null,
     intents: {},
     modules: [],
+    neoBalance: "17", gasBalance: "200000001",
     hookOrder: [],
     hookRevision: 0,
     script: "",
@@ -82,7 +85,7 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     extras.set(c.dynamicCall(CORE, method, args, 5), value);
   const manifest = () => ({
     name: "SmartAccount",
-    extra: {},
+    extra: { smartAccount: { abiVersion: 4, profileParameterDigest: NATIVE_PROFILE_PARAMETER_DIGEST } },
     abi: {
       methods: Object.entries({
         ...NATIVE_REQUIRED_ABI,
@@ -115,7 +118,6 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       BOOL(false),
       I(0),
       BOOL(false),
-      N,
     ]);
   const record = () =>
     A([
@@ -126,7 +128,7 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       I(state.epoch),
       I(state.config),
       I(state.timelock),
-      BOOL(true),
+      BOOL(state.defaultOperationAuthorization),
       BOOL(true),
       BOOL(false),
       I(state.hookRevision),
@@ -134,7 +136,6 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       BOOL(!!state.pendingRecovery),
       I(state.pendingRecovery?.matureAt ?? 0),
       BOOL(false),
-      N,
     ]);
   const intentRecord = (intent) =>
     A([
@@ -178,7 +179,15 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     const add = (method, args, value) =>
       map.set(c.dynamicCall(CORE, method, args, 5), value);
     const id = c.hashValue(accountId);
-    add("getProtocolInfo", [], A([I(state.protocolVersion), BOOL(false)]));
+    const proxy = c.hashValue(accountAddress);
+    for (const [token, amount] of [["ef4073a0f2b305a38ec4050e4d3d28bc40ea63f5", state.neoBalance], ["d2a4cff31913016155e38e474a2c06d08be276cf", state.gasBalance]]) {
+      map.set(c.dynamicCall(token, "balanceOf", [proxy], 5), amount === null ? N : I(amount));
+    }
+    const subkey = "00".repeat(32);
+    const channel = c.deriveNonceChannel({ accountId, coreContractHash: CORE },
+      { authorityEpoch: String(state.epoch), validatorId: "0", credentialGeneration: "1", nonceSubkey: subkey });
+    add("getNonce", [id, I(0), { type: "ByteString", value: subkey }], I(c.composeNonce(channel, 0)));
+    add("getProtocolInfo", [], A([I(state.protocolVersion)]));
     add("getAccountImplementationId", [], TEXT(state.implementationId));
     add("getAccount", [id], state.registered ? record() : notFound());
     add(
@@ -265,7 +274,7 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     if (method === "getapplicationlog")
       return {
         txid: params[0],
-        executions: [{ trigger: "Application", vmstate: "HALT", stack: [] }],
+        executions: [{ trigger: "Application", vmstate: "HALT", stack: [N] }],
       };
     if (method !== "invokescript") throw Error("Unsupported fixture RPC");
     const script = Buffer.from(params[0], "base64").toString("hex");
@@ -278,7 +287,8 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       minimumrequiredfee: "100000",
     };
   }
-  return { state, send, answers, add, manifest, record };
+  return { state, send, answers, add, manifest, record,
+    setInvocationResult: (script, item) => extras.set(script, item) };
 }
 
 export const nativeTestRecoverySeat = Object.freeze({ nefSha256: "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e", moduleType: 5, moduleId: 17, contractHash: "ef".repeat(20), credentialGeneration: 1, profileSha256: "9e3aa360fd7b9bc1d04d368140639e44985a07045f338a3036df3e0859e536e6" });

@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent
-ARTIFACTS = {"coq/NativeV4Admission.v", "coq/SmartAccountSA.v", "coq/MultiSigPolicy.v",
+ARTIFACTS = {"coq/NativeAdmission.v", "coq/SubscriptionBilling.v", "coq/SmartAccountSA.v", "coq/MultiSigPolicy.v",
              "coq/ProxyWitnessScript.v",
              # Archived historical models of the retired custom kernel. Their C#
              # source correspondence retired with that kernel in Phase 3, so the
@@ -43,8 +43,8 @@ RUNTIME_PROFILES = {
            "verifierCall": "System.Contract.Call", "verifierChildBudgetEnforced": False},
     "platform": {"artifactDirectory": "contracts/bin/platform", "define": "PLATFORM",
                  "verifierCall": "System.Contract.CallWithGasLimit", "verifierChildBudgetEnforced": True},
-    "native-v4": {"abiVersion": 4, "identityVersion": 4, "implementationVerified": False,
-                  "scope": "authority admission, recovery status and hook order policy model"},
+    "native-current": {"abiVersion": 4, "identityVersion": 4, "implementationVerified": False,
+                  "scope": "authority admission, recovery status, hook order, governed policy admission, resource-disjoint policy checkpoints, atomic core configuration batches and custody operation authorization, exclusive threshold spending and delayed release; optional SubscriptionValidator billing windows (model only)"},
     "native": {"artifactDirectory": "explicit native build output", "define": "SMARTACCOUNT_NATIVE",
                "core": "SmartAccount", "abiVersion": 2, "identityVersion": 1,
                "verifierCall": "bounded native callback", "verifierChildBudgetEnforced": True,
@@ -58,7 +58,8 @@ PUBLIC_MODELS = {"coq/SmartAccountSA.v", "coq/ProxyWitnessScript.v", "coq/MultiS
 MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
                          ["public", "platform"] if name in PUBLIC_MODELS else ["native"])
                   for name in sorted(ARTIFACTS)}
-MODEL_PROFILES["coq/NativeV4Admission.v"] = ["native-v4"]
+MODEL_PROFILES["coq/NativeAdmission.v"] = ["native-current"]
+MODEL_PROFILES["coq/SubscriptionBilling.v"] = ["native-current"]
 # The core checkout is external: no host path is committed or trusted as identity.
 # Hash the full selected Neo source graph, not only SmartAccount partials.
 NATIVE_CORE_REQUIRED_FILES = {
@@ -85,6 +86,14 @@ NATIVE_KERNEL_SOURCES = {
         "SmartAccountModuleProtocol.cs", "SmartAccountProtocol.cs", "SmartAccountRecords.cs")},
 }
 SOURCE_FILES = {*NATIVE_KERNEL_SOURCES,
+                "contracts/plugins/validators/SubscriptionValidator.cs",
+                "docs/proposals/nep-smartaccount-module-profiles.mediawiki",
+                "docs/proposals/nep-smartaccount-module-interface.mediawiki",
+                "docs/proposals/nep-smartaccount-entry-verifier.mediawiki",
+                "docs/proposals/smartaccount-named-module-interfaces.json",
+                "docs/proposals/smartaccount-module-profile.schema.json",
+                "scripts/sync_native_smartaccount.py",
+                "docs/SA-MODULE-PROTOCOL.md",
                 "contracts/plugins/validators/ValidatorPayload.cs",
                 "contracts/plugins/validators/SignerDomain.cs",
                 "contracts/plugins/validators/MultiSigValidator.cs",
@@ -99,19 +108,19 @@ SOURCE_FILES = {*NATIVE_KERNEL_SOURCES,
                 "contracts/plugins/hooks/WhitelistHook.cs",
                 "contracts/plugins/hooks/DailyLimitHook.cs",
                 "contracts/plugins/hooks/TokenRestrictedHook.cs",
-                "docs/proposals/smartaccount-native-profile-v2-parameters.json",
-                "docs/proposals/smartaccount-native-profile-v2-vectors.json",
+                "docs/archive/native-research/smartaccount-native-profile-v2-parameters.json",
+                "docs/archive/native-research/smartaccount-native-profile-v2-vectors.json",
                 "scripts/native_module_profile.py", "scripts/build_native_modules.py",
                 "contracts/plugins/native-profile/profiles.json"}
 SOURCE_FILES.update({"contracts/modules/Shared/ModuleSupport.cs",
-                     "docs/proposals/smartaccount-native-profile-v4-parameters.json"})
+                     "docs/proposals/smartaccount-native-profile-parameters.json"})
 for _module in ("GovernanceModule", "RecoveryModule", "HookOrchestratorModule", "SigningModule", "ThresholdPolicyModule"):
     for _file in (_module + ".cs", _module + ".csproj", "packages.lock.json"):
         SOURCE_FILES.add(f"contracts/modules/{_module}/{_file}")
 SOURCE_FILES.update({"Directory.Build.props", "nuget.config", "contracts/neo-platform-packages.json",
                      "scripts/verify_repo.sh", "scripts/check_neo_platform_packages.mjs",
                      "formal/verify.py", "formal/verify-in-docker.sh", "formal/Dockerfile",
-                     "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
+                     "docs/archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md",
@@ -790,12 +799,43 @@ NATIVE_AUTHORITY_EPOCH_MUTATIONS["execution-envelope-arity-bypass"] = (
     "true && authorized maximum s domain valid_signature.")
 
 COQ_MODULES = {
-    "NativeV4Admission.v": {
+    "SubscriptionBilling.v": {
+        "allow-period-zero": ("(0 <? now / duration)", "true"),
+        "ignore-new-window": ("(booked / duration <? now / duration)", "true"),
+        "ignore-booked-window": ("(booked / previous <? now / previous)", "true"),
+        "reject-boundary-second": ("booked / duration <? now / duration", "S (booked / duration) <? now / duration"),
+    },
+    "NativeAdmission.v": {
+        "roster-ignore-provider": ("match store provider account with", "match store 0 account with"),
+        "roster-ignore-account": ("match store provider account with", "match store provider 0 with"),
+        "roster-ignore-commitment": ("Nat.eqb observed_digest commitment", "true"),
+        "roster-ignore-revision": ("Nat.eqb observed_revision revision", "true"),
+        "spend-outside-enrolled-route": ("Nat.eqb route (S n) && quorum", "quorum"),
+        "skip-enrolled-quorum": ("Nat.eqb route (S n) && quorum", "Nat.eqb route (S n)"),
+        "release-before-recovery-maturity": ("recover s seat configured mature current then", "recover s seat configured true current then"),
+        "release-under-stale-recovery-epoch": ("recover s seat configured mature current then", "recover s seat configured mature true then"),
+        "accept-message-key-for-spending": ("enabled && custody_signature", "enabled && (custody_signature || message_signature)"),
+        "ignore-operation-generation": ("Nat.eqb generation 1.", "true."),
+        "ignore-operation-authority-epoch": ("Nat.eqb expected_epoch signed_epoch", "true"),
         "omit-incoming-consent": ("(negb changed || consent)", "(negb changed || true)"),
         "reject-frozen-recovery": ("| Active | Frozen =>", "| Frozen => false\n  | Active =>"),
         "omit-recovery-maturity": ("configured && mature &&", "configured && true &&"),
-        "admit-migration": ("| MigrationRequired => false", "| MigrationRequired => true"),
+        "admit-invalid-status": ("| InvalidStatus => false", "| InvalidStatus => true"),
         "post-order-forward": ("hooks ++ rev hooks", "hooks ++ hooks"),
+        "ignore-governance-manifest": ("exact_code && exact_manifest", "exact_code && true"),
+        "ignore-governance-deployment": ("exact_manifest && original_deployment", "exact_manifest && true"),
+        "ignore-intent-payload": ("original_deployment && exact_payload", "original_deployment && true"),
+        "ignore-policy-maturity": ("unused && (maturity <=? now)", "unused && true"),
+        "ignore-policy-expiry": ("&& (now <=? expiry).", "&& true."),
+        "skip-prior-checkpoint": ("Nat.eqb checkpoint before", "true"),
+        "allow-unobserved-version-jump": ("Nat.eqb after (S before)", "true"),
+        "ignore-governance-readset": ("same_epoch && disjoint", "same_epoch"),
+        "carry-arbitrary-commit": ("pending_policy && committed_policy", "pending_policy"),
+        "advance-per-action": ("(S nonce, final)", "(nonce + length actions, final)"),
+        "ignore-final-operation-route": ("if route final then", "if true then"),
+        "skip-refused-action": ("| None => None\n      end", "| None => stage_actions step state rest\n      end"),
+        "commit-failed-batch-version": ("| None => (nonce, state)", "| None => (S nonce, state)"),
+        "ignore-batch-size": ("if (1 <=? length actions) && (length actions <=? 16) then", "if true then"),
     },
     "NativeAuthorityEpoch.v": NATIVE_AUTHORITY_EPOCH_MUTATIONS,
     "NativeCompositePhase.v": NATIVE_COMPOSITE_PHASE_MUTATIONS,
@@ -915,9 +955,8 @@ def check_inventory(root=ROOT):
 # kernel in Phase 3. The archived models above keep their abstract theorems and
 # mutation tests, but nothing in this gate claims a live source link for them.
 # The native threshold-policy guards and their bounded config/acceptance model
-# (check_multisig_bounded) retired on 2026-11-22 for the same reason: threshold
-# ownership moved to the user-space ThresholdPolicyModule, so the gate no longer
-# asserts a native threshold-policy source link. The abstract MultiSigPolicy.v
+# (check_multisig_bounded) retired on 2026-11-22 for the same reason: the old model does not
+# prove the governed policy implementation. The abstract MultiSigPolicy.v
 # Coq model remains as compile-and-mutation evidence only.
 
 
@@ -982,7 +1021,7 @@ def check_native_composite_bounded(repo_root=ROOT.parent):
     membership and a first-valid-index scan for selection. Source correspondence
     still requires the reviewed lock and implementation/runtime evidence.
     """
-    profile = json.loads((repo_root / "docs/proposals/smartaccount-native-profile-v2-parameters.json").read_text())
+    profile = json.loads((repo_root / "docs/archive/native-research/smartaccount-native-profile-v2-parameters.json").read_text())
     profile_caps = {name: profile.get(field) for name, field in {
         "children": "compositeVerifierMaxChildren", "threshold": "compositeVerifierMaxThreshold",
         "approved": "compositeVerifierMaxApprovedChildren", "domains": "compositeVerifierMaxSignerDomains"}.items()}
@@ -1213,21 +1252,108 @@ def resolve_java(candidates, logs):
                      + "). Set JAVA_BIN to a JDK's bin/java; on macOS `brew install openjdk`.")
 
 
+def check_coq_modules(modules, coqc, work, logs, report):
+    for module, mutations in modules.items():
+        require(f"coq/{module}" in ARTIFACTS, f"Unregistered Coq module: {module}")
+        require(bool(mutations), f"Coq module without mutations: {module}")
+        source = (work / module).read_text()
+        names = coq_declarations(source)
+        rc, out = run([coqc, "-q", module], work, logs, "coq-" + module)
+        require(rc == 0 and out.count("Closed under the global context") == len(names)
+                and "Axioms:" not in out,
+                f"Coq compilation/assumption audit failed: {module}")
+        report["coqDeclarations"][module] = len(names)
+        for name, (old, new) in mutations.items():
+            mutant = replace_once(source, old, new)
+            label = coq_mutation_label(module, name)
+            directory = work / ("coq-" + label)
+            directory.mkdir()
+            (directory / module).write_text(mutant)
+            # First compile just the definitions: a malformed mutation is
+            # not proof evidence.
+            prefix = re.split(r"^(?:Lemma|Theorem|Corollary|Proposition|Fact|Example|Remark) ",
+                              mutant, maxsplit=1, flags=re.M)[0]
+            (directory / "Definitions.v").write_text(prefix)
+            rc, out = run([coqc, "-q", "Definitions.v"], directory, logs, label + "-definitions")
+            require(rc == 0, f"Invalid model mutation: {name}")
+            rc, out = run([coqc, "-q", module], directory, logs, label + "-mutant")
+            require(rc != 0 and "Error:" in out and "Syntax error" not in out,
+                    f"Coq mutation escaped or failed without proof rejection: {name}")
+        report["coqMutationsRejected"][module] = list(mutations)
+
+
+# Only these modules have an explicit correspondence claim for the current
+# protocol. The general reference suite has its own scope and receipt.
+CURRENT_PROFILE = "native-current"
+CURRENT_SOURCES = SOURCE_FILES - {
+    "docs/archive/native-research/smartaccount-native-profile-v2-parameters.json",
+    "docs/archive/native-research/smartaccount-native-profile-v2-vectors.json",
+    "docs/archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
+    "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md",
+    "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md",
+}
+
+
+def current_snapshot():
+    lock = json.loads((ROOT / "source-lock.json").read_text())
+    check_profile_scope(lock)
+    claimed = {name for name, profiles in MODEL_PROFILES.items() if CURRENT_PROFILE in profiles}
+    require(claimed and all(name.startswith("coq/") and name[4:] in COQ_MODULES for name in claimed),
+            "Current model missing from the proof runner")
+    pins = {name: content_digest(ROOT.parent / name) for name in sorted(CURRENT_SOURCES)}
+    require(all(lock["sources"].get(name) == value for name, value in pins.items()),
+            "Current protocol sources differ from the reviewed lock")
+    return lock, pins, {name: content_digest(ROOT / name) for name in sorted(claimed)}
+
+
+def check_current(coqc, core, logs, report):
+    lock, pins, artifacts = current_snapshot()
+    native = check_native_core_sources(lock, core)
+    report.update(runtimeProfiles={CURRENT_PROFILE: RUNTIME_PROFILES[CURRENT_PROFILE]},
+                  modelProfiles={name: [CURRENT_PROFILE] for name in artifacts},
+                  artifactSha256=artifacts, sourceSha256=pins, nativeCoreSourceSha256=native,
+                  coqDeclarations={}, coqMutationsRejected={})
+    rc, out = run([coqc, "--version"], ROOT, logs, "coq-version")
+    require(rc == 0 and out.strip(), "Cannot read Coq version")
+    report["toolVersions"] = {"coq": out.splitlines()[0]}
+    with tempfile.TemporaryDirectory(prefix="sa-current-") as temp:
+        work = Path(temp)
+        for name in artifacts:
+            shutil.copyfile(ROOT / name, work / Path(name).name)
+        modules = {Path(name).name: COQ_MODULES[Path(name).name] for name in artifacts}
+        check_coq_modules(modules, coqc, work, logs, report)
+    require(current_snapshot() == (lock, pins, artifacts), "Current inputs changed during verification")
+    check_native_core_sources(lock, core)
+    report["modelChecksPassed"] = True
+    print(f"PASS: current SmartAccount policy models; {sum(report['coqDeclarations'].values())} declarations, "
+          f"{sum(map(len, report['coqMutationsRejected'].values()))} semantic mutations; implementation unproven")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".runs" / "latest")
     parser.add_argument("--native-core-root", type=Path, default=os.environ.get("NEOOS_NATIVE_CORE_SOURCE"))
+    parser.add_argument("--reference-models", action="store_true", help="Run research models with their original scopes in a separate receipt")
     args = parser.parse_args()
     logs = args.output.resolve()
     logs.mkdir(parents=True, exist_ok=True)
     # Invalidate a previous success before any current gate runs.
     report = {"modelChecksPassed": False, "implementationVerified": False,
               "boundary": "Hand-written abstractions; no VM/source/NEF refinement or liveness proof",
-              "runtimeProfiles": RUNTIME_PROFILES, "modelProfiles": MODEL_PROFILES}
+              "runtimeProfiles": RUNTIME_PROFILES if args.reference_models else {CURRENT_PROFILE: RUNTIME_PROFILES[CURRENT_PROFILE]},
+              "modelProfiles": MODEL_PROFILES if args.reference_models else {n: p for n, p in MODEL_PROFILES.items() if CURRENT_PROFILE in p}}
     report_path = logs / "result.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     try:
         coqc = executable("COQC", "coqc")
+        require(args.native_core_root, "A --native-core-root is required")
+        rc, _ = run([sys.executable, ROOT.parent / "scripts/sync_native_smartaccount.py",
+                     "--core", Path(args.native_core_root).resolve(), "--check"], ROOT, logs, "native-source-sync")
+        require(rc == 0, "Native generated files differ from the SmartAccount source (see native-source-sync.log)")
+        report["nativeGeneratedCopiesMatched"] = True
+        if not args.reference_models:
+            check_current(coqc, args.native_core_root, logs, report)
+            return 0
         check_inventory()
         source_lock = json.loads((ROOT / "source-lock.json").read_text())
         report["nativeCoreSourceSha256"] = check_native_core_sources(source_lock, args.native_core_root)
@@ -1255,33 +1381,7 @@ def main():
             # still reported PASS.
             report["coqDeclarations"] = {}
             report["coqMutationsRejected"] = {}
-            for module, mutations in COQ_MODULES.items():
-                require(f"coq/{module}" in ARTIFACTS, f"Unregistered Coq module: {module}")
-                require(bool(mutations), f"Coq module without mutations: {module}")
-                source = (work / module).read_text()
-                names = coq_declarations(source)
-                rc, out = run([coqc, "-q", module], work, logs, "coq-" + module)
-                require(rc == 0 and out.count("Closed under the global context") == len(names)
-                        and "Axioms:" not in out,
-                        f"Coq compilation/assumption audit failed: {module}")
-                report["coqDeclarations"][module] = len(names)
-                for name, (old, new) in mutations.items():
-                    mutant = replace_once(source, old, new)
-                    label = coq_mutation_label(module, name)
-                    directory = work / ("coq-" + label)
-                    directory.mkdir()
-                    (directory / module).write_text(mutant)
-                    # First compile just the definitions: a malformed mutation is
-                    # not proof evidence.
-                    prefix = re.split(r"^(?:Lemma|Theorem|Corollary|Proposition|Fact|Example|Remark) ",
-                                      mutant, maxsplit=1, flags=re.M)[0]
-                    (directory / "Definitions.v").write_text(prefix)
-                    rc, out = run([coqc, "-q", "Definitions.v"], directory, logs, label + "-definitions")
-                    require(rc == 0, f"Invalid model mutation: {name}")
-                    rc, out = run([coqc, "-q", module], directory, logs, label + "-mutant")
-                    require(rc != 0 and "Error:" in out and "Syntax error" not in out,
-                            f"Coq mutation escaped or failed without proof rejection: {name}")
-                report["coqMutationsRejected"][module] = list(mutations)
+            check_coq_modules(COQ_MODULES, coqc, work, logs, report)
             command = [java, "-Xmx1g", "-XX:+UseParallelGC", "-cp", jar, "tlc2.TLC",
                        "-workers", "1", "-coverage", "1", "-config", "SmartAccountSA.cfg",
                        "SmartAccountSA.tla"]

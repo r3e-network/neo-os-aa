@@ -1,0 +1,388 @@
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ActionSessionValidator/ActionSessionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ActionSessionValidator/ActionSessionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ActionSessionValidator/SocialRecoveryService.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ActionSessionValidator/SocialRecoveryService.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/hooks/DailyLimitHook.csproj (用时 20.37 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/NeoDIDCredentialHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/NeoDIDCredentialHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/MultiHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/MultiHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/DailyLimitHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/DailyLimitHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/TokenRestrictedHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/TokenRestrictedHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/WhitelistHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DailyLimitHook/WhitelistHook.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/DelegatedIdentityValidator.csproj (用时 8.31 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/DelegatedIdentityValidator/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/GovernanceModule/GovernanceModule.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/GovernanceModule/GovernanceModule.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/HookOrchestratorModule/HookOrchestratorModule.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/HookOrchestratorModule/HookOrchestratorModule.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/hooks/MultiHook.csproj (用时 6.22 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/NeoDIDCredentialHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/NeoDIDCredentialHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/MultiHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/MultiHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/DailyLimitHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/DailyLimitHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/TokenRestrictedHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/TokenRestrictedHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/WhitelistHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiHook/WhitelistHook.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/MultiSigValidator.csproj (用时 9.11 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/MultiSigValidator/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/hooks/NeoDIDCredentialHook.csproj (用时 11.41 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/NeoDIDCredentialHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/NeoDIDCredentialHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/MultiHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/MultiHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/DailyLimitHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/DailyLimitHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/TokenRestrictedHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/TokenRestrictedHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/WhitelistHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoDIDCredentialHook/WhitelistHook.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/NeoWitnessValidator.csproj (用时 7.19 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/NeoWitnessValidator/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/P256Validator.csproj (用时 10.34 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/P256Validator/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/RecoveryModule/RecoveryModule.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/RecoveryModule/RecoveryModule.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/SessionKeyValidator.csproj (用时 11.1 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SessionKeyValidator/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SigningModule/SigningModule.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SigningModule/SigningModule.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/SubscriptionValidator.csproj (用时 6.84 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/SubscriptionValidator/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/TeeKeyValidator.csproj (用时 8.14 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TeeKeyValidator/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ThresholdPolicyModule/ThresholdPolicyModule.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ThresholdPolicyModule/ThresholdPolicyModule.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/hooks/TokenRestrictedHook.csproj (用时 5.8 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/NeoDIDCredentialHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/NeoDIDCredentialHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/MultiHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/MultiHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/DailyLimitHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/DailyLimitHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/TokenRestrictedHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/TokenRestrictedHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/WhitelistHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/TokenRestrictedHook/WhitelistHook.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/Web3AuthValidator.csproj (用时 2.55 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/Web3AuthValidator/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/hooks/WhitelistHook.csproj (用时 3.46 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/NeoDIDCredentialHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/NeoDIDCredentialHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/MultiHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/MultiHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/DailyLimitHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/DailyLimitHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/TokenRestrictedHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/TokenRestrictedHook.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/WhitelistHook.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/WhitelistHook/WhitelistHook.manifest.json
+Compilation completed successfully.
+  正在确定要还原的项目…
+  已还原 /Users/jinghuiliao/git/neo-os/neo-os-aa/contracts/plugins/validators/ZKEmailVerifier.csproj (用时 5.75 秒)。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/DelegatedIdentityValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/DelegatedIdentityValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/SubscriptionValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/SubscriptionValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/SessionKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/SessionKeyValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/P256Validator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/P256Validator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/NeoWitnessValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/NeoWitnessValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/Web3AuthValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/Web3AuthValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/MultiSigValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/MultiSigValidator.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/ZKEmailVerifier.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/ZKEmailVerifier.manifest.json
+Compilation completed successfully.
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/TeeKeyValidator.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/ZKEmailVerifier/TeeKeyValidator.manifest.json
+Compilation completed successfully.
+20 deployed module profile getters matched in NeoVM.
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/_test_core/NativeEpochCore.nef
+Created /var/folders/4c/mvvl373n0c70kx4vhzlb9fdw0000gn/T/sa-nep-gbs5bt1b/_test_core/NativeEpochCore.manifest.json
+Compilation completed successfully.
+20 named installation profiles checked; 20 named module commands accepted in NeoVM; 20 wrong arities and 14 wrong numeric field types rejected.
+18 enabled modules accepted empty uninstall data in NeoVM.
+20 module profiles verified against compiled manifests

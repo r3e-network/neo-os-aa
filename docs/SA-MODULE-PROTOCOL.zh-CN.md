@@ -1,71 +1,41 @@
-# SA 模块协议 —— 共同规范（协议版本 4）
+# SmartAccount 模块协议
 
-本文件是 Neo Smart Account（SA）模块模型的**唯一共同规范**，由 native kernel 批次实施：
+本协议尚未发布，只定义当前原生核心及其模块。[当前参数](proposals/smartaccount-native-profile-parameters.json)用于实现、打包和钱包校验；[实现清单](../contracts/native/profile.json)列出尚未闭合的事项。
 
-- 原生合约版 kernel —— 任务 #40（`contracts/native/SmartAccount/`）
-- 已退役的 custom kernel —— 任务 #39，归档交付记录
-
-本文定义的 DTO、profile、存储布局、上限、错误码、事件与 gas 预算，是核心与每个模块之间的
-契约；任何实现不得偏离或自行重新设计。凡运行时确有差异之处（如 caller/阶段门实现机制），
-必须作为披露的能力差异显式列出，绝不允许表现为 DTO 分叉。
-
-状态：**已交付规范 + 共享常量 + fixture + native kernel。**
-`contracts/native/SmartAccount` 已实现本文描述的表面；
-`tests/SmartAccount.Native.Tests` 覆盖它，并对
-`tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json` 中的共享向量
-做断言。曾经实现同一表面的第二个 kernel 已退役，因此本文与其向量是唯一的共享契约。
-本文不声称该源码已在链上部署；形式化模型的状态单独记录在
-`docs/engineering/VERIFICATION-AND-GATES.md`（仅英文，SA 形式化验证章）。
+集成时请区分调用目标：原生核心提供 `installModule` 和 `removeModule`。启用强制多签前，托管方或代码绑定仍有效的已安装验证器可以直接管理模块。§10 的 24 小时窗口适用于提交给标准治理模块的提案；直接管理没有该延时。在本候选中，应用直接调用原生核心验证消息，以便摘要绑定真实调用方。签名主体和门限策略变更均须由标准治理模块到期确认；待确认提案也通过治理模块查询。参见[标准模块目录](../contracts/modules/README.md)。当前原生候选没有公共网络激活或完整实现精化证明。
 
 配套文档：
 
-- `docs/SA-MODULE-PROTOCOL.md` —— 英文对应版本（与本文共同权威；如有出入，以两份
-  较新的修订为准）。
-- `docs/engineering/VERIFICATION-AND-GATES.md` —— SA 迁移 manifest 章（旧→新设计；§14 为摘要）。
+- [核心协议 NEP](proposals/nep-smartaccount-entry-verifier.mediawiki)：账户身份、操作编码、权限与恢复。
+- [模块 NEP 接入说明](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md)：查询每个模块对应的规范条款、接口格式和校验命令。
+- [英文对应版本](SA-MODULE-PROTOCOL.md)。引用原稿时，采用其第 9 页注明的英文快照；条文相冲突时标注规则号与修订版本。文件更新时间不构成实现符合性的证据。
 - `tests/fixtures/sa-module-protocol/README.md` —— golden 向量/拒绝回归 fixture
   格式与 kernel 验证矩阵。
 - `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` ——
   常量文件，承载本文全部数值（§15）。
 
-## 1. 范围与术语迁移
+## 1. 范围与术语
 
 ### 1.1 术语
 
-旧模型的授权决策模块名为 `verifier`。协议 v4 采用 ERC-7579 术语 **validator**；
-`hook` 名称不变。合约 API、存储、事件与错误码一律使用 `validator`/`Validator`；
-旧 `verifier`/`Verifier` 名称移除且不保留别名（仅身份决定的 witness 入口
-`verify(accountId)` 保留，因其嵌入代理脚本 —— 见 `docs/SDK.zh-CN.md` 与
-§13）。
+验证器（validator）负责授权判断；钩子（hook）在执行前后检查策略。
 
 模块类型（一字节类型码，ERC-7579 编号）：
 
-| 类型 | 名称 | v4 是否支持 |
+| 类型 | 名称 | 是否支持 |
 | --- | --- | --- |
 | 1 | validator | 支持 |
-| 2 | executor | 不支持 —— `supportsModuleType` 返回 false，安装拒绝 |
+| 2 | executor | 不支持，安装时拒绝 |
 | 3 | fallback handler | 不支持 —— 同上 |
 | 4 | hook | 支持 |
+| 5 | recovery 恢复席位（原生扩展） | 支持；每账户最多一个 |
 
 类型 2/3 不是 validator/hook 的别名。未实现却声明支持是被禁止的；profile 写
 “不支持”，不写“可能”。
 
-### 1.2 插件改名与去向（出自已批准设计报告 §3.12）
+### 1.2 标准模块
 
-| 旧插件 | v4 去向 |
-| --- | --- |
-| MultiHook | 停止新安装；迁移时按旧正序展开为核心 `hookOrder` |
-| MultiSigVerifier | 变为 **MultiSigValidator** —— 阈值*政策*；编排与批准收据归核心 |
-| NeoNativeVerifier | NeoWitnessValidator（多主体交易 witness；默认单 witness 已内建） |
-| SessionKeyVerifier | SessionKeyValidator —— 实例隔离，每实例一组委托凭证 |
-| SubscriptionVerifier | SubscriptionValidator —— 核心 nonce 是唯一 sequence；同 subId 重建 ⇒ 新 credential generation |
-| Web3AuthVerifier | Web3AuthValidator —— 同签名方案，完整新签名域 |
-| WebAuthnVerifier | **P256Validator**（裸 P-256；不声称 WebAuthn ceremony） |
-| TEEVerifier | **TeeKeyValidator**（仅配置 enclave key 验签；不声称远程 attestation） |
-| ZkLoginVerifier | **DelegatedIdentityValidator**（配置 P-256 signer + 身份绑定；不声称通用 ZK proof） |
-| ZKEmailVerifier | 维持禁用；仅保留禁用模板，不发布可安装生产 validator |
-| DailyLimitHook / TokenRestrictedHook / WhitelistHook / NeoDIDCredentialHook | 保留、实例化（外部 registry 读取计入回调 gas 预算） |
-| SocialRecoveryVerifier | 拆分为可选 social recovery *service* 与可选 action-session validator；基础恢复为核心内建 |
-| HookAuthority / VerifierAuthority、SignerDomain、VerifierPayload、模板 | 共同协议库更新，不算可安装插件 |
+可安装的模块及其职责见[模块目录](../contracts/modules/README.md)。
 
 ## 2. moduleId —— 实例命名空间
 
@@ -85,7 +55,7 @@ session；地址不得同时承担代码身份、实例身份与授权代际。
 
 ## 3. 集合上限与顺序语义
 
-Profile 上限（协议级，两 kernel 强制，数值钉扎于 §15 常量文件）：
+Profile 上限（协议级，原生核心 强制，数值钉扎于 §15 常量文件）：
 
 | 上限 | 数值 |
 | --- | --- |
@@ -111,7 +81,17 @@ Profile 上限（协议级，两 kernel 强制，数值钉扎于 §15 常量文�
 顺序基于快照：执行期间重入的配置变更不会改变在途序列。签名绑定 hook proof 摘要
 （§5），签名者看到的 hook 集合与实际运行的集合不可能不一致。
 
-设置恢复策略需要现管理方签署。更换非零恢复地址时，新地址也须签署；保留原恢复地址不需要重复同意。恢复席位可在 Active 或 Frozen 完成已成熟的恢复，MigrationRequired 不可恢复。
+设置恢复策略需要现管理方签署。更换非零恢复地址时，新地址也须签署；保留原恢复地址不需要重复同意。恢复席位可在 Active 或 Frozen 完成已成熟的恢复，未定义状态一律拒绝。
+
+**进行中的恢复请求按发起时的策略快照裁决。** 标准恢复席位在 `beginRecovery` 时保存核心恢复授权方与 `recoveryTimelockMs`，执行时要求两者仍与核心当前值一致；权限代次快照仍然独立核对。三种语义固定如下：
+
+- **撤销权限**：恢复地址换成不同地址后，旧请求失效，旧授权方的见证不再足以完成托管权轮换。当前托管方或新授权方可以取消旧记录并重新发起；新请求仍需完整等待期。
+- **只改延时**：等待期改成不同数值后，旧请求同样失效；新数值只约束此后发起的请求，既不缩短也不延长已经开始的请求。
+- **幂等重写**：授权方、等待期与保留位都写成相同值时，旧请求继续有效。该写入仍按配置提交推进 `configurationNonce` 与 `controlRevision`，因此已审阅的取消/执行交易因核心配置 nonce 改变而必须重新审阅，但普通完成入口不受影响。
+
+核心直接写入与治理批量动作 8 共用同一个落地函数，以上规则对两条路径相同。普通完成入口核对策略快照与权限代次；钱包审阅的完成入口额外核对交易确认时看到的当前核心配置 nonce。策略快照可通过标准恢复席位的 `getRecoveryPolicySnapshot(accountId)` 读出为 `[recoveryAuthority, recoveryTimelockMs]`，无记录时为空数组。策略快照不一致以 `SA_EPOCH_STALE` 失败，失败交易不写入托管权、策略、nonce 或模块状态。第三方恢复席位必须自行给出同等或更强的失效规则。
+
+`ownerOnlyRecovery` 是 0x51 记录为兼容旧布局保留的字段，在当前协议中没有任何授权含义，也不得被客户端呈现为“只有所有者可以恢复”。`setRecoveryPolicy` 与治理批量动作 8 的合法输入只有 `false`；`true` 以 `SA_OPERATION_MALFORMED` 拒绝。恢复发起与取消始终由托管方或核心记录的恢复授权方见证，与这个保留位无关。
 
 原生重置只接受已安装、代码绑定仍有效的恢复模块直接调用。标准恢复模块在提议时要求新托管方提供见证；钱包确认的取消和执行还绑定待办编号与核心配置 nonce。第三方恢复模块需要独立证明准入与延迟规则。
 
@@ -119,7 +99,7 @@ Profile 上限（协议级，两 kernel 强制，数值钉扎于 §15 常量文�
 
 ### 4.1 线上形态
 
-v4 UserOperation 是**严格的 13 字段 NeoVM `Array`**（操作中任何位置出现
+UserOperation 是**严格的 13 字段 NeoVM `Array`**（操作中任何位置出现
 `Struct` 即拒绝）：
 
 ```
@@ -200,15 +180,14 @@ validator 签名格式**必须**在其自身 DTO 内、或通过哈希上述核�
 | Web3AuthValidator | EIP-712 风格 typed payload，见 `docs/SDK.zh-CN.md`（域名 `"Neo Smart Account"`），64 字节紧凑签名 |
 | P256Validator（原 WebAuthn） | 裸 P-256 `r‖s`（64 字节），对实例配置密钥 |
 | DelegatedIdentityValidator（原 ZkLogin） | 配置 P-256 signer 签名 + 身份承诺 |
-| 内建（validatorId = 0） | §8 消息 profile 复用于操作模式：canonical P-256 脚本 + 签名，阈值按 0x57 |
+| 内建（validatorId = 0） | 一份规范的 P-256 托管脚本及其对操作摘要的签名 |
 
 阈值路由：`validatorId` 指向阈值政策时，核心在**共享父验证预算**下逐个直接调用
 成员 validator，批准收据保存在核心调用局部状态；`postCheck` 阶段仅对验证阶段
-获准成员执行 completion。成员必须是标量 validator；同一成员不得加入两个活动政策；
-被政策引用的成员在被引用期间不可卸载。成员侧在自己的 0x52 记录里携带指向活动政策
-的反查指针（`activePolicyId`，§7.1），由政策执行器在每次激活、重写和解激活时维护；
-因此路由与卸载检查只读一条实例记录，无需扫描账户下全部政策；解激活政策会清掉指针，
-成员随之释放，不需第二轮扫描。
+获准成员执行 completion。启用前必须安装标准恢复模块，配置恢复授权方。每个成员须使用协议指定的标准验证器和不同的压缩公钥。
+启用后，核心记录唯一可支出的策略编号，关闭基础转账。收款照常，支出须达到签名门限。
+托管人、验证器和治理模块都不能直接更换成员、重开基础转账或修改恢复设置。
+启用时权限代次递增，之前提出的恢复请求随之失效。恢复基本账户须重新发起请求，经预设延时后由原恢复模块完成。
 
 ## 6. nonce channel 与命名空间派生
 
@@ -220,8 +199,6 @@ validator 签名格式**必须**在其自身 DTO 内、或通过哈希上述核�
 - 每 channel 持久保存**完整 256 位派生摘要**（0x5C）；若第二个不同派生映射到
   已使用的 191 位 channel，操作被拒绝（截断碰撞 fail-closed），绝不静默共享。
 - sequence 耗尽（游标 == 2^64 哨兵）：channel 死亡；无回绕。
-- 旧游标合并规则（迁移，§14）：新游标永不降低；读新游标时先取
-  `max(同 channel 的旧 0x03 值, 新 0x56 值)` 再写入。
 - 插件不维护必须与核心游标精确同步的私有 sequence 计数器；核心 nonce 是唯一
   sequence 源（SubscriptionValidator 只消费核心 nonce）。
 
@@ -236,47 +213,42 @@ unfreeze、恢复与 custody 变更都单调推进；操作消费与额度计数
 
 | 路由 | 绑定的代次 | 记录 |
 | --- | --- | --- |
-| 内置（`validatorId` = 0） | 账户的 `SubjectRevision` | 0x57 |
+| 内置（`validatorId` = 0） | 操作固定为 1 | 账户控制记录中的 custody |
 | 已安装验证器实例 | 该实例的 `CredentialGeneration` | 0x52 |
 | 生效中的阈值策略 | 策略的 `CredentialGeneration` | 0x5B |
 
-两 kernel 共同成立的推论：
+原生核心 共同成立的推论：
 
-- 内置代次**不是**固定的 1。每次主体变更都推进 `SubjectRevision`（§8.3），客户端
-  硬编码 1 会派生出核心在修订号推进后永不能重现的通道。无 0x57 主体记录的账户仍
-  处于代次 1。
+- 普通账户用代理地址收款，凭一份托管签名转账。基础操作的凭据代次固定为 1。
+  托管人更换后，权限代次使旧签名失效。链下消息名单及其修订号只用于消息授权。
 - 已安装实例从代次 1 开始，只在 `revokeCredentials` 时推进——那是 custody 授权、
   无回调的即时撤销，一次废弃所有绑定旧代次的签名。重新绑定模块代码推进的是
   `moduleRevision`，不是凭据代次。
-- 阈值策略的代次跨重写单调（新策略写入时为代次 1；每次重写携带旧值再自增），因此
-  重塑后的策略会杀死上一代的通道，且永不重置为 1。
-- 因为代次在 §4.3 的签名域内，过期值不是可重试的 nonce 不匹配。已安装验证器或阈值策略
-  路由以 `SA_CREDENTIAL_STALE` 故障；内置路由则以自身的无效签名结果拒绝该消息，因为代次
+- 强制多签策略的初始代次为 1。恢复会清除该策略并推进权限代次，已分配的策略编号永不复用。
+- 因为代次在 §4.3 的签名域内，过期值不是可重试的 nonce 不匹配。操作路由代次不符时以 `SA_CREDENTIAL_STALE` 故障；内置路由则以自身的无效签名结果拒绝该消息，因为代次
   在比较任何主体之前就已经与 `SubjectRevision` 比对。
 - `getNonce` 在核心内部解析代次并返回核心会使用的通道。调用方可自行交叉校验，但以
   核心的答案为准。
 
 ## 7. 存储布局规划
 
-### 7.1 共享 0x50–0x5F 区域（两 kernel，键字节一致）
+### 7.1 共享 0x50–0x5F 区域（原生核心，键字节一致）
 
 键构造：1 字节前缀 ‖ 原始 20 字节 accountId ‖ 注明处的定宽**大端**整数后缀。
 0x5F 保留不分配。
 
 | 前缀 | 键后缀 | 用途 |
 | --- | --- | --- |
-| 0x50 | bare | 协议版本、布局版本、激活状态、profile 摘要 |
 | 0x51 | +acctId | 账户控制元数据（§7.2） |
 | 0x52 | +acctId+moduleId[8 BE] | 模块实例记录（type[1]、contractHash、contractId、updateCounter、nefSha256、profileSha256、moduleRevision、credentialGeneration、能力标志、activePolicyId） |
 | 0x53 | +acctId+type[1]+moduleId[8 BE] | 安装实例枚举索引（marker 行；按类型升序 moduleId 扫描） |
 | 0x54 | +acctId | 保留；有效顺序取自 0x53 的 hook 索引，修订号在 0x51 |
 | 0x55 | +acctId+intentId[8 BE] | 配置意图记录 |
 | 0x56 | +acctId+channel[24 BE] | nonce 游标（新编码） |
-| 0x57 | +acctId | 内建消息签名主体（≤16 个 20 或 32 字节主体，阈值）+ subjectRevision（§8.1） |
+| 0x57 | +acctId | 消息策略修订号；采用自定义名单时另含治理模块的存储编号与名单摘要（§8.1） |
 | 0x58 | +acctId | Application 回调/执行上下文（阶段 + 重入状态） |
 | 0x59 | +acctId | 核心恢复与紧急失效记录（Market 逃生路径，§7.5） |
-| 0x5A | +acctId | 迁移状态与旧状态摘要（§14） |
-| 0x5B | +acctId+policyId[8 BE] | 阈值成员列表与政策 commitment |
+| 0x5B | +acctId+policyId[8 BE] | 4 字节大端模块存储编号及支出策略的 SHA-256；模块在自身的 `0x05 ‖ accountId` 存放成员、门限、启用标志与代次 |
 | 0x5C | +acctId+channel[24 BE] | nonce 命名空间完整摘要（碰撞检测） |
 | 0x5D | +acctId | Market 锁 ↔ custody/控制代际 ↔ listing 绑定（§7.5） |
 | 0x5E | +acctId | 有界配置意图索引 |
@@ -285,13 +257,13 @@ unfreeze、恢复与 custody 变更都单调推进；操作消费与额度计数
 
 ### 7.2 0x51 账户控制元数据
 
-status（Active/Frozen/MigrationRequired）、custody、恢复 authority；
+status（Active/Frozen）、custody、恢复 authority；
 authorityEpoch、configurationNonce；nextModuleId（moduleId 与 policyId 共用分配器）、
 nextIntentId；默认操作授权开关与默认消息授权开关；recoveryTimelockMs（7–90 天；
-迁移账户保持既有值）；hookOrderRevision、defaultPolicyRevision、controlRevision；
-旧永久 owner-only 标志（迁移后继续约束该账户）。
+按账户配置）；hookOrderRevision、defaultPolicyRevision、controlRevision；
+owner-only 恢复保留位（布局兼容，恒为 false）。
 
-### 7.3 0x52 代码绑定（两 kernel 定义一致）
+### 7.3 0x52 代码绑定（原生核心 定义一致）
 
 contractHash、ContractId、UpdateCounter、SHA256(NEF bytes)、SHA256(canonical 模块
 profile JSON)。ContractId 阻断销毁重部署；UpdateCounter 捕捉 manifest-only 更新；
@@ -299,17 +271,6 @@ NEF 哈希钉扎代码；profile 哈希钉扎接口能力。每次模块回调�
 同地址重部署不继承授权。逐回调检查只比较 `(ContractId, UpdateCounter)`：这对值唯一
 对应一个（部署槽位、版本），与记录里安装时钉过的 NEF 哈希等价，但不必在每个回调里
 重算 NEF 哈希。
-
-### 7.4 旧区域
-
-**custom kernel：**
-- 0x01 旧五字段 AccountState 行**保留作迁移输入/历史证据**；新状态只写 0x51。
-  新代码绝不经旧 Verifier/HookId 字段路由；legacy decoder 仅为迁移存在。
-- 0x12 与 0x1C **退役**：新授权绝不源自它们。迁移意图为账户的 0x12/0x1C 行记录
-  显式失效声明（存于 0x5A）；这些字节永不重新分配。
-
-**原生 kernel：** 0x10 账户键下的旧 14-slot Array 仍是迁移输入；迁移后由新
-0x51 记录取代。0x10/0x11/0x20/0x30/0x40 旧前缀不被新模块模型重新解释。
 
 ### 7.5 Market 最小锁（0x5D / 0x59）
 
@@ -324,7 +285,7 @@ NEF 哈希钉扎代码；profile 哈希钉扎接口能力。每次模块回调�
 
 ## 8. 内建消息签名 envelope（ERC-1271 profile）
 
-两 kernel 都实现核心 P-256 单签/阈值消息验证，不依赖插件。
+原生核心 都实现核心 P-256 单签/阈值消息验证，不依赖插件。
 
 API：`isValidSignature(accountId, hash, signatureEnvelope)`。
 - `hash`：32 字节 ByteString（调用方提供的消息摘要）。
@@ -362,62 +323,35 @@ messageDigest := SHA256( domain || hash )
 ```
 
 内建规则：每个 `verificationScript` 必须是压缩点的 canonical N3 P-256 验证脚本
-（标准钱包脚本构建器形态）；`SHA256(script)`（脚本哈希）必须是 0x57 中 ≤16 个已
+（标准钱包脚本构建器形态）；脚本的 HASH160 或 SHA-256 必须匹配 ≤16 个已
 授权主体之一；envelope 内脚本两两相异；对 `messageDigest` 的 P-256 签名有效；
-数量 ≥ 配置阈值。重复密钥、非曲线点与非规范脚本拒绝。主体集合与阈值存于 0x57，
-配 `subjectRevision`，每次主体变更（custody 门控、24 h 配置）推进。新账户注册必须
-设置消息主体（默认可与 custody 相同）。
+数量 ≥ 配置阈值。重复密钥、非曲线点与非规范脚本拒绝。自定义名单与阈值由治理模块保存，
+每次确认变更推进修订号。新账户默认使用托管地址，无需写入名单。
 
 模块消息签名：`validatorId` = 实例 moduleId；仅限声明 `messageCapability` 的模块。
 核心转发脱敏后的签名 payload 与 `originalSender`；执行额度 hook 绝不适用于不透明
 消息哈希。SessionKeyValidator 与 SubscriptionValidator **默认不声明**任意消息能力。
 
-### 8.1 0x57 的两个键
+### 8.1 消息签名主体
 
-每个账户的主体存储占两个键，宽度故意不同：
+已注册且未设置消息策略的账户，查询结果为 `[[custody], 1, 1]`。开户不占用消息策略存储。
+未知账户返回空数组。治理模块在自身存储的 `0x04 ‖ accountId` 写入规范序列化的
+`[名单, 阈值, 修订号]`。原生核心的 `0x57 ‖ accountId` 仅记录大端编码的 8 字节修订号、
+4 字节模块存储编号及 32 字节名单摘要。数据缺失或摘要不符时消息验签失败。
+恢复无需读取旧名单，核心仅保留新的 8 字节修订号。
+每个主体是验证脚本的原始 HASH160（20 字节）或 SHA-256（32 字节）。
+恢复账户会清除委托，将当前托管人设为唯一消息签名者，并推进修订号。
+消息授权不授予转账权限。
 
-| 键 | 字节数 | 含义 |
-| --- | --- | --- |
-| `0x57 ‖ accountId` | 21 | canonical 主体行：`MessageSubjectRecord`（≤16 个主体、阈值、`SubjectRevision`） |
-| `0x57 ‖ accountId ‖ 0x01` | 22 | 内部 provenance 标记，绝不是第二条主体行 |
+## 9. 公共接口（原生核心 命名一致）
 
-canonical 行保持 **21 字节**：改成 22 会移动所有既有账户的记录，并把一个已评审的键
-变成另一个键。标记复用 canonical 前缀加一字节后缀，而不另占一个协议前缀，且只由核心
-写入与删除。
-
-### 8.2 主体匹配
-
-主体条目绑定的是签名者**脚本**，接受两种宽度：
-
-- 32 字节主体是签名者验证脚本的裸 `SHA256`，必须精确相等；
-- 20 字节主体是签名者的账户地址（`RIPEMD160(SHA256(script))`，即 N3 script hash），
-  必须精确相等。
-
-其他宽度一律不匹配。两种形态都对应同一套对 `messageDigest` 的 ECDSA 校验，因此同一
-账户可以混用；注册写入的是 20 字节形态，因为 canonical P-256 custody 脚本的哈希正好
-就是 custody 地址，该密钥因此无需等待 24 小时的主体意图即可立即签发内建消息。
-
-### 8.3 custody 派生的主体与 provenance
-
-注册写入 `Subjects = [custody]`、阈值 1、`SubjectRevision` 1，并置上 22 字节的
-provenance 标记。custody 轮换时，核心只在**该标记存在**的情况下把主体集合改写为新
-custody 并推进 `SubjectRevision`：
-
-- 标记缺失意味着 provenance 未知：主体集合既可能是（通过主体意图）显式配置的，也可能是早于
-  该标记的历史默认主体状态。运行时对两者都不做推断——它只是不改写——且即便某个主体恰好等于
-  旧 custody 地址，也不会被解读为显式委托的证据：绝不用地址相等来推断 provenance；
-- 标记存在但取值异常属于完整性故障，而不是轮换信号；
-- 轮换会以新修订号发出主体更新事件，因此内置凭据代次随主体集合一同推进。Escape
-  （§7.5）与账户拆除会删除这两个键。
-
-## 9. 公共接口（两 kernel 命名一致）
-
-查询：`getProtocolInfo`、`getAccount(accountId)`、`getAccountAddress(accountId)`、`supportsModuleType(type)`、
-`supportsExecutionMode(mode)`、`getModules(accountId, type, cursor, limit)`
+查询：`getProtocolInfo()`、`getAccountImplementationId()`、`getAccount(accountId)`、
+`getAccountAddress(accountId)`、`getModules(accountId, moduleType, cursor, limit)`
 （limit 1–32；返回下一 cursor 与当前 configurationNonce；cursor 基于 moduleId）、
 `getModule(accountId, moduleId)`、
-`isModuleInstalled(accountId, type, moduleHash, additionalContext)`、
-`getAuthorizedModuleId(accountId, phase)`、
+`isModuleInstalled(accountId, moduleType, moduleHash, additionalContext)`、
+`getAuthorizedModuleId(accountId, phase)`、`getMessageSubjects(accountId)`、
+`getThresholdPolicy(accountId, policyId)`、`isValidSignature(accountId, hash, signatureEnvelope)`、
 `getNonce(accountId, validatorId, nonceSubkey)`（packed）、
 `getNonceSequence(accountId, channel)`、
 `getOperationDigest(accountId, operation)`。
@@ -425,11 +359,12 @@ custody 并推进 `SubjectRevision`：
 配置：`installModule(accountId, moduleType, moduleContractHash, initData)` 与
 `removeModule(accountId, moduleId, deInitData)`，两者都由托管见证或某个已安装验证器实例的见证授权，
 且都会推进配置 nonce。核心不保留意图记录、没有成熟窗口、没有取消路径：
-那些属于治理模块，由它通过这两个方法提交成熟后的调用。
+这些由治理模块管理。提案成熟后，模块按签名时的顺序提交动作（§10）。
 
-动作：核心只执行两个动作码，`installModule` 与 `uninstallModule`，
-注册通过两个模块方法所用的同一个执行器跑它们。v3 kernel 携带的其他每个动作码都已移除 ——
-仍组装它们的脚本会以 `SA_OPERATION_MALFORMED` 被拒绝，而不是被静默忽略。
+注册只接受安装（1）和卸载（2）。对于已经注册且处于 Active 状态的账户，原生候选还提供
+`applyConfigurationActions(accountId, actions)`，接受安装（1）、卸载（2）、内建授权（5）和
+恢复策略（8）。只有已确认的治理提案还可配置实例（3）、启用门限策略（7）或更改消息签名主体（9）。
+整组成功时配置版本只加一。
 
 执行：`validateUserOp(accountId, operation)`（只读、真实验证、结构化结果）、
 `executeUserOp(accountId, operation)`、`executeUserOps(accountId, operations)`、
@@ -439,11 +374,11 @@ custody 并推进 `SubjectRevision`：
 
 身份决定的 witness 入口 `verify(accountId)`（嵌入代理脚本）保留为真正的 witness
 门，不是旧 API 别名。旧 `getVerifier`/`getHook`/`CallVerifier`/`CallHook`/`*Child`
-表面在两 kernel 一并移除、不留别名。
+表面在原生核心 一并移除、不留别名。
 
-生命周期模块回调（核心→模块）：`onInstall(accountId, moduleId, generation,
-initData)`、`onUninstall(accountId, moduleId, generation, deInitData)`、
-`configure(accountId, moduleId, generation, configData)`、hook 的
+生命周期模块回调（核心→模块）：`onInstall(accountId, moduleId, moduleType,
+initData)`、`onUninstall(accountId, moduleId, moduleType, deInitData)`、
+`configure(accountId, moduleId, moduleType, configData)`、hook 的
 `preCheck`/`postCheck`、validator 的 `validateUserOp`/`onUserOpComplete`，均受 §11
 预算约束。核心不再硬编码 `setPublicKey` 等按方法允许列表 —— 模块经核心配置门解码
 自己的 `configData`。
@@ -456,10 +391,10 @@ manifest 方法名是 C# 方法名首字母小写（`OnInstall` → `onInstall`�
 
 | 方向 | 操作 | manifest ABI | 说明 |
 | --- | --- | --- | --- |
-| module→core | `getModuleProfile()` | `→ String`，**safe** | canonical profile 字节，≤ 2048 字节，无参数、不可写。 |
-| core→module | `onInstall(accountId, moduleId, generation, initData)` | `Hash160, Integer, Integer, Array → Void` | `initData` 是命令数组（见 §9.3）或空数组。 |
-| core→module | `configure(accountId, moduleId, generation, configData)` | `Hash160, Integer, Integer, Array → Void` | 同一命令形态；在配置阶段执行。 |
-| core→module | `onUninstall(accountId, moduleId, generation, deInitData)` | `Hash160, Integer, Integer, Array → Void` | 必须清空 `(accountId, moduleId)` 的全部实例键。 |
+| core→module | `getModuleProfile()` | `→ String`，**safe** | canonical profile 字节，≤ 2048 字节，无参数、不可写。 |
+| core→module | `onInstall(accountId, moduleId, moduleType, initData)` | `Hash160, Integer, Integer, Array → Void` | `initData` 是命令数组（见 §9.3）或空数组。 |
+| core→module | `configure(accountId, moduleId, moduleType, configData)` | `Hash160, Integer, Integer, Array → Void` | 同一命令形态；在配置阶段执行。 |
+| core→module | `onUninstall(accountId, moduleId, moduleType, deInitData)` | `Hash160, Integer, Integer, Array → Void` | 必须清空 `(accountId, moduleId)` 的全部实例键。 |
 | core→module（validator） | `validateUserOp(accountId, operationDigest, operation)` | `Hash160, ByteArray, Array → Boolean`，**safe** | `operationDigest` 为 §4.3 核心摘要；`operation` 为 canonical 13 字段视图。 |
 | core→module（validator） | `onUserOpComplete(accountId, operation, result)` | `Hash160, Array, Any → Void` | 仅 completion 阶段；`result` 是净化后的目标返回值。 |
 | core→module（hook） | `preCheck(accountId, operation)` | `Hash160, Array → ByteArray` | 返回本实例的 `hookData`；`null` 归一化为空字节串；最多 512 字节，否则 `SA_HOOK_DATA_TOO_LARGE`。 |
@@ -503,17 +438,17 @@ manifest 方法名是 C# 方法名首字母小写（`OnInstall` → `onInstall`�
 
 ### 9.3 配置命令数组
 
-`initData`、`configData`、`deInitData` 都是 `[command, ...args]` 数组。命令词汇由
-模块自己拥有；核心只约束数组上限（≤ §3 参数上限）与 2.5 GAS 生命周期预算。
-随仓库发布的模块使用：
+三个生命周期参数都是 VM 数组。安装时按具名条款的[安装格式](proposals/nep-smartaccount-module-profiles.mediawiki#Installation_data)构造 `initData`。
+配置时，`configData` 是一条 `[command, ...args]` 命令。正常卸载任一启用的具名模块时传 `deInitData = []`，没有卸载命令。
+第三方模块自行定义数据含义。核心限制数组长度（见 §3）和生命周期回调预算（2.5 GAS）。内置模块的配置命令如下：
 
 | 模块 | 命令 |
 | --- | --- |
 | `P256Validator`、`Web3AuthValidator`、`TeeKeyValidator` | `setPublicKey(publicKey)` —— 33 字节压缩或 65 字节未压缩，存储为压缩形式。 |
 | `NeoWitnessValidator` | `setSigners(signers[], threshold)` |
 | `MultiSigValidator` | `setMemberKey(publicKey)` —— 每实例一把密钥。 |
-| `SessionKeyValidator` | `setSessionKey(publicKey, target, method, expiry, cap, subId)` / `clearSessionKey()` |
-| `SubscriptionValidator` | `createSubscription(publicKey, payee, token, amount, period)` / `cancelSubscription(subId)` |
+| `SessionKeyValidator` | `setSessionKey(publicKey, target, method, validUntil, spendingLimit, description)` / `clearSessionKey()`；到期时间为 Unix 毫秒时间戳 |
+| `SubscriptionValidator` | `createSubscription(subId, merchant, token, amount, periodSeconds)` / `cancelSubscription(subId)`；[订阅 ID 与账期规则](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md) |
 | `DelegatedIdentityValidator` | `setConfig(publicKey, provider, masterNullifier)` |
 | `ZKEmailVerifier` | 无 —— 证明验证器尚未部署，所有回调 fail-closed。 |
 | `ActionSessionValidator` | `setRecoveryService(service)` / `clearRecoveryService()` |
@@ -524,6 +459,8 @@ manifest 方法名是 C# 方法名首字母小写（`OnInstall` → `onInstall`�
 | `MultiHook` | 无 —— 已退役，安装被拒（§1.2）。 |
 
 ## 10. 生命周期、pending 意图与时间锁
+
+本节的等待窗口针对标准治理模块的提案路径。授权主体直接调用核心管理入口不经过该窗口。
 
 正常配置（空槽安装、卸载、hook 顺序调整、signer 变更、默认授权开关、代码重绑定）
 —— 一律 **24 h 延迟**（86 400 000 ms）。
@@ -542,22 +479,39 @@ Pending 意图：每账户独立 `intentId`（0x51 内独立分配器）；未�
 冲突的过期意图失效，不是所有 pending。到期意图显式清理；成熟记录不得偷偷替换。
 确认再要求 custody witness；引入新控制主体还要求新主体见证。
 
-冻结语义：custody witness 可冻结；冻结后仅只读查询、恢复/逃生与 unfreeze 可 达；
-`freezeAccount` 立即生效，而 `unfreezeAccount` 只提议解冻意图，由 `confirmConfiguration`
-在统一 24 h 延迟后执行 —— 处于 `MigrationRequired` 的账户永远不能解冻；
-冻结推进代际（旧签名与意图失效）。最后一个 validator 规则：内建路由永远存在但受
-默认政策门控 —— 卸载最后一个 validator 必须在同一 24 h 意图中启用内建路由，且既有
-hook 继续运行；没有自动 owner fallback；仅紧急恢复可 callback-free 摘除全部政策。
+启用强制多签前，可用 `[9, 主体列表, 阈值]` 提议更换消息签名人，每个主体为验证脚本的 20 字节脚本哈希或 32 字节 SHA-256。启用多签使用 `[7, 0, 阈值, 成员实例编号列表, true]`，须放在提案末尾，由标准治理模块在 24 小时后确认原提案。查询 `getThresholdPolicy(accountId, 0)` 可获取当前强制策略，结果为空数组或 `[阈值, 成员编号列表, 启用状态, 凭据代次, 策略编号]`。传入正编号时返回前四项，未知编号返回空数组。消息名单单独通过 `getMessageSubjects` 查询。
 
-恢复：核心内建；custody 自救 + 可选恢复 authority；每账户时间锁 7–90 天；恢复
+只含策略动作 5、7、8、9 的提案（含批量）可在资源互不重叠时分别到期、按任一顺序确认。资源检查涵盖将释放和新增的成员，以及新编号分配。确认不会替另一份提案改写原始收据或缩短等待时间。绕过治理的直接变更及影响范围未知的回调不能让旧提案重新生效。代码重绑（6）尚未实现。未知动作（包括编号 10）会在提案分配编号前被拒绝。
+
+标准治理模块保存已确认的自定义消息签名名单和强制支出门限策略。原生核心保存治理合约的存储编号和策略正文的 SHA-256，读取时核对摘要，并执行支出门限。签名和门限模块提供查询。卸载治理模块会清理待处理的提案，已确认的名单仍然有效。参见[治理模块 NEP 条款](proposals/nep-smartaccount-module-profiles.mediawiki#GovernanceModule)。
+
+**原生候选：一次提案改多项配置（R-11-10/12）。** 核心入口 `applyConfigurationActions(accountId, actions)` 按原顺序执行 1 至 16 个动作：安装模块（1）、卸载模块（2）、调整内建授权（5）、设置恢复策略（8），以及仅限治理的动作 7、9。载荷和提案相同。全部成功，账户配置版本和控制记录版本各加一；任一动作失败，整组不生效。内建操作授权已关闭时，不可单独卸载最后一个验证器；可以在同一组里重新打开授权。这项能力不改变注册规则：注册仍只接受动作 1、2。
+
+| 用户关心的问题 | 这个候选实际保证什么 |
+|---|---|
+| 谁可以立即调整这四类配置？ | 托管方，或代码绑定仍有效的已安装验证器。通过核心直接管理没有 24 小时等待。账户安装了治理模块，不代表直接管理自动被禁用。 |
+| 哪些变更要等？ | 通过标准治理模块提出的配置变更要等满 24 小时，确认的动作、顺序和有效期必须与原提案一致。不能把这个承诺套用到所有模块自己的写入口。 |
+| 谁能成为新恢复方？ | 修改为新的恢复地址时，除了管理员，还需要新地址提供见证。 |
+| 多个变更能否一起完成？ | 可以。治理提案中的核心动作必须连续；模块动作可以在这组之前或之后。把模块动作夹在两段核心动作之间的提案会在分配编号前被拒绝，不会擅自调整已签顺序。若模块回调造成额外的版本推进，使整笔超过一次，确认会整笔回滚。 |
+
+此候选共有 29 个核心入口，参数摘要绑定治理代码和清单。客户端在连接时同时核对核心接口和清单中的 参数摘要，任一不匹配便停止。
+
+启用强制支出多签后，托管人不能单独冻结、解冻或更换恢复策略。退出多签必须走预设延时恢复流程。
+未启用强制支出多签时，托管方调用 `SmartAccount.freezeAccount` 可立即冻结。
+`GovernanceModule.unfreezeAccount` 只创建提案，24 小时后才可确认；托管方或代码绑定仍有效的
+已安装验证器直接调用 `SmartAccount.unfreezeAccount` 则可立即解冻。仅安装治理模块不保证账户
+至少冻结 24 小时。冻结和解冻都会推进授权代际。
+卸载最后一个验证器时，整组配置完成前必须启用内建操作授权；已有 hook 保留，不会自动开启后备授权。
+
+标准恢复模块接受托管人或已配置恢复方的请求；如指定新托管人，还需新托管人见证。只有已安装且代码绑定有效的恢复席位可以调用核心重置。每账户时间锁为 7–90 天；恢复
 意图不得被另一请求覆盖或重启；成熟后可 permissionless 执行已批准的精确结果；不
 调用旧 verifier/hook/Market/Oracle；推进 authorityEpoch/configurationNonce、摘除
-全部模块与政策、作废 pending、启用内建授权；旧永久 owner-only 标志迁移后继续有效。
+全部模块与政策、作废 pending、恢复内建授权。
 
 ## 11. gas 硬预算 profile（已批准方案 B）
 
 单位：**datoshi**，1 GAS = 100 000 000 datoshi（与既有
-`System.Contract.CallWithGasLimit` 用法同单位）。两 kernel 数值一致：
+`System.Contract.CallWithGasLimit` 用法同单位）。原生核心 数值一致：
 
 | 回调 | 硬预算 |
 | --- | --- |
@@ -609,18 +563,18 @@ hook 继续运行；没有自动 owner fallback；仅紧急恢复可 callback-fr
 - 每个 hook 回调有自己的 2.5 GAS 上限；一个 hook 的剩余预算绝不结转到下一个。
   `preCheck` 按 `hookOrder` 升序执行，`postCheck` 对同一获准集合逆序执行。
 - 验证 aggregate 覆盖一笔交易内的全部 validator 调用（含阈值成员）；completion
-  另有自己的 1 GAS aggregate。
+  另有独立的 11 GAS 共用上限；每次单独回调最多使用 1 GAS。
 - 返回值 ABI 类型不对的回调在 manifest 检查时失败，而不是 gas：核心不做类型强转。
 
 ## 12. 模块能力声明 profile
 
 每个可安装模块附带 canonical profile JSON（profile 哈希进入 0x52 绑定）。Schema
-（骨架见 `tests/fixtures/sa-module-protocol/module-profile.template.json`）：
+（下例为验证器；钩子、恢复席位的回调和完整模板见[模块标准接入说明](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md)）：
 
 ```json
 {
   "profileVersion": 1,
-  "moduleType": "validator | hook",
+  "moduleType": "validator",
   "contractName": "…",
   "capabilities": {
     "instanceIsolation": false,
@@ -658,7 +612,7 @@ profile 是对象键排序、无空白、**末尾无换行**的 UTF-8 JSON 文�
 退出码 1 失败）。`scripts/sync-module-profiles.mjs --check` 在 STALE/ERROR 时失败；请在构建前先运行它，
 因为已退役的 `contracts/compile.sh` 不再把它链接进编译流程。
 
-绑定顺序与失败模式（两 kernel 一致）：
+绑定顺序与失败模式（原生核心 一致）：
 
 1. `getModuleProfile` 必须存在且为 `safe` → 否则 `SA_MODULE_CODE_BINDING_MISMATCH`。
 2. `SHA-256(返回字节)` 必须等于安装动作里的 `profileDigest32` → 否则
@@ -707,13 +661,9 @@ profile 是对象键排序、无空白、**末尾无换行**的 UTF-8 JSON 文�
 所有文档/UI 措辞规则：“职责与安全模型对齐的 Neo profile”，绝不写“完整兼容
 ERC-4337/ERC-7579”。
 
-## 14. 迁移 manifest（摘要 —— 完整设计见 docs/engineering/VERIFICATION-AND-GATES.md 的 SA 迁移 manifest 章）
+## 14. 账户初始状态
 
-每账户分类：`no-plugin`、`scalar-plugin`、`multihook`、`multisig`、
-`unknown-plugin`、`owner-only`、`market-locked`、`recovery-pending`。未知插件绝不
-猜测迁移 —— 账户进入 `MigrationRequired`（执行与消息授权拒绝；查询、冻结与
-callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧五字段与原生
-14-slot Array 仅作输入；旧 pending、旧签名、0x12 与 0x1C 绝非授权依据。
+账户从注册创建。只有正常与冻结两种状态；其他状态码必须拒绝。动作 10 未分配。没有旧账户导入。
 
 ## 15. 共享常量文件与 fixture
 
@@ -723,7 +673,7 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 | 原生版常量 | `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs`（internal static `SmartAccountModuleProtocol`，经 `scripts/sync_native_smartaccount.py` 同步到 neo-native-core） |
 | fixture 骨架 | `tests/fixtures/sa-module-protocol/`（README + schema + 模板） |
 
-常量文件钉住以下数值：协议版本 4；模块类型码 1/4；§3 全部上限；13
+常量文件钉住以下数值：固定编码标记 4；模块类型码 1/4；§3 全部上限；13
 字段 envelope 字段序号；nonce 尺寸（32 字节 subkey、24 字节 channel）；序列化上限
 （4096/8192/4096/16384/65536）；时间锁（86 400 000 / 604 800 000 /
 7 776 000 000 ms）；gas 预算（100 000 000 / 250 000 000 datoshi）；ERC-1271 magic
@@ -734,37 +684,16 @@ callback-free 恢复保留）。迁移意图对 manifest 摘要幂等；0x01 旧
 
 ## 16. Kernel 实施映射
 
-> 下方的 #39 表是已退役 custom kernel 的交付记录归档；仍描述本仓库的是 #40 映射。
-
-### 16.1 已退役的 custom kernel（#39，归档交付记录）
-
-| 规范章节 | custom 版需创建/修改的文件 |
-| --- | --- |
-| §2/§3/§7 常量 | 消费随已退役 custom kernel 一起发布的常量文件（`SmartAccount.ModuleProtocol.cs`） |
-| §7.1/§7.4 前缀 | 在 `SmartAccount.cs` STORAGE PREFIX MAP 注释中追加 0x50–0x5E 行；把 `SmartAccount.ModuleProtocol.cs` 加入 `tests/SmartAccount.Contracts.Tests/StoragePrefixMapTests.cs` 的 `WalletPartials`，**与首次键使用同一批次**（DeriveShape 要求使用证据） |
-| §4/§5 envelope + 摘要 | `SmartAccount.Execution.cs`（13 字段解码、摘要、batch）；如拆分则新建 `SmartAccount.Intents.cs` |
-| §6 nonce | `SmartAccount.Internal.cs`/新 nonce partial（0x56/0x5C，与旧 0x03 合并） |
-| §8 消息 | `SmartAccount.State.cs`（内建 P-256 主体，0x57） |
-| §9 接口+生命周期 | `SmartAccount.Accounts.cs`（custody+salt 注册身份、原子初始安装）、`SmartAccount.Modules.cs`（0x51–0x53、0x5B；`AssertModuleCallbackAbi`、`BindModuleProfile`、hook pre/post 调度）、`SmartAccount.State.cs`（`getModule`/`getModules` 描述符）、`SmartAccount.Message.cs`（模块 `isValidSignature` 路由）；不再保留 `HookChildren`/`VerifierChildren` 适配 partial |
-| §10 意图 | 新 intents partial（0x55/0x5E） |
-| §7.5 Market | `SmartAccount.MarketEscrow.cs`（0x5D 绑定、owner 不直写 0x1D、代际校验）、`SmartAccount.Escape.cs`（0x59 记录、callback-free 逃生） |
-| F-1（verify scope） | `SmartAccount.VerifyContext.cs` —— 删除 `verifyScopeTarget` 授权、阶段门 |
-| F-7（阶段门） | `SmartAccount.VerifyContext.cs` + `SmartAccount.Execution.cs`（0x58 上下文、只读回调用直接 caller + ReadOnly + 严格域检查） |
-| 事件 | `SmartAccount.Events.cs`（§18 表；保留既有无 AA 事件） |
-| 插件 | `contracts/plugins/validators/` —— 9 个 validator（`P256Validator`、`Web3AuthValidator`、`TeeKeyValidator`、`NeoWitnessValidator`、`DelegatedIdentityValidator`、`MultiSigValidator`、`SessionKeyValidator`、`SubscriptionValidator`、`ZKEmailVerifier`），加共享层 `ModuleOperation.cs`、`ValidatorAuthority.cs`、`ValidatorPayload.cs`、`ValidatorClock.cs`、`ValidatorModels.cs`、`SignerDomain.cs` |
-| hook | `contracts/plugins/hooks/` —— `DailyLimitHook`、`TokenRestrictedHook`、`WhitelistHook`、`NeoDIDCredentialHook`、退役的 `MultiHook`（安装被拒）、共享 `HookAuthority.cs` |
-| recovery 拆分 | `contracts/plugins/recovery/ActionSessionValidator.cs`（validator 模块）与 `contracts/plugins/recovery/SocialRecoveryService.*.cs`（服务合约）；各自附带 canonical profile |
-| profile 事实源 | 每个模块同目录的 `<Name>.profile.json`，字面量以 `ModuleProfileJson` 嵌入源码，由 `scripts/sync-module-profiles.mjs` 保持同步（构建前运行 `--check`） |
-| 构建布局 | 已退役的 custom 构建输出 `contracts/bin/public`（核心、服务、mock）、`bin/public/validators`、`bin/public/hooks`；原生核由 MSBuild 构建到各项目自己的 `bin/Release/net10.0/`，`scripts/build_native_modules.py` 把六个 native-profile 模块写到它的 `--output` |
+> 下方的 #39 表是已退役 custom kernel 的交付记录归档；#40 表是设计映射，不是已交付的原生 ABI 或能力清单。
 
 ### 16.2 原生 kernel（#40，与 #29 共享修改批次）
 
 | 规范章节 | 原生版需创建/修改的文件 |
 | --- | --- |
 | 常量 | 消费 `SmartAccountModuleProtocol.cs`（本批产出；随后运行 `scripts/sync_native_smartaccount.py` 物化 neo-native-core 副本） |
-| §4/§5 envelope/摘要 | `SmartAccountProtocol.cs`（v4 域、13 字段序列化）、`SmartAccountEnvelope.cs`（13 字段操作） |
+| §4/§5 envelope/摘要 | `SmartAccountProtocol.cs`（签名域、13 字段序列化）、`SmartAccountEnvelope.cs`（13 字段操作） |
 | §6 nonce | `SmartAccountProtocol.cs` + nonce 存储 partial（0x56/0x5C；与旧 0x20 合并） |
-| §7 状态 | `SmartAccountRecords.cs`（新 0x51 记录与其 codec；旧 14-slot decoder 仅保留用于 迁移） |
+| §7 状态 | `SmartAccountRecords.cs`（0x51 记录与其 codec） |
 | §2/§3 集合 | `SmartAccount.Modules.cs`（实例记录、枚举、hookOrder、阈值政策）、`SmartAccountModulePolicy.cs`（新上限） |
 | §9/§10 生命周期与意图 | `SmartAccount.Modules.cs`、新 intents partial（0x55/0x5E） |
 | §8 消息 | `SmartAccount.Keys.cs`（P-256 主体）、`SmartAccount.cs`（`isValidSignature` ABI） |
@@ -783,12 +712,11 @@ post/configuration/cleanup 提权攻击；contractId/updateCounter/NEF/profile �
 漂移；撤销重授与市场出售重放；同 subId 重建新代数；未消费 recovery ticket 跨
 clear/setup 重放（F-11）；恢复不依赖任何插件回调；无插件操作与内建消息签名；合约
 custody 不能伪造消息签名；Verification 与 Application 分开的 gas 超限/不返回/
-whitelist 路径；两网 53/407 真实账户迁移 fixture、全部旧前缀、MultiHook 顺序、
-MultiSig 阈值、nonce 与代际单调性、0x12/0x1C 失效、中断与重复迁移。
+whitelist 路径及 nonce 与代际单调性。
 
 ## 17. 错误码
 
-错误码为稳定字符串常量（`SA_*`），两 kernel 逐字共享；kernel 异常携带它们（可在
+错误码为稳定字符串常量（`SA_*`），原生核心 逐字共享；kernel 异常携带它们（可在
 空格后附加细节后缀）。常量文件钉扎拼写。
 
 | 错误码 | 含义 |
@@ -819,50 +747,32 @@ MultiSig 阈值、nonce 与代际单调性、0x12/0x1C 失效、中断与重复�
 | `SA_PHASE_VIOLATION` | 回调在其 writer 阶段之外被调用 |
 | `SA_GAS_BUDGET_EXCEEDED` | 回调超出 §11 预算（fail-closed） |
 | `SA_MESSAGE_INVALID` | 消息 envelope 失败（返回 magic-invalid；畸形输入亦可抛出） |
-| `SA_MIGRATION_REQUIRED` | 账户未迁移；执行/消息被拒 |
 | `SA_MARKET_LOCKED` | Market 动作的 0x5D 代际绑定不匹配 |
 | `SA_UNAUTHORIZED` | caller/主体 witness 失败 |
 
 ## 18. 事件表
 
-沿用的既有（无 AA）事件：`AccountRegistered`、`ModuleInstalled`、
-`ModuleUpdateInitiated`、`ModuleUpdateConfirmed`、`ModuleUpdateCancelled`、
-`ModuleRemoved`、`MetadataUriUpdated`、`UserOpExecuted`、`EscapeInitiated`、
-`EscapeCancelled`、`EscapeFinalized`、`MarketEscrowEntered`、
-`MarketEscrowCancelled`、`MarketEscrowSettled`、`SponsoredUserOpExecuted`。
+下表是原生 SmartAccount 合约的事件。参数顺序和 manifest 类型均属于接口。处理模块通知时，应另行核对发出通知的合约。
 
-`VerifyScopeTargetSet` 随 F-1 修复**退役**。
-
-新增模块模型事件（显示名钉扎于常量文件；payload 顺序固定）：
-
-| 事件 | Payload |
+| 事件 | 参数 |
 | --- | --- |
-| `ModuleInstanceInstalled` | accountId, moduleId, moduleType, contractHash, credentialGeneration |
-| `ModuleInstanceConfigured` | accountId, moduleId, credentialGeneration |
-| `ModuleInstanceRemoved` | accountId, moduleId |
-| `ModuleCodeRebound` | accountId, moduleId, bindingDigest |
-| `HookOrderSet` | accountId, hookOrderRevision, hookIds |
-| `ThresholdPolicySet` | accountId, policyId, threshold, memberIds |
-| `ConfigurationIntentProposed` | accountId, intentId, actionCount, actionDigest |
-| `ConfigurationIntentConfirmed` | accountId, intentId, configurationNonce |
-| `ConfigurationIntentCancelled` | accountId, intentId |
-| `ConfigurationIntentExpired` | accountId, intentId |
-| `CredentialRevoked` | accountId, moduleId, credentialGeneration |
-| `NonceChannelOpened` | accountId, channelDigest |
-| `NonceChannelExhausted` | accountId, channelDigest |
-| `MessageSubjectUpdated` | accountId, subjectCount, threshold, subjectRevision |
-| `AccountFrozen` | accountId, authorityEpoch |
-| `AccountUnfrozen` | accountId, authorityEpoch |
-| `RecoveryInitiated` | accountId, newCustody, matureAt |
-| `RecoveryCancelled` | accountId |
-| `RecoveryExecuted` | accountId, authorityEpoch, configurationNonce |
-| `MarketControlEpochBound` | accountId, listingId, controlEpoch |
-| `MarketLockInvalidated` | accountId, controlEpoch |
-| `CoreRecoveryRecorded` | accountId, matureAt |
-| `MigrationRequired` | accountId, legacyModuleCount |
-| `MigrationImported` | accountId, manifestDigest, classification |
-
-每个生命周期转换恰好发出一个事件；安装/卸载失败即抛出（无部分提交的事件对）。
+| `AccountRegistered` | `accountId: Hash160`, `custody: Hash160` |
+| `ModuleInstalled` | `accountId: Hash160`, `moduleType: String`, `moduleHash: Hash160` |
+| `ModuleRemoved` | `accountId: Hash160`, `moduleType: String`, `moduleHash: Hash160` |
+| `UserOpExecuted` | `accountId: Hash160`, `targetContract: Hash160`, `method: String`, `nonce: Integer` |
+| `ModuleInstanceInstalled` | `accountId: Hash160`, `moduleId: Integer`, `moduleType: Integer`, `contractHash: Hash160`, `credentialGeneration: Integer` |
+| `ModuleInstanceRemoved` | `accountId: Hash160`, `moduleId: Integer` |
+| `NonceChannelOpened` | `accountId: Hash160`, `channelDigest: ByteArray` |
+| `NonceChannelExhausted` | `accountId: Hash160`, `channelDigest: ByteArray` |
+| `AccountFrozen` | `accountId: Hash160`, `authorityEpoch: Integer` |
+| `AccountUnfrozen` | `accountId: Hash160`, `authorityEpoch: Integer` |
+| `ModuleCredentialsRevoked` | `accountId: Hash160`, `moduleId: Integer`, `credentialGeneration: Integer` |
+| `RecoveryPolicySet` | `accountId: Hash160`, `recoveryAuthority: Hash160`, `recoveryTimelockMs: Integer`, `ownerOnlyRecovery: Boolean` |
+| `AccountReset` | `accountId: Hash160`, `custody: Hash160`, `authorityEpoch: Integer` |
+| `BuiltinAuthorizationSet` | `accountId: Hash160`, `defaultOperationAuthorization: Boolean`, `defaultMessageAuthorization: Boolean` |
+| `ThresholdPolicySet` | `accountId: Hash160`, `policyId: Integer`, `threshold: Integer`, `memberIds: Array` |
+| `MessageSubjectUpdated` | `accountId: Hash160`, `subjectCount: Integer`, `threshold: Integer`, `subjectRevision: Integer` |
+| `ModuleInstanceConfigured` | `accountId: Hash160`, `moduleId: Integer`, `credentialGeneration: Integer` |
 
 ---
 

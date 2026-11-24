@@ -1,0 +1,179 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "coqchkPassed": true,
+  "calls": 368,
+  "picoRates": [
+    300000,
+    300001,
+    1000000
+  ],
+  "paths": [
+    {
+      "method": "getAccountImplementationId",
+      "case": "no argument",
+      "units": 414348,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "single",
+      "units": 416497,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "batch",
+      "units": 416536,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "batch-atomic",
+      "units": 416575,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "empty",
+      "units": 416575,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "unknown",
+      "units": 416575,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "integer",
+      "units": 416568,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "bytes255",
+      "units": 416575,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "bytes256",
+      "units": 417079,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "bytes65535",
+      "units": 417079,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "limit",
+      "units": 420663,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsExecutionMode",
+      "case": "over limit",
+      "units": 420573,
+      "outcome": "comparison fault"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "validator",
+      "units": 416497,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "verifier",
+      "units": 416536,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "hook",
+      "units": 416575,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "empty",
+      "units": 416575,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "unknown",
+      "units": 416575,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "integer",
+      "units": 416568,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "bytes255",
+      "units": 416575,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "bytes256",
+      "units": 417079,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "bytes65535",
+      "units": 417079,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "limit",
+      "units": 420663,
+      "outcome": "return"
+    },
+    {
+      "method": "supportsModuleType",
+      "case": "over limit",
+      "units": 420573,
+      "outcome": "comparison fault"
+    }
+  ],
+  "runtimeSha256": "11e0a8670fc3e3641e223c40e4ce34c5317684755eb88bd12028535d40a731fb",
+  "fixedRateRuntimeSha256": "f7a00c251a46e22ea4e2d9a00fc77eedd91d6030cc7c82656508c316614086c1",
+  "methodFixedFees": {
+    "getAccountImplementationId": 0,
+    "supportsExecutionMode": 12345,
+    "supportsModuleType": 54321
+  },
+  "maxRateRuntimeSha256": "2e027776343c4cf957a0b110aaa94facbf4307903589f208684ed055f9f3844c",
+  "policySourceSha256": "bde31f8af6df23a66b563081ef4f866d80ffb318ce4a1b01d7289a12f14fea62",
+  "fractionalRuntimeSha256": "eff5c53bcf6f4f85bb09363b89402f6d41db18567646c0e68dbaac59bfa49f72",
+  "modelSha256": "f52836156c03b08126af6da1767476f17edfe280b79264bb768eb8526c2c26b8",
+  "certificateSha256": "36c5a859eacdd5e188bdb1907d687480a0b6b12a9f21e2520bf499769b524a2c",
+  "queryFeeModelSha256": "93d834d2b5ad68cd25ab2fe2597e80026708a0e1c221a64bc2914bf52636329b",
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "priceSources": {
+    "ApplicationEngine.cs": "97b08bfe754bc51ed8418316b45d3805dccff76ef51fbd43ac9b663eacb4d5eb",
+    "ApplicationEngine.OpCodePrices.cs": "9835961f56aacb0d4df903dad7b98ab33ee3a1e75ea98189228b000f7ed0a447",
+    "ApplicationEngine.Storage.cs": "adeb3ce69a7d04a3015de35884c0f0c6203ef2dfbfbe8056395f074d69e04083",
+    "ApplicationEngine.Runtime.cs": "b0f4fa6316d796e0b0aa1406a696395669311d5382600f3f83bad966c6d429e9",
+    "ApplicationEngine.Contract.cs": "8958efff155cb407fef140dea11a516b9f08ab10feecf1b3c39d986d79801a96",
+    "Native/StdLib.cs": "510dbd32f7896e99b0953096b6bc1df64fabfbee952ff4dc9f186789f084be05",
+    "Native/NativeContract.cs": "3ceb1bd9c78e0683b81b2833e0c544a7a3b77778fb44676ec4cc9f76d863fcbf",
+    "Native/ContractMethodAttribute.cs": "9c521cac926a61d7a1d6329d84a31808c233378fa4bf04bf240bc92f9820b5d1",
+    "Native/ContractMethodMetadata.cs": "33aac77fd9353fa23f64cbcbd96cb3e751f2eda8517d4b17ca79c1026f8bbc19"
+  },
+  "priceCommit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+  "scope": "Whole canonical driver budget threshold for any admitted byte string, using the specified PUSHDATA width and the extracted initializer and method path. Paid includes comparison faults. For an ordinary caller and a fixed-price target, the separate fixed_method_budget theorem covers the metered driver followed by the fixed charge. No general proof of call-frame exemption propagation, script admission, other VM resource limits or arbitrary outer scripts."
+}

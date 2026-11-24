@@ -25,7 +25,7 @@ namespace SmartAccount.Hooks
 #if SMARTACCOUNT_NATIVE
     [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "getAuthorizedModuleId", "getAccountAddress")]
     [ContractPermission("*", "balanceOf")]
-    [ManifestExtra("SmartAccountProfile", "native-v4")]
+    [ManifestExtra("SmartAccountProfile", "native-smartaccount")]
 #else
     [ContractPermission("*", "getAuthorizedModuleId")]
     [ContractPermission("*", "getProxyScriptHash")]
@@ -128,6 +128,8 @@ namespace SmartAccount.Hooks
             if (command == "setDailyLimit")
             {
                 ModuleConfig.RequireArgs(data, 3);
+                ExecutionEngine.Assert(data[2] is BigInteger && data[3] is bool,
+                    "Daily limit requires an integer amount and a boolean window flag");
                 SetDailyLimit(accountId, moduleId, (UInt160)data[1], (BigInteger)data[2], (bool)data[3]);
                 return;
             }

@@ -69,6 +69,25 @@ namespace Neo.UnitTests.SmartContract.Native
         }
 
         [TestMethod]
+        public void ValidatorBudgetsPersistAcrossOperationsAndAreSeparateByAccountAndPhase()
+        {
+            var meter = new SmartAccountInvocationContext();
+            var validate = SmartAccountCallbackPhase.Validation;
+            var complete = SmartAccountCallbackPhase.Completion;
+            long limit = SmartAccountModuleProtocol.ValidationAggregateGasLimit;
+            meter.ChargeValidator(Account, validate, limit - 1);
+            meter.OpenExecution(Account);
+            meter.CloseExecution(Account);
+            Assert.AreEqual(1L, meter.ValidatorGasRemaining(Account, validate));
+            Assert.ThrowsExactly<InvalidOperationException>(() => meter.ChargeValidator(Account, validate, 2));
+            meter.ChargeValidator(Account, validate, 1);
+            Assert.AreEqual(0L, meter.ValidatorGasRemaining(Account, validate));
+            Assert.AreEqual(SmartAccountModuleProtocol.CompletionAggregateGasLimit, meter.ValidatorGasRemaining(Account, complete));
+            Assert.AreEqual(limit, meter.ValidatorGasRemaining(OtherAccount, validate));
+            Assert.AreEqual(limit, new SmartAccountInvocationContext().ValidatorGasRemaining(Account, validate));
+        }
+
+        [TestMethod]
         public void AccountLockRejectsReentryAndOwnsIdentity()
         {
             var authority = new SmartAccountInvocationContext();

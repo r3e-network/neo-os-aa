@@ -132,8 +132,8 @@ class NativeProfileCiTests(unittest.TestCase):
         for section in sections:
             patterns = re.findall(r"      - '([^']+)'", section)
             for changed in (".editorconfig", "global.json", "Directory.Build.props", "Directory.Build.targets", "nuget.config",
-                    "docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md", "docs/proposals/smartaccount-native-profile-v2-parameters.json",
-                    "docs/proposals/test_native_profile_v2.py", "docs/reports/sa-native-ci-probe-consistency-20261009.json",
+                    "docs/SA-MODULE-PROTOCOL.md", "docs/proposals/smartaccount-native-profile-parameters.json",
+                    "docs/proposals/validate-native-smartaccount-profile.py", "docs/reports/sa-native-ci-probe-consistency-20261009.json",
                     "contracts/native/profile.json", "shared/nativeSmartAccountClient.mjs",
                     "frontend/src/features/native/NativeAccountWorkspace.vue", "frontend/tests/fixtures/nativeRpcFixture.js",
                     "sdk/js/src/native.js", "sdk/js/tests/fixtures/native-signed-execution.json",

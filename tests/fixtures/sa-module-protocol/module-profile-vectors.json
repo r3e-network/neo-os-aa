@@ -1,0 +1,74 @@
+[
+  {
+    "case": "reference-WhitelistHook",
+    "manifestName": "WhitelistHook",
+    "role": "hook",
+    "profileText": "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"WhitelistHook\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}",
+    "expectedAccepted": true,
+    "sha256": "3d7413093315107b2dc8f2ffab4d0894394df39604eafdb5a84fc8117145d9da"
+  },
+  {
+    "case": "reference-P256Validator",
+    "manifestName": "P256Validator",
+    "role": "validator",
+    "profileText": "{\"callbacks\":[\"validateUserOp\",\"onUserOpComplete\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":true},\"contractName\":\"P256Validator\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"validator\",\"profileVersion\":1}",
+    "expectedAccepted": true,
+    "sha256": "15307d47b9ee7e68f88f5c85e8b400fa4f2c4463ec7920e0be3d43fcf819bffe"
+  },
+  {
+    "case": "utf8-name",
+    "manifestName": "限额",
+    "role": "hook",
+    "profileText": "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"限额\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}",
+    "expectedAccepted": true,
+    "sha256": "dda93e545da75dee3aa43f709686f50840b5d129b75d18785035a59b297c8b0d"
+  },
+  {
+    "case": "optional-unicode-escape",
+    "manifestName": "限额",
+    "role": "hook",
+    "profileText": "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"\\u9650\\u989d\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}",
+    "expectedAccepted": false,
+    "sha256": "94af938e30cf8a1c26a314a8d5a609ed1db92758346b5f3ce690d087b3e6ef74"
+  },
+  {
+    "case": "mandatory-control-escape",
+    "manifestName": "\u001c",
+    "role": "hook",
+    "profileText": "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"\\u001c\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}",
+    "expectedAccepted": true,
+    "sha256": "2cd688fe418972194f3fc67092d9f42a4b5e49d8c43bc6aec2a4813ea44219ca"
+  },
+  {
+    "case": "white-space-only",
+    "manifestName": "　",
+    "role": "hook",
+    "profileText": "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"　\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}",
+    "expectedAccepted": false,
+    "sha256": "82b12f8143118dfc28196ec21721f0dd424b2e0012895eb7321d2748002df42b"
+  },
+  {
+    "case": "wrong-role",
+    "manifestName": "WhitelistHook",
+    "role": "validator",
+    "profileText": "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"WhitelistHook\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}",
+    "expectedAccepted": false,
+    "sha256": "3d7413093315107b2dc8f2ffab4d0894394df39604eafdb5a84fc8117145d9da"
+  },
+  {
+    "case": "trailing-line-feed",
+    "manifestName": "WhitelistHook",
+    "role": "hook",
+    "profileText": "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"WhitelistHook\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}\n",
+    "expectedAccepted": false,
+    "sha256": "64051dee152a983ae82c491b6c5db645e1e773370e74e84880a4328aa48b5b0e"
+  },
+  {
+    "case": "duplicate-key",
+    "manifestName": "WhitelistHook",
+    "role": "hook",
+    "profileText": "{\"callbacks\":[],\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"WhitelistHook\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}",
+    "expectedAccepted": false,
+    "sha256": "bfeabd8c964139ac82287efc0b68f1d302bfbde238e773a7a118984b7e1c6e19"
+  }
+]

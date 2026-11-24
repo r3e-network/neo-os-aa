@@ -1,0 +1,149 @@
+<pre>
+  NEP: <to be assigned>
+  Title: SmartAccount Module Profiles
+  Author: <to be assigned before submission>
+  Type: Standard
+  Status: Draft
+  Created: 2026-11-24
+</pre>
+
+==Abstract==
+This companion to [[nep-smartaccount-module-interface.mediawiki|SmartAccount Module Interface]] specifies the profiles used by the current SmartAccount implementation. A section name identifies a profile in this proposal, not a separately assigned NEP number. An implementation must meet both the common interface and the applicable section. Neither a matching name nor the ability to install a contract establishes behavioral conformance.
+
+==Motivation==
+A wallet should be able to tell a user what authority a module obtains. For example, a recovery seat can complete a delayed account reset, whereas a recovery-related validator can only authorize an operation. A module that refuses all operations must never be presented as a working spending credential.
+
+==Specification==
+Configuration commands below are VM Arrays beginning with the exact string shown. The position of each argument is part of the wire format. Public callback types and profile encoding are defined in the companion interface. The operation array, signing domains, proposal actions, time units and error semantics are defined in <code>docs/SA-MODULE-PROTOCOL.md</code>. The accompanying <code>smartaccount-module-abis.md</code> lists manifest signatures and safe flags per module. Roles below are installation roles; four management/read modules deliberately expose a validator ABI without approving spending.
+
+===Claiming a named profile===
+The normative [[smartaccount-named-module-interfaces.json|named interface catalogue]] is keyed by the section names below. For each profile, <code>moduleType</code>, <code>capabilities</code> and <code>lifecycle</code> MUST match the common discovery response. Each entry in <code>methods</code> is an additional required method: its key is the case-sensitive manifest method name and its value is <code>[[ordered parameter types], return type, safe flag]</code>. Parameter names are informative. A module MUST expose exactly one matching method at the specified name and arity. Other methods are permitted but MUST NOT weaken the behavioral rules. An empty methods object removes no common callback or behavioral requirement.
+
+A third-party implementation MAY use its own manifest name; its discovery response MUST still name that deployment. To check, for example, a daily limit implementation before installation:
+<pre>
+python3 scripts/check_module_neps.py --profile MyLimit.profile.json --manifest MyLimit.manifest.json --nef MyLimit.nef --named-profile DailyLimitHook
+</pre>
+The profile selection is an input to the publisher's check, not a new on-chain field. With <code>--nef</code>, the checker verifies the required method offsets are within the NEF script, deploys the supplied artifact in a fresh local NeoVM with the raw core address as deployment data, calls the getter with <code>ReadStates</code> and compares its ByteString byte for byte with the supplied profile file. Without the NEF, the static interface check verifies that required offsets are nonnegative integers but cannot verify their upper bound. Modules with different deployment prerequisites need an equivalent check in their own environment. Neither check certifies the spending limit, replaces native admission, or qualifies a different deployment for a privileged role. The disabled profiles below remain disabled even if this check passes.
+
+The Boolean <code>disabled</code> in the named catalogue describes the standard, not a deployment. When true, a wallet MUST NOT offer the named profile as a usable feature. False does not attest a deployment, authorize spending or imply module installation on this network. This field is not part of the getter bytes or their digest.
+
+The catalogue's <code>commands</code> object describes the contents of the configuration array, which the manifest only identifies as <code>Array</code>. Start with the command name as a String and append the values in the listed order; a <code>name:type</code> descriptor is metadata and is never an array element. <code>Hash160[]</code> is one Array of addresses, and a command with no arguments still has its name at index zero. An Integer field MUST be a VM Integer and a Boolean field MUST be a VM Boolean, both at installation and during configuration. Byte encodings of the same number and integer substitutes for Boolean flags MUST be rejected. An empty commands object defines no configuration commands, even when a disabled implementation exposes a rejecting callback. The configurable, enabled profiles also accept one such command as non-empty install data.
+
+===Installation data===
+The <code>installData</code> list in each catalogue entry defines all accepted shapes of the fourth <code>onInstall</code> argument. These labels describe how to build the VM Array; do not send the labels.
+{| class="wikitable"
+! Catalogue label !! VM Array the wallet sends
+|-
+| empty || An empty Array: <code>[]</code>.
+|-
+| command || Exactly one of that entry's configuration command arrays, as-is. For example, to install a whitelist with an initial target, pass <code>["allowTarget",target]</code>, without an extra array around it.
+|-
+| hookOrder || A one-element Array containing the ordered Array of installed hook IDs: <code>[[id1,id2,...]]</code>. Each ID MUST be a VM Integer, and the sequence MUST exactly match the core's current hook IDs. This confirms an existing order. It cannot reorder or omit hooks.
+|}
+An empty list of labels means the profile MUST refuse installation even with empty data. Four profiles (governance, recovery, signing and threshold policy) accept only the empty Array. The hook orchestrator accepts empty or hookOrder. Every other enabled profile accepts empty or command. A recognized shape does not waive caller, value, or account-state checks.
+
+===Ordinary removal===
+For all enabled profiles in this catalogue, wallets MUST pass an empty VM Array as the last argument of <code>removeModule(accountId,moduleId,[])</code>. No named profile defines an uninstall command. The authenticated core calls <code>onUninstall(accountId,moduleId,moduleType,[])</code> while the instance still exists. The module MUST support this data shape for an otherwise permitted removal, without user-supplied cleanup keys or commands. Wallets MUST NOT rely on what an implementation does with extra data. Removal clears the removed instance's state; it MUST NOT clear another account's state or a confirmed account policy the core still references. A callback failure aborts ordinary removal. The two disabled profiles have no normal installation to remove. Delayed account recovery has its own reset path and does not dispatch this callback.
+
+=== GovernanceModule ===
+Role: validator. MUST NOT approve UserOperations. Propose using <code>proposeConfiguration(accountId,actions,readSet)</code>. Confirm the exact actions after 24 hours within the 7-day confirmation window. Confirmation MUST check the epoch, proposal digest and applicable resource conflicts. Signing policy uses action 9; mandatory spending enrollment uses action 7 as the last action. A direct wallet call to the module's policy storage writer MUST fail.
+
+The reviewed provider MUST retain the last confirmed custom message roster and mandatory spending body in separate account slots. The callback <code>storeGovernedPolicy(accountId,kind,policy)</code> accepts only the configured core. Kind 4 stores the supplied bytes at <code>0x04 || accountId</code>; kind 5 uses <code>0x05 || accountId</code>, in the provider's storage namespace. The account ID here is the 20 raw bytes used by the core. Commit the SHA-256 of the exact stored bytes and the provider's four-byte big-endian storage ID, as specified by the core storage table. A wallet MUST NOT treat a missing body, digest mismatch or read failure as permission for custody to sign. Uninstall removes pending governance intents but MUST NOT remove a body still referenced by the core. Recovery through the preset seat MUST NOT require decoding the old body.
+
+=== RecoveryModule ===
+Role: recovery. <code>beginRecovery(accountId,newCustody)</code> requires the applicable configured authority; a nonzero new custodian must consent. Zero retains custody. The seat MUST record the starting epoch, the recovery authority and the account's configured delay, allow authorized cancellation, and refuse early or stale execution. Replacing the authority or changing the delay retires a pending request; writing the same values again leaves it executable while still advancing the core configuration nonce. <code>getRecoveryPolicySnapshot(accountId)</code> exposes the begin-time <code>[authority, timelockMs]</code> so a wallet can detect a stale request. A third party may pay to execute a mature valid request. The seat is not an operation validator.
+
+=== HookOrchestratorModule ===
+Role: validator. MUST NOT authorize spending. <code>getHookOrder</code> reports the installed order. <code>setHookOrder</code> only confirms that exact sequence; a different order MUST fail. It and <code>revokeCredentials</code> are administrative actions, not hook callbacks.
+
+=== SigningModule ===
+Role: validator. MUST NOT authorize spending. Its safe <code>getMessageSubjects(accountId)</code> returns the effective subjects, threshold and revision, or an empty array for an unknown account. Roster changes require reviewed governance action 9. Applications verifying messages call the core directly because the original caller is part of the digest.
+
+=== ThresholdPolicyModule ===
+Role: validator. Read adapter; MUST NOT authorize spending by itself. <code>getThresholdPolicy(accountId,0)</code> discovers the effective policy; a positive ID reads that policy. Enrollment requires distinct member keys and the preset delayed recovery seat. A mandatory policy accepts only its own route with the required approvals. Neither an absent member signature nor an unreadable roster permits direct custody spending.
+
+=== MultiSigValidator ===
+Role: validator. One instance represents one member, not a whole quorum. <code>["setMemberKey", publicKey]</code> sets its P-256 key. Approval MUST bind the operation digest, member instance and credential generation. A policy signature contains a row for every member, sorted by ascending ID; empty signature bytes mean absent. Enrollment in the mandatory route also requires the reviewed member code and manifest.
+
+=== NeoWitnessValidator ===
+Role: validator. <code>["setSigners", signers, threshold]</code> configures a witness quorum. Count distinct configured witnesses for this transaction; absence of the required witnesses MUST NOT be treated as a cryptographic signature. The approval is not a general message signature.
+
+=== P256Validator ===
+Role: validator. <code>["setPublicKey", publicKey]</code> configures the P-256 verification key. Verify the compact 64-byte signature on the operation/member digest for this route. An unconfigured key, wrong digest or malformed signature MUST NOT approve. This is not a WebAuthn assertion format.
+
+=== TeeKeyValidator ===
+Role: validator. <code>["setPublicKey", publicKey]</code> registers a P-256 key. Require its 32-byte key ID followed by a 64-byte signature; check the ID against the configured compressed key and verify the signed digest. A valid signature proves possession of the configured key, not fresh hardware attestation.
+
+=== DelegatedIdentityValidator ===
+Role: validator. <code>["setConfig", signerPublicKey, provider, masterNullifier]</code> pins the identity configuration. Validate the version, provider length and bytes, master and action nullifiers, exact total payload length and delegated signature. A different provider or action must not authorize. This profile does not claim an on-chain zero-knowledge identity proof.
+
+=== Web3AuthValidator ===
+Role: validator. <code>["setPublicKey", publicKey]</code> configures the Ethereum-style signing credential. Distinguish its typed operation signature from the optional read-only message callback. A valid signature for one domain is not authorization for the other; do not route opaque message hashes through spending hooks.
+
+=== SessionKeyValidator ===
+Role: validator. <code>["setSessionKey",publicKey,target,method,validUntil,spendingLimit,description]</code> grants scoped operation authority; <code>["clearSessionKey"]</code> revokes it. Verify target, method, validity, generation and available allowance for the signed operation. Reject out-of-scope spending; preview must not consume allowance. This grant does not authorize arbitrary messages.
+
+The expiry is an absolute Unix timestamp in milliseconds, strictly in the future and at most 30 days from the block time. A positive cap is valid only for the exact method <code>transfer</code>; zero means uncapped. The last argument is human-readable description text.
+
+=== SubscriptionValidator ===
+Role: validator. Standalone use only. <code>["createSubscription",id,merchant,token,amount,periodSeconds]</code> creates or replaces a subscription; <code>["cancelSubscription",id]</code> removes its configuration. The ID is an opaque ByteArray of 1 to 255 bytes inclusive. Merchant and token MUST be nonzero Hash160 addresses; amount and periodSeconds MUST be positive integers. Only the merchant's transaction witness can authorize the configured token's <code>transfer(accountAssetAddress,merchant,value,data)</code>; value MUST be a VM Integer between 1 and amount inclusive. The operation MUST carry the subscription's recorded credential generation. Only a Boolean true transfer result books the charge.
+
+Billing periods are aligned to Unix epoch seconds. For duration d and time t in seconds the period number is floor(t/d); zero is reserved. For each installed instance and ID, preserve the time b and duration p of the last successful charge through replacement, cancellation and re-creation. A charge at t under duration d is due only if floor(t/d) is positive and, when a receipt exists, both floor(t/p) > floor(b/p) and floor(t/d) > floor(b/d). Thus a change to the schedule takes effect once both windows containing the last charge have ended. The first eligible Unix second after a booking is max(p × (floor(b/p) + 1), d × (floor(b/d) + 1)). With no receipt the first eligible second is d. These are billing-time conditions only; the merchant witness and other authorization checks still apply. With no intervening charge, editing the schedule does not rewrite the receipt. <code>getLastChargedPeriod</code> and the last field of <code>getSubscription</code> return the period number at booking (zero before the first charge). After cancellation only the former exposes it; uninstall clears this instance's records.
+
+=== ActionSessionValidator ===
+Role: validator. Only a standalone route may use the recorded recovery authority's witness or the authorized session executor reported by the configured service. Configure using <code>["setRecoveryService",service]</code> or <code>["clearRecoveryService"]</code>. This validator MUST NOT be treated as a recovery seat, a threshold member, or proof of an elapsed reset delay.
+
+=== ZKEmailVerifier ===
+Role: validator. Disabled profile: operation validation MUST return false. No email proof encoding is accepted by this implementation. A wallet MUST NOT offer this contract as a working email authorization or recovery mechanism.
+
+=== WhitelistHook ===
+Role: hook. <code>["allowTarget",target]</code> and <code>["denyTarget",target]</code> manage permitted operation targets. A pre-check must refuse a disallowed target. Permission for the immediate target is not evidence about all contracts it may call.
+
+=== DailyLimitHook ===
+Role: hook. <code>["setDailyLimit",token,maxAmount,useRollingWindow]</code> and <code>["clearDailyLimit",token]</code> govern per-token spending. Apply the configured window and measure outflow across the target call. A successful operation must not leave spending over the limit.
+
+Meter the account's asset proxy address. Amounts use the token's smallest unit. Zero removes the limit and its usage history; it does not block all spending. With a fixed window the first booked outflow starts a 24-hour period. A rolling window includes outflows timestamped at or after the current time minus 24 hours.
+
+=== TokenRestrictedHook ===
+Role: hook. <code>["restrictToken",token]</code> and <code>["unrestrictToken",token]</code> maintain the restricted set. Reject direct calls to a restricted token, snapshot balances before execution, and reject a net outflow from a restricted balance afterwards, including through an intermediary.
+
+=== NeoDIDCredentialHook ===
+Role: hook. Use <code>["requireCredential",target,provider,claimType,claimCommitment]</code> or <code>["clearRequirement",target]</code>. An empty provider or claim type clears the requirement. Otherwise the commitment MUST be exactly 32 bytes. Before a call to that target, the registry binding for this account, provider and claim type MUST be active and its commitment MUST match. This hook does not grant spending authority.
+
+=== MultiHook ===
+Role: hook. Disabled composite profile: install, configure, pre-check and post-check fault. It MUST NOT be advertised as an executable nested hook chain. Use the core's ordered individual hooks.
+
+===Wire formats for wallet authors===
+A wallet confirming a single dynamic call MUST check the Application execution for the reviewed transaction. A HALT accompanied by an exception, a missing result, or a result of the wrong ABI type does not establish success. For <code>installModule</code> the result is one Integer: an allocated instance ID from 1 through 2^64 - 2. For <code>beginRecovery</code> it is one positive Integer: the pending request nonce. The reviewed cancellation and execution methods return Void; the dynamic call leaves one VM null item. Starting a request does not mean that recovery has executed.
+
+{| class="wikitable"
+! Profile !! Input to validation
+|-
+| NeoWitnessValidator || Configure 1–10 distinct signer addresses and an integer threshold between 1 and their count. The evidence is the transaction's witnesses.
+|-
+| TeeKeyValidator || Concatenate SHA-256 of the compressed public key (32 bytes) and the compact P-256 signature (64 bytes).
+|-
+| DelegatedIdentityValidator || Concatenate 0x01, a one-byte provider length, the provider bytes, master nullifier (32 bytes), action nullifier (32 bytes) and signature (64 bytes). Reject trailing bytes.
+|-
+| Web3AuthValidator || For an operation use a 64-byte compact secp256k1 signature over the typed signing payload. For the message callback supply exactly one pair [configured compressed public key, recoverable signature (64 or 65 bytes)] and recover against the supplied domain-bound digest.
+|-
+| SessionKeyValidator || Concatenate the current grant digest (32 bytes) and its signature (64 bytes). An unlimited grant is not a spending cap; wallets must display the configured target, method, expiry and whether spending is capped.
+|-
+| SubscriptionValidator || The signature field contains the raw subscription ID (1–255 bytes), not its hash. The ID selects the grant; authorization additionally requires the configured merchant's witness.
+|}
+
+==Rationale==
+Named sections keep one common format while exposing distinct authority, proof formats and failure behavior. Unpublished disabled implementations are documented to prevent clients from interpreting their presence as a usable credential.
+
+==Backwards Compatibility==
+Only the current unpublished profiles are defined. The standard does not assign authority to a historical name, emitted event, capability hint or abandoned implementation.
+
+==Test Cases==
+Compile each listed module, then run <code>python3 scripts/check_module_neps.py --manifests DIR</code>. For behavioral conformance test the allowed case and the refusal specified in each section, including absent quorum, stale recovery, exhausted allowance, restricted indirect outflow and both disabled modules. The shared interface test checks wire types; a pass cannot establish any of these behaviors on its own.
+
+For the six builds pinned to the native core, run <code>python3 scripts/check_module_neps.py --native-packages DIR</code> on the output directory of <code>build_native_modules.py</code>. This checks the packaged NEF and manifest against the packaging receipt, verifies each named interface and compares the deployed getter bytes with the profile. Manifest binary parameters use <code>ByteArray</code>; <code>ByteString</code> is a VM stack type.
+
+==Implementation==
+The native core passes the module type as the third install/uninstall argument. SessionKeyValidator and SubscriptionValidator read the current credential generation from the core's instance descriptor when issuing a grant. The type stays constant across revocations; it MUST NOT be used as a generation.
+
+The five standard management and recovery contracts live under <code>contracts/modules</code>. Ten credential implementations and five hooks live under <code>contracts/plugins</code>. Templates, the external SocialRecoveryService and the native account core are not deployable modules covered by this catalogue. See <code>docs/SA-MODULE-PROTOCOL.zh-CN.md</code> for the Chinese protocol text.

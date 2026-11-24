@@ -1,0 +1,2205 @@
+{
+  "status": "PASS_SAMPLED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "engineSha256": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "rows": [
+    {
+      "name": "computeRegistrationAccountId",
+      "arity": 5,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "computeRegistrationAccountId",
+      "arity": 5,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        0
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "registerAccount",
+      "arity": 6,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "registerAccount",
+      "arity": 6,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        420
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "registerAccounts",
+      "arity": 6,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "registerAccounts",
+      "arity": 6,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        2317
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "updateHook",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "updateHook",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        2528
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmHookUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmHookUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        3352
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "updateVerifier",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "updateVerifier",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        3830
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmVerifierUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmVerifierUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        4307
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "callVerifier",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "callVerifier",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        5094
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "callHook",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "callHook",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        5335
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "proposeUpdate",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "proposeUpdate",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        5555
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelUpdate",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelUpdate",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        5920
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "update",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "update",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        5983
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmUpdate",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmUpdate",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        6391
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getContractAdmin",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getContractAdmin",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        6402
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "proposeAdminTransfer",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "proposeAdminTransfer",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        6462
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelAdminTransfer",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelAdminTransfer",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        6694
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmAdminTransfer",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmAdminTransfer",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        6760
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingContractAdmin",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingContractAdmin",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        7041
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getAdminTransferAvailableAt",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getAdminTransferAvailableAt",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        7101
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isOwnerOnlyRecovery",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isOwnerOnlyRecovery",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        7142
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "finalizeEscapeToOwner",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "finalizeEscapeToOwner",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        7422
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "initiateEscape",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "initiateEscape",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        8259
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "finalizeEscape",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "finalizeEscape",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        8514
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "finalizeEscape",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "finalizeEscape",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        8526
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "executeUserOp",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "executeUserOp",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        9394
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "previewUserOpValidation",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "previewUserOpValidation",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        11676
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "executeUserOps",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "executeUserOps",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        11753
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isExecutionActive",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isExecutionActive",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        7396
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "enterMarketEscrow",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "enterMarketEscrow",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        11921
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelMarketEscrow",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelMarketEscrow",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        12136
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "settleMarketEscrow",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "settleMarketEscrow",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        12534
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "initiateMarketEscrowCancel",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "initiateMarketEscrowCancel",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        13116
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "forceCancelMarketEscrow",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "forceCancelMarketEscrow",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        13260
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasMarketEscrowOwnerCancel",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasMarketEscrowOwnerCancel",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        13514
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getMarketEscrowOwnerCancelTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getMarketEscrowOwnerCancelTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        13525
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "executeSponsoredUserOp",
+      "arity": 5,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "executeSponsoredUserOp",
+      "arity": 5,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        13765
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "executeSponsoredUserOps",
+      "arity": 5,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "executeSponsoredUserOps",
+      "arity": 5,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        14110
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "computePlatformAccountId",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "computePlatformAccountId",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        14754
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "computeStablePlatformAccountId",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "computeStablePlatformAccountId",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        14907
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "registerPlatformAccount",
+      "arity": 4,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "registerPlatformAccount",
+      "arity": 4,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        15018
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "registerStablePlatformAccount",
+      "arity": 4,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "registerStablePlatformAccount",
+      "arity": 4,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        15519
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "rotatePlatformAccountOwner",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "rotatePlatformAccountOwner",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        15701
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "proposePlatformAccountOwnerRotation",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "proposePlatformAccountOwnerRotation",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        15710
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmPlatformAccountOwnerRotation",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmPlatformAccountOwnerRotation",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        16144
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelPlatformAccountOwnerRotation",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelPlatformAccountOwnerRotation",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        16612
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingPlatformAccountOwnerRotation",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingPlatformAccountOwnerRotation",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        16987
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPlatformAccountOwnerRotationAvailableAt",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPlatformAccountOwnerRotationAvailableAt",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17043
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "proposePlatformRegistrar",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "proposePlatformRegistrar",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17064
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmPlatformRegistrar",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "confirmPlatformRegistrar",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17314
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelPlatformRegistrar",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelPlatformRegistrar",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17583
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPlatformRegistrar",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPlatformRegistrar",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        15211
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getAccountIdByProxy",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getAccountIdByProxy",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17661
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingPlatformRegistrar",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingPlatformRegistrar",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17805
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPlatformRegistrarAvailableAt",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPlatformRegistrarAvailableAt",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17865
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getProxyScriptHash",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getProxyScriptHash",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        15373
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getAccountImplementationId",
+      "arity": 0,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getAccountImplementationId",
+      "arity": 0,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17906
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getAccountImplementationId",
+      "arity": 0,
+      "limit": 1024,
+      "free": 2,
+      "loaded": [
+        17906,
+        24903
+      ],
+      "executed": 173,
+      "state": "HALT",
+      "error": null
+    },
+    {
+      "name": "supportsExecutionMode",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "supportsExecutionMode",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        17949
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "supportsExecutionMode",
+      "arity": 1,
+      "limit": 1024,
+      "free": 2,
+      "loaded": [
+        17949,
+        24903
+      ],
+      "executed": 183,
+      "state": "HALT",
+      "error": null
+    },
+    {
+      "name": "supportsModuleType",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "supportsModuleType",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18000
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "supportsModuleType",
+      "arity": 1,
+      "limit": 1024,
+      "free": 2,
+      "loaded": [
+        18000,
+        24903
+      ],
+      "executed": 184,
+      "state": "HALT",
+      "error": null
+    },
+    {
+      "name": "isModuleInstalled",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isModuleInstalled",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18049
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isValidSignature",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isValidSignature",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18156
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getVerifier",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getVerifier",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18389
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getHook",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getHook",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18403
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getBackupOwner",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getBackupOwner",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18417
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getEscapeTimelock",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getEscapeTimelock",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18431
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getEscapeTriggeredAt",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getEscapeTriggeredAt",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18445
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getMarketEscrowContract",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getMarketEscrowContract",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        3226
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getMarketEscrowListingId",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getMarketEscrowListingId",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        3291
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isMarketEscrowActive",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isMarketEscrowActive",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        3184
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isEscapeActive",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "isEscapeActive",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18459
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getNonce",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getNonce",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18475
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "computeArgsHash",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "computeArgsHash",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18569
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasPendingVerifierUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasPendingVerifierUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18645
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasPendingHookUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasPendingHookUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18671
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18696
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18766
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierUpdateTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierUpdateTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18827
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookUpdateTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookUpdateTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18871
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasPendingVerifierCall",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasPendingVerifierCall",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18950
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasPendingHookCall",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "hasPendingHookCall",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18963
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierCallModule",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierCallModule",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        18976
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookCallModule",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookCallModule",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19020
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierCallHash",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierCallHash",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19064
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookCallHash",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookCallHash",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19093
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierCallTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingVerifierCallTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19122
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookCallTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getPendingHookCallTime",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19151
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelVerifierUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelVerifierUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19180
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelHookUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "cancelHookUpdate",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19307
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "setMetadataUri",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "setMetadataUri",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19425
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getMetadataUri",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getMetadataUri",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19540
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "callVerifierChild",
+      "arity": 4,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "callVerifierChild",
+      "arity": 4,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        19576
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "verify",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "verify",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        21023
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getVerifyScopeTarget",
+      "arity": 1,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "getVerifyScopeTarget",
+      "arity": 1,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        21400
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "setVerifyScopeTarget",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "setVerifyScopeTarget",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        24202
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "setVerifyScopeTargets",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "setVerifyScopeTargets",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        24462
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "canConfigureVerifier",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "canConfigureVerifier",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        24592
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "canConfigureHook",
+      "arity": 2,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "canConfigureHook",
+      "arity": 2,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        24661
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "canExecuteVerifier",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "canExecuteVerifier",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        24731
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "canExecuteHook",
+      "arity": 3,
+      "limit": 1024,
+      "free": 0,
+      "loaded": [],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    },
+    {
+      "name": "canExecuteHook",
+      "arity": 3,
+      "limit": 1024,
+      "free": 1,
+      "loaded": [
+        24817
+      ],
+      "executed": 0,
+      "state": "FAULT",
+      "error": "MaxInvocationStackSize exceed: 1024"
+    }
+  ]
+}

@@ -76,7 +76,7 @@ def check_module_build(compiled, artifacts, contracts):
     scripts = Path(__file__).parent
     require(compiled["recipeSha256"] == sha256(scripts/"build_native_modules.py") and
             compiled["packagingRecipeSha256"] == sha256(scripts/"native_module_profile.py"), "Native recipe changed after build")
-    parameters = contracts.parent / "docs/proposals/smartaccount-native-profile-v4-parameters.json"
+    parameters = contracts.parent / "docs/proposals/smartaccount-native-profile-parameters.json"
     parameter_digest = profile_digest(parameters)
     packaging = json.loads((artifacts / "native-profile-packaging.json").read_text())
     require(packaging.get("status") == "PASS" and packaging.get("nefRewritten") is False,
@@ -97,7 +97,7 @@ def check_module_build(compiled, artifacts, contracts):
         manifest = json.loads((artifacts / (name + ".manifest.json")).read_text())
         require(manifest.get("name") == name, "Native manifest name mismatch")
         # Protocol v4 carries the capability profile inside the module (getModuleProfile) and marks the
-        # compiler manifest with SmartAccountProfile=native-v4. Re-admit the packaged bytes against the
+        # compiler manifest with SmartAccountProfile=native-smartaccount. Re-admit the packaged bytes against the
         # current descriptor, so a forged marker, permission allowlist, lifecycle ABI or capability is
         # rejected even when the receipt and the artifact pins were rehashed to match.
         try:

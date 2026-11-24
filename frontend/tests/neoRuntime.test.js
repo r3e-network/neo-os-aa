@@ -115,11 +115,8 @@ test('createProxyScript emits the §16.1 proxy verification script', () => {
     script,
     `0c14${reverseHex(accountId)}11c0150c067665726966790c14${reverseHex(CORE_HASH)}41627d5b52`,
   );
-  // The flag stays explicit: CallFlags.All (15) derives a different address.
-  assert.equal(
-    createProxyScript(CORE_HASH, accountId, 15),
-    `0c14${reverseHex(accountId)}11c01f0c067665726966790c14${reverseHex(CORE_HASH)}41627d5b52`,
-  );
+  assert.throws(() => createProxyScript(CORE_HASH, accountId, 15));
+  assert.throws(() => createProxyScript(CORE_HASH, '00'.repeat(20)));
 });
 
 test('frontend and SDK derive one canonical account address', () => {

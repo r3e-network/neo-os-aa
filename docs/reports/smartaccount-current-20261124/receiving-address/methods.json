@@ -1,0 +1,600 @@
+{
+  "assemblySha256": "2b498dcb83e762f6fb9b2ff07a44d7a7aadeb6a7de8f2baf65760e25ac3009e2",
+  "methods": [
+    {
+      "id": "Neo.SmartContract.Native.SmartAccount.GetAccountAddress",
+      "signature": "Neo.UInt160 Neo.SmartContract.Native.SmartAccount::GetAccountAddress(Neo.UInt160)",
+      "IsStatic": false,
+      "il": "03285c05000603280c0600062a",
+      "instructions": [
+        {
+          "pc": 0,
+          "op": "ldarg.1",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 1,
+          "op": "call",
+          "operand": "System.Void Neo.SmartContract.Native.SmartAccount::RequireAccountId(Neo.UInt160)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 6,
+          "op": "ldarg.1",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 7,
+          "op": "call",
+          "operand": "Neo.UInt160 Neo.SmartContract.Native.SmartAccountProtocol::GetAccountAddress(Neo.UInt160)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 12,
+          "op": "ret",
+          "operand": "",
+          "scope": null
+        }
+      ],
+      "locals": [],
+      "handlers": []
+    },
+    {
+      "id": "Neo.SmartContract.Native.SmartAccount.RequireAccountId",
+      "signature": "System.Void Neo.SmartContract.Native.SmartAccount::RequireAccountId(Neo.UInt160)",
+      "IsStatic": true,
+      "il": "02282b0600062a",
+      "instructions": [
+        {
+          "pc": 0,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 1,
+          "op": "call",
+          "operand": "System.Void Neo.SmartContract.Native.SmartAccountProtocol::RequireIdentity(Neo.UInt160)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 6,
+          "op": "ret",
+          "operand": "",
+          "scope": null
+        }
+      ],
+      "locals": [],
+      "handlers": []
+    },
+    {
+      "id": "Neo.SmartContract.Native.SmartAccountProtocol.GetAccountAddress",
+      "signature": "Neo.UInt160 Neo.SmartContract.Native.SmartAccountProtocol::GetAccountAddress(Neo.UInt160)",
+      "IsStatic": true,
+      "il": "02280b06000628ec0200062a",
+      "instructions": [
+        {
+          "pc": 0,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 1,
+          "op": "call",
+          "operand": "System.Byte[] Neo.SmartContract.Native.SmartAccountProtocol::CreateVerificationScript(Neo.UInt160)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 6,
+          "op": "call",
+          "operand": "Neo.UInt160 Neo.SmartContract.Helper::ToScriptHash(System.Byte[])",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 11,
+          "op": "ret",
+          "operand": "",
+          "scope": null
+        }
+      ],
+      "locals": [],
+      "handlers": []
+    },
+    {
+      "id": "Neo.SmartContract.Native.SmartAccountProtocol.RequireIdentity",
+      "signature": "System.Void Neo.SmartContract.Native.SmartAccountProtocol::RequireIdentity(Neo.UInt160)",
+      "IsStatic": true,
+      "il": "022c0d027e4100000428e20000062c0b72268c007073a700000a7a2a",
+      "instructions": [
+        {
+          "pc": 0,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 1,
+          "op": "brfalse.s",
+          "operand": "16",
+          "scope": null
+        },
+        {
+          "pc": 3,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 4,
+          "op": "ldsfld",
+          "operand": "Neo.UInt160 Neo.UInt160::Zero",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 9,
+          "op": "call",
+          "operand": "System.Boolean Neo.UInt160::op_Equality(Neo.UInt160,Neo.UInt160)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 14,
+          "op": "brfalse.s",
+          "operand": "27",
+          "scope": null
+        },
+        {
+          "pc": 16,
+          "op": "ldstr",
+          "operand": "A zero account or custody identity is not permitted.",
+          "scope": null
+        },
+        {
+          "pc": 21,
+          "op": "newobj",
+          "operand": "System.Void System.FormatException::.ctor(System.String)",
+          "scope": "System.Runtime"
+        },
+        {
+          "pc": 26,
+          "op": "throw",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 27,
+          "op": "ret",
+          "operand": "",
+          "scope": null
+        }
+      ],
+      "locals": [],
+      "handlers": []
+    },
+    {
+      "id": "Neo.SmartContract.Native.SmartAccountProtocol.CreateVerificationScript",
+      "signature": "System.Byte[] Neo.SmartContract.Native.SmartAccountProtocol::CreateVerificationScript(Neo.UInt160)",
+      "IsStatic": true,
+      "il": "02282b06000616734901000a0a062809060006728c5300701b178d10000001251602a228900a000626066f4a01000a0bde0a062c06066f3600000adc072a",
+      "instructions": [
+        {
+          "pc": 0,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 1,
+          "op": "call",
+          "operand": "System.Void Neo.SmartContract.Native.SmartAccountProtocol::RequireIdentity(Neo.UInt160)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 6,
+          "op": "ldc.i4.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 7,
+          "op": "newobj",
+          "operand": "System.Void Neo.VM.ScriptBuilder::.ctor(System.Int32)",
+          "scope": "Neo.VM"
+        },
+        {
+          "pc": 12,
+          "op": "stloc.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 13,
+          "op": "ldloc.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 14,
+          "op": "call",
+          "operand": "Neo.UInt160 Neo.SmartContract.Native.SmartAccountProtocol::get_ServiceHash()",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 19,
+          "op": "ldstr",
+          "operand": "verify",
+          "scope": null
+        },
+        {
+          "pc": 24,
+          "op": "ldc.i4.5",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 25,
+          "op": "ldc.i4.1",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 26,
+          "op": "newarr",
+          "operand": "System.Object",
+          "scope": "System.Runtime"
+        },
+        {
+          "pc": 31,
+          "op": "dup",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 32,
+          "op": "ldc.i4.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 33,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 34,
+          "op": "stelem.ref",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 35,
+          "op": "call",
+          "operand": "Neo.VM.ScriptBuilder Neo.Extensions.ScriptBuilderExtensions::EmitDynamicCall(Neo.VM.ScriptBuilder,Neo.UInt160,System.String,Neo.SmartContract.CallFlags,System.Object[])",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 40,
+          "op": "pop",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 41,
+          "op": "ldloc.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 42,
+          "op": "callvirt",
+          "operand": "System.Byte[] Neo.VM.ScriptBuilder::ToArray()",
+          "scope": "Neo.VM"
+        },
+        {
+          "pc": 47,
+          "op": "stloc.1",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 48,
+          "op": "leave.s",
+          "operand": "60",
+          "scope": null
+        },
+        {
+          "pc": 50,
+          "op": "ldloc.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 51,
+          "op": "brfalse.s",
+          "operand": "59",
+          "scope": null
+        },
+        {
+          "pc": 53,
+          "op": "ldloc.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 54,
+          "op": "callvirt",
+          "operand": "System.Void System.IDisposable::Dispose()",
+          "scope": "System.Runtime"
+        },
+        {
+          "pc": 59,
+          "op": "endfinally",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 60,
+          "op": "ldloc.1",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 61,
+          "op": "ret",
+          "operand": "",
+          "scope": null
+        }
+      ],
+      "locals": [
+        "Neo.VM.ScriptBuilder",
+        "System.Byte[]"
+      ],
+      "handlers": [
+        {
+          "kind": "Finally",
+          "start": 13,
+          "end": 50,
+          "handler": 50,
+          "after": 60
+        }
+      ]
+    },
+    {
+      "id": "Neo.SmartContract.Native.SmartAccountProtocol.get_ServiceHash",
+      "signature": "Neo.UInt160 Neo.SmartContract.Native.SmartAccountProtocol::get_ServiceHash()",
+      "IsStatic": true,
+      "il": "7eba020004284701000a73d10000062a",
+      "instructions": [
+        {
+          "pc": 0,
+          "op": "ldsfld",
+          "operand": "System.Byte[] Neo.SmartContract.Native.SmartAccountProtocol::ServiceHashBytes",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 5,
+          "op": "call",
+          "operand": "System.ReadOnlySpan\u00601\u003C!0\u003E System.ReadOnlySpan\u00601\u003CSystem.Byte\u003E::op_Implicit(!0[])",
+          "scope": "System.Runtime"
+        },
+        {
+          "pc": 10,
+          "op": "newobj",
+          "operand": "System.Void Neo.UInt160::.ctor(System.ReadOnlySpan\u00601\u003CSystem.Byte\u003E)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 15,
+          "op": "ret",
+          "operand": "",
+          "scope": null
+        }
+      ],
+      "locals": [],
+      "handlers": []
+    },
+    {
+      "id": "Neo.Extensions.ScriptBuilderExtensions.EmitDynamicCall",
+      "signature": "Neo.VM.ScriptBuilder Neo.Extensions.ScriptBuilderExtensions::EmitDynamicCall(Neo.VM.ScriptBuilder,Neo.UInt160,System.String,Neo.SmartContract.CallFlags,System.Object[])",
+      "IsStatic": true,
+      "il": "020e04284402002b2602058c2400000228930a00062602046f7e03000a26020328910a000626027e78000004280a0300066f2003000a26022a",
+      "instructions": [
+        {
+          "pc": 0,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 1,
+          "op": "ldarg.s",
+          "operand": "args",
+          "scope": null
+        },
+        {
+          "pc": 3,
+          "op": "call",
+          "operand": "Neo.VM.ScriptBuilder Neo.Extensions.ScriptBuilderExtensions::CreateArray\u003CSystem.Object\u003E(Neo.VM.ScriptBuilder,System.Collections.Generic.IReadOnlyList\u00601\u003CT\u003E)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 8,
+          "op": "pop",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 9,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 10,
+          "op": "ldarg.3",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 11,
+          "op": "box",
+          "operand": "Neo.SmartContract.CallFlags",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 16,
+          "op": "call",
+          "operand": "Neo.VM.ScriptBuilder Neo.Extensions.ScriptBuilderExtensions::EmitPush(Neo.VM.ScriptBuilder,System.Object)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 21,
+          "op": "pop",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 22,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 23,
+          "op": "ldarg.2",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 24,
+          "op": "callvirt",
+          "operand": "Neo.VM.ScriptBuilder Neo.VM.ScriptBuilder::EmitPush(System.String)",
+          "scope": "Neo.VM"
+        },
+        {
+          "pc": 29,
+          "op": "pop",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 30,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 31,
+          "op": "ldarg.1",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 32,
+          "op": "call",
+          "operand": "Neo.VM.ScriptBuilder Neo.Extensions.ScriptBuilderExtensions::EmitPush(Neo.VM.ScriptBuilder,Neo.IO.ISerializable)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 37,
+          "op": "pop",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 38,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 39,
+          "op": "ldsfld",
+          "operand": "Neo.SmartContract.InteropDescriptor Neo.SmartContract.ApplicationEngine::System_Contract_Call",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 44,
+          "op": "call",
+          "operand": "System.UInt32 Neo.SmartContract.InteropDescriptor::op_Implicit(Neo.SmartContract.InteropDescriptor)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 49,
+          "op": "callvirt",
+          "operand": "Neo.VM.ScriptBuilder Neo.VM.ScriptBuilder::EmitSysCall(System.UInt32)",
+          "scope": "Neo.VM"
+        },
+        {
+          "pc": 54,
+          "op": "pop",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 55,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 56,
+          "op": "ret",
+          "operand": "",
+          "scope": null
+        }
+      ],
+      "locals": [],
+      "handlers": []
+    },
+    {
+      "id": "Neo.SmartContract.Helper.ToScriptHash",
+      "signature": "Neo.UInt160 Neo.SmartContract.Helper::ToScriptHash(System.Byte[])",
+      "IsStatic": true,
+      "il": "02284701000a28a80a0006284701000a73d10000062a",
+      "instructions": [
+        {
+          "pc": 0,
+          "op": "ldarg.0",
+          "operand": "",
+          "scope": null
+        },
+        {
+          "pc": 1,
+          "op": "call",
+          "operand": "System.ReadOnlySpan\u00601\u003C!0\u003E System.ReadOnlySpan\u00601\u003CSystem.Byte\u003E::op_Implicit(!0[])",
+          "scope": "System.Runtime"
+        },
+        {
+          "pc": 6,
+          "op": "call",
+          "operand": "System.Byte[] Neo.Cryptography.Crypto::Hash160(System.ReadOnlySpan\u00601\u003CSystem.Byte\u003E)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 11,
+          "op": "call",
+          "operand": "System.ReadOnlySpan\u00601\u003C!0\u003E System.ReadOnlySpan\u00601\u003CSystem.Byte\u003E::op_Implicit(!0[])",
+          "scope": "System.Runtime"
+        },
+        {
+          "pc": 16,
+          "op": "newobj",
+          "operand": "System.Void Neo.UInt160::.ctor(System.ReadOnlySpan\u00601\u003CSystem.Byte\u003E)",
+          "scope": "Neo.dll"
+        },
+        {
+          "pc": 21,
+          "op": "ret",
+          "operand": "",
+          "scope": null
+        }
+      ],
+      "locals": [],
+      "handlers": []
+    }
+  ]
+}

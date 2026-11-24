@@ -13,6 +13,7 @@ import {
   // Protocol identity
   DEFAULT_CALL_FLAGS,
   NATIVE_ABI_VERSION,
+  NATIVE_PROFILE_PARAMETER_DIGEST,
   NATIVE_PROXY_CALL_FLAGS,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
@@ -120,6 +121,7 @@ declare function awaited<T>(value: Promise<T>): T;
 // --- Protocol identity ------------------------------------------------------
 const version: 4 = PROTOCOL_VERSION;
 const abiVersion: 4 = NATIVE_ABI_VERSION;
+const profileDigest: string = NATIVE_PROFILE_PARAMETER_DIGEST;
 const nativeFlags: 5 = NATIVE_PROXY_CALL_FLAGS;
 const defaultFlags: 5 = DEFAULT_CALL_FLAGS;
 const domainName: 'Neo Smart Account' = USER_OPERATION_DOMAIN_NAME;
@@ -342,8 +344,12 @@ const registration: RegistrationPlan = client.buildCreateAccountScript({
 const moduleInstall: AccountActionPlan = client.buildAccountActionScript({
   method: 'installModule',
   accountId: ACCOUNT_ID,
-  args: [1, CUSTODY, []],
+  args: [codec.integerValue(1), codec.hashValue(TARGET), { type: 'Array', value: [] }],
 });
+const batch: AccountActionPlan = awaited(client.buildConfigurationBatchPlan({ accountId: ACCOUNT_ID, actions: [
+  { method: 'setBuiltinAuthorization', defaultOperationAuthorization: true, defaultMessageAuthorization: false },
+  { method: 'setRecoveryPolicy', recoveryAuthority: TARGET, recoveryTimelockMs: '604800000' },
+] }));
 const execution = client.buildExecutionScript({
   accountId: ACCOUNT_ID,
   operations: [operation],
@@ -470,6 +476,7 @@ const legacyOperation: UserOperation = {
 void [
   version,
   abiVersion,
+  profileDigest,
   nativeFlags,
   defaultFlags,
   domainName,
@@ -539,7 +546,8 @@ void [
   registration,
   executionSigners,
   thresholdMembers,
-  configuration,
+  moduleInstall,
+  batch,
   frozen,
   routed,
   lookup,

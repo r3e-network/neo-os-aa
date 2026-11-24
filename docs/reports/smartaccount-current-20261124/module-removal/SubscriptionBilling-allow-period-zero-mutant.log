@@ -1,0 +1,14 @@
+File "./SubscriptionBilling.v", line 1, characters 5-8:
+Warning: "From Coq" has been replaced by "From Stdlib".
+[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
+File "./SubscriptionBilling.v", line 24, characters 10-24:
+Warning: Notation Nat.mul_div_le is deprecated since 8.17.
+Use Div0.mul_div_le instead.
+[deprecated-syntactic-definition-since-8.17,deprecated-since-8.17,deprecated-syntactic-definition,deprecated,default]
+File "./SubscriptionBilling.v", line 24, characters 10-24:
+Warning: Notation Nat.mul_div_le is deprecated since 8.17.
+Use Div0.mul_div_le instead.
+[deprecated-syntactic-definition-since-8.17,deprecated-since-8.17,deprecated-syntactic-definition,deprecated,default]
+File "./SubscriptionBilling.v", line 31, characters 31-67:
+Error: Found no subterm matching "(?n <? ?n0) = true" in the current goal.
+

@@ -1,0 +1,1500 @@
+{
+  "status": "PASS_SAMPLED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "engineSha256": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "methods": 100,
+  "maxTestedArity": 7,
+  "positiveControlInstructions": 183,
+  "rows": [
+    {
+      "name": "computeRegistrationAccountId",
+      "listed": [
+        5
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "registerAccount",
+      "listed": [
+        6
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7
+      ]
+    },
+    {
+      "name": "registerAccounts",
+      "listed": [
+        6
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7
+      ]
+    },
+    {
+      "name": "updateHook",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "confirmHookUpdate",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "updateVerifier",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "confirmVerifierUpdate",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "callVerifier",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "callHook",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "_deploy",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "proposeUpdate",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "cancelUpdate",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "update",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "confirmUpdate",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getContractAdmin",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "proposeAdminTransfer",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "cancelAdminTransfer",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "confirmAdminTransfer",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingContractAdmin",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getAdminTransferAvailableAt",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "isOwnerOnlyRecovery",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "finalizeEscapeToOwner",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "initiateEscape",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "finalizeEscape",
+      "listed": [
+        2,
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "executeUserOp",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "previewUserOpValidation",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "executeUserOps",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "isExecutionActive",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "enterMarketEscrow",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "cancelMarketEscrow",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "settleMarketEscrow",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "initiateMarketEscrowCancel",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "forceCancelMarketEscrow",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "hasMarketEscrowOwnerCancel",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getMarketEscrowOwnerCancelTime",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "executeSponsoredUserOp",
+      "listed": [
+        5
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "executeSponsoredUserOps",
+      "listed": [
+        5
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "computePlatformAccountId",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "computeStablePlatformAccountId",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "registerPlatformAccount",
+      "listed": [
+        4
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "registerStablePlatformAccount",
+      "listed": [
+        4
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "rotatePlatformAccountOwner",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "proposePlatformAccountOwnerRotation",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "confirmPlatformAccountOwnerRotation",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "cancelPlatformAccountOwnerRotation",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingPlatformAccountOwnerRotation",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPlatformAccountOwnerRotationAvailableAt",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "proposePlatformRegistrar",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "confirmPlatformRegistrar",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "cancelPlatformRegistrar",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPlatformRegistrar",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getAccountIdByProxy",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingPlatformRegistrar",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPlatformRegistrarAvailableAt",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getProxyScriptHash",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getAccountImplementationId",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "isModuleInstalled",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "isValidSignature",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getVerifier",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getHook",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getBackupOwner",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getEscapeTimelock",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getEscapeTriggeredAt",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getMarketEscrowContract",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getMarketEscrowListingId",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "isMarketEscrowActive",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "isEscapeActive",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getNonce",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "computeArgsHash",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "hasPendingVerifierUpdate",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "hasPendingHookUpdate",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingVerifierUpdate",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingHookUpdate",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingVerifierUpdateTime",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingHookUpdateTime",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "hasPendingVerifierCall",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "hasPendingHookCall",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingVerifierCallModule",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingHookCallModule",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingVerifierCallHash",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingHookCallHash",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingVerifierCallTime",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getPendingHookCallTime",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "cancelVerifierUpdate",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "cancelHookUpdate",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "setMetadataUri",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getMetadataUri",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "callVerifierChild",
+      "listed": [
+        4
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "verify",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "getVerifyScopeTarget",
+      "listed": [
+        1
+      ],
+      "rejected": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "setVerifyScopeTarget",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "setVerifyScopeTargets",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "canConfigureVerifier",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "canConfigureHook",
+      "listed": [
+        2
+      ],
+      "rejected": [
+        0,
+        1,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "canExecuteVerifier",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "canExecuteHook",
+      "listed": [
+        3
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "_initialize",
+      "listed": [
+        0
+      ],
+      "rejected": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    }
+  ]
+}

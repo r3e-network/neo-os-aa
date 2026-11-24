@@ -1,0 +1,163 @@
+{
+  "status": "PASS_SAMPLED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "engineSha256": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "rows": [
+    {
+      "name": "getAccountImplementationId",
+      "label": "no argument",
+      "expected": "org.r3e.neo.aa.unified-smart-wallet.v3",
+      "state": "HALT",
+      "error": null,
+      "pc": 17948,
+      "fee": 12430440
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "single",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "fee": 12494910
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "batch",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "fee": 12496080
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "batch-atomic",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "fee": 12497250
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "empty",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "fee": 12497250
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "unknown",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "fee": 12497250
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "integer",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "fee": 12497040
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "limit",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "fee": 12619890
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "over limit",
+      "expected": null,
+      "state": "FAULT",
+      "error": "The operand exceeds the maximum comparable size, 65537/65536.",
+      "pc": 17961,
+      "fee": 12617190
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "validator",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "fee": 12494910
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "verifier",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "fee": 12496080
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "hook",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "fee": 12497250
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "empty",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "fee": 12497250
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "unknown",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "fee": 12497250
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "integer",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "fee": 12497040
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "limit",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "fee": 12619890
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "over limit",
+      "expected": null,
+      "state": "FAULT",
+      "error": "The operand exceeds the maximum comparable size, 65537/65536.",
+      "pc": 18015,
+      "fee": 12617190
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+Inductive clr := Engine | Snapshot | Address | Addresses | Bytes | ByteArrays
+               | VMArray | VMItem | Text | Int32 | BigInt | Bit | Unit.
+Scheme Equality for clr.
+Inductive abi := Hash160 | ByteArray | ArrayType | AnyType | StringType
+               | IntegerType | BooleanType | VoidType.
+Scheme Equality for abi.
+Inductive result_shape := Direct (t:clr) | Task (t:clr).
+Record signature_row := sigrow {
+  at_pc:nat; raw_parameters:list clr; routed_parameters:list clr;
+  result_type:result_shape; use_engine:bool; use_snapshot:bool
+}.
+Definition wire_type t := match t with
+| Engine | Snapshot => None | Address => Some Hash160
+| Addresses | ByteArrays | VMArray => Some ArrayType
+| Bytes => Some ByteArray | VMItem => Some AnyType | Text => Some StringType
+| Int32 | BigInt => Some IntegerType | Bit => Some BooleanType | Unit => Some VoidType end.
+Definition result_wire t := match t with Direct c | Task c => wire_type c end.
+Definition visible (s:signature_row) :=
+  match raw_parameters s, use_engine s, use_snapshot s with
+  | Engine :: xs, true, false | Snapshot :: xs, false, true => Some xs
+  | xs, false, false => Some xs | _, _, _ => None end.
+Fixpoint wire_parameters xs ys := match xs, ys with
+| [], [] => true
+| x::xt, y::yt => match wire_type x with
+  | Some x' => andb (abi_beq x' y) (wire_parameters xt yt) | None => false end
+| _, _ => false end.
+Definition matches_signature s args ret :=
+  match visible s, result_wire (result_type s) with
+  | Some raw, Some r =>
+    if list_eq_dec clr_eq_dec raw (routed_parameters s)
+    then andb (wire_parameters raw args) (abi_beq r ret) else false
+  | _, _ => false end.
+Definition valid_signature table pc args ret :=
+  match List.find (fun s => Nat.eqb (at_pc s) pc) table with
+  | Some s => matches_signature s args ret | None => false end.

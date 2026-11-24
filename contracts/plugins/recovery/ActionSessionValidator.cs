@@ -29,7 +29,7 @@ namespace SmartAccount.Validators
     [DisplayName("ActionSessionValidator")]
 #if SMARTACCOUNT_NATIVE
     [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "getAuthorizedModuleId", "getAccount")]
-    [ManifestExtra("SmartAccountProfile", "native-v4")]
+    [ManifestExtra("SmartAccountProfile", "native-smartaccount")]
 #else
     [ContractPermission("*", "getAuthorizedModuleId")]
     [ContractPermission("*", "getAccount")]

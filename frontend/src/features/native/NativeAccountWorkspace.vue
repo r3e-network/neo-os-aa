@@ -2,7 +2,7 @@
   <div class="native-workspace" :aria-busy="busy">
     <header class="native-heading">
       <div>
-        <p class="eyebrow">NEO · NATIVE ABI 4</p>
+        <p class="eyebrow">NEO · SMARTACCOUNT</p>
         <h1>{{ L("Native accounts", "原生智能账户") }}</h1>
         <p>
           {{
@@ -16,8 +16,8 @@
       <span class="pill" :class="{ verified: profile }">{{
         profile
           ? L(
-              "Protocol v4 profile matched · " + profile.implementationId,
-              "v4 协议配置匹配 · " + profile.implementationId,
+              "SmartAccount protocol matched · " + profile.implementationId,
+              "SmartAccount 协议匹配 · " + profile.implementationId,
             )
           : L("Read only · not verified", "只读 · 尚未验证")
       }}</span>
@@ -27,8 +27,8 @@
       <p>
         {{
           L(
-            "This node must answer protocol v4, the full native ABI and the shipped implementation id. A v3 kernel cannot activate this workspace.",
-            "当前节点必须返回 v4 协议、完整原生 ABI 与已发布实现 ID。v3 内核无法启用本工作区。",
+            "Connect to a node that supports SmartAccount. Account actions become available after the wallet checks the node.",
+            "请连接支持 SmartAccount 的节点。钱包核对节点后即可使用账户操作。",
           )
         }}
       </p>
@@ -52,7 +52,7 @@
         </button>
       </div>
       <p v-if="profile" class="small mono">
-        SmartAccount · protocol {{ profile.protocolVersion }} · network
+        SmartAccount · {{ L("Network", "网络") }}
         {{ profile.networkMagic }}<br />{{ profile.implementationId }}<br />0x{{
           profile.contract
         }}
@@ -90,7 +90,8 @@
         v-for="item in tabs"
         :key="item.id"
         :aria-pressed="tab === item.id"
-        @click="tab = item.id"
+        :disabled="busy"
+        @click="selectTab(item.id)"
       >
         {{ L(item.en, item.zh) }}
       </button>
@@ -135,89 +136,37 @@
           </p>
           <template v-if="snapshot">
             <div class="account-summary" data-testid="native-account-summary">
-              <div class="summary-top">
-                <strong>{{ snapshot.account.statusName }}</strong
-                ><span
-                  >Epoch {{ snapshot.account.authorityEpoch }} · Config
-                  {{ snapshot.account.configurationNonce }}</span
-                >
-              </div>
+              <h3>{{ L("Your account", "我的账户") }}</h3>
               <dl>
-                <dt>{{ L("Identity", "身份标识") }}</dt>
-                <dd class="mono">0x{{ snapshot.account.accountId }}</dd>
                 <dt>{{ L("Funding address", "收款地址") }}</dt>
-                <dd class="mono">
-                  {{ addressOf(snapshot.account.accountAddress) }}<br />0x{{
-                    snapshot.account.accountAddress
-                  }}
-                </dd>
-                <dt>{{ L("Custody", "托管权限") }}</dt>
-                <dd class="mono">0x{{ snapshot.account.custodyAddress }}</dd>
-                <dt>{{ L("Recovery authority", "恢复权限") }}</dt>
-                <dd class="mono">
-                  {{
-                    snapshot.account.recoveryAuthority === ZERO_HASH
-                      ? L("Not configured", "未配置")
-                      : "0x" + snapshot.account.recoveryAuthority
-                  }}
-                </dd>
-                <dt>{{ L("Recovery timelock", "恢复延迟") }}</dt>
-                <dd>{{ timelockText(snapshot.account.recoveryTimelockMs) }}</dd>
-                <dt>{{ L("Modules", "模块") }}</dt>
-                <dd data-testid="native-module-counts">
-                  {{ snapshot.modules.validators.length }}
-                  {{ L("validators", "验证模块") }} ·
-                  {{ snapshot.modules.hooks.length }}
-                  {{ L("hooks", "策略模块") }}
-                </dd>
-                <dt>{{ L("Hook order", "策略顺序") }}</dt>
-                <dd>{{ hookOrderText }}</dd>
-                <dt>{{ L("Built-in route", "内置通道") }}</dt>
-                <dd>
-                  {{ L("operations", "操作") }}
-                  {{
-                    snapshot.account.defaultOperationAuthorization
-                      ? L("on", "开")
-                      : L("off", "关")
-                  }}
-                  · {{ L("messages", "消息") }}
-                  {{
-                    snapshot.account.defaultMessageAuthorization
-                      ? L("on", "开")
-                      : L("off", "关")
-                  }}
-                </dd>
-                <dt>{{ L("Chain time", "链上时间") }}</dt>
-                <dd>{{ time(snapshot.chainTime) }}</dd>
+                <dd class="mono" data-testid="native-funding-address">{{ addressOf(snapshot.account.accountAddress) }}</dd>
+                <dt>{{ L("Balances", "余额") }}</dt>
+                <dd data-testid="native-balances">NEO: {{ snapshot.balances.NEO ?? L("Unavailable", "暂时无法读取") }} ·
+                  GAS: {{ snapshot.balances.GAS === null ? L("Unavailable", "暂时无法读取") : formatGas(snapshot.balances.GAS).replace(/ GAS$/, "") }}</dd>
+                <dt>{{ L("Wallet recovery", "钱包恢复") }}</dt>
+                <dd data-testid="native-recovery-readiness">{{ recoveryReadiness }}</dd>
                 <template v-if="snapshot.account.pendingRecovery">
                   <dt>{{ L("Pending recovery", "待生效恢复") }}</dt>
-                  <dd class="mono">
-                    0x{{ snapshot.account.pendingRecovery.newCustody }}<br />{{
-                      time(snapshot.account.pendingRecovery.matureAt)
-                    }}
-                  </dd>
+                  <dd>{{ snapshot.account.pendingRecovery.newCustody === ZERO_HASH ? L("Keep current custody", "保留当前托管方") : addressOf(snapshot.account.pendingRecovery.newCustody) }} · {{ time(snapshot.account.pendingRecovery.matureAt) }}</dd>
                 </template>
               </dl>
+              <button v-if="snapshot.account.statusName === 'Active' && snapshot.account.defaultOperationAuthorization"
+                class="secondary" :disabled="busy" @click="selectTab('transfer')">{{ L("Prepare a transfer", "准备转账") }}</button>
+              <details><summary>{{ L("Account details", "账户详情") }}</summary>
+                <dl>
+                  <dt>{{ L("Account ID", "账户 ID") }}</dt><dd class="mono">0x{{ snapshot.account.accountId }}</dd>
+                  <dt>{{ L("Custody", "托管钱包") }}</dt><dd class="mono">0x{{ snapshot.account.custodyAddress }}</dd>
+                  <dt>{{ L("Recovery wallet", "恢复钱包") }}</dt><dd class="mono">{{ snapshot.account.recoveryAuthority === ZERO_HASH ? L("Not configured", "未配置") : "0x" + snapshot.account.recoveryAuthority }}</dd>
+                  <dt>{{ L("Recovery delay", "恢复等待时间") }}</dt><dd>{{ timelockText(snapshot.account.recoveryTimelockMs) }}</dd>
+                  <dt>{{ L("Account status", "账户状态") }}</dt><dd>{{ snapshot.account.statusName }}</dd>
+                  <dt>{{ L("Chain time", "链上时间") }}</dt><dd>{{ time(snapshot.chainTime) }}</dd>
+                  <dt>{{ L("Configuration version", "配置版本") }}</dt><dd>{{ snapshot.account.configurationNonce }}</dd>
+                </dl>
+              </details>
             </div>
-            <p class="small">
-              {{ L("State and maturity use the chain time shown above. Refresh after waiting or submitting a transaction; this page does not advance maturity using your device clock.", "状态和到期判断使用上方链上时间。等待或提交交易后请刷新；本页不会按设备时钟推算到期。") }}
-            </p>
             <button class="secondary" :disabled="busy || !profile" @click="loadAccount">
               {{ L("Refresh account and chain time", "刷新账户与链上时间") }}
             </button>
-            <div v-if="snapshot.pending.length" class="callout" data-testid="native-pending-intents">
-              <strong>{{ L("Pending configuration intents", "待生效配置意图") }}</strong>
-              <p v-for="intent in snapshot.pending" :key="intent.intentId">
-                #{{ intent.intentId }} · {{ L("matures", "成熟") }}
-                {{ time(intent.matureAt) }} ·
-                {{ intent.mature ? L("mature", "已成熟") : L("waiting", "等待中") }} ·
-                {{
-                  intent.expired
-                    ? L("expired", "已过期")
-                    : L("expires", "过期") + " " + time(intent.expiresAt)
-                }}
-              </p>
-            </div>
             <h3>{{ L("Authority and recovery", "权限与恢复") }}</h3>
             <label
               >{{ L("Action", "操作")
@@ -278,8 +227,8 @@
           <p>
             {{
               L(
-                "v4 identity is custody + salt. Registration may install the first validator atomically; every later module change is installModule or removeModule inside a signed script.",
-                "v4 身份由托管地址与随机盐确定。注册可原子安装首个验证模块；之后每次模块变更都是已签名脚本里的 installModule 与 removeModule。",
+                "Account identity is custody + salt. Registration may install the first validator atomically; every later module change is installModule or removeModule inside a signed script.",
+                "账户身份由托管地址与随机盐确定。注册可原子安装首个验证模块；之后每次模块变更都是已签名脚本里的 installModule 与 removeModule。",
               )
             }}
           </p>
@@ -321,7 +270,7 @@
             {{ L("Generate new salt", "生成新的随机盐") }}
           </button>
           <details data-testid="native-initial-install">
-            <summary>{{ L("Install the first validator atomically", "原子安装首个验证模块") }}</summary>
+            <summary>{{ L("Install a module at creation (optional)", "创建时安装一个模块（可选）") }}</summary>
             <label>{{ L("Module contract hash", "模块合约哈希") }}<input v-model.trim="initialInstall.contractHash" spellcheck="false" placeholder="0x…" /></label>
             <label>{{ L("Module profile digest (32 bytes)", "模块配置摘要（32 字节）") }}<input v-model.trim="initialInstall.profileDigest" spellcheck="false" /></label>
             <label>{{ L("Module type", "模块类型") }}<select v-model="initialInstall.moduleType" :aria-label="L('Module type', '模块类型')">
@@ -330,6 +279,7 @@
               <option value="recovery">{{ L("Recovery seat", "恢复模块") }}</option>
             </select></label>
             <p class="small">{{ L("The built-in custody route stays active when you install a module. Review the installed validator before explicitly disabling that route.", "安装模块不会关闭内置托管通道。只有在核实新的验证模块后，才应显式关闭该通道。") }}</p>
+            <p v-if="initialInstallIncomplete" role="alert">{{ L("Enter both the module contract hash and its profile digest, or clear both to create without a module.", "请同时填写模块合约哈希与配置摘要；如需创建无模块账户，请清空两项。") }}</p>
           </details>
           <div v-if="derived" class="account-summary">
             <dl>
@@ -345,7 +295,7 @@
           </div>
           <div class="actions">
             <button
-              :disabled="!profile || busy || !derived"
+              :disabled="!profile || busy || !derived || initialInstallIncomplete"
               @click="reviewRegistration"
             >
               {{ L("Review registration", "审核注册") }}</button
@@ -372,16 +322,18 @@
             <p class="small" data-testid="native-module-admin">
               {{
                 L(
-                  "The core executes exactly two module actions: installModule and uninstallModule. A change is one action inside a signed script. The core keeps no proposal window — a change that matures for 24 hours belongs to a governance module.",
-                  "核心只执行两个模块动作：installModule 与 uninstallModule。一次变更就是已签名脚本里的一个动作。核心没有提案窗口——需要 24 小时成熟的变更属于治理模块。",
+                  "The core methods are installModule and removeModule. Direct module changes take effect when the transaction succeeds. The 24-hour delay applies to proposals made through the governance module.",
+                  "核心入口为 installModule 与 removeModule。直接管理在交易成功时生效；24 小时等待期适用于通过治理模块提交的提案。",
                 )
               }}
             </p>
             <h3>{{ L("Installed modules", "已安装模块") }}</h3>
-            <p v-if="!installedModules.length" class="small">
+            <button v-if="!roster" class="secondary" :disabled="busy" @click="loadRoster">{{ L("Load module details", "读取模块详情") }}</button>
+            <p v-if="roster" data-testid="native-module-counts">{{ roster.validators.length }} {{ L("validators", "验证模块") }} · {{ roster.hooks.length }} {{ L("hooks", "策略模块") }} · {{ roster.recovery.length }} {{ L("recovery seats", "恢复席位") }}</p>
+            <p v-if="roster && !installedModules.length" class="small">
               {{ L("No module is installed on this account.", "该账户没有安装任何模块。") }}
             </p>
-            <dl v-else data-testid="native-modules">
+            <dl v-if="installedModules.length" data-testid="native-modules">
               <template v-for="entry in installedModules" :key="entry.moduleId">
                 <dt>{{ L("Module", "模块") }} #{{ entry.moduleId }}</dt>
                 <dd>
@@ -426,10 +378,15 @@
                   v-model.trim="moduleDraft.profileDigest"
                   spellcheck="false"
               /></label>
-              <label
-                >{{ L("Install data (byte list)", "安装数据（字节列表）")
-                }}<input v-model.trim="moduleDraft.initData" spellcheck="false"
-              /></label>
+              <details>
+                <summary>{{ L("Initial configuration (optional)", "初始配置（可选）") }}</summary>
+                <label>{{ L("Module arguments (JSON array)", "模块参数（JSON 数组）") }}
+                  <textarea v-model.trim="moduleDraft.initData" spellcheck="false" placeholder="[]"></textarea>
+                </label>
+                <p class="small">{{ L("For a whitelist, use your target address in this command:", "配置白名单时，在这条命令中填入目标地址：") }}
+                  <code>["allowTarget", {"type":"Hash160","value":"0x…"}]</code>
+                </p>
+              </details>
             </template>
             <template v-else>
               <label
@@ -437,10 +394,6 @@
                 }}<input
                   v-model.trim="moduleDraft.moduleId"
                   inputmode="numeric"
-              /></label>
-              <label
-                >{{ L("Uninstall data (byte list)", "卸载数据（字节列表）")
-                }}<input v-model.trim="moduleDraft.deInitData" spellcheck="false"
               /></label>
             </template>
             <button
@@ -468,13 +421,32 @@
             </div>
           </template>
         </template>
+        <template v-else-if="tab === 'transfer'">
+          <h2>{{ L("Prepare a transfer", "准备转账") }}</h2>
+          <p v-if="!snapshot">{{ L("Load your account first.", "请先加载账户。") }}</p>
+          <template v-else>
+            <label>{{ L("Asset", "资产") }}<select v-model="transfer.symbol"><option>NEO</option><option>GAS</option></select></label>
+            <label>{{ L("Recipient address", "收款人地址") }}<input v-model.trim="transfer.recipient" autocomplete="off" spellcheck="false" /></label>
+            <label>{{ L("Amount", "金额") }}<input v-model.trim="transfer.amount" inputmode="decimal" /></label>
+            <p>{{ L("Use your custody signing tool for this transfer. Accounts that require additional rule proofs should use Native operation. Preparing a draft does not send funds.", "此处使用托管钱包签名；如账户规则需要额外证明，请使用「原生操作」。生成草稿不会转出资金。") }}</p>
+            <button :disabled="busy || !transfer.amount || !transfer.recipient || !snapshot.account.defaultOperationAuthorization || snapshot.account.statusName !== 'Active'" @click="prepareTransfer">{{ L("Prepare unsigned draft", "生成未签名草稿") }}</button>
+            <div v-if="preparedTransfer" data-testid="native-transfer-draft">
+              <p>{{ preparedTransfer.amount }} {{ preparedTransfer.symbol }} → {{ addressOf(preparedTransfer.recipient) }}</p>
+              <p>{{ L("Sign before", "签名有效期至") }} {{ time(preparedTransfer.operation.deadline) }}</p>
+              <button class="secondary" @click="download('native-transfer-draft.json', preparedTransfer)">{{ L("Export unsigned draft", "导出未签名草稿") }}</button>
+              <label>{{ L("Signed operation proof (hex, from your signing tool)", "签名工具返回的操作签名凭证（十六进制）") }}
+                <input v-model.trim="transferSignature" spellcheck="false" autocomplete="off" /></label>
+              <button :disabled="busy || !transferSignature" @click="previewTransfer">{{ L("Preview signed transfer", "预览已签名转账") }}</button>
+            </div>
+          </template>
+        </template>
         <template v-else>
           <h2>2. {{ L("Prepare a native operation", "准备原生业务操作") }}</h2>
           <p>
             {{
               L(
-                "A v4 user operation carries its nonce, subkey, deadline, validator, credential generation, authority epoch, configuration nonce, signature and hook proofs. The proxy witness is the only signer executeUserOp accepts.",
-                "v4 用户操作包含 nonce、子键、截止时间、验证模块、凭据代际、权限代际、配置 nonce、签名与策略证明。executeUserOp 只接受代理 witness。",
+                "A user operation carries its nonce, subkey, deadline, validator, credential generation, authority epoch, configuration nonce, signature and hook proofs. The proxy witness is the only signer executeUserOp accepts.",
+                "用户操作包含 nonce、子键、截止时间、验证模块、凭据代际、权限代际、配置 nonce、签名与策略证明。executeUserOp 只接受代理 witness。",
               )
             }}
           </p>
@@ -577,8 +549,7 @@
             <dd>{{ review.submission }}</dd>
             <dt>{{ L("Network / protocol", "网络 / 协议") }}</dt>
             <dd>
-              {{ review.profile.networkMagic }} /
-              v{{ review.profile.protocolVersion }}
+              {{ review.profile.networkMagic }} / SmartAccount
             </dd>
             <dt>{{ L("Account ID", "账户 ID") }}</dt>
             <dd class="mono">0x{{ review.plan.accountId }}</dd>
@@ -802,6 +773,7 @@ import {
   readRecoveryDescriptor,
   describeConfigurationAction,
   installModuleAction,
+  parseModuleInstallData,
   uninstallModuleAction,
   jsonText,
 } from "./nativeWorkspace.js";
@@ -811,6 +783,8 @@ const endpoint = ref(RUNTIME_CONFIG.rpcUrl),
   network = ref(String(RUNTIME_CONFIG.networkMagic)),
   profile = shallowRef(null),
   snapshot = shallowRef(null),
+  roster = shallowRef(null),
+  preparedTransfer = shallowRef(null),
   inspected = shallowRef(null),
   review = shallowRef(null),
   signedTransaction = shallowRef(null),
@@ -843,6 +817,7 @@ const initialInstall = reactive({
   contractHash: "",
   profileDigest: "",
 });
+const initialInstallIncomplete = computed(() => Boolean(initialInstall.contractHash) !== Boolean(initialInstall.profileDigest));
 const draft = reactive({
   kind: "install",
   moduleType: "validator",
@@ -869,8 +844,12 @@ const action = ref("freezeAccount"),
 const workspace = createNativeWorkspace({
   wallet: createNativeWalletAdapter(walletService),
 });
+const transferSignature = ref("");
+watch(preparedTransfer, () => { transferSignature.value = ""; }, { flush: "sync" });
+const transfer = reactive({ symbol: "GAS", recipient: "", amount: "" });
 const tabs = [
   { id: "account", en: "Account & recovery", zh: "账户与恢复" },
+  { id: "transfer", en: "Transfer draft", zh: "转账草稿" },
   { id: "create", en: "Create account", zh: "创建账户" },
   { id: "modules", en: "Modules", zh: "模块" },
   { id: "operation", en: "Native operation", zh: "原生操作" },
@@ -879,16 +858,18 @@ const selectedAction = computed(() =>
   NATIVE_ACTIONS.find((a) => a.value === action.value),
 );
 const actionBlocked = computed(() =>
-  actionBlockReason(snapshot.value?.account, action.value),
+  actionBlockReason(snapshot.value?.account, action.value, L),
 );
-const modules = computed(() =>
-  snapshot.value
-    ? [...snapshot.value.modules.validators, ...snapshot.value.modules.hooks]
-    : [],
-);
-const hookOrderText = computed(() => {
-  const ids = snapshot.value?.hookOrder.hookIds ?? [];
-  return ids.length ? ids.join(" → ") : L("none", "无");
+const recoveryReadiness = computed(() => {
+  const a = snapshot.value?.account;
+  if (!a) return "";
+  if (a.recoveryAuthority === ZERO_HASH) return L("Not configured: no recovery wallet", "未设置：尚未指定恢复钱包");
+  if (a.recoveryCheckFailed) return L("Could not verify recovery. Refresh to check again.", "暂时无法核验恢复设置，请刷新后重试。");
+  if (!a.recoverySeat) return L("Incomplete: no recovery module installed", "未完成：尚未安装恢复模块");
+  if (!a.recoverySeat.supported) return L("This wallet cannot verify the installed recovery module", "此钱包无法核验已安装的恢复模块");
+  if (a.pendingRecovery && a.pendingRecovery.authorityEpochAtInit !== a.authorityEpoch)
+    return L("Pending request is outdated. Check recovery before proceeding.", "待处理的恢复请求已失效，请先核对恢复设置。");
+  return L("Standard recovery configured · " + timelockText(a.recoveryTimelockMs), "已配置标准恢复 · 等待 " + timelockText(a.recoveryTimelockMs));
 });
 const derived = computed(() => {
   try {
@@ -971,6 +952,7 @@ watch(
 );
 watch(
   [
+    transferSignature,
     () => ({ ...registration }),
     () => ({ ...initialInstall }),
     () => ({ ...draft }),
@@ -986,6 +968,8 @@ watch(
   clearReview,
   { flush: "sync" },
 );
+watch(transfer, () => { preparedTransfer.value = null; workspace.clearReview(); }, { flush: "sync" });
+watch(snapshot, () => { roster.value = null; preparedTransfer.value = null; }, { flush: "sync" });
 watch(action, () => { actionAddress.value = ""; policyDays.value = ""; }, { flush: "sync" });
 watch(
   accountId,
@@ -1049,8 +1033,8 @@ async function connectNode() {
       networkMagic: network.value,
     });
     notice.value = L(
-      "Node answered the v4 native profile, ABI and implementation id.",
-      "节点已返回 v4 原生配置、ABI 与实现 ID。",
+      "Node supports the current SmartAccount protocol.",
+      "节点支持当前 SmartAccount 协议。",
     );
   });
 }
@@ -1058,12 +1042,39 @@ async function loadAccount() {
   await run(async () => {
     clearReview();
     inspected.value = null;
+    snapshot.value = null;
     snapshot.value = await workspace.load(accountId.value);
     if (!feePayer.value) feePayer.value = snapshot.value.account.custodyAddress;
     notice.value = L(
       "Account loaded from the selected node.",
       "账户已从验证节点加载。",
     );
+  });
+}
+async function selectTab(next) {
+  tab.value = next;
+  preparedTransfer.value = null;
+  if (next === "modules" && snapshot.value && !roster.value) await loadRoster();
+}
+async function loadRoster() {
+  await run(async () => { const a = snapshot.value.account;
+    roster.value = await workspace.loadModules(a.accountId, a.configurationNonce);
+  });
+}
+async function prepareTransfer() {
+  await run(async () => {
+    preparedTransfer.value = null;
+    preparedTransfer.value = await workspace.transferDraft({ accountId: accountId.value, ...transfer });
+  });
+}
+async function previewTransfer() {
+  await run(async () => {
+    const draft = preparedTransfer.value;
+    if (!draft) return;
+    setReview(await workspace.operation({
+      accountId: draft.accountId, feePayer: feePayer.value,
+      operations: [{ ...draft.operation, signature: nativeCodec.hex(transferSignature.value) }],
+    }));
   });
 }
 function generateSalt() {
@@ -1102,6 +1113,7 @@ function setReview(value) {
   txid.value = "";
 }
 async function reviewRegistration() {
+  if (initialInstallIncomplete.value) return;
   await run(async () => {
     const actions =
       initialInstall.contractHash && initialInstall.profileDigest
@@ -1147,34 +1159,31 @@ const moduleDraft = reactive({
   profileDigest: "",
   initData: "",
   moduleId: "",
-  deInitData: "",
 });
 const moduleReview = shallowRef(null);
 const installedModules = computed(() => [
-  ...(snapshot.value?.modules?.validators ?? []),
-  ...(snapshot.value?.modules?.hooks ?? []),
-  ...(snapshot.value?.modules?.recovery ?? []),
+  ...(roster.value?.validators ?? []),
+  ...(roster.value?.hooks ?? []),
+  ...(roster.value?.recovery ?? []),
 ]);
-const numberList = (text) => String(text).split(/[\s,]+/).filter(Boolean);
 function buildModuleAction() {
   return moduleDraft.kind === "install"
     ? installModuleAction({
         moduleType: moduleDraft.moduleType,
         contractHash: moduleDraft.contractHash,
         profileDigest: moduleDraft.profileDigest,
-        initData: numberList(moduleDraft.initData).map(Number),
+        initData: parseModuleInstallData(moduleDraft.initData),
       })
     : uninstallModuleAction({
         moduleId: moduleDraft.moduleId,
-        deInitData: numberList(moduleDraft.deInitData).map(Number),
       });
 }
 function reviewModuleAction() {
-  const action = buildModuleAction();
-  moduleReview.value = {
-    action,
-    description: describeConfigurationAction(action),
-  };
+  moduleReview.value = null;
+  return run(() => {
+    const action = buildModuleAction();
+    moduleReview.value = { action, description: describeConfigurationAction(action) };
+  });
 }
 async function reviewOperation() {
   await run(async () => {
@@ -1204,16 +1213,18 @@ async function reviewOperation() {
     );
   });
 }
-function fillEnvelope() {
+async function fillEnvelope() {
   const account = snapshot.value?.account;
   if (!account) return;
-  // Route the skeleton at a real validator when the account has one: the
-  // instance's CredentialGeneration is published by getModule, so the draft
-  // carries a reviewed value instead of a guess. With no installed validator
-  // the built-in route is in use and its generation is the account's 0x57
-  // SubjectRevision, which the kernel does not publish -- the field stays null
-  // so the builder refuses the envelope until it is filled in.
-  const validator = snapshot.value?.modules?.validators?.[0] ?? null;
+  if (!account.defaultOperationAuthorization && !roster.value) {
+    await loadRoster();
+    if (!roster.value || snapshot.value?.account !== account) return;
+  }
+  const validator = account.defaultOperationAuthorization ? null : roster.value?.validators[0];
+  if (!account.defaultOperationAuthorization && !validator) {
+    error.value = L("No available signing route.", "没有可用的签名方式。");
+    return;
+  }
   operation.operations = JSON.stringify(
     [
       {
@@ -1226,7 +1237,7 @@ function fillEnvelope() {
         validatorId: validator ? String(validator.moduleId) : "0",
         credentialGeneration: validator
           ? String(validator.credentialGeneration)
-          : null,
+          : "1",
         authorityEpoch: account.authorityEpoch,
         configurationNonce: account.configurationNonce,
         signature: "",
@@ -1242,8 +1253,8 @@ function fillEnvelope() {
         "已按实时权限代际、配置 nonce 与已安装验证器的凭证代际填充骨架。请替换目标、参数、nonce 与签名。",
       )
     : L(
-        "Skeleton filled with the live epoch and configuration nonce. The built-in route's credential generation is the account SubjectRevision, which the kernel does not publish: read it from the account's 0x57 subject record and replace the null before signing.",
-        "已按实时权限代际与配置 nonce 填充骨架。内置通道的凭证代际即账户 SubjectRevision，合约并不对外发布该值：请从账户 0x57 subject 记录读取后替换 null，再行签名。",
+        "Draft uses the built-in custody route. Replace the example target, arguments, nonce and signature before review.",
+        "草稿使用内置托管签名方式。审核前请替换示例目标、参数、nonce 和签名。",
       );
 }
 function download(name, value) {

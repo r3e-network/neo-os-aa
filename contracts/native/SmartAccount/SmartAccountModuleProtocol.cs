@@ -85,6 +85,7 @@ namespace Neo.SmartContract.Native
         internal const int MaxRecoveryModuleInstances = 1;
         internal const int MaxOperationsPerEnvelope = 32;
         internal const int MaxActionsPerRegistration = 16;
+        internal const int MaxConfigurationActions = 16;
         internal const int MinEnumerationLimit = 1;
         internal const int MaxEnumerationLimit = 32;
         // Canonical module profile (spec §12).
@@ -98,6 +99,22 @@ namespace Neo.SmartContract.Native
         internal const int NonceSubkeySize = 32;
         internal const int NonceChannelSize = 24;          // 191-bit channel, BE, top bits zero
         internal const int MethodBytesMax = 128;
+        internal const string ErrorModuleLimitThreshold = "SA_MODULE_LIMIT_THRESHOLD";
+        internal const string ErrorModuleLimitMembers = "SA_MODULE_LIMIT_MEMBERS";
+        internal const int MaxThresholdPolicyMembers = 10;
+        internal const int MinThresholdPolicyValue = 1;
+        internal const int MaxThresholdPolicyValue = 10;
+        internal const int MessageSubjectKeysMax = 16;
+        internal const int MessageHashSize = 32;
+        internal const uint MagicIsValidSignature = 0x1626ba7e; // ERC-1271 MAGICVALUE
+        internal const uint MagicInvalidSignature = 0xffffffff;
+        internal const byte PrefixThresholdPolicy = 0x5B;
+        internal const int ActionSetThresholdPolicy = 7;
+        internal const int ActionSetMessageSubjects = 9;
+        internal const string EventNameThresholdPolicySet = "ThresholdPolicySet";
+        internal const string EventNameMessageSubjectUpdated = "MessageSubjectUpdated";
+        internal const string ErrorIntentConflict = "SA_INTENT_CONFLICT";
+
         internal const int ArgsCountMax = 64;
         internal const int ArgsDepthMax = 8;
         internal const int ArgsSerializedSizeMax = 4096;
@@ -120,6 +137,8 @@ namespace Neo.SmartContract.Native
         internal const long HookAggregateGasLimit = HookCallbackGasLimit * MaxHookModuleInstances;
         internal const long ValidationPerCallGasLimit = 100_000_000;     // 1 GAS per validateUserOp
         internal const long CompletionPerCallGasLimit = 100_000_000;     // 1 GAS per onUserOpComplete
+        internal const long ValidationAggregateGasLimit = ValidationPerCallGasLimit * (1 + MaxThresholdPolicyMembers);
+        internal const long CompletionAggregateGasLimit = CompletionPerCallGasLimit * (1 + MaxThresholdPolicyMembers);
         internal const long LifecycleCallbackGasLimit = 250_000_000;     // 2.5 GAS per onInstall/onUninstall
 
         // ------------------------------------------------------------------
@@ -139,7 +158,6 @@ namespace Neo.SmartContract.Native
         internal const byte PrefixModuleInstance = 0x52;
         internal const byte PrefixModuleIndex = 0x53;
         internal const byte PrefixNonceCursor = 0x56;
-        internal const byte PrefixMigrationState = 0x5A;
         internal const byte PrefixNonceNamespace = 0x5C;
 
         // ------------------------------------------------------------------
@@ -150,6 +168,9 @@ namespace Neo.SmartContract.Native
 
         internal const int ActionInstallModule = 1;
         internal const int ActionUninstallModule = 2;
+        internal const int ActionConfigureModule = 3;
+        internal const int ActionSetBuiltinAuthorization = 5;
+        internal const int ActionSetRecoveryPolicy = 8;
 
         // ------------------------------------------------------------------
         // 7. Canonical key builders (spec §7.1)
@@ -247,7 +268,6 @@ namespace Neo.SmartContract.Native
         internal const string ErrorAccountStatus = "SA_ACCOUNT_STATUS";
         internal const string ErrorReentrancyForbidden = "SA_REENTRANCY_FORBIDDEN";
         internal const string ErrorGasBudgetExceeded = "SA_GAS_BUDGET_EXCEEDED";
-        internal const string ErrorMigrationRequired = "SA_MIGRATION_REQUIRED";
         internal const string ErrorUnauthorized = "SA_UNAUTHORIZED";
         // Spec §7.1/R-07-14/R-08-08: closing the built-in operation switch
         // while the account holds no installed validator instance would leave

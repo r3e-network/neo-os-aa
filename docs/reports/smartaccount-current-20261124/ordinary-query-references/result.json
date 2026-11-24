@@ -1,0 +1,55 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "target": "archive",
+  "gitRevision": null,
+  "abiEntries": 100,
+  "initializerInstructions": 170,
+  "initializerPeak": 68,
+  "initializerFinal": 67,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "probeDllSha256": "a4279081dbda29a90a40d693a90da725ff1a15473e3894051ee003f9be452dcb",
+  "checkerSha256": "807d9fb92b8539d08d964656580040d22f4f53484429e58af82a0277374e8339",
+  "modelSha256": {
+    "IntegerSemantics": "b2d8cfb443115bdda59c52abc04022ebd4b0bbea0a13f122f12ec7a0b891425c",
+    "CapArithmetic": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "CapMethodVm": "cffee42ebb1dbacdf49a97c9213472026e3481fc122472f94911abda7e62dfb9",
+    "CapContext": "3fab1800231f6698890ac60ce74bd2514faca174ec4ed64e2be00cb403337995",
+    "PublicPureMethods": "7ef6a29f7176b3c59cf1b417c0583f3354b45e5a08f84fa41760478520425f75",
+    "InitializerReferences": "5c1e6111e0bfebbdd85e634472f673c147d53a4568193117ffd1ef0da69e35f3",
+    "QueryReferences": "1ffb97d855170dce75ef223ee8ddf3f0a6fbf151e8a0bb36a5cb8a6301e5ca55",
+    "ReferenceArtifact": "71e2dbf7a1a0518c8038c2e49da35998787525096788b533b8a46946eb80eedf",
+    "QueryArtifact": "1d3555bcb9da3341162d5fad7c37ff12ba658a1b6c328576af4406d55397eb90"
+  },
+  "probeSourceSha256": {
+    "InitializerProbe.csproj": "5244a4e970b7dc859cc7b01f1f1f18251c25ed1c45051e798ad927d612aaa839",
+    "packages.lock.json": "7f1a79dc260f6697fcf2ebe28d27febe0a193b983f61e6dabae2b7ae4b5732de",
+    "Program.cs": "b4f7e98897de0fb12cbf937566720ddb8340730bfbe1da747c6d383c657f21b8",
+    "QueryLimits.cs": "6dce385c9e70e88f2f891e04b72a016c8b7096ed00982c8643943b526f8243f8",
+    "ReferenceLimits.cs": "d10cdbc3c859e6363d6b275df084f034095a45ba2f5ad7c07f636fcf2576bd1e"
+  },
+  "applicationEngineSha256": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+  "applicationProbe": {
+    "packages.lock.json": "8bb3696b4d1a659c7fc49825235c019a12bfdc4d955ec9b442d3cbf8f73881d3",
+    "QueryReferenceCalls.cs": "932a66ffce28db2af1fc12e8b5d2b603cff15f8ba7d3409974276205fd85d3c4",
+    "PresenceProbe.csproj": "607b8f2f03522de35010a5712fdc91cff1bdb2344fb462983285fce37557943d",
+    "NestedFees.cs": "2d87f94fd06e6f5df6e67e74543a56ea8932b76e7784e82a1f319298d2c5ef58",
+    "BlockRollback.cs": "b8653b77a34f74c2aad50b2f7619d65179ed024b3c5b92001c2e51ae4dcbb004",
+    "Program.cs": "4414fa456dee405715231de9084798c809a15addadefe680d0105dea2f64679a"
+  },
+  "applicationTraceSha256": "326a563d2e6441c5588324d7242859169eeb94d8b50b3c69ee2ea5dc69354e8a",
+  "applicationCases": 60,
+  "rocq": "The Rocq Prover, version 9.2\ncompiled with OCaml 5.5.0",
+  "coqchkPassed": true,
+  "runtimeSha256": "8650411112e26966e71c079f4523d61ad4f85e50e5a1ac1188137f8a2efcc6b9",
+  "runtimeCases": 60,
+  "requiredFreeReferences": {
+    "getAccountImplementationId": 68,
+    "supportsExecutionMode": 69,
+    "supportsModuleType": 69
+  },
+  "scope": "Post-instruction reference limit for scalar bytes/null from fresh initializer to method return, or the last successful instruction before a comparison exception. Separate caller context, successful frame construction, no gas or other interfering faults. No CLR/VM universal correspondence."
+}

@@ -23,7 +23,7 @@ import {
   createProtocolCodec,
   NATIVE_SMART_ACCOUNT_CONTRACT,
 } from "../../shared/nativeSmartAccount.mjs";
-import { createNativeClientClass } from "../../shared/nativeSmartAccountClient.mjs";
+import { createNativeClientClass, validateNativeApplicationExecution } from "../../shared/nativeSmartAccountClient.mjs";
 import { createProxyWitness } from "../../shared/proxyWitness.mjs";
 import {
   getScriptHashFromAddress,
@@ -83,12 +83,10 @@ export const NATIVE_ACTION_CODES = freeze({
   setThresholdPolicy: 7,
   setRecoveryPolicy: 8,
   setMessageSubjects: 9,
-  migrateAccount: 10,
 });
 export const NATIVE_STATUS_NAMES = freeze([
   "Active",
   "Frozen",
-  "MigrationRequired",
 ]);
 
 async function browserTransactionTools() {
@@ -385,6 +383,28 @@ function dataArray(value, label) {
   return A(value);
 }
 
+// Human input uses text for commands, explicit Hash160 for display-order
+// addresses, and explicit ByteString for opaque bytes. No hex guessing.
+export function parseModuleInstallData(text) {
+  let values;
+  try { values = JSON.parse(text.trim() || "[]"); }
+  catch { fail("Initial configuration must be a JSON array."); }
+  if (!Array.isArray(values) || values.length > 64) fail("Expected at most 64 install arguments.");
+  function encode(value, depth) {
+    if (depth > 8) fail("Install arguments are nested too deeply.");
+    if (Array.isArray(value)) return A(value.map(v => encode(v, depth + 1)));
+    if (typeof value === "string") return nativeCodec.stringValue(value);
+    if (typeof value === "boolean") return { type: "Boolean", value };
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value)) fail("Use a typed Integer with a decimal string for large integers.");
+      return I(value);
+    }
+    if (value?.type === "Hash160") return nativeCodec.hashValue(nativeAddress(value.value, { zero: true }));
+    return nativeCodec.canonicalValue(value);
+  }
+  return nativeCodec.canonicalValue(A(values.map(v => encode(v, 1)))).value;
+}
+
 export function installModuleAction({
   moduleType,
   contractHash,
@@ -404,10 +424,12 @@ export function installModuleAction({
 }
 
 export function uninstallModuleAction({ moduleId, deInitData = [] }) {
+  const id = nativeCodec.unsigned(moduleId, 64, "module id");
+  if (id === 0n) fail("Module id must be positive.");
   return freeze(
     A([
       I(NATIVE_ACTION_CODES.uninstallModule),
-      I(nativeCodec.unsigned(moduleId, 64, "module id")),
+      I(id),
       dataArray(deInitData, "Uninstall data"),
     ]),
   );
@@ -461,32 +483,20 @@ export function setThresholdPolicyAction({
   memberIds,
   active = true,
 }) {
-  const value = Number(threshold);
-  if (
-    !Number.isInteger(value) ||
-    value < NATIVE_THRESHOLD_LIMITS.minValue ||
-    value > NATIVE_THRESHOLD_LIMITS.maxValue
-  )
-    fail(
-      `Threshold must be ${NATIVE_THRESHOLD_LIMITS.minValue}..${NATIVE_THRESHOLD_LIMITS.maxValue}.`,
-    );
-  if (
-    !Array.isArray(memberIds) ||
-    memberIds.length > NATIVE_THRESHOLD_LIMITS.maxMembers
-  )
+  const id = nativeCodec.unsigned(policyId, 64, "policy id");
+  const value = Number(nativeCodec.unsigned(threshold, 8, "threshold"));
+  if (active !== true || id !== 0n) fail("Changing an active spending policy requires delayed recovery.");
+  if (!Array.isArray(memberIds) || memberIds.length > NATIVE_THRESHOLD_LIMITS.maxMembers)
     fail(`A threshold policy carries at most ${NATIVE_THRESHOLD_LIMITS.maxMembers} members.`);
-  const members = memberIds.map((id) =>
-    nativeCodec.unsigned(id, 64, "member module id"),
-  );
-  if (new Set(members.map(String)).size !== members.length)
-    fail("Threshold members must be distinct module ids.");
-  if (active && (value > members.length || members.length === 0))
+  const members = memberIds.map(v => nativeCodec.unsigned(v, 64, "member module id"));
+  if (members.includes(0n) || new Set(members).size !== members.length)
+    fail("Threshold members must be distinct nonzero module ids.");
+  if (active && (value < 1 || value > members.length))
     fail("A reachable threshold needs between 1 and its member count.");
-  if (!active && members.length) fail("An inactive policy carries no members.");
   return freeze(
     A([
       I(NATIVE_ACTION_CODES.setThresholdPolicy),
-      I(nativeCodec.unsigned(policyId, 64, "policy id")),
+      I(id),
       I(value),
       A(members.map(I)),
       { type: "Boolean", value: active === true },
@@ -499,6 +509,8 @@ export function setRecoveryPolicyAction({
   recoveryTimelockMs: timelock,
   ownerOnlyRecovery = false,
 }) {
+  if (ownerOnlyRecovery !== false)
+    throw new Error("ownerOnlyRecovery is reserved and must be false");
   const delay = recoveryTimelockMs(timelock);
   const authority = nativeAddress(recoveryAuthority);
   return freeze(
@@ -551,8 +563,6 @@ export function describeConfigurationAction(action) {
     }
     case NATIVE_ACTION_CODES.setMessageSubjects:
       return "Set message subjects";
-    case NATIVE_ACTION_CODES.migrateAccount:
-      return "Import a v3 account (custom kernel only)";
     default:
       return `Action ${code}`;
   }
@@ -587,10 +597,14 @@ export const NATIVE_ACTIONS = freeze([
   { value: "executeRecovery", label: "Complete mature recovery", detail: "Anyone can pay to complete the reviewed recovery once mature." },
 ]);
 
-export function actionBlockReason(state, action) {
+export function actionBlockReason(state, action, translate = (en) => en) {
   if (!state) return "Load an account first.";
+  if (!NATIVE_STATUS_NAMES.includes(state.statusName)) return "Unrecognized account status.";
+  if (["freezeAccount", "unfreezeAccount", "setRecoveryPolicy"].includes(action)) {
+    if (state.requiredPolicyId) return translate("Mandatory multisig locks custody administration. Use the preset delayed recovery process.", "已启用强制多签，托管人不能单独管理账户。请走预设延时恢复流程。");
+    if (state.policyCheckFailed) return translate("Could not verify the spending policy. Refresh before changing account settings.", "无法核验支出策略，请刷新后再更改账户设置。");
+  }
   if (["beginRecovery", "cancelRecovery", "executeRecovery"].includes(action)) {
-    if (state.statusName === "MigrationRequired") return "This account must complete migration first.";
     if (state.recoveryAuthority === ZERO_HASH) return "Configure a recovery authority first.";
     if (!state.recoverySeat?.supported) return "No supported recovery module is installed.";
     if (action === "beginRecovery" && state.pendingRecovery) return "A recovery is already pending.";
@@ -598,13 +612,6 @@ export function actionBlockReason(state, action) {
   }
   if (action === "setRecoveryPolicy" && state.statusName !== "Active")
     return "Recovery policy can only be changed on an active account.";
-  // Migration outranks the freeze state: a migrating account cannot run either
-  // transition, and "not frozen" would be a misleading reason for a frozen one.
-  if (
-    ["freezeAccount", "unfreezeAccount"].includes(action) &&
-    state.statusName === "MigrationRequired"
-  )
-    return "This account must complete migration first.";
   if (action === "freezeAccount" && state.statusName === "Frozen")
     return "The account is already frozen.";
   if (action === "unfreezeAccount" && state.statusName !== "Frozen")
@@ -645,26 +652,76 @@ async function chainTime(client) {
   return block.time;
 }
 
-async function readState(client, accountId) {
+async function readState(client, accountId, { overview = false } = {}) {
   const account = await client.getAccount(accountId);
   if (!account) fail("This native account is not registered.");
-  const recoverySeat = account.recoveryAuthority === ZERO_HASH ? null : await client.getRecoverySeat(accountId);
+  let requiredPolicyId = null, policyCheckFailed = false;
+  if (!account.defaultOperationAuthorization && account.recoveryAuthority !== ZERO_HASH) {
+    try { requiredPolicyId = (await client.getThresholdPolicy(accountId))?.policyId ?? null; }
+    catch { policyCheckFailed = true; }
+  }
+  let recoverySeat = null, recoveryCheckFailed = false;
+  if (account.recoveryAuthority !== ZERO_HASH) {
+    try { recoverySeat = await client.getRecoverySeat(accountId); }
+    catch (error) {
+      if (!overview) throw error;
+      recoveryCheckFailed = true;
+    }
+    if (overview && recoverySeat?.supported &&
+        (await client.getAccount(accountId))?.configurationNonce !== account.configurationNonce)
+      fail("Account configuration changed. Refresh the account.");
+  }
   return freeze({ ...account, statusName: NATIVE_STATUS_NAMES[account.status] ?? "Unknown",
-    recoverySeat, pendingRecovery: recoverySeat?.pending ?? null });
-
+    recoverySeat, recoveryCheckFailed, requiredPolicyId, policyCheckFailed, pendingRecovery: recoverySeat?.pending ?? null });
 }
 
-async function readModules(client, accountId) {
+const nativeAssets = Object.freeze({
+  NEO: { hash: "ef4073a0f2b305a38ec4050e4d3d28bc40ea63f5", decimals: 0 },
+  GAS: { hash: "d2a4cff31913016155e38e474a2c06d08be276cf", decimals: 8 },
+});
+
+// Read the two native assets directly; nodes need no wallet indexer. A failed
+// balance query is unknown, never a zero balance.
+async function readBalances(client, address) {
+  const pairs = await Promise.all(Object.entries(nativeAssets).map(async ([symbol, asset]) => {
+    try {
+      const script = nativeCodec.dynamicCall(asset.hash, "balanceOf", [nativeCodec.hashValue(address)], 5);
+      const { stack } = await client.invokeScript(script);
+      const item = stack[0];
+      if (stack.length === 1 && item?.type === "Integer" && typeof item.value === "string" &&
+          /^(0|[1-9][0-9]{0,76})$/.test(item.value) && BigInt(item.value) < 1n << 255n)
+        return [symbol, item.value];
+    } catch { /* The other balance and account identity remain useful. */ }
+    return [symbol, null];
+  }));
+  return Object.fromEntries(pairs);
+}
+
+async function readModules(client, accountId, config) {
+  const changed = () => fail("Module configuration changed. Refresh the account and try again.");
   const page = async (type) => {
-    const { moduleIds } = await client.getModules(accountId, type);
+    const { moduleIds, configurationNonce, nextCursor } = await client.getModules(accountId, type);
+    if (configurationNonce !== config) changed();
+    if (moduleIds.length > NATIVE_MODULE_LIMITS[type] ||
+        moduleIds.some((id, i) => BigInt(id) <= BigInt(moduleIds[i - 1] ?? "0")))
+      fail("Invalid native module roster.");
+    if (nextCursor !== "0") {
+      // At the 32-validator limit the core returns the last ID as a cursor,
+      // even if no further IDs exist. Verify the empty tail on this revision.
+      if (moduleIds.length !== 32 || nextCursor !== moduleIds.at(-1)) changed();
+      const tail = await client.getModules(accountId, type, { cursor: nextCursor });
+      if (tail.configurationNonce !== config || tail.nextCursor !== "0" || tail.moduleIds.length) changed();
+    }
     const modules = [];
     for (const moduleId of moduleIds) {
       const module = await client.getModule(accountId, moduleId);
-      if (module) modules.push({ ...module, moduleTypeName: moduleTypeName(module.moduleType) });
+      if (!module || module.moduleId !== moduleId || module.moduleType !== NATIVE_MODULE_TYPES[type]) changed();
+      modules.push({ ...module, moduleTypeName: moduleTypeName(module.moduleType) });
     }
     return modules;
   };
   const [validators, hooks, recovery] = await Promise.all([page("validator"), page("hook"), page("recovery")]);
+  if ((await client.getAccount(accountId))?.configurationNonce !== config) changed();
   return freeze({ validators, hooks, recovery });
 }
 
@@ -853,22 +910,10 @@ export function validateNativeReceipt(review, transaction, log, txid) {
   const applications = Array.isArray(log.executions)
     ? log.executions.filter((item) => item.trigger === "Application")
     : [];
-  if (applications.length !== 1 || applications[0].vmstate !== "HALT")
-    fail("Transaction has no successful Application result.");
-  if (review.plan.kind === "execution") {
-    const stack = applications[0].stack;
-    const values = review.plan.batch
-      ? stack?.[0]?.type === "Array"
-        ? stack[0].value
-        : []
-      : [stack?.[0]];
-    for (const [index, operation] of review.plan.operations.entries())
-      if (
-        operation.method === "transfer" &&
-        (values?.[index]?.type !== "Boolean" || values[index].value !== true)
-      )
-        fail("Token transfer result is false or could not be verified.");
-  }
+  if (applications.length !== 1)
+    fail("Transaction must have exactly one Application result.");
+  if (validateNativeApplicationExecution(review.plan, applications[0]).length)
+    fail("Token transfer result is false or could not be verified.");
   return { txid: "0x" + hash, state: "HALT" };
 }
 
@@ -1043,31 +1088,52 @@ export function createNativeWorkspace({
       const { version, c, intent } = begin();
       const id = nativeAddress(accountId);
       await c.discover();
-      const account = await readState(c, id);
-      const [protocol, modules, chainNow] = await Promise.all([
-        c.getProtocolInfo(),
-        readModules(c, id),
-        chainTime(c),
-      ]);
-      // Hook order is no longer a core getter: the revision is published in the
-      // account descriptor and the members are the installed hook instances,
-      // read back from getModules. That is the whole fact the core owns.
-      const hookOrder = freeze({
-        hookIds: modules.hooks.map((module) => module.moduleId),
-        revision: account.hookOrderRevision,
-      });
+      const [account, chainNow] = await Promise.all([readState(c, id, { overview: true }), chainTime(c)]);
+      const balances = await readBalances(c, account.accountAddress);
       guard(version);
       if (intent !== intentVersion) fail("Account input changed. Load again.");
-      return freeze({
-        account,
-        protocol,
-        modules,
-        hookOrder,
-        // The minimal core holds no configuration intent; the governance
-        // module does, so the core's pending list is always empty.
-        pending: [],
-        chainTime: chainNow,
-      });
+      return freeze({ account, balances, chainTime: chainNow });
+    },
+    async loadModules(accountId, configurationNonce) {
+      const { version, c, intent } = begin();
+      await c.discover();
+      const modules = await readModules(c, nativeAddress(accountId), configurationNonce);
+      guard(version);
+      if (intent !== intentVersion) fail("Account input changed. Load again.");
+      return modules;
+    },
+    async transferDraft({ accountId, symbol, recipient, amount }) {
+      const { version, c, intent } = begin();
+      const id = nativeAddress(accountId), to = nativeAddress(recipient);
+      if (!Object.hasOwn(nativeAssets, symbol)) fail("Choose NEO or GAS.");
+      const asset = nativeAssets[symbol], value = String(amount).trim();
+      if (value.length > 32 || !/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(value))
+        fail("Enter a positive token amount.");
+      const [whole, fraction = ""] = value.split(".");
+      if (fraction.length > asset.decimals) fail(symbol === "NEO" ? "NEO transfers require a whole number." : "GAS supports up to 8 decimal places.");
+      const units = BigInt(whole + fraction.padEnd(asset.decimals, "0"));
+      if (units === 0n) fail("Enter a positive token amount.");
+      await c.discover();
+      const [account, now] = await Promise.all([c.getAccount(id), chainTime(c)]);
+      if (!account || account.statusName !== "Active" || !account.defaultOperationAuthorization)
+        fail("This transfer form requires an active account with the built-in custody route.");
+      const nonceSubkey = "00".repeat(32), credentialGeneration = "1";
+      // Native v4 fixes the built-in generation at 1. Verify it and the
+      // account epoch against the channel returned by the node.
+      const { packed } = await c.getNonce(id, { authorityEpoch: account.authorityEpoch,
+        validatorId: "0", credentialGeneration, nonceSubkey });
+      if (packed === (1n << 64n).toString()) fail("Nonce channel exhausted.");
+      const op = { targetContract: asset.hash, method: "transfer",
+        args: [nativeCodec.hashValue(account.accountAddress), nativeCodec.hashValue(to),
+          { type: "Integer", value: units.toString() }, { type: "Null" }],
+        nonce: packed, nonceSubkey, deadline: String(now + 900000), validatorId: "0",
+        credentialGeneration, authorityEpoch: account.authorityEpoch, configurationNonce: account.configurationNonce,
+        signature: "", hookProofs: [] };
+      const digest = nativeCodec.operationDigest({ networkMagic: c.networkMagic, coreContractHash: c.contractHash, accountId: id }, op);
+      guard(version);
+      if (intent !== intentVersion) fail("Transfer inputs changed. Prepare the draft again.");
+      return freeze({ accountId: id, networkMagic: c.networkMagic, core: c.contractHash, recipient: to,
+        symbol, amount: value, digest, operation: op });
     },
     async registration(input) {
       const { version, c, intent } = begin();
@@ -1229,7 +1295,7 @@ export function createNativeWorkspace({
         );
       const state = await readState(c, accountId);
       if (state.statusName !== "Active")
-        fail("The account is not active. Freeze, migration and recovery block execution.");
+        fail("The account is not active. Check whether the account is frozen or in recovery.");
       const plan = c.buildExecutionScript({ accountId, operations });
       return reviewPlan({
         version,
@@ -1242,7 +1308,7 @@ export function createNativeWorkspace({
         submission: input.submission,
         actor: input.feePayer || state.custodyAddress,
         description:
-          "Signed v4 user operation batch. The proxy witness is the only signer the core accepts for executeUserOp, and the operation signature must come from an installed validator or the built-in route.",
+          "Signed user operation batch. The proxy witness is the only signer the core accepts for executeUserOp, and the operation signature must come from an installed validator or the built-in route.",
       });
     },
     async submit(review) {

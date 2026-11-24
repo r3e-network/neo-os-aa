@@ -5,12 +5,10 @@ import path from 'node:path';
 
 import { MORPHEUS_PUBLIC_REGISTRY } from '../src/config/generatedMorpheusRegistry.js';
 
-// README.md and the docs viewer's copy restate the generated Morpheus registry by
-// hand. Keep both equal to it so the prose cannot drift from the gated copy.
+// External service addresses belong to the registry, not the SmartAccount release surface.
 const frontendRoot = path.resolve(import.meta.dirname, '..');
 const DOCUMENTS = [
-  path.join(frontendRoot, '..', 'README.md'),
-  path.join(frontendRoot, 'src', 'assets', 'docs', 'repo-readme.md'),
+  path.join(frontendRoot, '..', 'docs', 'engineering', 'MORPHEUS-REGISTRY.md'),
 ];
 
 const TABLE_ROWS = {
@@ -104,3 +102,14 @@ for (const file of DOCUMENTS) {
     assert.deepEqual(testnetNote.slice(1), [testnet.contracts.saCore, testnet.contracts.saWeb3AuthVerifier]);
   });
 }
+
+
+test('wallet landing pages do not advertise external accounts as a SmartAccount release', () => {
+  for (const file of ['../README.md', 'src/assets/docs/repo-readme.md']) {
+    const text = fs.readFileSync(path.join(frontendRoot, file), 'utf8');
+    assert.match(text, /unpublished/i);
+    assert.match(text, /MORPHEUS-REGISTRY\.md/);
+    for (const network of ['mainnet', 'testnet'])
+      assert.ok(!text.includes(MORPHEUS_PUBLIC_REGISTRY[network].contracts.saCore));
+  }
+});

@@ -42,7 +42,7 @@ test('the native profile is the shipped implementation profile and tracks native
   // modules are built against.
   assert.equal(native.data.version, 4, 'the native profile version follows the native-v4 parameter set');
   assert.equal(native.data.protocolVersion, 4);
-  assert.equal(native.data.protocolParameters, 'docs/proposals/smartaccount-native-profile-v4-parameters.json');
+  assert.equal(native.data.protocolParameters, 'docs/proposals/smartaccount-native-profile-parameters.json');
 
   const parameters = JSON.parse(fs.readFileSync(path.join(repoRoot, native.data.protocolParameters), 'utf8'));
   assert.equal(parameters.profileVersion, native.data.version);

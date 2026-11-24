@@ -1,0 +1,439 @@
+[
+  {
+    "field": "RegistrationAccountIdDomain",
+    "kind": "ByteArray",
+    "value": [
+      170,
+      82,
+      71,
+      1
+    ]
+  },
+  {
+    "field": "Prefix_AccountState",
+    "kind": "ByteArray",
+    "value": [
+      1
+    ]
+  },
+  {
+    "field": "Prefix_VerifierConfigContext",
+    "kind": "ByteArray",
+    "value": [
+      4
+    ]
+  },
+  {
+    "field": "Prefix_OwnerOnlyRecovery",
+    "kind": "ByteArray",
+    "value": [
+      34
+    ]
+  },
+  {
+    "field": "Prefix_MarketEscrowContract",
+    "kind": "ByteArray",
+    "value": [
+      6
+    ]
+  },
+  {
+    "field": "Prefix_MarketEscrowListing",
+    "kind": "ByteArray",
+    "value": [
+      7
+    ]
+  },
+  {
+    "field": "Prefix_PendingHookUpdate",
+    "kind": "ByteArray",
+    "value": [
+      10
+    ]
+  },
+  {
+    "field": "ConfigUpdateTimelockMs",
+    "kind": "Integer",
+    "value": 86400000
+  },
+  {
+    "field": "Prefix_HookConfigContext",
+    "kind": "ByteArray",
+    "value": [
+      5
+    ]
+  },
+  {
+    "field": "Prefix_PendingVerifierUpdate",
+    "kind": "ByteArray",
+    "value": [
+      9
+    ]
+  },
+  {
+    "field": "AllowedVerifierMethods",
+    "kind": "Array",
+    "value": [
+      "clearAccount",
+      "setSessionKey",
+      "clearSessionKey",
+      "setConfig",
+      "createSubscription",
+      "setDKIMRegistry"
+    ]
+  },
+  {
+    "field": "Prefix_PendingVerifierCall",
+    "kind": "ByteArray",
+    "value": [
+      15
+    ]
+  },
+  {
+    "field": "AllowedHookMethods",
+    "kind": "Array",
+    "value": [
+      "setDailyLimit",
+      "setWhitelist",
+      "setRestrictedToken",
+      "requireCredentialCommitmentForContract",
+      "setRegistry",
+      "setHooks",
+      "setConfig",
+      "clearAccount"
+    ]
+  },
+  {
+    "field": "Prefix_PendingHookCall",
+    "kind": "ByteArray",
+    "value": [
+      16
+    ]
+  },
+  {
+    "field": "Prefix_ContractAdmin",
+    "kind": "ByteArray",
+    "value": [
+      17
+    ]
+  },
+  {
+    "field": "LegacyStoragePrefix12",
+    "kind": "ByteArray",
+    "value": [
+      18
+    ]
+  },
+  {
+    "field": "LegacyStoragePrefix13",
+    "kind": "ByteArray",
+    "value": [
+      19
+    ]
+  },
+  {
+    "field": "Prefix_PendingUpdateNefHash",
+    "kind": "ByteArray",
+    "value": [
+      26
+    ]
+  },
+  {
+    "field": "Prefix_PendingUpdateManifestHash",
+    "kind": "ByteArray",
+    "value": [
+      27
+    ]
+  },
+  {
+    "field": "Prefix_UpdateTimelock",
+    "kind": "ByteArray",
+    "value": [
+      20
+    ]
+  },
+  {
+    "field": "MinUpgradeDelayMs",
+    "kind": "Integer",
+    "value": 604800000
+  },
+  {
+    "field": "Prefix_PendingContractAdmin",
+    "kind": "ByteArray",
+    "value": [
+      21
+    ]
+  },
+  {
+    "field": "Prefix_AdminTransferTimelock",
+    "kind": "ByteArray",
+    "value": [
+      22
+    ]
+  },
+  {
+    "field": "Prefix_ExecutionLock",
+    "kind": "ByteArray",
+    "value": [
+      11
+    ]
+  },
+  {
+    "field": "Prefix_VerifyContext",
+    "kind": "ByteArray",
+    "value": [
+      2
+    ]
+  },
+  {
+    "field": "Prefix_VerifierExecutionContext",
+    "kind": "ByteArray",
+    "value": [
+      14
+    ]
+  },
+  {
+    "field": "Prefix_HookExecutionContext",
+    "kind": "ByteArray",
+    "value": [
+      13
+    ]
+  },
+  {
+    "field": "Prefix_PendingPlatformOwnerRotation",
+    "kind": "ByteArray",
+    "value": [
+      32
+    ]
+  },
+  {
+    "field": "Prefix_EscapeLastInitiated",
+    "kind": "ByteArray",
+    "value": [
+      8
+    ]
+  },
+  {
+    "field": "Prefix_MetadataUri",
+    "kind": "ByteArray",
+    "value": [
+      12
+    ]
+  },
+  {
+    "field": "Prefix_MarketEscrowCancelInitiated",
+    "kind": "ByteArray",
+    "value": [
+      29
+    ]
+  },
+  {
+    "field": "EscapeCooldownMs",
+    "kind": "Integer",
+    "value": 3600000
+  },
+  {
+    "field": "Prefix_Nonce",
+    "kind": "ByteArray",
+    "value": [
+      3
+    ]
+  },
+  {
+    "field": "MarketEscrowOwnerCancelTimelockMs",
+    "kind": "Integer",
+    "value": 604800000
+  },
+  {
+    "field": "Prefix_TransactionReimbursement",
+    "kind": "ByteArray",
+    "value": [
+      33
+    ]
+  },
+  {
+    "field": "StablePlatformAccountOwnerDomain",
+    "kind": "ByteArray",
+    "value": [
+      170,
+      82,
+      71,
+      2
+    ]
+  },
+  {
+    "field": "Prefix_PlatformRegistrar",
+    "kind": "ByteArray",
+    "value": [
+      23
+    ]
+  },
+  {
+    "field": "Prefix_PlatformAccountBinding",
+    "kind": "ByteArray",
+    "value": [
+      30
+    ]
+  },
+  {
+    "field": "ProxyScriptPushData20",
+    "kind": "ByteArray",
+    "value": [
+      12,
+      20
+    ]
+  },
+  {
+    "field": "ProxyScriptVerifyCall",
+    "kind": "ByteArray",
+    "value": [
+      17,
+      192,
+      31,
+      12,
+      6,
+      118,
+      101,
+      114,
+      105,
+      102,
+      121,
+      12,
+      20
+    ]
+  },
+  {
+    "field": "SyscallSystemContractCall",
+    "kind": "ByteArray",
+    "value": [
+      65,
+      98,
+      125,
+      91,
+      82
+    ]
+  },
+  {
+    "field": "Prefix_PlatformProxyAccount",
+    "kind": "ByteArray",
+    "value": [
+      31
+    ]
+  },
+  {
+    "field": "Prefix_PendingPlatformRegistrar",
+    "kind": "ByteArray",
+    "value": [
+      24
+    ]
+  },
+  {
+    "field": "Prefix_PlatformRegistrarTimelock",
+    "kind": "ByteArray",
+    "value": [
+      25
+    ]
+  },
+  {
+    "field": "ERC1271_INVALID_VALUE",
+    "kind": "ByteArray",
+    "value": [
+      255,
+      255,
+      255,
+      255
+    ]
+  },
+  {
+    "field": "ERC1271_MAGIC_VALUE",
+    "kind": "ByteArray",
+    "value": [
+      22,
+      38,
+      186,
+      126
+    ]
+  },
+  {
+    "field": "MaxMetadataUriLength",
+    "kind": "Integer",
+    "value": 240
+  },
+  {
+    "field": "Prefix_VerifyScopeTarget",
+    "kind": "ByteArray",
+    "value": [
+      28
+    ]
+  },
+  {
+    "field": "ScriptSyscallContractCall",
+    "kind": "ByteArray",
+    "value": [
+      65,
+      98,
+      125,
+      91,
+      82
+    ]
+  },
+  {
+    "field": "ScriptPushData20",
+    "kind": "ByteArray",
+    "value": [
+      12,
+      20
+    ]
+  },
+  {
+    "field": "ScriptPush2Pack",
+    "kind": "ByteArray",
+    "value": [
+      18,
+      192
+    ]
+  },
+  {
+    "field": "ScriptPushExecuteUserOp",
+    "kind": "ByteArray",
+    "value": [
+      12,
+      13,
+      101,
+      120,
+      101,
+      99,
+      117,
+      116,
+      101,
+      85,
+      115,
+      101,
+      114,
+      79,
+      112
+    ]
+  },
+  {
+    "field": "ScriptPushExecuteUserOps",
+    "kind": "ByteArray",
+    "value": [
+      12,
+      14,
+      101,
+      120,
+      101,
+      99,
+      117,
+      116,
+      101,
+      85,
+      115,
+      101,
+      114,
+      79,
+      112,
+      115
+    ]
+  }
+]

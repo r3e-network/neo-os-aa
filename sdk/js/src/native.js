@@ -2,10 +2,8 @@
  * The native kernel SDK entry point: the v4 protocol codec, the shared client
  * bound to the native core, and the transaction lifecycle.
  *
- * The v3 surface (`createNativeCodec`, `NATIVE_ABI_VERSION 2`, the verifier
- * witness registry, `NATIVE_PROFILE_PARAMETER_DIGEST`) is gone. A profile is
- * now read from the chain (`discover()` returns `{contract, networkMagic,
- * protocolVersion, implementationId}`), not pinned as a parameter digest.
+ * Discovery verifies the native manifest and v4 parameter digest before
+ * returning the contract, network, protocol version and implementation ID.
  */
 
 const { rpc } = require("./neonCompat");
@@ -18,6 +16,7 @@ const {
 const {
   createNativeClientClass,
   NATIVE_ACCOUNT_ADDRESS_ABI,
+  NATIVE_PROFILE_PARAMETER_DIGEST,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
 } = require("./native/client");
@@ -95,6 +94,7 @@ module.exports = {
   transactionTools,
   codeIdentityTools,
   NATIVE_ACCOUNT_ADDRESS_ABI,
+  NATIVE_PROFILE_PARAMETER_DIGEST,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
   NATIVE_SMART_ACCOUNT_CONTRACT,

@@ -18,7 +18,7 @@
 
 想判断“今天能不能上线”：`engineering/VERIFICATION-AND-GATES.md` 的集成精化闭合门禁章 → `docs/reports/sa-closure-gate-20261117.json` → `ARCHITECTURE.md` 的“系统状态与能力边界”章（有中文版）。
 
-想改合约或写集成：`SDK.md`（EIP-712 签名章节）→ `engineering/HANDOFF-RECORDS.md`（先读合约交接章，再读前端对应关系章）；原生 ABI 2 的整份规范见 `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`。
+想改合约或写集成：先读[现行账户协议](SA-MODULE-PROTOCOL.zh-CN.md)，按[模块 NEP 接入说明](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md)找到对应的接口与权限条款，再查[SDK](SDK.zh-CN.md)和[原生 ABI](../tests/fixtures/native-smartaccount.manifest.json)。
 
 想评估证明边界：`engineering/VERIFICATION-AND-GATES.md`（SA 形式化验证章）的 Status 与 open boundaries 章节 → `docs/reports/sa-native-open-boundaries-20261008.json` → 再按需读单条精化文档。
 
@@ -37,17 +37,11 @@
 - `engineering/VERIFICATION-AND-GATES.md`（SA 形式化验证章）：总入口。给出 Coq 模型范围、运行时对应关系与**未覆盖边界**。任何“已形式化验证”的说法都必须能在这章里定位到具体作用域；其附录（custom 合约实现的精化）载有实现精化的目标与验收条件。
 - 方法级精化的逐方法记录（工件清单、报销 helper、预留算术、公开纯方法体、`System.Contract.Call`／`CALLT` 准入、interop 参数转换、描述符计费窗口效应与异常身份）曾作为单篇文档存在。它描述的是已退役 custom 合约的方法体，因此随 custom 实现一并移除；可核对的反射产物仍归档在 `formal/refinement/fixtures/current-method-proof/`，并由 `formal/refinement/method_proofs.py` 复算。
 
-**协议设计规范（原生 ABI 2，`docs/proposals/`）**
+**现行协议设计规范**
 
-- `SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`：整份 ABI 2 规范的主体——身份派生与地址、14 字段账户记录、权威分离与生命周期、模块绑定与代码身份、UserOperation 授权与执行、资源与费用计量、治理与升级、迁移、必需 ABI 面与符合性向量。修改链上行为前先读这一篇。
-- `SMARTACCOUNT-NATIVE-MODULE-PROFILES.md`：六个原生工件的兼容性边界、构建与打包规则、必需验证与形式化对应边界。
-- `SMARTACCOUNT-NATIVE-MULTISIG.md`：组合验证器配置档、瞬态批准回执、依赖清理，以及参数与结果的深度隔离义务。
-- `SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md`：`0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix` 键布局，以及恢复时的权威代次撤销。
-- `SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md`：源码构建运行时、签名代理、配置根变更与联合见证恢复的私有链证据。
-- `SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md`：`System.Contract.CallWithGasLimit` 平台扩展提案与预算语义。
-- `SMARTACCOUNT-ISSUE-242-CONFORMANCE.md`：issue #242 的六个必需章节与六条验收标准的逐条映射。
-
-其中四篇（PROFILE-DRAFT、MODULE-PROFILES、MULTISIG、AUTHORITY-EPOCH）有同名 `.zh-CN.md` 对照，结构、代码围栏与行内标识按英文原文逐字保留；PRIVATE-VALIDATION、ISSUE-242-CONFORMANCE 与 VERIFIER-GAS-BUDGET 三篇仅提供英文（过程 / 验证层）。
+- [核心协议 NEP](proposals/nep-smartaccount-entry-verifier.mediawiki)规定收款地址、13 字段操作、授权和恢复边界；[中文协议](SA-MODULE-PROTOCOL.zh-CN.md)给出字段、计量和状态转换。
+- [模块公共接口和各模块条款](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md)规定发现、配置和回调；[原生模块构建说明](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md)说明指定模块产物如何打包。
+- [原生评审对照表](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md)区分协议条款、实现证据和外部接纳；[实现清单](../contracts/native/profile.json)记录仍开放的门禁。
 
 **接口约定**
 

@@ -31,7 +31,7 @@ Set NEOOS_REQUIRE_COMPLETE=1 to fail closed when any selected optional gate woul
 Pass --formal (or set NEOOS_REQUIRE_FORMAL=1) to also run the fail-closed SA model-checking
 gate (formal/verify.py plus its runner tests). Set NEOOS_NATIVE_CORE_SOURCE to the reviewed
 core checkout matching formal/source-lock.json (default: ../neo-native-core). It needs Coq
-8.16+ (including Rocq 9), Z3, a real JDK (JAVA_BIN) and tla2tools.jar (TLA_JAR); a missing
+8.16+ (including Rocq 9); a missing
 tool is a failure, never a simulated pass.
 
 Set NEOOS_NATIVE_CORE_SOURCE to the pinned core checkout the native solution build and unit
@@ -124,25 +124,31 @@ if [[ $run_contracts -eq 1 ]]; then
     standard_module_dir="$(mktemp -d "${TMPDIR:-/tmp}/sa-standard-modules.XXXXXX")"
     trap 'rm -rf -- "$standard_module_dir"' EXIT
     for module_project in contracts/modules/GovernanceModule/GovernanceModule.csproj \
+        contracts/modules/SigningModule/SigningModule.csproj contracts/modules/ThresholdPolicyModule/ThresholdPolicyModule.csproj \
+        contracts/plugins/native-profile/MultiSigValidator.Native.csproj \
         contracts/modules/RecoveryModule/RecoveryModule.csproj contracts/plugins/native-profile/WhitelistHook.Native.csproj; do
       "$NCCS_BIN" "$module_project" -o "$standard_module_dir"
     done
+    node scripts/check_standard_governance_artifacts.mjs "$standard_module_dir"
     node scripts/check_standard_recovery_nef.mjs "$standard_module_dir/RecoveryModule.nef"
-    dotnet test tests/SmartAccount.Native.Tests/SmartAccount.Tests.csproj -c Release --nologo \
-      "${native_core_args[@]}" -p:StandardModuleNefDir="$standard_module_dir"
+    native_test_args=("${native_core_args[@]}")
+    if [[ -n "${NEOOS_NATIVE_TEST_RESULTS:-}" ]]; then
+      native_test_args+=(--results-directory "$NEOOS_NATIVE_TEST_RESULTS" --logger "trx;LogFileName=native.trx")
+    fi
+    SMARTACCOUNT_ADDRESS_VECTORS="$standard_module_dir/address-vectors.json" \
+      dotnet test tests/SmartAccount.Native.Tests/SmartAccount.Tests.csproj -c Release --nologo \
+      "${native_test_args[@]}" -p:StandardModuleNefDir="$standard_module_dir"
+    node scripts/check_native_receiving_addresses.cjs "$standard_module_dir/address-vectors.json"
   else
     mark_not_run "native-build"
     echo "native build gate: NOT RUN - no pinned core checkout at $native_core_source."
     echo "native build gate:   set NEOOS_NATIVE_CORE_SOURCE to a reviewed neo checkout (src/Neo and tests/AssemblyInfo.cs must exist)."
   fi
   python3 docs/proposals/validate-native-smartaccount-profile.py
-  python3 -m unittest discover -s docs/proposals -p 'test_native_profile*.py'
-  # One pattern covers every scripts/test_native_*.py lane (module profile, profile CI,
-  # multisig, NEF probe, restricted, service identity, SmartAccount sync, budget
-  # benchmark), so a newly added native guard cannot be orphaned outside the gate.
   python3 -m unittest discover -s scripts -p 'test_native_*.py'
-  python3 -m unittest discover -s scripts -p 'test_neoexpress_native_*.py'
-  python3 -m unittest discover -s scripts -p 'test_neoexpress_activation_validate.py'
+  python3 -m unittest discover -s scripts -p 'test_neoexpress*.py'
+  python3 -m unittest discover -s scripts -p 'test_check_module_neps.py'
+  python3 scripts/check_module_neps.py --compiler "$NCCS_BIN" --vm-getters --vm-commands
   python3 -m unittest discover -s scripts -p 'test_build_native_*.py'
   # Real production module bytecode runs in the public NeoVM with a test-only ABI
   # fixture. This proves module storage/object isolation, not native-chain admission.
@@ -153,16 +159,14 @@ if [[ $run_contracts -eq 1 ]]; then
   echo "native module VM regression: locked production build + test-only public-VM fixture (not native-chain proof)"
   echo "native module VM receipt: $native_epoch_probe_receipt"
   python3 scripts/native_epoch_probe.py --compiler "$NCCS_BIN" --output "$native_epoch_probe_receipt"
-  # The formal gate is opt-in because CI's ubuntu image ships neither Rocq/Coq 9 nor the TLA
-  # tools; formal/verify.py refuses to substitute a simulated result for a missing tool, so an
-  # unconditional run would only ever fail there. State the gap instead of hiding it.
+  # The current model requires a Coq installation and a pinned native source tree.
   if [[ $run_formal -eq 1 || "${NEOOS_REQUIRE_FORMAL:-0}" == "1" ]]; then
     echo "formal gate: running fail-closed SA model checks (formal/verify.py)"
-    python3 formal/verify.py
+    python3 formal/verify.py --native-core-root "$native_core_source"
     python3 -m unittest discover -s formal -p 'test_*.py'
   else
     mark_not_run "formal"
-    echo "formal gate: NOT RUN - formal/verify.py (Coq/TLC/Z3 model checks + semantic mutations) was skipped."
+    echo "formal gate: NOT RUN - formal/verify.py (current policy proofs and semantic mutations) was skipped."
     echo "formal gate:   pass --formal or set NEOOS_REQUIRE_FORMAL=1 to run it; see docs/SA-FORMAL-VERIFICATION.md."
   fi
 fi

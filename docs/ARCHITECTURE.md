@@ -182,7 +182,7 @@ This chapter describes the native implementation of the parallel
 [smart-account paths](#system-status-and-capability-boundaries). The deployed-contract
 implementation is the near-term NeoOS delivery priority. The native path is
 `SmartAccount`, a protocol service with a
-small, explicit authorization boundary. The [ABI 2 profile](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)
+small, explicit authorization boundary. The [ABI 2 profile](archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md)
 defines the wire contract. The [SDK](SDK.md) and [workspace](GUIDE.md)
 consume that contract; neither can grant authority the native contract rejects.
 The profile remains a draft until the Neo proposal and activation process is
@@ -574,11 +574,7 @@ implements; passing its tests is not acceptance of a Neo standard.
 | Native contract | `SmartAccount`, native ABI 2 modules, `NativeSmartAccountClient` and `/native` | Matching node implementation, protocol review and hardfork activation |
 | Runtime experiments | Private `PLATFORM` build | Research and controlled validation only; not a third public product |
 
-Existing V3 is the operational starting point for the deployed-contract path,
-not a claim that its current ABI already conforms to every native draft rule.
-Evolution must preserve existing users or introduce an explicit new version and
-migration. Do not overwrite a deployed account's meaning by changing an endpoint,
-core hash, build symbol or display label.
+The unpublished native SmartAccount has one supported protocol. Wallets check the node against the current native fingerprint. External contract deployments do not name a SmartAccount account or authorize its operations.
 
 #### Common semantics and explicit differences
 
@@ -675,7 +671,7 @@ local true-source/sync structure and its CI gate are repository mechanics;
 they do not change the external activation, acceptance and readback boundaries
 listed below.
 
-Discovery binds the [current profile parameters](proposals/smartaccount-native-profile-v2-parameters.json)
+Discovery binds the [current profile parameters](archive/native-research/smartaccount-native-profile-v2-parameters.json)
 and their digest, not just `getVersion() == 2`. Identity derivation remains version 1;
 authorization and the exact 14-field account record are version 2. Execution takes
 four arguments, including the current authority epoch and configuration nonce.

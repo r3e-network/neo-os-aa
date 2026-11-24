@@ -92,7 +92,7 @@ function preflightOf(artifact, overrides = {}) {
     mempoolChecked: false,
     gasconsumed: "10",
     minimumrequiredfee: "100",
-    stack: [{ type: "Boolean", value: true }],
+    stack: [{ type: "Any" }],
     ...overrides,
   };
 }
@@ -106,7 +106,7 @@ function confirmed(node, artifact, execution) {
       {
         trigger: "Application",
         vmstate: "HALT",
-        stack: [{ type: "Boolean", value: true }],
+        stack: [{ type: "Any" }],
         ...execution,
       },
     ],
@@ -155,7 +155,7 @@ test("export binds canonical bytes, hash, sign data and carries no callbacks", a
   assert.equal(artifact.signData, Buffer.from(artifact.networkMagic.toString(16).padStart(8, "0"), "hex").reverse().toString("hex") + sha256(artifact.unsignedHex));
   assert.ok(artifact.rawTransaction.startsWith(artifact.unsignedHex));
   assert.equal(artifact.profile.contract, node.client.contractHash);
-  assert.equal(artifact.profile.implementationId, "NativeSmartAccount/v4");
+  assert.equal(artifact.profile.implementationId, "NativeSmartAccount");
   assert.equal(artifact.witnesses.length, artifact.transaction.signers.length);
   assert.deepEqual(artifact.transaction.signers, prepared.review.signers);
   // The archive is data: a wallet loading it must not have to run SDK code.
@@ -353,6 +353,7 @@ test("preflight checks every declared block, execution boundary and fee", async 
     { network: 124 },
     { verification: "Failed" },
     { state: "FAULT" },
+    { exception: "inconsistent preflight result" },
     { relayed: true },
     { mempoolChecked: true },
     { minimumrequiredfee: "201" },
@@ -497,6 +498,7 @@ test("a FAULT or a refused transfer is never reported as success", async () => {
   const imported = await importArtifact(node, review, artifact);
   for (const execution of [
     { vmstate: "FAULT" },
+    { exception: "inconsistent application result" },
     { stack: [{ type: "Boolean", value: false }] },
     { stack: [] },
     { stack: [{ type: "Boolean", value: "true" }] },
@@ -507,7 +509,7 @@ test("a FAULT or a refused transfer is never reported as success", async () => {
     assert.equal(receipt.succeeded, false);
     assert.ok(receipt.failures.length);
   }
-  confirmed(node, artifact, {});
+  confirmed(node, artifact, { stack: [{ type: "Boolean", value: true }] });
   assert.equal((await tools.receipt(node.client, imported)).succeeded, true);
 });
 

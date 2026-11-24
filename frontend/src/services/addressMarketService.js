@@ -207,7 +207,7 @@ async function invokeMarketRead(operation, args = []) {
 // [exists, status, custody, recoveryAuthority, authorityEpoch, configurationNonce,
 //  recoveryTimelockMs, defaultOperationAuthorization, defaultMessageAuthorization,
 //  ownerOnlyRecovery, hookOrderRevision, controlRevision, recoveryPending,
-//  recoveryMatureAt, marketEscrowActive, legacyRow].
+//  recoveryMatureAt, marketEscrowActive].
 async function fetchAccountSnapshot(saContractHash, accountIdHash) {
   const empty = {
     exists: false,
@@ -219,7 +219,7 @@ async function fetchAccountSnapshot(saContractHash, accountIdHash) {
   try {
     const result = await invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getAccount', [{ type: 'Hash160', value: `0x${accountIdHash}` }]);
     const record = result?.stack?.[0];
-    if (!record || record.type !== 'Array' || !Array.isArray(record.value) || record.value.length < 16) {
+    if (!record || record.type !== 'Array' || !Array.isArray(record.value) || record.value.length !== 15) {
       return empty;
     }
     const [existsItem, statusItem, custodyItem, recoveryItem, , , , , , , , , , , escrowItem] = record.value;

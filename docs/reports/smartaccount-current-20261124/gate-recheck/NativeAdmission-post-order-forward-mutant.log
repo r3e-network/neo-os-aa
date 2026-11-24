@@ -1,0 +1,7 @@
+File "./NativeAdmission.v", line 1, characters 5-8:
+Warning: "From Coq" has been replaced by "From Stdlib".
+[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
+File "./NativeAdmission.v", line 101, characters 41-62:
+Error: Found no subterm matching "?M747 ++ ?M748 ++ ?M749"
+in the current goal.
+

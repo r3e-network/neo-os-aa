@@ -45,7 +45,7 @@ class NativeModuleMatrixTests(unittest.TestCase):
         from test_native_module_profile import manifest
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); contracts = root / 'contracts'; (contracts / 'plugins/native-profile').mkdir(parents=True)
-            parameters = root / 'docs/proposals/smartaccount-native-profile-v4-parameters.json'
+            parameters = root / 'docs/proposals/smartaccount-native-profile-parameters.json'
             parameters.parent.mkdir(parents=True)
             parameters.write_bytes((Path(__file__).resolve().parent.parent / parameters.relative_to(root)).read_bytes())
             profiles = {'NeoWitnessValidator': {'project': 'NeoWitnessValidator.Native.csproj', 'role': 'verifier',
@@ -57,7 +57,7 @@ class NativeModuleMatrixTests(unittest.TestCase):
             (raw / 'NeoWitnessValidator.manifest.json').write_text(json.dumps(manifest()))
             package(raw, artifacts, descriptor, parameters)
             source_pins = {n: hashlib.sha256((root / n).read_bytes()).hexdigest() for n in
-                ('contracts/plugins/native-profile/profiles.json', 'docs/proposals/smartaccount-native-profile-v4-parameters.json')}
+                ('contracts/plugins/native-profile/profiles.json', 'docs/proposals/smartaccount-native-profile-parameters.json')}
             scripts = Path(__file__).parent
             receipt = {'schema': 'smartaccount-native-module-build/v2', 'sourceRoot': 'repository',
                 'restoreLockedMode': True, 'packageSourcesPolicy': 'nuget.config', 'status': 'PASS', 'reproducible': True,

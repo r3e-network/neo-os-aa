@@ -169,7 +169,7 @@ Paymaster 从不对执行进行授权——它只在验证器与钩子已经批�
 
 ## 原生系统架构
 
-本章描述并行的[智能账户实现路径](#系统状态与能力边界) 中的原生实现。已部署合约实现是 NeoOS 近期的交付优先级。原生路径是 `SmartAccount`：一项具有小而明确的授权边界的协议服务。[ABI 2 配置](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) 定义了线上的合约约定。[SDK](SDK.zh-CN.md) 与[工作台](GUIDE.zh-CN.md) 消费该约定；两者都无法授予原生合约会拒绝的权限。在 Neo 提案与激活流程完成之前，该配置仍是草案。公开的 custom `SmartAccount` 构建与私有的 `PLATFORM` 构建是相互独立的运行时配置，拥有各自的账户身份与工件。原生实现的进展不会废止或暂停已部署合约的开发。
+本章描述并行的[智能账户实现路径](#系统状态与能力边界) 中的原生实现。已部署合约实现是 NeoOS 近期的交付优先级。原生路径是 `SmartAccount`：一项具有小而明确的授权边界的协议服务。[ABI 2 配置](archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) 定义了线上的合约约定。[SDK](SDK.zh-CN.md) 与[工作台](GUIDE.zh-CN.md) 消费该约定；两者都无法授予原生合约会拒绝的权限。在 Neo 提案与激活流程完成之前，该配置仍是草案。公开的 custom `SmartAccount` 构建与私有的 `PLATFORM` 构建是相互独立的运行时配置，拥有各自的账户身份与工件。原生实现的进展不会废止或暂停已部署合约的开发。
 
 [账户工作台](GUIDE.zh-CN.md) 涵盖初始化、备份、权限与时序矩阵以及恢复决策。
 
@@ -266,7 +266,7 @@ Paymaster 从不对执行进行授权——它只在验证器与钩子已经批�
 | 原生合约 | `SmartAccount`、原生 ABI 2 模块、`NativeSmartAccountClient` 与 `/native` | 匹配的节点实现、协议评审与硬分叉激活 |
 | 运行时实验 | 私有 `PLATFORM` 构建 | 仅用于研究与受控验证；不是第三个公开产品 |
 
-既有 V3 是已部署合约路径的运营起点，并不意味着其当前 ABI 已符合原生草案的每一条规则。演进必须保留既有用户，或引入显式的新版本与迁移。不要通过改变端点、核心哈希、构建符号或展示名称来覆盖已部署账户的含义。
+未发布的原生 SmartAccount 只有一份协议。钱包按当前原生协议指纹核对节点，外部合约部署不能标识 SmartAccount 账户或授权其操作。
 
 #### 共同语义与显式差异
 
@@ -317,7 +317,7 @@ Paymaster 从不对执行进行授权——它只在验证器与钩子已经批�
 
 源码托管：本仓库的 `contracts/native/SmartAccount/` 是原生 `SmartAccount` 合约唯一可编辑副本（真实源码）；[原生 VM 工作流](../.github/workflows/native-profile.yml) 使用的、按 SHA 固定的 Neo 核心检出版本携带这些文件的生成副本，该工作流在任何构建或测试之前运行 `scripts/sync_native_smartaccount.py --check`，因此漂移、缺失或未纳管的副本会在此失败。该固定版本现已记录重新生成的标记提交。这一“真实源码 / 同步”结构及其 CI 门禁属于仓库机制，不会改变下文列出的外部激活、验收与回读边界。
 
-发现流程绑定[当前配置参数](proposals/smartaccount-native-profile-v2-parameters.json)及其摘要，而不仅仅是 `getVersion() == 2`。身份推导仍是版本 1；授权与精确的 14 字段账户记录是版本 2。执行接收四个参数，包括当前权限 epoch 与配置 nonce。原生复合限额为三个子模块、两个批准 / 阈值与三个聚合签名域。验证器回调预算为 1 GAS；钩子与维护各 2.5 GAS。这些边界并不保证最大批次能满足网络的全局验证预算。
+发现流程绑定[当前配置参数](archive/native-research/smartaccount-native-profile-v2-parameters.json)及其摘要，而不仅仅是 `getVersion() == 2`。身份推导仍是版本 1；授权与精确的 14 字段账户记录是版本 2。执行接收四个参数，包括当前权限 epoch 与配置 nonce。原生复合限额为三个子模块、两个批准 / 阈值与三个聚合签名域。验证器回调预算为 1 GAS；钩子与维护各 2.5 GAS。这些边界并不保证最大批次能满足网络的全局验证预算。
 
 ### 公开 v4 账户与运营工作流
 

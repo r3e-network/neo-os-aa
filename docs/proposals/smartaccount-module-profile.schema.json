@@ -1,0 +1,161 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SmartAccount module discovery profile",
+  "description": "Parsed discovery object only. Canonical encoding, byte length, manifest and installed role are checked separately.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractName",
+    "moduleType",
+    "profileVersion",
+    "capabilities",
+    "callbacks",
+    "lifecycle"
+  ],
+  "properties": {
+    "contractName": {
+      "type": "string",
+      "pattern": "[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]"
+    },
+    "moduleType": {
+      "enum": [
+        "validator",
+        "hook",
+        "recovery"
+      ]
+    },
+    "profileVersion": {
+      "const": 1
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "instanceIsolation",
+        "messageCapability",
+        "thresholdMemberEligible",
+        "compositeLayer"
+      ],
+      "properties": {
+        "instanceIsolation": {
+          "type": "boolean"
+        },
+        "messageCapability": {
+          "type": "boolean"
+        },
+        "thresholdMemberEligible": {
+          "type": "boolean"
+        },
+        "compositeLayer": {
+          "type": "integer",
+          "enum": [
+            0,
+            1
+          ]
+        }
+      }
+    },
+    "callbacks": {
+      "type": "array"
+    },
+    "lifecycle": {
+      "enum": [
+        [
+          "onInstall",
+          "onUninstall"
+        ],
+        [
+          "onInstall",
+          "onUninstall",
+          "configure"
+        ]
+      ]
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "moduleType": {
+          "const": "validator"
+        },
+        "callbacks": {
+          "const": [
+            "validateUserOp",
+            "onUserOpComplete"
+          ]
+        },
+        "capabilities": {
+          "properties": {
+            "messageCapability": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "moduleType": {
+          "const": "validator"
+        },
+        "callbacks": {
+          "const": [
+            "validateUserOp",
+            "onUserOpComplete",
+            "isValidSignature"
+          ]
+        },
+        "capabilities": {
+          "properties": {
+            "messageCapability": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "moduleType": {
+          "const": "hook"
+        },
+        "callbacks": {
+          "const": [
+            "preCheck",
+            "postCheck"
+          ]
+        },
+        "capabilities": {
+          "properties": {
+            "messageCapability": {
+              "const": false
+            },
+            "thresholdMemberEligible": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "moduleType": {
+          "const": "recovery"
+        },
+        "callbacks": {
+          "const": []
+        },
+        "capabilities": {
+          "properties": {
+            "messageCapability": {
+              "const": false
+            },
+            "thresholdMemberEligible": {
+              "const": false
+            }
+          }
+        }
+      }
+    }
+  ]
+}

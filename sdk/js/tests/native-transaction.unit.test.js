@@ -59,13 +59,13 @@ function descriptors(artifact) {
   return artifact.transaction.signers;
 }
 
-function staged(artifact) {
+function staged(artifact, stack = [{ type: "Boolean", value: true }]) {
   return {
     tx: { hash: artifact.txid, blockhash: "0x" + "cc".repeat(32) },
     wire: Buffer.from(artifact.rawTransaction, "hex").toString("base64"),
     log: {
       txid: artifact.txid,
-      executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Boolean", value: true }] }],
+      executions: [{ trigger: "Application", vmstate: "HALT", stack }],
     },
     preflight: {
       hash: artifact.txid,
@@ -87,7 +87,7 @@ function staged(artifact) {
       mempoolChecked: false,
       gasconsumed: "10",
       minimumrequiredfee: "100",
-      stack: [{ type: "Boolean", value: true }],
+      stack,
     },
   };
 }
@@ -157,6 +157,42 @@ test("a recovery policy review signs with custody and the newly introduced walle
   assert.deepEqual(descriptors(prepared), [custody, recipient].map(({ account }) => ({
     account: "0x" + account, scopes: "CustomContracts", allowedcontracts: ["0x" + node.client.contractHash]
   })));
+  const signed = await node.client.signTransaction(prepared);
+  Object.assign(node.state, staged(node.client.exportSignedTransaction(signed), [{ type: "Any" }]));
+  node.setAccount({ custody: recipient.account, status: 1 });
+  assert.equal((await node.client.getTransactionReceipt(signed)).succeeded, true);
+});
+
+test("the reserved owner-only recovery bit is refused before a plan is built", async () => {
+  const node = createNode();
+  const custody = spyWallet(), recipient = spyWallet();
+  node.setAccount({ custody: custody.account });
+  const policy = { accountId: ACCOUNT, recoveryAuthority: recipient.account,
+    recoveryTimelockMs: "604800000", ownerOnlyRecovery: true };
+  await assert.rejects(node.client.buildRecoveryPolicyPlan(policy), /ownerOnlyRecovery is reserved/);
+  await assert.rejects(node.client.buildConfigurationBatchPlan({ accountId: ACCOUNT,
+    actions: [{ method: "setRecoveryPolicy", ...policy }] }), /ownerOnlyRecovery is reserved/);
+});
+
+test("a direct batch requires the incoming authority and its receipt survives a later account change", async () => {
+  const node = createNode();
+  const custody = spyWallet(), recipient = spyWallet();
+  node.setAccount({ custody: custody.account });
+  const recipe = { method: "buildConfigurationBatchPlan", input: { accountId: ACCOUNT, actions: [
+    { method: "setBuiltinAuthorization", defaultOperationAuthorization: true, defaultMessageAuthorization: false },
+    { method: "setRecoveryPolicy", recoveryAuthority: recipient.account, recoveryTimelockMs: "604800000" }] } };
+  const plan = await node.client.buildConfigurationBatchPlan(recipe.input);
+  await assert.rejects(prepare(node, plan, options(custody, { recipe })), /missing authority/);
+  const prepared = await prepare(node, plan, options(custody, { recipe, authorizers: [recipient] }));
+  assert.deepEqual(descriptors(prepared), [custody, recipient].map(({account}) => ({
+    account: "0x" + account, scopes: "CustomContracts", allowedcontracts: ["0x" + node.client.contractHash] })));
+  const signed = await node.client.signTransaction(prepared);
+  Object.assign(node.state, staged(node.client.exportSignedTransaction(signed), [{ type: "Any" }]));
+  node.setAccount({ custody: recipient.account, status: 1 });
+  await assert.rejects(node.client.preflightTransaction(signed), /configuration changed/);
+  const receipt = await node.client.getTransactionReceipt(signed);
+  assert.equal(receipt.confirmed, true);
+  assert.equal(receipt.succeeded, true);
 });
 
 test("registration asks for the custody witness and refuses any other", async () => {
@@ -206,12 +242,18 @@ test("account actions are custody-gated and carry their operands verbatim", asyn
     prepare(node, install.plan, options(wallet(), { recipe: install.recipe })),
     /missing authority witness/,
   );
+  for (const item of [{ type: "Boolean", value: true }, I(0), I(-1), I("18446744073709551615")]) {
+    node.state.simulate.stack = [item];
+    await assert.rejects(prepare(node, install.plan, options(wallet(), { recipe: install.recipe, authorizers: [custody] })), /allocated module ID/);
+  }
+  node.state.simulate.stack = [I(3)];
   const prepared = await prepare(node, install.plan, options(wallet(), { recipe: install.recipe, authorizers: [custody] }));
   assert.equal(prepared.review.plan.method, "installModule");
   assert.equal(descriptors(prepared).length, 2);
 
   // Removing a module names the id the core allocated, never the contract.
   const remove = build.account(node, { method: "removeModule", args: [I(3), A([])] });
+  node.state.simulate.stack = [{ type: "Any" }];
   const removed = await prepare(node, remove.plan, options(wallet(), { recipe: remove.recipe, authorizers: [custody] }));
   assert.equal(removed.review.plan.method, "removeModule");
 });
@@ -251,22 +293,22 @@ test("fee gates: explicit budget, node admission, consumption and caps", async (
   const node = createNode();
   const custody = wallet();
   const { plan, recipe } = build.registration(node, { custody });
-  node.state.simulate = { state: "HALT", stack: [], gasconsumed: "10" };
+  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "10" };
   await assert.rejects(
     prepare(node, plan, { ...CAPS, nonce: 1, feePayer: wallet(), authorizers: [custody], recipe, systemFee: undefined }),
     /supply an explicit system fee budget/,
   );
-  node.state.simulate = { state: "HALT", stack: [], gasconsumed: "210", minimumrequiredfee: "100" };
+  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "210", minimumrequiredfee: "100" };
   await assert.rejects(
     prepare(node, plan, options(wallet(), { recipe, authorizers: [custody] })),
     /below gasconsumed/,
   );
-  node.state.simulate = { state: "HALT", stack: [], gasconsumed: "10", minimumrequiredfee: "300" };
+  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "10", minimumrequiredfee: "300" };
   await assert.rejects(
     prepare(node, plan, options(wallet(), { recipe, authorizers: [custody] })),
     /bounded-call admission/,
   );
-  node.state.simulate = { state: "HALT", stack: [], gasconsumed: "10", minimumrequiredfee: "100" };
+  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "10", minimumrequiredfee: "100" };
   await assert.rejects(
     prepare(node, plan, options(wallet(), { recipe, authorizers: [custody], systemFee: "1001" })),
     /exceeds approved cap/,
@@ -464,7 +506,7 @@ test("broadcast sends the identical bytes once, dedupes, and recovers after a fa
   const signed = await node.client.signTransaction(prepared);
   await assert.rejects(node.client.broadcastTransaction(signed), /preflight/);
   assert.equal(node.calls.some((call) => call.method === "sendrawtransaction"), false);
-  Object.assign(node.state, staged(node.client.exportSignedTransaction(signed)));
+  Object.assign(node.state, staged(node.client.exportSignedTransaction(signed), [{ type: "Any" }]));
   node.calls.length = 0;
   const [a, b] = await Promise.all([
     node.client.broadcastTransaction(signed),

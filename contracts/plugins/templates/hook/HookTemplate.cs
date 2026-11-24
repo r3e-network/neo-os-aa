@@ -79,7 +79,7 @@ namespace SmartAccount.Hooks
         /// <summary>
         /// <c>initData</c>: empty, or one command <c>["allowTarget", targetContract]</c>.
         /// </summary>
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             HookAuthority.RequireLifecycle(accountId, moduleId);
             if (initData.Length > 0) ApplyConfig(accountId, moduleId, initData);
@@ -90,7 +90,7 @@ namespace SmartAccount.Hooks
         /// <c>["denyTarget", targetContract]</c>. Replace this with your own policy
         /// configuration surface (limits, windows, quotas…).
         /// </summary>
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             HookAuthority.RequireLifecycle(accountId, moduleId);
             ApplyConfig(accountId, moduleId, configData);
@@ -101,7 +101,7 @@ namespace SmartAccount.Hooks
         /// it on uninstall and aborts the enclosing action on a fault, so it must be
         /// idempotent for never-configured instances.
         /// </summary>
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             HookAuthority.RequireLifecycle(accountId, moduleId);
             HookAuthority.DeleteInstancePrefix(Prefix_Target, accountId, moduleId);

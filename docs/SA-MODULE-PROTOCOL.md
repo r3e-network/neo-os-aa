@@ -1,77 +1,41 @@
-# SA Module Protocol — Shared Specification (Protocol Version 4)
+# SmartAccount module protocol
 
-This document is the **single shared specification** for the Neo Smart Account (SA)
-module model implemented by the native kernel batch:
+This unpublished protocol defines one native core and its modules. The [current parameters](proposals/smartaccount-native-profile-parameters.json) bind the implementation, packaging and wallets. The [implementation profile](../contracts/native/profile.json) lists open conformance gates.
 
-- native kernel — task #40 (`contracts/native/SmartAccount/`)
-- retired custom (user-contract) kernel — task #39, archived delivery record
-
-The DTOs, profiles, storage layout, limits, error codes, events and gas budget
-defined here are the contract between the core and every module. No
-implementation may deviate from or independently re-design anything in this
-document. Where a runtime difference is unavoidable (e.g. caller/phase
-enforcement mechanics), it is explicitly listed as a disclosed capability
-difference, never as a divergent DTO.
-
-Status: **specification + shared constants + fixtures + native kernel delivered.**
-`contracts/native/SmartAccount` implements the surface described here;
-`tests/SmartAccount.Native.Tests` covers it and asserts the shared vectors in
-`tests/SmartAccount.Native.Tests/TestFile/smartaccount-v4-vectors.json`. The second
-kernel that once implemented the same surface has been retired, so this document
-and its vectors are the single shared contract. Nothing here claims on-chain
-deployment of this source, and the formal models are reported separately in
-`docs/engineering/VERIFICATION-AND-GATES.md` (the SA formal verification chapter).
+For integrators: the native core exposes `installModule` and `removeModule`. Until a mandatory threshold policy is activated, custody or a code-bound installed validator can administer modules directly. The 24-hour window in §10 applies to proposals submitted to the standard governance module; it does not delay direct administration. In the candidate described below, verify messages on the native core so the digest binds the calling contract. Submit a change to the signing roster or threshold policy through the standard governance module. Use the [standard module directory](../contracts/modules/README.md) to find the corresponding contract. The native candidate is not publicly activated or proven equivalent to the full design.
 
 Companion documents:
 
-- `docs/SA-MODULE-PROTOCOL.zh-CN.md` — Chinese counterpart (authoritative together
-  with this file; on any divergence the newer revision of both wins).
-- `docs/engineering/VERIFICATION-AND-GATES.md` — the SA migration manifest chapter (legacy→v4 design; §14 summarizes).
+- [Core protocol NEP](proposals/nep-smartaccount-entry-verifier.mediawiki): account identity, the operation envelope and authority.
+- [Module interface NEP](proposals/nep-smartaccount-module-interface.mediawiki) and [named module NEP](proposals/nep-smartaccount-module-profiles.mediawiki): discovery format, callbacks and requirements for each implementation.
+- [Chinese counterpart](SA-MODULE-PROTOCOL.zh-CN.md). When citing the manuscript, use its dated English baseline (p. 9) and identify any conflicting rule and revision. A later file edit does not establish implementation conformance.
 - `tests/fixtures/sa-module-protocol/README.md` — golden-vector / rejection
   fixture formats and the kernel verification matrix.
 - `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` — the constant
   file carrying every numeric value in this spec (§15).
 
-## 1. Scope and terminology migration
+## 1. Scope and terminology
 
 ### 1.1 Terminology
 
-The legacy model used `verifier` for the authorization-deciding module. Protocol
-v4 adopts the ERC-7579 term **validator**; `hook` keeps its name. The contract
-API, storage, events and error codes use `validator`/`Validator` exclusively; the
-old `verifier`/`Verifier` names are removed without aliases (the identity-only
-witness entry `verify(accountId)` survives because the proxy script embeds it —
-see `docs/SDK.md` and §13).
+A validator decides authorization. A hook checks policy before and after execution.
 
 Module kinds (one-byte type code, ERC-7579 numbering):
 
-| Type | Name | Supported in v4 |
+| Type | Name | Supported in |
 | --- | --- | --- |
 | 1 | validator | yes |
-| 2 | executor | no — `supportsModuleType` returns false, install rejected |
+| 2 | executor | unsupported; installation is rejected |
 | 3 | fallback handler | no — same |
 | 4 | hook | yes |
+| 5 | recovery seat (native extension) | yes; one per account |
 
 Types 2 and 3 are not aliases of validator/hook. Declaring support without an
 implementation is forbidden; the profile says "not supported", not "maybe".
 
-### 1.2 Plugin renaming / disposition (from the approved design report §3.12)
+### 1.2 Standard modules
 
-| Legacy plugin | v4 disposition |
-| --- | --- |
-| MultiHook | stops new installs; migrated hook order unfolds in core `hookOrder` |
-| MultiSigVerifier | becomes **MultiSigValidator** — threshold *policy*; orchestration and approval receipts live in the core |
-| NeoNativeVerifier | NeoWitnessValidator (multi-party transaction witness; default single witness is built-in) |
-| SessionKeyVerifier | SessionKeyValidator — instance-isolated, one credential set per instance |
-| SubscriptionVerifier | SubscriptionValidator — core nonce is the only sequence; same subId re-created ⇒ new credential generation |
-| Web3AuthVerifier | Web3AuthValidator — same signature scheme, full new signing domain |
-| Web3AuthnVerifier | **P256Validator** (raw P-256; no WebAuthn ceremony claim) |
-| TEEVerifier | **TeeKeyValidator** (configured enclave-key verification only; no remote-attestation claim) |
-| ZkLoginVerifier | **DelegatedIdentityValidator** (configured P-256 signer + identity binding; no general ZK-proof claim) |
-| ZKEmailVerifier | stays disabled; a disabled template only, no installable production validator |
-| DailyLimitHook / TokenRestrictedHook / WhitelistHook / NeoDIDCredentialHook | kept, instantiated (external registry reads count against callback gas budget) |
-| SocialRecoveryVerifier | split into an optional social-recovery *service* and an optional action-session validator; base recovery is core-native |
-| HookAuthority / VerifierAuthority, SignerDomain, VerifierPayload, templates | shared protocol library updates, not installable plugins |
+See the [module directory](../contracts/modules/README.md) for installable modules and their responsibilities.
 
 ## 2. moduleId — instance namespace
 
@@ -97,7 +61,7 @@ generation.
 
 ## 3. Set limits and ordering semantics
 
-Profile limits (protocol-level, enforced by both kernels, values pinned in
+Profile limits (protocol-level, enforced by the native core, values pinned in
 §15 constant files):
 
 | Limit | Value |
@@ -128,13 +92,23 @@ does not alter the in-flight sequence. Signatures bind the hook-proof digest
 (§5), so a signer cannot be shown a different hook set than the one that will
 run.
 
-The recovery policy write requires the existing administrator and, when the recipient changes, a witness from the new nonzero recovery authority. Retaining the same authority needs no second consent. The core admits only the installed, code-bound recovery contract as the direct reset caller. The standard seat obtains the incoming custody witness at proposal, and a mature record can be completed in Active or Frozen, never in MigrationRequired. Its reviewed cancellation and completion methods bind the record nonce and current core configuration nonce. A third-party seat must separately establish its admission and delay guarantees.
+The recovery policy write requires the existing administrator and, when the recipient changes, a witness from the new nonzero recovery authority. Retaining the same authority needs no second consent. The core admits only the installed, code-bound recovery contract as the direct reset caller. The standard seat obtains the incoming custody witness at proposal, and a mature record can be completed in Active or Frozen. Its reviewed cancellation and completion methods bind the record nonce and current core configuration nonce. A third-party seat must separately establish its admission and delay guarantees.
+
+**A running recovery is judged against the policy snapshot taken when it began.** The standard seat snapshots the core recovery authority and `recoveryTimelockMs` in `beginRecovery`, and completion requires both to still equal the live core values; the separate authority-epoch snapshot is still checked. The three cases are fixed:
+
+- **Authority revocation:** naming a different recovery authority retires the pending request. A witness from the old authority is no longer enough to rotate custody. The current custodian or the new authority may cancel the stale record and start a fresh request, which runs a full new delay.
+- **Delay-only rewrite:** naming a different timelock also retires the pending request. The new value binds only requests begun afterwards; it neither shortens nor extends a running one.
+- **Idempotent rewrite:** writing the same authority, timelock and reserved bit leaves the pending request intact. The write still advances `configurationNonce` and `controlRevision` as a configuration commit, so a reviewed cancel/complete transaction must be reviewed again, but the ordinary completion entry is unaffected.
+
+The core's direct write and governance action 8 share one landing implementation, so the rule is identical on both paths. Ordinary completion checks the policy snapshot and the authority epoch; the reviewed completion entry additionally checks the current core configuration nonce that the reviewed transaction saw. The standard seat exposes the snapshot as `getRecoveryPolicySnapshot(accountId) → [recoveryAuthority, recoveryTimelockMs]`, or an empty array when no record is present. A snapshot mismatch fails with `SA_EPOCH_STALE` and commits no custody, policy, nonce or module state.
+
+`ownerOnlyRecovery` is a field retained in the 0x51 record for layout compatibility. It carries no authorization meaning in this protocol and clients must never present it as "only the owner can recover". The only legal input to `setRecoveryPolicy` and governance action 8 is `false`; `true` is rejected with `SA_OPERATION_MALFORMED`. Starting and cancelling recovery always require a witness from the custodian or from the recovery authority recorded in the core, independent of this reserved field.
 
 ## 4. Operation envelope — canonical encoding
 
 ### 4.1 Wire shape
 
-A v4 UserOperation is a **strict 13-field NeoVM `Array`** (a `Struct` anywhere in
+A UserOperation is a **strict 13-field NeoVM `Array`** (a `Struct` anywhere in
 the operation is rejected):
 
 ```
@@ -227,20 +201,19 @@ the binding requirements are auditable against this list):
 | Web3AuthValidator | EIP-712-style typed payload per `docs/SDK.md` (domain name `"Neo Smart Account"`), signature 64-byte compact |
 | P256Validator (was WebAuthn) | raw P-256 `r‖s` (64 bytes) against the instance's configured key |
 | DelegatedIdentityValidator (was ZkLogin) | configured P-256 signer signature + identity commitment |
-| built-in (validatorId = 0) | §8 message profile reused in operation mode: canonical P-256 script + signature, threshold per 0x57 |
+| built-in (validatorId = 0) | one canonical P-256 custody script and its signature over the operation digest |
 
 Threshold routing: when `validatorId` names a threshold policy, the core calls
 each member validator directly under a **shared parent validation budget**,
 keeps approval receipts in core-local invocation state, and — in `postCheck` —
 runs completion only for the members approved in the validation phase.
-Members are scalar validators only; one member may not join two active
-policies; a member referenced by a policy cannot be uninstalled while
-referenced. The member side carries the back-pointer to its active policy in its
-own 0x52 record (`activePolicyId`, §7.1), which the policy executor rewrites on
-every activation, reshape and deactivation. Routing and uninstall checks
-therefore read one instance record instead of scanning every policy of the
-account; a deactivated policy clears the pointer, releasing its members without
-a second pass.
+Enrollment requires the standard recovery seat and a configured recovery authority.
+Each member must use the pinned standard member validator and a distinct compressed key.
+The core records the mandatory policy ID and disables basic spending. All spending must now
+meet this threshold. The core refuses direct administration and further governance writes,
+including member changes and re-enabling basic spending. Enrollment advances the authority epoch,
+invalidating earlier recovery requests. Only completion of a fresh request through the preset
+delayed recovery seat restores basic spending. Receiving funds remains available.
 
 ## 6. Nonce channels and namespace derivation
 
@@ -257,9 +230,6 @@ a second pass.
   shared.
 - Sequence exhaustion (cursor == 2^64 sentinel): the channel is dead; no
   wrap-around.
-- Legacy cursor merge rule (migration, §14): the new cursor never decreases, and
-  reading the new cursor takes `max(legacy 0x03 value for the same channel,
-  new 0x56 value)` before writing.
 - Plugins do not keep private sequence counters that must be kept in exact sync
   with the core cursor; the core nonce is the single sequence source
   (SubscriptionValidator consumes the core nonce only).
@@ -278,27 +248,23 @@ route).
 
 | Route | Bound generation | Record |
 | --- | --- | --- |
-| built-in (`validatorId` = 0) | the account's `SubjectRevision` | 0x57 |
+| built-in (`validatorId` = 0) | 1 for operations | custody in account control |
 | installed validator instance | that instance's `CredentialGeneration` | 0x52 |
 | active threshold policy | the policy's `CredentialGeneration` | 0x5B |
 
-Consequences that hold in both kernels:
+Consequences that hold in the native core:
 
-- The built-in generation is **not** a fixed 1. Every subject change advances
-  `SubjectRevision` (§8.3), and a client that hard-codes 1 derives a channel the
-  core can never reproduce once the revision has moved. An account with no 0x57
-  subject record is still at generation 1.
+- A basic account receives assets at its proxy address and spends with one custody signature.
+  Its operation generation is 1. A custody change invalidates prior signatures through
+  the authority epoch. The off-chain signing roster and its revision only authorize messages.
 - An installed instance starts at generation 1 and advances on
   `revokeCredentials` only — a custody-authorized, callback-free revocation that
   retires every signature bound to the old generation at once. Rebinding a
   module's code advances `moduleRevision`, not the credential generation.
-- A threshold policy's generation is monotonic across rewrites (a new policy is
-  written at generation 1, every reshape carries the previous value forward and
-  bumps it), so a reshaped policy kills the channels of its previous generation
-  and never resets to 1.
+- A new mandatory policy starts at generation 1. Recovery clears the policy and advances the authority epoch. The ID allocator never reuses the retired policy ID.
 - Because the generation is inside the §4.3 domain, a stale value is not a
-  retryable nonce mismatch. An installed-validator or threshold-policy route
-  faults with `SA_CREDENTIAL_STALE`; the built-in route rejects the message with
+  retryable nonce mismatch. An operation with a mismatched route generation
+  faults with `SA_CREDENTIAL_STALE`. The built-in message route rejects the message with
   its invalid-signature result instead, because the generation is compared
   against `SubjectRevision` before any subject is examined.
 - `getNonce` resolves the generation internally and returns the channel the core
@@ -307,7 +273,7 @@ Consequences that hold in both kernels:
 
 ## 7. Storage layout plan
 
-### 7.1 Shared 0x50–0x5F region (both kernels, identical key bytes)
+### 7.1 Shared 0x50–0x5F region (the native core, identical key bytes)
 
 Key construction: 1-byte prefix ‖ raw 20-byte accountId ‖ fixed-width
 **big-endian** integer suffixes where noted. All integer key suffixes are
@@ -315,18 +281,16 @@ fixed-width big-endian. 0x5F is reserved and unallocated.
 
 | Prefix | Key suffix | Use |
 | --- | --- | --- |
-| 0x50 | bare | protocol version, layout version, activation state, profile summary |
 | 0x51 | +acctId | account control metadata (§7.2) |
 | 0x52 | +acctId+moduleId[8 BE] | module instance record (type[1], contractHash, contractId, updateCounter, nefSha256, profileSha256, moduleRevision, credentialGeneration, capability flags, activePolicyId) |
 | 0x53 | +acctId+type[1]+moduleId[8 BE] | installed-instance enumeration index (marker rows; per-type ascending-moduleId scan) |
 | 0x54 | +acctId | reserved; effective hook order is the 0x53 hook index, revision is in 0x51 |
 | 0x55 | +acctId+intentId[8 BE] | configuration intent record |
 | 0x56 | +acctId+channel[24 BE] | nonce cursor (new encoding) |
-| 0x57 | +acctId | built-in message signer subjects (≤16 20- or 32-byte subjects, threshold) + subjectRevision (§8.1) |
+| 0x57 | +acctId | message policy revision and optional commitment to the governance provider's roster (§8.1) |
 | 0x58 | +acctId | application callback/execution context (phase + re-entrancy state) |
 | 0x59 | +acctId | core recovery & emergency invalidation records (Market escape path, §7.5) |
-| 0x5A | +acctId | migration state & legacy state digest (§14) |
-| 0x5B | +acctId+policyId[8 BE] | threshold member list & policy commitment |
+| 0x5B | +acctId+policyId[8 BE] | 4-byte provider storage ID (big endian) and SHA-256 of its spending policy; provider slot `0x05 ‖ accountId` holds the canonical member list, threshold, active flag and generation |
 | 0x5C | +acctId+channel[24 BE] | nonce namespace full digest (collision detection) |
 | 0x5D | +acctId | Market lock ↔ custody/control-epoch ↔ listing binding (§7.5) |
 | 0x5E | +acctId | bounded configuration-intent index |
@@ -336,15 +300,13 @@ upgrade; unknown occupied keys abort the upgrade — they are never overwritten.
 
 ### 7.2 0x51 account control metadata
 
-status (Active/Frozen/MigrationRequired), custody, recovery authority;
+status (Active/Frozen), custody, recovery authority;
 authorityEpoch, configurationNonce; nextModuleId (shared allocator for moduleIds
 and policyIds), nextIntentId; default operation authorization switch and default
-message authorization switch; recoveryTimelockMs (7–90 days; migrated accounts
-keep their existing value); hookOrderRevision, defaultPolicyRevision,
-controlRevision; the legacy permanent owner-only flag, which continues to
-constrain that account after migration.
+message authorization switch; recoveryTimelockMs (7–90 days); hookOrderRevision, defaultPolicyRevision,
+controlRevision; the owner-only recovery reserved field (retained for layout compatibility, always false).
 
-### 7.3 0x52 code binding (identical definition in both kernels)
+### 7.3 0x52 code binding (identical definition in the native core)
 
 contractHash, ContractId, UpdateCounter, SHA256(NEF bytes), SHA256(canonical
 module profile JSON). ContractId blocks destroy-and-redeploy; UpdateCounter
@@ -354,24 +316,6 @@ commit; an address re-deploy does not inherit authorization. The per-callback
 check compares `(ContractId, UpdateCounter)` only — the pair names exactly one
 (deployment slot, revision), so it proves the same thing the record's install-time
 NEF hash pins, without re-hashing the NEF on every callback.
-
-### 7.4 Legacy regions
-
-**Custom kernel:**
-- 0x01 legacy five-field AccountState rows are **kept as migration input /
-  historical evidence**; new state is written only under 0x51. New code never
-  routes through the old Verifier/HookId fields; a legacy decoder exists solely
-  for migration.
-- 0x12 and 0x1C are **retired**: new authorization never derives from them. The
-  migration intent records an explicit invalidation declaration for any 0x12 /
-  0x1C rows of the account (stored under 0x5A); the bytes are never
-  re-allocated.
-- 0x12 is permanently reserved, never re-allocated; 0x1C likewise.
-
-**Native kernel:** the legacy 14-slot account Array under the 0x10 account key
-remains the migration input; the new 0x51 record supersedes it after
-migration. 0x10/0x11/0x20/0x30/0x40 legacy prefixes are not re-interpreted by
-the new module model.
 
 ### 7.5 Market minimal lock (0x5D / 0x59)
 
@@ -435,13 +379,12 @@ messageDigest := SHA256( domain || hash )
 
 Built-in rules: each `verificationScript` must be the canonical N3 P-256
 verification script for a compressed point (standard wallet script builder
-shape); `SHA256(script)` (script hash) must be one of the ≤16 authorized
-subjects in 0x57; scripts in the envelope must be pairwise distinct; valid
+shape); HASH160 or SHA-256 of the script must match one of the ≤16 authorized
+subjects; scripts in the envelope must be pairwise distinct; valid
 P-256 signatures over `messageDigest`; count ≥ configured threshold. Duplicate
 keys, off-curve points and non-canonical scripts are rejected. The subject set
-and threshold live in 0x57 with a `subjectRevision` that advances on every
-subject change (custody-gated, 24 h configuration). New account registration
-must set a message subject (default = custody address).
+and threshold are stored by the governance module. Confirmation advances the
+revision. A new account uses its custody address without a stored roster.
 
 Module message signing: `validatorId` = instance moduleId; only modules whose
 profile declares `messageCapability`. The core forwards a sanitized signature
@@ -449,65 +392,29 @@ payload and `originalSender`; execution quota hooks never apply to opaque
 message hashes. SessionKey and Subscription validators **do not** declare
 arbitrary-message capability by default.
 
-### 8.1 The two 0x57 keys
+### 8.1 Message subjects
 
-The subject store occupies two keys per account, and they are different widths on
-purpose:
+For a registered account with no explicit signing policy, the effective record is
+`[[custody], 1, 1]`. Registration allocates no message policy storage. An unknown
+account returns an empty array. At confirmation the governance provider stores
+the canonical serialized `[subjects, threshold, revision]` at `0x04 ‖ accountId` in its
+own storage. The core stores `U64BE(revision) ‖ I32BE(provider storage ID) ‖ SHA256(payload)`
+at `0x57 ‖ accountId` and checks the digest before using the roster. A missing or changed
+payload makes message validation fail. Recovery needs only the reference and replaces
+it with an eight-byte revision. Each subject is the raw HASH160
+(20 bytes) or SHA-256 (32 bytes) of its verification script. Recovery clears any
+delegation, restores the current custody as the sole message signer and advances
+the revision. None of these message settings grants permission to transfer assets.
 
-| Key | Bytes | Meaning |
-| --- | --- | --- |
-| `0x57 ‖ accountId` | 21 | the canonical subject row: `MessageSubjectRecord` (≤16 subjects, threshold, `SubjectRevision`) |
-| `0x57 ‖ accountId ‖ 0x01` | 22 | an internal provenance marker, never a second row |
+## 9. Public interface (identical naming in the native core)
 
-The canonical row stays **21 bytes**: widening it to 22 would move every existing
-account's record and turn a reviewed key into a different one. The marker reuses
-the canonical prefix plus a one-byte suffix instead of allocating another
-protocol prefix, and it is written and deleted only by the core.
-
-### 8.2 Subject matching
-
-A subject entry binds the signer's **script**, and two widths are accepted:
-
-- a 32-byte subject is the raw `SHA256` of the signer's verification script and
-  must equal it exactly;
-- a 20-byte subject is the signer's account address (`RIPEMD160(SHA256(script))`,
-  the N3 script hash) and must equal it exactly.
-
-Any other width matches nothing. Both forms verify the same ECDSA check over
-`messageDigest`, so an account may mix them; the 20-byte form is what registration
-writes, because the canonical P-256 custody script hashes back to exactly the
-custody address and that key can therefore sign built-in messages immediately
-without waiting out the 24-hour subject intent.
-
-### 8.3 Custody-derived subjects and provenance
-
-Registration writes `Subjects = [custody]`, threshold 1, `SubjectRevision` 1, and
-sets the 22-byte provenance marker. On a custody rotation the core rewrites the
-subject set to the new custody and advances `SubjectRevision` **only when that
-marker is present**:
-
-- a missing marker means the provenance is unknown: the subject set may have been
-  configured deliberately (through the subject intent), or the account may predate
-  the marker and still carry its historical default subject state. The runtime
-  makes no inference in either direction — it simply does not rewrite — and a
-  subject that happens to equal the old custody address is never read as
-  evidence of explicit delegation: address equality is never used to infer
-  provenance;
-- a marker that is present but carries an unexpected value is an integrity fault,
-  not a signal to rotate;
-- the rotation emits the subject-update event with the new revision, so the built-in
-  credential generation advances together with the subject set. Escape (§7.5) and
-  account teardown delete both keys.
-
-## 9. Public interface (identical naming in both kernels)
-
-Queries: `getProtocolInfo`, `getAccount(accountId)`,
-`getAccountAddress(accountId)`, `supportsModuleType(type)`,
-`supportsExecutionMode(mode)`, `getModules(accountId, type, cursor, limit)`
+Queries: `getProtocolInfo()`, `getAccountImplementationId()`, `getAccount(accountId)`,
+`getAccountAddress(accountId)`, `getModules(accountId, moduleType, cursor, limit)`
 (limit 1–32; returns next cursor and current configurationNonce; cursor is
 moduleId-based), `getModule(accountId, moduleId)`,
-`isModuleInstalled(accountId, type, moduleHash, additionalContext)`,
-`getAuthorizedModuleId(accountId, phase)`, `getAccountAddress(accountId)`,
+`isModuleInstalled(accountId, moduleType, moduleHash, additionalContext)`,
+`getAuthorizedModuleId(accountId, phase)`, `getMessageSubjects(accountId)`,
+`getThresholdPolicy(accountId, policyId)`, `isValidSignature(accountId, hash, signatureEnvelope)`,
 `getNonce(accountId, validatorId, nonceSubkey)` (packed),
 `getNonceSequence(accountId, channel)`,
 `getOperationDigest(accountId, operation)`.
@@ -515,13 +422,14 @@ moduleId-based), `getModule(accountId, moduleId)`,
 Configuration: `installModule(accountId, moduleType, moduleContractHash, initData)` and
 `removeModule(accountId, moduleId, deInitData)`, each authorised by the custody witness or by the
 witness of an already installed validator instance, and each advancing the configuration nonce. The
-core keeps no intent record, no maturity window and no cancellation path: those belong to a
-governance module, which submits the matured call through these two methods.
+core keeps no intent record, maturity window or cancellation path. The governance module owns those
+records and submits the matured actions in the signed order (§10).
 
-Actions: the core executes exactly two action codes, `installModule` and `uninstallModule`, and
-registration runs them through the same executor the two module methods use. Every other code a v3
-kernel carried is removed — a script that still assembles one is rejected with
-SA_OPERATION_MALFORMED rather than silently ignored.
+Registration accepts exactly two action codes: install (1) and remove (2). On an existing
+active account the native candidate also exposes `applyConfigurationActions(accountId, actions)`.
+It accepts install (1), remove (2), built-in authorization (5) and recovery policy (8);
+only confirmed governance may also configure an instance (3), enroll a threshold policy (7)
+or change message subjects (9). The entire group advances the configuration nonce once.
 
 Execution: `validateUserOp(accountId, operation)` (read-only, real
 verification, structured result), `executeUserOp(accountId, operation)`,
@@ -532,11 +440,11 @@ exposes none of them.
 
 The immutable-identity witness entry `verify(accountId)` (embedded in the proxy
 script) remains a real witness gate, not a legacy API alias. The old
-`getVerifier`/`getHook`/`CallVerifier`/`CallHook`/`*Child` surfaces are removed without aliases in both kernels.
+`getVerifier`/`getHook`/`CallVerifier`/`CallHook`/`*Child` surfaces are removed without aliases in the native core.
 
 Lifecycle module callbacks (core→module): `onInstall(accountId, moduleId,
-generation, initData)`, `onUninstall(accountId, moduleId, generation,
-deInitData)`, `configure(accountId, moduleId, generation, configData)`,
+moduleType, initData)`, `onUninstall(accountId, moduleId, moduleType,
+deInitData)`, `configure(accountId, moduleId, moduleType, configData)`,
 `preCheck` / `postCheck` (hooks), `validateUserOp` /
 `onUserOpComplete` (validators), each bounded by §11 budgets. The core no
 longer hard-codes per-method allowlists such as `setPublicKey` — modules decode
@@ -551,10 +459,10 @@ Type names below are manifest parameter types.
 
 | Direction | Operation | Manifest ABI | Notes |
 | --- | --- | --- | --- |
-| module→core | `getModuleProfile()` | `→ String`, **safe** | Canonical profile bytes, ≤ 2048 bytes, no arguments, no writes. |
-| core→module | `onInstall(accountId, moduleId, generation, initData)` | `Hash160, Integer, Integer, Array → Void` | `initData` is a command array (see §9.3) or empty. |
-| core→module | `configure(accountId, moduleId, generation, configData)` | `Hash160, Integer, Integer, Array → Void` | Same command shape; runs at the configuration phase. |
-| core→module | `onUninstall(accountId, moduleId, generation, deInitData)` | `Hash160, Integer, Integer, Array → Void` | Must clear every instance-scoped key of `(accountId, moduleId)`. |
+| core→module | `getModuleProfile()` | `→ String`, **safe** | Canonical profile bytes, ≤ 2048 bytes, no arguments, no writes. |
+| core→module | `onInstall(accountId, moduleId, moduleType, initData)` | `Hash160, Integer, Integer, Array → Void` | `initData` is a command array (see §9.3) or empty. |
+| core→module | `configure(accountId, moduleId, moduleType, configData)` | `Hash160, Integer, Integer, Array → Void` | Same command shape; runs at the configuration phase. |
+| core→module | `onUninstall(accountId, moduleId, moduleType, deInitData)` | `Hash160, Integer, Integer, Array → Void` | Must clear every instance-scoped key of `(accountId, moduleId)`. |
 | core→module (validator) | `validateUserOp(accountId, operationDigest, operation)` | `Hash160, ByteArray, Array → Boolean`, **safe** | `operationDigest` is the §4.3 core digest; `operation` is the canonical 13-field view. |
 | core→module (validator) | `onUserOpComplete(accountId, operation, result)` | `Hash160, Array, Any → Void` | Completion phase only; `result` is the sanitized target result. |
 | core→module (hook) | `preCheck(accountId, operation)` | `Hash160, Array → ByteArray` | Returns instance `hookData`; `null` is normalised to the empty byte string; at most 512 bytes or `SA_HOOK_DATA_TOO_LARGE`. |
@@ -606,17 +514,21 @@ The instance key is `prefix (1 byte) ‖ accountId (20 bytes) ‖ moduleId
 
 ### 9.3 Configuration command arrays
 
-`initData`, `configData` and `deInitData` are `[command, ...args]` arrays. Each
-module owns its command vocabulary; the core only enforces the array bound
-(≤ §3 argument count) and the 2.5 GAS lifecycle budget. Shipped modules use:
+All three lifecycle data arguments are VM Arrays. Build `initData` from the
+named profile's [installation forms](proposals/nep-smartaccount-module-profiles.mediawiki#Installation_data).
+For a configurable module, `configData` is one `[command, ...args]` array.
+For ordinary removal of any enabled named module, send `deInitData = []`;
+there is no uninstall command. Third-party profiles define their own data semantics.
+The core bounds each array (§3) and the lifecycle callback budget (2.5 GAS).
+Shipped modules use these configuration commands:
 
 | Module | Commands |
 | --- | --- |
 | `P256Validator`, `Web3AuthValidator`, `TeeKeyValidator` | `setPublicKey(publicKey)` — 33-byte compressed or 65-byte uncompressed, stored compressed. |
 | `NeoWitnessValidator` | `setSigners(signers[], threshold)` |
 | `MultiSigValidator` | `setMemberKey(publicKey)` — one key per instance. |
-| `SessionKeyValidator` | `setSessionKey(publicKey, target, method, expiry, cap, subId)` / `clearSessionKey()` |
-| `SubscriptionValidator` | `createSubscription(publicKey, payee, token, amount, period)` / `cancelSubscription(subId)` |
+| `SessionKeyValidator` | `setSessionKey(publicKey, target, method, validUntil, spendingLimit, description)` / `clearSessionKey()`; expiry is a Unix timestamp in milliseconds |
+| `SubscriptionValidator` | `createSubscription(subId, merchant, token, amount, periodSeconds)` / `cancelSubscription(subId)`; [billing and ID rules](proposals/nep-smartaccount-module-profiles.mediawiki#SubscriptionValidator) |
 | `DelegatedIdentityValidator` | `setConfig(publicKey, provider, masterNullifier)` |
 | `ZKEmailVerifier` | none — the proof verifier is not deployed, so every callback fails closed. |
 | `ActionSessionValidator` | `setRecoveryService(service)` / `clearRecoveryService()` |
@@ -629,7 +541,7 @@ module owns its command vocabulary; the core only enforces the array bound
 
 ## 10. Lifecycle, pending intents and time locks
 
-Normal configuration (empty-slot install, uninstall, hook order change,
+For the governance proposal path, normal configuration (empty-slot install, uninstall, hook order change,
 signer change, default-authorization toggles, code rebinding) — **24 h delay
 uniformly** (86 400 000 ms).
 
@@ -653,29 +565,49 @@ explicitly cleaned; maturing cannot be covertly replaced. Confirmation
 re-requires a custody witness; a new control subject additionally needs that
 subject's witness.
 
-Freeze semantics: custody witness can freeze; frozen accounts expose only
-read queries, recovery/escape, and unfreeze; `freezeAccount` is immediate, while
-`unfreezeAccount` only proposes the unfreeze intent that `confirmConfiguration`
-executes after the uniform 24 h delay — an account under `MigrationRequired` can
-never thaw; freeze advances the epoch (old
-signatures and intents die). Last-validator rule: the built-in route always
-exists but is gated by the default policy — uninstalling the last validator
-must enable the built-in route within the same 24 h intent, and existing hooks
-keep running; there is no automatic owner fallback; only emergency recovery
-removes all policies callback-free.
+To change message signers before threshold enrollment, propose `[9, subjects, threshold]` using a 20-byte script hash or 32-byte SHA-256 per verification script. To enable mandatory spending, place `[7, 0, threshold, memberInstanceIds, true]` last in the proposal. The standard governance module confirms the exact proposal after 24 hours. Read `getThresholdPolicy(accountId, 0)` to discover the current policy. It returns an empty array or `[threshold, memberIds, active, generation, policyId]`. A positive ID returns the first four fields, or an empty array for an unknown ID. Read the message roster separately with `getMessageSubjects`.
 
-Recovery: core-built-in; custody self-rescue plus optional recovery authority;
-timelock per-account 7–90 days; recovery intents are never overwritten or
+Separate proposals containing only policies 5, 7, 8 and 9 may confirm in either order when their resources are disjoint. The checkpoint covers one observed commit, including a batch, and preserves the original receipt and deadline. Threshold resources include the policy, members being released or acquired, and the shared allocation dependency for new or unknown IDs. Changes outside governance and callbacks with unknown effects cannot renew a stale approval. Code rebinding (6) is not implemented. Unknown actions, including code 10, are rejected before an intent ID is allocated.
+
+The standard governance module stores confirmed custom message rosters and mandatory spending policies. The native core binds each body to the provider's storage ID and SHA-256, and enforces the spending route. SigningModule and ThresholdPolicyModule expose reads. Removing governance discards pending proposals; it does not revoke an already confirmed roster. See the [governance module NEP clause](proposals/nep-smartaccount-module-profiles.mediawiki#GovernanceModule).
+
+**Native candidate: atomic configuration (R-11-10/12).** The core method
+`applyConfigurationActions(accountId, actions)` accepts 1–16 ordered actions: install (1),
+remove (2), set built-in authorization (5), set recovery policy (8), and the governance-only actions 7 and 9, with the same field
+types as the proposal. A successful group advances the account configuration nonce and
+control revision exactly once. A fault in any action or the final route check commits no
+writes. Removing the last validator with built-in operation authorization closed fails;
+the same group may reopen the route. The caller still needs custody or a code-bound
+installed validator; a changed recovery address must witness the change. Direct administration of actions 1, 2, 5 and 8 has no 24-hour delay. Actions 7 and 9 require the mature governance path.
+Registration continues to accept only actions 1 and 2.
+
+In the governance module, core actions must form one consecutive group. Module actions may
+precede or follow it; the exact proposed order is preserved. A proposal that separates
+core writes with a module action is refused before an ID is issued. The module also checks
+the final nonce: an unexpected second increment during callbacks faults the entire confirmation.
+The candidate exposes 29 core methods and binds its governance artifacts in the profile parameter digest. Clients check both the method descriptors and the declared parameter digest during discovery.
+
+With a mandatory spending policy, custody cannot freeze, thaw, or change the recovery policy; exiting the policy requires the preset delayed recovery process.
+Without a mandatory spending policy, custody can call `SmartAccount.freezeAccount`
+immediately. `GovernanceModule.unfreezeAccount` creates an intent; its confirmation must
+wait 24 h. The separately authorized `SmartAccount.unfreezeAccount` thaws a frozen account
+immediately when called by custody or a code-bound installed validator. An installed
+governance module therefore does not guarantee a minimum freeze duration. Freeze and thaw advance the authority epoch.
+Removing the last validator requires built-in operation authorization to be enabled by the
+end of the same configuration group; existing hooks remain. No fallback is enabled implicitly.
+
+The standard recovery seat accepts a request from custody or the configured recovery
+authority. Only the installed, code-bound seat can call the core reset. The
+per-account timelock is 7–90 days; recovery intents are never overwritten or
 restarted by another request; matured execution is permissionless and applies
 the exact approved result; it calls no old verifier/hook/Market/Oracle; it
 advances authorityEpoch/configurationNonce, removes all modules and policies,
-voids pending intents, enables built-in authorization; legacy permanent
-owner-only flags survive migration.
+invalidates pending intents and restores built-in authorization.
 
 ## 11. Gas hard budget profile (approved Plan B)
 
 Unit: **datoshi**, 1 GAS = 100 000 000 datoshi (same unit as the existing
-`System.Contract.CallWithGasLimit` usage). Values identical in both kernels:
+`System.Contract.CallWithGasLimit` usage). Values identical in the native core:
 
 | Callback | Hard budget |
 | --- | --- |
@@ -735,7 +667,7 @@ Bounds that shape the worst case are pinned in the same files: `HookDataBytesMax
   into the next hook. `preCheck` runs in ascending `hookOrder`, `postCheck` in
   reverse over the same approved set.
 - The validation aggregate covers every validator call in one transaction,
-  including threshold members; completion has its own 1 GAS aggregate.
+  including threshold members; completion has its own 11 GAS aggregate. Each individual callback remains limited to 1 GAS.
 - A callback that returns a value of the wrong ABI type fails at the manifest
   check, not at gas: the core does not coerce.
 
@@ -748,7 +680,7 @@ into the 0x52 binding). Schema (skeleton in
 ```json
 {
   "profileVersion": 1,
-  "moduleType": "validator | hook",
+  "moduleType": "validator",
   "contractName": "…",
   "capabilities": {
     "instanceIsolation": false,
@@ -760,6 +692,10 @@ into the 0x52 binding). Schema (skeleton in
   "callbacks": ["validateUserOp", "onUserOpComplete"]
 }
 ```
+
+The example is a validator. Hooks and recovery seats have their own callback lists;
+see the [module interface](proposals/nep-smartaccount-module-interface.mediawiki)
+and the [named profiles](proposals/nep-smartaccount-module-profiles.mediawiki).
 
 - `instanceIsolation: true` is required for multiple instances of the same
   contract address on one account.
@@ -846,16 +782,9 @@ protocol compatibility:**
 Wording rule for all docs/UI: "responsibility- and security-model-aligned Neo
 profile", never "fully ERC-4337/ERC-7579 compatible".
 
-## 14. Migration manifest (summary — full design in the SA migration manifest chapter of docs/engineering/VERIFICATION-AND-GATES.md)
+## 14. Account creation and state
 
-Per-account classification: `no-plugin`, `scalar-plugin`, `multihook`,
-`multisig`, `unknown-plugin`, `owner-only`, `market-locked`, `recovery-pending`.
-Unknown plugins are never guess-migrated — the account enters
-`MigrationRequired` (execution and message authorization rejected; queries,
-freeze and callback-free recovery remain). Migration intents are idempotent
-against the manifest digest; the 0x01 legacy five fields and the native
-14-slot Array are inputs only; old pending, old signatures, 0x12 and 0x1C are
-never authorization sources.
+Accounts start at registration. Active and Frozen are the only defined states; reject every other status code. Action 10 is unassigned. There is no account import.
 
 ## 15. Shared constant files and fixtures
 
@@ -865,7 +794,7 @@ never authorization sources.
 | native constants | `contracts/native/SmartAccount/SmartAccountModuleProtocol.cs` (internal static `SmartAccountModuleProtocol`, synced to neo-native-core via `scripts/sync_native_smartaccount.py`) |
 | fixture skeletons | `tests/fixtures/sa-module-protocol/` (README + schemas + templates) |
 
-The constant file carries, for: protocol version 4;
+The constant file carries, for: wire tag 4;
 module type codes 1/4; all §3 limits; 13-field envelope field indices; nonce
 sizes (32-byte subkey, 24-byte channel); serialized-size caps (4096/8192/4096/
 16384/65536); delays (86 400 000 / 604 800 000 / 7 776 000 000 ms); gas budgets
@@ -878,37 +807,16 @@ per-prefix composite key builders).
 ## 16. Kernel implementation mapping
 
 > The #39 table below is the archived delivery record of the retired custom kernel;
-> the #40 mapping is the one that still describes this repository.
-
-### 16.1 Retired custom kernel (#39, archived delivery record)
-
-| Spec section | Custom files to create/modify |
-| --- | --- |
-| §2/§3/§7 constants | consume the constant file that shipped with the retired custom kernel (`SmartAccount.ModuleProtocol.cs`) |
-| §7.1/§7.4 prefixes | extend the STORAGE PREFIX MAP comment in `SmartAccount.cs` with the 0x50–0x5E rows; add `SmartAccount.ModuleProtocol.cs` to `WalletPartials` in `tests/SmartAccount.Contracts.Tests/StoragePrefixMapTests.cs` **together with first key usages** (DeriveShape requires usage) |
-| §4/§5 envelope + digest | `SmartAccount.Execution.cs` (13-field decode, digest, batch), new `SmartAccount.Intents.cs` if split |
-| §6 nonce | `SmartAccount.Internal.cs`/new nonce partial (0x56/0x5C, merge with legacy 0x03) |
-| §8 message | `SmartAccount.State.cs` (built-in P-256 subjects, 0x57) |
-| §9 interface + lifecycle | `SmartAccount.Accounts.cs` (registration identity custody+salt, atomic initial install), `SmartAccount.Modules.cs` (0x51–0x53, 0x5B; `AssertModuleCallbackAbi`, `BindModuleProfile`, hook pre/post dispatch), `SmartAccount.State.cs` (`getModule`/`getModules` descriptors), `SmartAccount.Message.cs` (module `isValidSignature` route), no `HookChildren`/`VerifierChildren` adapter partials remain |
-| §10 intents | new intents partial (0x55/0x5E) |
-| §7.5 Market | `SmartAccount.MarketEscrow.cs` (0x5D binding, no owner-side 0x1D writes, epoch validation), `SmartAccount.Escape.cs` (0x59 records, callback-free escape) |
-| F-1 (verify scope) | `SmartAccount.VerifyContext.cs` — delete `verifyScopeTarget` authorization, phase gates |
-| F-7 (phase gates) | `SmartAccount.VerifyContext.cs` + `SmartAccount.Execution.cs` (0x58 context, direct-caller + ReadOnly + strict domain checks for read-only callbacks) |
-| events | `SmartAccount.Events.cs` (§10bis table; keep existing AA-free events) |
-| plugins | `contracts/plugins/validators/` — 9 validators (`P256Validator`, `Web3AuthValidator`, `TeeKeyValidator`, `NeoWitnessValidator`, `DelegatedIdentityValidator`, `MultiSigValidator`, `SessionKeyValidator`, `SubscriptionValidator`, `ZKEmailVerifier`) plus the shared layer `ModuleOperation.cs`, `ValidatorAuthority.cs`, `ValidatorPayload.cs`, `ValidatorClock.cs`, `ValidatorModels.cs`, `SignerDomain.cs` |
-| hooks | `contracts/plugins/hooks/` — `DailyLimitHook`, `TokenRestrictedHook`, `WhitelistHook`, `NeoDIDCredentialHook`, retired `MultiHook` (installation rejected), shared `HookAuthority.cs` |
-| recovery split | `contracts/plugins/recovery/ActionSessionValidator.cs` (validator module) and `contracts/plugins/recovery/SocialRecoveryService.*.cs` (service contract); each ships a canonical profile |
-| profile sources | `<Name>.profile.json` next to every module, literal embedded as `ModuleProfileJson`, kept in sync by `scripts/sync-module-profiles.mjs` (run `--check` before building) |
-| build layout | the retired custom build emitted `contracts/bin/public` for the core, services and mocks, `bin/public/validators`, `bin/public/hooks`; the native kernel builds through MSBuild into each project's `bin/Release/net10.0/`, and `scripts/build_native_modules.py` writes the six native-profile modules to its `--output` |
+> the #40 table is a design mapping, not an inventory of native ABI methods or completed deliverables.
 
 ### 16.2 Native kernel (#40, shares its batch with #29)
 
 | Spec section | Native files to create/modify |
 | --- | --- |
 | constants | consume `SmartAccountModuleProtocol.cs` (this batch; then run `scripts/sync_native_smartaccount.py` to materialize the neo-native-core copy) |
-| §4/§5 envelope/digest | `SmartAccountProtocol.cs` (v4 domain, 13-field serialize), `SmartAccountEnvelope.cs` (13-field operations) |
-| §6 nonce | `SmartAccountProtocol.cs` + nonce storage partial (0x56/0x5C; legacy 0x20 merge) |
-| §7 state | `SmartAccountRecords.cs` (new 0x51 record and its codec; legacy 14-slot decoder kept for migration only) |
+| §4/§5 envelope/digest | `SmartAccountProtocol.cs` (signing domain, 13-field serialize), `SmartAccountEnvelope.cs` (13-field operations) |
+| §6 nonce | `SmartAccountProtocol.cs` + nonce storage partial (0x56/0x5C) |
+| §7 state | `SmartAccountRecords.cs` (new 0x51 record and its codec) |
 | §2/§3 collections | `SmartAccount.Modules.cs` (instance records, enumeration, hookOrder, threshold policies), `SmartAccountModulePolicy.cs` (new limits) |
 | §9/§10 lifecycle & intents | `SmartAccount.Modules.cs`, new intents partial (0x55/0x5E) |
 | §8 message | `SmartAccount.Keys.cs` (P-256 subjects), `SmartAccount.cs` (`isValidSignature` ABI) |
@@ -916,7 +824,7 @@ per-prefix composite key builders).
 | F-7 phase gates | `SmartAccountInvocationContext.cs` (exact-frame writer-phase grants; validation/message must never reach post/configuration/cleanup writes) |
 | §7.5 Market | core 0x5D/0x59 records; Market contract updates in the services batch |
 
-### 16.3 Cross-kernel invariants to verify (fixture matrix)
+### 16.3 Native invariants to verify (fixture matrix)
 
 The full matrix is `tests/fixtures/sa-module-protocol/README.md` (from design
 report §5.4): multi-instance same-address installs; validator swap cannot skip
@@ -931,9 +839,7 @@ market-sale replay; subId re-creation with fresh generations; unconsumed
 recovery-ticket replay across clear/setup (F-11); recovery without any plugin
 callback; no-plugin operation + built-in message signatures; contract custody
 cannot fake message signatures; gas overrun/non-return/whitelist paths in
-Verification and Application separately; migration fixtures for 53/407 real
-accounts, all legacy prefixes, MultiHook order, MultiSig threshold, nonce and
-epoch monotonicity, 0x12/0x1C invalidation, interrupted and repeated migration.
+Verification and Application separately; nonce and credential monotonicity.
 
 ## 17. Error codes
 
@@ -969,53 +875,32 @@ space). The constants files pin the spellings.
 | `SA_PHASE_VIOLATION` | callback invoked outside its writer phase |
 | `SA_GAS_BUDGET_EXCEEDED` | callback exceeded its §11 budget (fail-closed) |
 | `SA_MESSAGE_INVALID` | message envelope failed (returns magic-invalid, may also throw on malformed input) |
-| `SA_MIGRATION_REQUIRED` | account not yet migrated; execution/message rejected |
 | `SA_MARKET_LOCKED` | 0x5D epoch binding mismatch for Market action |
 | `SA_UNAUTHORIZED` | caller/subject witness failure |
 
 ## 18. Event table
 
-Reused existing (AA-free) events: `AccountRegistered`, `ModuleInstalled`,
-`ModuleUpdateInitiated`, `ModuleUpdateConfirmed`, `ModuleUpdateCancelled`,
-`ModuleRemoved`, `MetadataUriUpdated`, `UserOpExecuted`,
-`EscapeInitiated`, `EscapeCancelled`, `EscapeFinalized`,
-`MarketEscrowEntered`, `MarketEscrowCancelled`, `MarketEscrowSettled`,
-`SponsoredUserOpExecuted`.
+These are the events emitted by the native SmartAccount contract. Parameter order and manifest types are part of the interface. For module notifications, identify the emitting contract separately.
 
-`VerifyScopeTargetSet` is **retired** with the F-1 fix.
-
-New module-model events (display names pinned in the constants files; payload
-order fixed):
-
-| Event | Payload |
+| Event | Parameters |
 | --- | --- |
-| `ModuleInstanceInstalled` | accountId, moduleId, moduleType, contractHash, credentialGeneration |
-| `ModuleInstanceConfigured` | accountId, moduleId, credentialGeneration |
-| `ModuleInstanceRemoved` | accountId, moduleId |
-| `ModuleCodeRebound` | accountId, moduleId, bindingDigest |
-| `HookOrderSet` | accountId, hookOrderRevision, hookIds |
-| `ThresholdPolicySet` | accountId, policyId, threshold, memberIds |
-| `ConfigurationIntentProposed` | accountId, intentId, actionCount, actionDigest |
-| `ConfigurationIntentConfirmed` | accountId, intentId, configurationNonce |
-| `ConfigurationIntentCancelled` | accountId, intentId |
-| `ConfigurationIntentExpired` | accountId, intentId |
-| `CredentialRevoked` | accountId, moduleId, credentialGeneration |
-| `NonceChannelOpened` | accountId, channelDigest |
-| `NonceChannelExhausted` | accountId, channelDigest |
-| `MessageSubjectUpdated` | accountId, subjectCount, threshold, subjectRevision |
-| `AccountFrozen` | accountId, authorityEpoch |
-| `AccountUnfrozen` | accountId, authorityEpoch |
-| `RecoveryInitiated` | accountId, newCustody, matureAt |
-| `RecoveryCancelled` | accountId |
-| `RecoveryExecuted` | accountId, authorityEpoch, configurationNonce |
-| `MarketControlEpochBound` | accountId, listingId, controlEpoch |
-| `MarketLockInvalidated` | accountId, controlEpoch |
-| `CoreRecoveryRecorded` | accountId, matureAt |
-| `MigrationRequired` | accountId, legacyModuleCount |
-| `MigrationImported` | accountId, manifestDigest, classification |
-
-Every lifecycle transition emits exactly one event; install/uninstall failure
-throws (no partial-commit event pair).
+| `AccountRegistered` | `accountId: Hash160`, `custody: Hash160` |
+| `ModuleInstalled` | `accountId: Hash160`, `moduleType: String`, `moduleHash: Hash160` |
+| `ModuleRemoved` | `accountId: Hash160`, `moduleType: String`, `moduleHash: Hash160` |
+| `UserOpExecuted` | `accountId: Hash160`, `targetContract: Hash160`, `method: String`, `nonce: Integer` |
+| `ModuleInstanceInstalled` | `accountId: Hash160`, `moduleId: Integer`, `moduleType: Integer`, `contractHash: Hash160`, `credentialGeneration: Integer` |
+| `ModuleInstanceRemoved` | `accountId: Hash160`, `moduleId: Integer` |
+| `NonceChannelOpened` | `accountId: Hash160`, `channelDigest: ByteArray` |
+| `NonceChannelExhausted` | `accountId: Hash160`, `channelDigest: ByteArray` |
+| `AccountFrozen` | `accountId: Hash160`, `authorityEpoch: Integer` |
+| `AccountUnfrozen` | `accountId: Hash160`, `authorityEpoch: Integer` |
+| `ModuleCredentialsRevoked` | `accountId: Hash160`, `moduleId: Integer`, `credentialGeneration: Integer` |
+| `RecoveryPolicySet` | `accountId: Hash160`, `recoveryAuthority: Hash160`, `recoveryTimelockMs: Integer`, `ownerOnlyRecovery: Boolean` |
+| `AccountReset` | `accountId: Hash160`, `custody: Hash160`, `authorityEpoch: Integer` |
+| `BuiltinAuthorizationSet` | `accountId: Hash160`, `defaultOperationAuthorization: Boolean`, `defaultMessageAuthorization: Boolean` |
+| `ThresholdPolicySet` | `accountId: Hash160`, `policyId: Integer`, `threshold: Integer`, `memberIds: Array` |
+| `MessageSubjectUpdated` | `accountId: Hash160`, `subjectCount: Integer`, `threshold: Integer`, `subjectRevision: Integer` |
+| `ModuleInstanceConfigured` | `accountId: Hash160`, `moduleId: Integer`, `credentialGeneration: Integer` |
 
 ---
 
@@ -1025,7 +910,7 @@ throws (no partial-commit event pair).
 
 ### Executive Summary
 
-This guide is for developers building protocol v4 validator or hook modules for the Neo N3 Smart
+This guide is for developers building the protocol validator or hook modules for the Neo N3 Smart
 Account ecosystem. It covers security best practices, common vulnerabilities, and the interfaces the
 core enforces at install and call time.
 
@@ -1113,9 +998,9 @@ public interface IModuleLifecycle
     // digest the core recomputes and binds at install (spec §12).
     string GetModuleProfile();
 
-    void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData);
-    void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData);
-    void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData);
+    void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData);
+    void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData);
+    void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData);
 }
 
 public interface IValidatorModule : IModuleLifecycle
@@ -1152,7 +1037,7 @@ outside its role, or a profile the core cannot re-hash, is rejected before it is
 installed. Manifest presence proves only the callable surface; it does not prove the
 method's cryptographic or storage semantics, so new modules still require an audited
 implementation and concrete runtime/refinement evidence. Composition is core-owned:
-protocol v4 replaced composite verifiers with the core threshold policy and composite hooks
+the protocol replaced composite verifiers with the core threshold policy and composite hooks
 with `hookOrder`, so `MultiSigValidator` validates one configured child signer and
 `MultiHook` rejects new installs. These checks are ABI/profile/lifecycle guards, not proofs
 of cryptographic independence or arbitrary future-module storage semantics.
@@ -1296,7 +1181,7 @@ state from a caller-controlled value, and a hook that returns more than 512 byte
 core's runtime suite verifies both the positive target path and rejection of an unlisted target
 through the real NeoVM callback path.
 
-`onUninstall(accountId, moduleId, generation, deInitData)` is a mandatory lifecycle method for both
+`onUninstall(accountId, moduleId, moduleType, deInitData)` is a mandatory lifecycle method for both
 validator and hook modules. It must delete every instance-scoped key owned by the module
 (`HookAuthority.DeleteInstancePrefix` or `ValidatorAuthority.DeleteInstancePrefix` per prefix) and
 must fault on an internal cleanup failure. It must also be idempotent for an instance the module
@@ -1454,7 +1339,7 @@ public static void PostCheck(UInt160 accountId, object[] operation, object resul
 
 ```csharp
 // REQUIRED at the head of every exported callback
-public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
 {
     ValidatorAuthority.RequireLifecycle(accountId, moduleId);
     // ... actual storage, keyed by InstanceKey(prefix, accountId, moduleId) ...
@@ -1630,7 +1515,7 @@ For official plugin listing, provide:
 - **Hook Examples:**
   - `contracts/plugins/hooks/WhitelistHook.cs`
   - `contracts/plugins/hooks/DailyLimitHook.cs`
-  - `contracts/plugins/hooks/MultiHook.cs` (rejects new installs; kept as migration evidence)
+  - `contracts/plugins/hooks/MultiHook.cs` (installation is rejected)
 
 ---
 
@@ -1665,7 +1550,7 @@ Follow these principles, and your plugin will be a secure, auditable component o
 
 ## Frontend module chooser guide
 
-Protocol v4 installs **modules** into an account instead of binding a single `verifier` contract.
+SmartAccount installs **modules** into an account instead of binding a single `verifier` contract.
 The module whose job is to decide authorization is a **validator** (the ERC-7579 term the protocol
 now uses); the modules that narrow what the account may do are **hooks**. The old `verifier` binding
 surface is removed without an alias, and the identity-only witness entry `verify` survives because
@@ -1673,16 +1558,17 @@ the proxy script embeds it.
 
 Module kinds are one-byte codes:
 
-| Type | Name | v4 |
+| Type | Name | |
 | --- | --- | --- |
 | 1 | validator | supported |
-| 2 | executor | rejected by `supportsModuleType` |
-| 3 | fallback handler | rejected by `supportsModuleType` |
+| 2 | executor | installation rejected |
+| 3 | fallback handler | installation rejected |
 | 4 | hook | supported |
+| 5 | recovery seat | one per account |
 
 ### Choose In Layers
 
-Treat an SA policy stack as three layers, installed in this order:
+A basic account needs no modules to receive or transfer assets. Add the following roles as needed:
 
 1. **Validator layer** — decides **who may authorize** an operation.
    The built-in route (the custody witness) always exists and is gated by the default policy, so an
@@ -1706,9 +1592,10 @@ Treat an SA policy stack as three layers, installed in this order:
    - `TokenRestrictedHook`
    - `NeoDIDCredentialHook`
 
-3. **Recovery path** — the core owns recovery: the custody witness can self-rescue, and an optional
-   recovery authority takes over only after the account's 7–90 day timelock. Recovery is not a
-   module; it removes modules and policies callback-free once it matures.
+3. **Recovery seat** — install `RecoveryModule` and set the delay in advance. Custody or the
+   configured recovery authority may start a request; a proposed new custodian must also consent.
+   Once the delay elapses, anyone can submit the approved reset through the seat. The core then
+   removes modules and policies without calling their uninstall callbacks.
 
 `MultiHook` is retired: installing it is rejected, and the migrated hook order lives in the core
 `hookOrder` list instead. `ZKEmailVerifier` is a disabled template — every callback fails closed, so
@@ -1716,10 +1603,9 @@ it is not an installable production validator.
 
 #### Validator notes
 
-- `MultiSigValidator` is a threshold *policy* now: one key per instance (`setMemberKey`), the member
-  set and threshold live in core state, and orchestration plus approval receipts are core-owned.
-  A threshold is 1–10 members over one layer — the members may share a key or a controller, so a
-  threshold counts modules, not independent humans.
+- Each `MultiSigValidator` instance supplies one member key. To require a quorum even for custody,
+  enroll distinct member keys in the mandatory threshold policy through governance. The threshold
+  counts keys; a wallet cannot infer how many independent people control them.
 - `SessionKeyValidator` instances are isolated: each instance owns one credential set, granted with
   `setSessionKey` and withdrawn with `clearSessionKey`. The cap is enforced on the `transfer` method
   only, so a wildcard method with a zero cap is a value-uncapped delegation.
@@ -1743,7 +1629,7 @@ it is not an installable production validator.
 
 #### High-Value Treasury
 
-- Validator: `MultiSigValidator` (threshold 2–10)
+- Spending: install the recovery seat and distinct member instances, then enroll the mandatory threshold policy
 - Hook: `TokenRestrictedHook`
 - Recovery: separate recovery authority with a 90 day timelock
 
@@ -1760,13 +1646,14 @@ core:
 
 1. `installModule(accountId, moduleType, moduleContractHash, initData)` installs one instance in the
    current transaction; `removeModule(accountId, moduleId, deInitData)` uninstalls it. Both accept the
-   custody witness or the witness of an already installed validator instance.
+   custody witness or a code-bound installed validator's witness before mandatory threshold enrollment.
+   Once enrolled, custody cannot use direct administration to restore single-signature spending.
 2. A registration action is the positional vector `[1, moduleType, moduleHash, profileDigest,
    initData]` — the install code, the module type, the module hash, the profile digest the core
    compares and the install data. Its uninstall companion is `[2, moduleId, deInitData]`.
-3. The core executes no other action code. A delay, a maturity window and a multi-action batch belong
-   to a governance module, which collects them and then calls the two methods above; the core itself
-   applies each call atomically or not at all.
+3. For an existing active account, use `applyConfigurationActions` to combine install, remove,
+   built-in authorization and recovery policy in one atomic update (§10). Direct administration
+   is immediate; the standard governance module owns proposal, maturity and confirmation.
 
 A module instance is identified by `(accountId, moduleId)`, never by contract address. `moduleId` is
 allocated once per account from 1 (0 is the built-in route) and is never reused, so an uninstalled
@@ -1778,16 +1665,17 @@ intent and 16 unresolved intents per account. Enumeration reads page at most 32 
 
 ### Module Commands
 
-Install data, configure data and uninstall data are `[command, ...args]` arrays. Each module owns its
-vocabulary; the core only enforces the array bound and the lifecycle gas budget.
+For the configurable validators and hooks below, a non-empty install payload uses the same
+`[command, ...args]` encoding as configuration. Empty install data skips initial configuration.
+Uninstall data is a separate lifecycle argument; it does not dispatch a configuration command.
 
 | Module | Commands |
 | --- | --- |
 | `P256Validator`, `Web3AuthValidator`, `TeeKeyValidator` | `setPublicKey` — 33-byte compressed or 65-byte uncompressed, stored compressed |
 | `NeoWitnessValidator` | `setSigners` — signer set plus threshold |
 | `MultiSigValidator` | `setMemberKey` — one key per instance |
-| `SessionKeyValidator` | `setSessionKey` — key, target, method, expiry, cap, subId; `clearSessionKey` |
-| `SubscriptionValidator` | `createSubscription` — key, payee, token, amount, period; `cancelSubscription` |
+| `SessionKeyValidator` | `setSessionKey` — key, target, method, expiry in milliseconds, spending cap, description; `clearSessionKey` |
+| `SubscriptionValidator` | `createSubscription` takes the raw subscription ID, merchant, token, amount cap and period in seconds; `cancelSubscription` takes the same ID |
 | `DelegatedIdentityValidator` | `setConfig` — public key, provider, master nullifier |
 | `ActionSessionValidator` | `setRecoveryService`; `clearRecoveryService` |
 | `DailyLimitHook` | `setDailyLimit` — token, max amount, rolling-window flag; `clearDailyLimit` |
@@ -1796,7 +1684,7 @@ vocabulary; the core only enforces the array bound and the lifecycle gas budget.
 | `NeoDIDCredentialHook` | `requireCredential` — target, provider, claim type, commitment; `clearRequirement` |
 | `MultiHook` | none — retired, installation rejected |
 
-`DailyLimitHook` meters the account id, not the derived virtual address, and usage accrues only
+`DailyLimitHook` meters the asset balance of the account's derived proxy address, and usage accrues only
 after a successful execution. `NeoDIDCredentialHook` stores no local credential flags: the credential
 must exist on the configured `NeoDIDRegistry`, and the commitment must be the 32-byte commitment
 registered for that provider and claim type.

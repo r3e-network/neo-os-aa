@@ -6,7 +6,7 @@
 
 custom 已部署 `SmartAccount` 仍来自已测试主分支的 `public` 实现；其独立的 `PLATFORM` 构建保留 10 GAS 的有界验证器回调。两者都不是原生 SmartAccount 合约。原生 ABI 2 使用 1 GAS 验证器预算（位于 1.5 GAS 验证信封之内）、2.5 GAS 钩子 / 维护预算，以及显式的能识别 epoch 的模块打包。
 
-原生恢复现在要求经过检查的权限 epoch 与配置 nonce 推进，在不调用旧模块的情况下摘除旧根 / 依赖，并保持身份、资产地址、执行 nonce 与冻结状态不变。所有模块存储使用 `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`。原生四参数执行信封在未签名交易脚本中承诺这两个计数器，覆盖托管回退与原生交易见证；操作签名原像同样绑定它们。上一代密钥或签名无法通过重新安装模块而恢复。这与 `contracts/build/` 下固定版本工件携带的上一代逃生通道不同，后者的旧模块清理仍可能失败关闭。当前源码还提供无需回调的恢复通道 `beginRecovery` / `cancelRecovery` / `executeRecovery`（通过 `getRecoveryStatus` 读回）：到期后轮换托管权、在完全不调用插件的情况下清扫全部模块行，并推进 authority epoch；它不提供原生 epoch 模块的重新安装。规范规则见 `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`。
+原生恢复现在要求经过检查的权限 epoch 与配置 nonce 推进，在不调用旧模块的情况下摘除旧根 / 依赖，并保持身份、资产地址、执行 nonce 与冻结状态不变。所有模块存储使用 `0xA2 || policyPrefix || accountIdLE20 || authorityEpochLE64 || suffix`。原生四参数执行信封在未签名交易脚本中承诺这两个计数器，覆盖托管回退与原生交易见证；操作签名原像同样绑定它们。上一代密钥或签名无法通过重新安装模块而恢复。这与 `contracts/build/` 下固定版本工件携带的上一代逃生通道不同，后者的旧模块清理仍可能失败关闭。当前源码还提供无需回调的恢复通道 `beginRecovery` / `cancelRecovery` / `executeRecovery`（通过 `getRecoveryStatus` 读回）：到期后轮换托管权、在完全不调用插件的情况下清扫全部模块行，并推进 authority epoch；它不提供原生 epoch 模块的重新安装。规范规则见 `docs/archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`。
 
 修订后的原生组合路径使用核心持有的、单操作回执：只有达到阈值的前若干个有效子项获得执行后权限。校验与执行后阶段仍会检查当前策略与所有活跃绑定固定值；Application 回执会重新创建，绝不复用 Verification 或另一个操作的回执。模块要求确切的当前配置指纹与显式的 Boolean 验证器组合标记。已发布的原生 P-256 配置把会话密钥与其标准账户见证映射到同一签名域，防止这两种表示提供彼此独立的投票。该规则并不建立对任意脚本账户的独立控制。
 

@@ -1,0 +1,58 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "remoteMain": "66b1715894f1eb38354ccc02f6cbdeb1c29911aa",
+  "targets": {
+    "archive": {
+      "abiEntries": 100,
+      "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+      "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+      "methods": [
+        "getMarketEscrowListingId",
+        "getAdminTransferAvailableAt",
+        "getPlatformRegistrarAvailableAt"
+      ],
+      "kernelChecked": true,
+      "calls": 42,
+      "certificateSha256": "0ad5757ddde007d1811d0dd55f924ab901162feceb31bd6f1349a37a278bb1ac",
+      "runtimeSha256": "4c8909091ae23177e32c3f16b948180d27607c7998c041442673ea0dbac5bc1f"
+    },
+    "main": {
+      "abiEntries": 90,
+      "nefSha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+      "manifestSha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+      "methods": [
+        "getMarketEscrowListingId",
+        "getAdminTransferAvailableAt",
+        "getPlatformRegistrarAvailableAt"
+      ],
+      "kernelChecked": true,
+      "calls": 42,
+      "certificateSha256": "696be250639a877fb2d694b95ae68af03ac1da3042b9981d3738934f9cd8e524",
+      "runtimeSha256": "36dbab229ce4ec930857ffde6d2d4161d18364724339ff25500df6cc04554f5d"
+    }
+  },
+  "models": {
+    "IntegerSemantics": "b2d8cfb443115bdda59c52abc04022ebd4b0bbea0a13f122f12ec7a0b891425c",
+    "CapArithmetic": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "CapMethodVm": "cffee42ebb1dbacdf49a97c9213472026e3481fc122472f94911abda7e62dfb9",
+    "CapContext": "3fab1800231f6698890ac60ce74bd2514faca174ec4ed64e2be00cb403337995",
+    "NumericCoercions": "2c9ec6bccb5930280bdbd99cada7704775211c0ec79662be49e94cb6408963fe",
+    "StorageGetter": "25a86e8b269e21e7221717de704632a7efbfd4f3ef954a589fd91e8a293f4126",
+    "StorageGetterVm": "2ec3f78682ecf98d787f467a9354661214e47fe2411ccee6ce8d32b2f59ba629"
+  },
+  "sources": {
+    "ordinary_stored_integers.py": "83ce70fd2da1cb55abd114a79827b02fd2a8c399a0342c94ba41832d330ea887",
+    "ordinary_query_references.py": "807d9fb92b8539d08d964656580040d22f4f53484429e58af82a0277374e8339",
+    "ordinary_initializer_proofs.py": "f93febdab0bacd857eca41bef23d582fc6d005efd85498e25ca7fc5383031014",
+    "ordinary_entry_proofs.py": "1efa6dd67dc1c0caa52d8588bbbda0f9ae49a8c7b859588ef28bbe2679bde2ec",
+    "nef_decode.py": "a2044eadec06c0f65bf9fe303dd156b88f54106a76dc7f4afb302b4124e60848",
+    "verify.py": "2737973f386c7da4570e705ede7e6fbc897cc61b401805b02fe8ece69af0a5f5",
+    "storage_getter_proofs.py": "93b446bb218429fde0cfba98d15b22da7bb82ef8191b01ee242e55fe0ae5d9b8",
+    "presence-probe/StoredIntegerCalls.cs": "075cc2f6af4ed392395ac184e4fe71f8745730287a7bdbe4650050c3006d6bcb",
+    "presence-probe/Program.cs": "8c7e8543c94f4470c8c75c34028bd3442660f537502065dd0bea874b31fc1875",
+    "presence-probe/PresenceProbe.csproj": "607b8f2f03522de35010a5712fdc91cff1bdb2344fb462983285fce37557943d",
+    "presence-probe/packages.lock.json": "8bb3696b4d1a659c7fc49825235c019a12bfdc4d955ec9b442d3cbf8f73881d3"
+  },
+  "scope": "Post-admission getter bodies under the storage-lookup and VM instruction model, initialized prefix and delay slots, signed conversion and addition. No arbitrary invocation, GAS, rollback, JIT or node refinement."
+}

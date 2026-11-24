@@ -389,6 +389,7 @@ export async function fetchNonce({
  */
 export function composeOperationNonce({ context, route, sequence, nonceSubkey = DEFAULT_NONCE_SUBKEY }) {
   const channel = smartAccountCodec.deriveNonceChannel(context, {
+    authorityEpoch: context.authorityEpoch,
     validatorId: route.validatorId,
     credentialGeneration: route.credentialGeneration,
     nonceSubkey,

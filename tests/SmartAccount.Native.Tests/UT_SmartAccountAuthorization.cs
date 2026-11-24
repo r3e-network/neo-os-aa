@@ -47,10 +47,17 @@ namespace Neo.UnitTests.SmartContract.Native
             ProfileBytes(name, isolation, hook ? "hook" : "validator");
 
         private static byte[] ProfileBytes(string name, bool isolation, string moduleType) =>
-            Encoding.UTF8.GetBytes(
-                $"{{\"profileVersion\":{SmartAccountModuleProtocol.ModuleProfileVersion}," +
-                $"\"moduleType\":\"{moduleType}\",\"contractName\":\"{name}\"," +
-                $"\"capabilities\":{{\"instanceIsolation\":{isolation.ToString().ToLowerInvariant()}}}}}");
+            System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                callbacks = moduleType switch
+                {
+                    "validator" => new[] { "validateUserOp", "onUserOpComplete" },
+                    "hook" => new[] { "preCheck", "postCheck" },
+                    _ => System.Array.Empty<string>()
+                },
+                capabilities = new { compositeLayer = 0, instanceIsolation = isolation, messageCapability = false, thresholdMemberEligible = false },
+                contractName = name, lifecycle = new[] { "onInstall", "onUninstall" }, moduleType, profileVersion = 1
+            });
 
         /// <summary>
         /// A deployed module: the profile and lifecycle callbacks every instance
@@ -59,10 +66,12 @@ namespace Neo.UnitTests.SmartContract.Native
         /// contract witness is the only authority those calls present.
         /// </summary>
         private static ContractState DeployModule(DataCache snapshot, int number, bool isolation = true,
-            bool hook = false, bool brokenReply = false, bool recovery = false, bool poisonAfterReset = false)
+            bool hook = false, bool brokenReply = false, bool recovery = false, bool poisonAfterReset = false,
+            Func<byte[], byte[]> alterProfile = null, int configureArity = 0, string manifestName = null)
         {
-            string name = $"Module{number}";
+            string name = manifestName ?? $"Module{number}";
             byte[] profile = ProfileBytes(name, isolation, recovery ? "recovery" : hook ? "hook" : "validator");
+            if (alterProfile != null) profile = alterProfile(profile);
 
             using var script = new ScriptBuilder();
             List<ContractMethodDescriptor> methods = new();
@@ -102,6 +111,10 @@ namespace Neo.UnitTests.SmartContract.Native
             }
 
             Method("getModuleProfile", ContractParameterType.String, true, builder => builder.EmitPush(profile));
+            if (configureArity > 0)
+                Method("configure", ContractParameterType.Void, false, _ => { },
+                    new[] { ContractParameterType.Hash160, ContractParameterType.Integer,
+                        ContractParameterType.Integer, ContractParameterType.Array }.Take(configureArity).ToArray());
             foreach (string lifecycle in new[] { "onInstall", "onUninstall" })
                 Method(lifecycle, ContractParameterType.Void, false, _ => { },
                     ContractParameterType.Hash160, ContractParameterType.Integer,
@@ -198,6 +211,85 @@ namespace Neo.UnitTests.SmartContract.Native
         {
             var key = new KeyBuilder(NativeContract.ContractManagement.Id, 8).Add(contract.Hash);
             snapshot.GetAndChange(key)!.GetInteroperable<ContractState>().UpdateCounter++;
+        }
+
+        [TestMethod]
+        [DataRow("\"compositeLayer\":0,", "")]
+        [DataRow("\"compositeLayer\":0", "\"compositeLayer\":2")]
+        [DataRow("\"messageCapability\":false", "\"messageCapability\":true")]
+        [DataRow("\"thresholdMemberEligible\":false", "\"thresholdMemberEligible\":true")]
+        [DataRow("\"postCheck\"", "\"preCheck\"")]
+        [DataRow("\"onUninstall\"", "\"onUninstall\",\"configure\"")]
+        [DataRow("\"profileVersion\":1", "\"profileVersion\":1.0")]
+        [DataRow("\"callbacks\":", "\"callbacks\": ")]
+        [DataRow("\"compositeLayer\":0", "\"compositeLayer\":0,\"compositeLayer\":0")]
+        public void InstallRefusesNonconformingHookWithoutConsumingAnInstance(string before, string after)
+        {
+            var snapshot = UT_SmartAccount.Snapshot();
+            var id = UT_SmartAccount.Register(snapshot);
+            var invalid = DeployModule(snapshot, 960, hook: true, alterProfile: bytes =>
+            {
+                string original = Encoding.UTF8.GetString(bytes);
+                string changed = original.Replace(before, after, StringComparison.Ordinal);
+                Assert.AreNotEqual(original, changed);
+                return Encoding.UTF8.GetBytes(changed);
+            });
+            int type = SmartAccountModuleProtocol.ModuleTypeCodeHook;
+            using var rejected = UT_SmartAccount.Invoke(snapshot, "installModule",
+                [id, type, invalid.Hash, new object[0]], signers: [UT_SmartAccount.Custody]);
+            Assert.AreEqual(VMState.FAULT, rejected.State);
+            Assert.DoesNotContain("ModuleInstanceInstalled", rejected.Notifications.Select(n => n.EventName));
+            var valid = DeployModule(snapshot, 961, hook: true);
+            Assert.AreEqual(BigInteger.One, UT_SmartAccount.Success(snapshot, "installModule",
+                [id, type, valid.Hash, new object[0]], signers: [UT_SmartAccount.Custody]).GetInteger());
+        }
+
+        [TestMethod]
+        public void InstallAgreesWithPublishedDiscoveryVectors()
+        {
+            var path = System.IO.Path.Combine(AppContext.BaseDirectory, "module-profile-vectors.json");
+            using var cases = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllBytes(path));
+            foreach (var vector in cases.RootElement.EnumerateArray())
+            {
+                var snapshot = UT_SmartAccount.Snapshot();
+                var id = UT_SmartAccount.Register(snapshot);
+                string label = vector.GetProperty("case").GetString();
+                string name = vector.GetProperty("manifestName").GetString();
+                byte[] wire = Encoding.UTF8.GetBytes(vector.GetProperty("profileText").GetString());
+                bool isHook = vector.GetProperty("role").GetString() == "hook";
+                bool accepted = vector.GetProperty("expectedAccepted").GetBoolean();
+                var module = DeployModule(snapshot, 963, hook: isHook, configureArity: 4,
+                    alterProfile: _ => wire, manifestName: name);
+                int type = isHook ? SmartAccountModuleProtocol.ModuleTypeCodeHook : SmartAccountModuleProtocol.ModuleTypeCodeValidator;
+                using var install = UT_SmartAccount.Invoke(snapshot, "installModule",
+                    [id, type, module.Hash, new object[0]], signers: [UT_SmartAccount.Custody]);
+                Assert.AreEqual(accepted ? VMState.HALT : VMState.FAULT, install.State, label + ": " + install.FaultException);
+                Assert.AreEqual(accepted ? 1 : 0, install.Notifications.Count(n => n.EventName == "ModuleInstanceInstalled"), label);
+                if (!accepted) continue;
+                var instance = install.ResultStack.Peek().GetInteger();
+                install.SnapshotCache.Commit();
+                Assert.AreEqual(vector.GetProperty("sha256").GetString(),
+                    Convert.ToHexStringLower(Descriptor(snapshot, id, instance)[6].GetSpan()), label);
+            }
+        }
+
+        [TestMethod]
+        [DataRow(false, 4, false)]
+        [DataRow(true, 4, true)]
+        [DataRow(false, 3, true)]
+        [DataRow(true, 3, false)]
+        public void InstallMatchesConfigurationDeclarationToDispatchArity(bool declared, int arity, bool accepted)
+        {
+            var snapshot = UT_SmartAccount.Snapshot();
+            var id = UT_SmartAccount.Register(snapshot);
+            var hook = DeployModule(snapshot, 962, hook: true, configureArity: arity,
+                alterProfile: bytes => declared ? Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes)
+                    .Replace("\"onUninstall\"", "\"onUninstall\",\"configure\"", StringComparison.Ordinal)) : bytes);
+            using var install = UT_SmartAccount.Invoke(snapshot, "installModule",
+                [id, SmartAccountModuleProtocol.ModuleTypeCodeHook, hook.Hash, new object[0]],
+                signers: [UT_SmartAccount.Custody]);
+            Assert.AreEqual(accepted ? VMState.HALT : VMState.FAULT, install.State, install.FaultException?.ToString());
+            Assert.AreEqual(accepted ? 1 : 0, install.Notifications.Count(n => n.EventName == "ModuleInstanceInstalled"));
         }
 
         [TestMethod]
@@ -402,9 +494,17 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.IsFalse(witnessed[7].GetBoolean(), "the validator witness closed the operation switch");
             Assert.IsFalse(witnessed[8].GetBoolean(), "the validator witness closed the message switch");
 
-            // With the validator removed the guard is back; closing the
-            // message switch still needs no routing subject.
-            UT_SmartAccount.Success(snapshot, "removeModule", [id, validatorId, new object[0]],
+            // R-11-12 also applies to direct administration. Removing the last
+            // validator alone cannot strand a closed built-in route.
+            using (var stranded = UT_SmartAccount.Invoke(snapshot, "removeModule",
+                [id, validatorId, new object[0]], signers: [UT_SmartAccount.Custody]))
+            {
+                Assert.AreEqual(VMState.FAULT, stranded.State);
+                Assert.Contains(SmartAccountModuleProtocol.ErrorBuiltinRouteRequired, stranded.FaultException!.ToString());
+            }
+            Assert.AreEqual(witnessed[5].GetInteger(), Control(snapshot, id)[5].GetInteger());
+            UT_SmartAccount.Success(snapshot, "applyConfigurationActions", [id, new object[]
+                { new object[] { 2, validatorId, new object[0] }, new object[] { 5, true, false } }],
                 signers: [UT_SmartAccount.Custody]);
             using (var lastRouteAgain = UT_SmartAccount.Invoke(snapshot, "setBuiltinAuthorization",
                 [id, false, true], signers: [UT_SmartAccount.Custody]))
@@ -450,20 +550,18 @@ namespace Neo.UnitTests.SmartContract.Native
             }
             UT_SmartAccount.Success(snapshot, "unfreezeAccount", [id], signers: [UT_SmartAccount.Custody]);
 
-            // Migration is answered with the generic account-status error: the
-            // account must be Active to re-route. No public write path reaches
-            // this state, so the 0x51 record is planted directly.
+            // An undefined stored status must fail decoding before authorization.
             var controlKey = new StorageKey { Id = NativeContract.SmartAccount.Id,
                 Key = SmartAccountProtocol.GetAccountControlKey(id) };
             AccountControl planted = AccountControl.Decode(snapshot.GetAndChange(controlKey)!.Value);
-            planted.Status = SmartAccountStatus.MigrationRequired;
+            planted.Status = (SmartAccountStatus)2;
             snapshot.GetAndChange(controlKey)!.Value = planted.Serialize();
             using (var migrating = UT_SmartAccount.Invoke(snapshot, "setBuiltinAuthorization",
                 [id, true, true], signers: [UT_SmartAccount.Custody]))
             {
                 Assert.AreEqual(VMState.FAULT, migrating.State,
-                    "a migration-required account refuses the landing write");
-                Assert.Contains(SmartAccountModuleProtocol.ErrorAccountStatus,
+                    "an undefined status refuses the landing write");
+                Assert.Contains("account status is not defined",
                     migrating.FaultException!.ToString());
             }
         }
@@ -708,7 +806,7 @@ namespace Neo.UnitTests.SmartContract.Native
             object[] Args(BigInteger timelock, bool ownerOnly) => [id, authority, timelock, ownerOnly];
 
             using (var foreign = UT_SmartAccount.Invoke(snapshot, "setRecoveryPolicy",
-                Args(min, true), signers: [ForeignCustody]))
+                Args(min, false), signers: [ForeignCustody]))
             {
                 Assert.AreEqual(VMState.FAULT, foreign.State,
                     "Only the administration family writes the recovery policy.");
@@ -720,7 +818,7 @@ namespace Neo.UnitTests.SmartContract.Native
             // witnessless caller learns the account is frozen, not unauthorized.
             UT_SmartAccount.Success(snapshot, "freezeAccount", [id], signers: [UT_SmartAccount.Custody]);
             using (var frozen = UT_SmartAccount.Invoke(snapshot, "setRecoveryPolicy",
-                Args(min, true), signers: [ForeignCustody]))
+                Args(min, false), signers: [ForeignCustody]))
             {
                 Assert.AreEqual(VMState.FAULT, frozen.State);
                 Assert.Contains(SmartAccountModuleProtocol.ErrorAccountFrozen,
@@ -746,16 +844,16 @@ namespace Neo.UnitTests.SmartContract.Native
             }
 
             BigInteger nonceBefore = Control(snapshot, id)[5].GetInteger();
-            using (var unaccepted = UT_SmartAccount.Invoke(snapshot, "setRecoveryPolicy", Args(min, true),
+            using (var unaccepted = UT_SmartAccount.Invoke(snapshot, "setRecoveryPolicy", Args(min, false),
                 signers: [UT_SmartAccount.Custody]))
                 Assert.AreEqual(VMState.FAULT, unaccepted.State, "The incoming authority must consent.");
             Assert.AreEqual(nonceBefore, Control(snapshot, id)[5].GetInteger());
-            UT_SmartAccount.Success(snapshot, "setRecoveryPolicy", Args(min, true),
+            UT_SmartAccount.Success(snapshot, "setRecoveryPolicy", Args(min, false),
                 signers: [UT_SmartAccount.Custody, authority]);
             Array landed = Control(snapshot, id);
             Assert.AreEqual(authority, new UInt160(landed[3].GetSpan()));
             Assert.AreEqual(min, landed[6].GetInteger());
-            Assert.IsTrue(landed[9].GetBoolean(), "ownerOnlyRecovery is recorded verbatim");
+            Assert.IsFalse(landed[9].GetBoolean(), "the reserved owner-only field stays false");
             Assert.AreEqual(nonceBefore + 1, landed[5].GetInteger(),
                 "the landing write advances the configuration nonce");
 
@@ -771,6 +869,40 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.AreEqual(max, relayed[6].GetInteger(),
                 "the module witness lands the action-8 write too");
             Assert.IsFalse(relayed[9].GetBoolean());
+        }
+
+        /// <summary>
+        /// The 0x51 owner-only field is a layout reservation, not a permission
+        /// switch. No entry or governance action may write true, and no client
+        /// may present it as a promise that only the owner can recover.
+        /// </summary>
+        [TestMethod]
+        public void ReservedOwnerOnlyRecoveryInputIsRejected()
+        {
+            var snapshot = UT_SmartAccount.Snapshot();
+            UInt160 id = UT_SmartAccount.Register(snapshot);
+            UInt160 authority = UInt160.Parse("0x0505050505050505050505050505050505050505");
+            BigInteger min = AccountControl.RecoveryTimelockMinMs;
+            BigInteger nonceBefore = Control(snapshot, id)[5].GetInteger();
+
+            using (var direct = UT_SmartAccount.Invoke(snapshot, "setRecoveryPolicy",
+                       [id, authority, min, true], signers: [UT_SmartAccount.Custody, authority]))
+            {
+                Assert.AreEqual(VMState.FAULT, direct.State);
+                Assert.Contains(SmartAccountModuleProtocol.ErrorOperationMalformed,
+                    direct.FaultException!.ToString());
+            }
+            using (var batch = UT_SmartAccount.Invoke(snapshot, "applyConfigurationActions",
+                       [id, new object[] { new object[] { 8, authority, min, true } }],
+                       signers: [UT_SmartAccount.Custody, authority]))
+            {
+                Assert.AreEqual(VMState.FAULT, batch.State);
+                Assert.Contains(SmartAccountModuleProtocol.ErrorOperationMalformed,
+                    batch.FaultException!.ToString());
+            }
+            Assert.AreEqual(nonceBefore, Control(snapshot, id)[5].GetInteger(),
+                "a rejected reserved-bit write commits no configuration change");
+            Assert.IsFalse(Control(snapshot, id)[9].GetBoolean());
         }
 
         /// <summary>
@@ -931,11 +1063,6 @@ namespace Neo.UnitTests.SmartContract.Native
             var routed = UT_SmartAccount.Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7],
                 nonce: routedNonce, sign: false, validatorId: validatorId);
             Assert.IsInstanceOfType<ByteString>(UT_SmartAccount.Success(snapshot, "executeUserOp", [id, routed]));
-            byte[] legacy = new byte[1 + UInt160.Length];
-            legacy[0] = SmartAccountModuleProtocol.PrefixMigrationState;
-            id.ToArray().CopyTo(legacy, 1);
-            snapshot.Add(new StorageKey { Id = NativeContract.SmartAccount.Id, Key = legacy },
-                new StorageItem(new byte[16]));
             // Positive controls: the routed operation left a nonce cursor and
             // the channel left a namespace digest — the reset must take both.
             Assert.IsGreaterThan(0, CountUnder(snapshot, id, 0x56));
@@ -984,7 +1111,6 @@ namespace Neo.UnitTests.SmartContract.Native
                 Assert.Contains(SmartAccountModuleProtocol.ErrorValidatorNotFound,
                     channel.FaultException!.ToString());
             }
-            Assert.IsNull(snapshot.TryGet(new StorageKey { Id = NativeContract.SmartAccount.Id, Key = legacy }));
             Assert.AreEqual(0, CountUnder(snapshot, id, 0x52), "no module record survives the reset");
             Assert.AreEqual(0, CountUnder(snapshot, id, 0x53), "no index row survives the reset");
             Assert.AreEqual(0, CountUnder(snapshot, id, 0x56), "the nonce cursors are gone");

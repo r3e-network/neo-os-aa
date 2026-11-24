@@ -33,11 +33,12 @@ namespace SmartAccount.Validators
     /// </remarks>
     [DisplayName("SubscriptionValidator")]
 #if SMARTACCOUNT_NATIVE
-    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "getAuthorizedModuleId", "getAccountAddress")]
-    [ManifestExtra("SmartAccountProfile", "native-v4")]
+    [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "getAuthorizedModuleId", "getAccountAddress", "getModule")]
+    [ManifestExtra("SmartAccountProfile", "native-smartaccount")]
 #else
     [ContractPermission("*", "getAuthorizedModuleId")]
     [ContractPermission("*", "getProxyScriptHash")]
+    [ContractPermission("*", "getModule")]
 #endif
     [ManifestExtra("Description", "Time-based subscription auto-payment validator")]
     public class SubscriptionValidator : SmartContract
@@ -45,10 +46,10 @@ namespace SmartAccount.Validators
         // Canonical bytes of SubscriptionValidator.profile.json (scripts/sync-module-profiles.mjs).
         private const string ModuleProfileJson = "{\"callbacks\":[\"validateUserOp\",\"onUserOpComplete\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"SubscriptionValidator\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"validator\",\"profileVersion\":1}";
 
-        // (accountId, moduleId) ‖ subId -> serialized
+        // (accountId, moduleId) ‖ SHA-256(subId) -> serialized
         //   [merchant, token, amount, periodSeconds, credentialGeneration]
         private static readonly byte[] Prefix_Subscription = new byte[] { 0x01 };
-        // (accountId, moduleId) ‖ subId -> last charged billing period
+        // Same suffix -> [chargedAtSeconds, periodSecondsAtCharge].
         private static readonly byte[] Prefix_LastChargedPeriod = new byte[] { 0x02 };
 
         private const int RecordFieldCount = 5;
@@ -81,10 +82,10 @@ namespace SmartAccount.Validators
         /// <summary>
         /// <c>initData</c>: empty, or one <c>createSubscription</c> command.
         /// </summary>
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
-            if (initData.Length > 0) ApplyConfig(accountId, moduleId, generation, initData);
+            if (initData.Length > 0) ApplyConfig(accountId, moduleId, initData);
         }
 
         /// <summary>
@@ -92,25 +93,28 @@ namespace SmartAccount.Validators
         /// <c>["createSubscription", subId, merchant, token, amount, periodSeconds]</c>
         /// or <c>["cancelSubscription", subId]</c>.
         /// </summary>
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
-            ApplyConfig(accountId, moduleId, generation, configData);
+            ApplyConfig(accountId, moduleId, configData);
         }
 
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             ModuleContext.DeleteInstancePrefix(Prefix_Subscription, accountId, moduleId);
             ModuleContext.DeleteInstancePrefix(Prefix_LastChargedPeriod, accountId, moduleId);
         }
 
-        private static void ApplyConfig(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] data)
+        private static void ApplyConfig(UInt160 accountId, BigInteger moduleId, object[] data)
         {
             string command = ModuleConfig.Name(data);
             if (command == "createSubscription")
             {
                 ModuleConfig.RequireArgs(data, 5);
+                ExecutionEngine.Assert(data[4] is BigInteger && data[5] is BigInteger,
+                    "Subscription amount and period must be integers");
+                BigInteger generation = ValidatorAuthority.CredentialGeneration(accountId, moduleId);
                 CreateSubscription(accountId, moduleId, generation, (ByteString)data[1], (UInt160)data[2],
                     (UInt160)data[3], (BigInteger)data[4], (BigInteger)data[5]);
                 return;
@@ -157,11 +161,9 @@ namespace SmartAccount.Validators
             if (subId == null || subId.Length == 0 || subId.Length > MaxSubIdLength) return new object[0];
             object[] record = ReadRecord(accountId, moduleId, subId);
             if (record.Length != RecordFieldCount) return new object[0];
-            ByteString? last = Storage.Get(Storage.CurrentContext,
-                RecordKey(Prefix_LastChargedPeriod, accountId, moduleId, subId));
             object[] result = new object[RecordFieldCount + 1];
             for (int i = 0; i < RecordFieldCount; i++) result[i] = record[i];
-            result[RecordFieldCount] = last == null ? BigInteger.Zero : (BigInteger)last;
+            result[RecordFieldCount] = LastPeriod(ReadCharge(accountId, moduleId, subId));
             return result;
         }
 
@@ -169,9 +171,18 @@ namespace SmartAccount.Validators
         public static BigInteger GetLastChargedPeriod(UInt160 accountId, BigInteger moduleId, ByteString subId)
         {
             if (subId == null || subId.Length == 0 || subId.Length > MaxSubIdLength) return 0;
-            ByteString? last = Storage.Get(Storage.CurrentContext,
+            return LastPeriod(ReadCharge(accountId, moduleId, subId));
+        }
+
+        private static BigInteger LastPeriod(object[] charge) =>
+            charge.Length == 0 ? BigInteger.Zero : (BigInteger)charge[0] / (BigInteger)charge[1];
+
+        private static object[] ReadCharge(UInt160 accountId, BigInteger moduleId, ByteString subId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext,
                 RecordKey(Prefix_LastChargedPeriod, accountId, moduleId, subId));
-            return last == null ? 0 : (BigInteger)last;
+            if (data == null) return new object[0];
+            return (object[])StdLib.Deserialize(data);
         }
 
         // Subscription authorization is a merchant witness selected dynamically by the
@@ -227,11 +238,15 @@ namespace SmartAccount.Validators
 
             BigInteger periodSeconds = (BigInteger)record[3];
             if (periodSeconds <= 0) return false;
-            BigInteger currentPeriod = Now() / (periodSeconds * 1000);
-            if (currentPeriod <= 0) return false;
-            ByteString? last = Storage.Get(Storage.CurrentContext,
-                RecordKey(Prefix_LastChargedPeriod, accountId, moduleId, subId));
-            return currentPeriod > (last == null ? BigInteger.Zero : (BigInteger)last);
+            BigInteger now = Now() / 1000;
+            BigInteger currentPeriod = now / periodSeconds;
+            if (currentPeriod == 0) return false;
+            object[] charge = ReadCharge(accountId, moduleId, subId);
+            if (charge.Length == 0) return true;
+            BigInteger bookedAt = (BigInteger)charge[0];
+            if (currentPeriod <= bookedAt / periodSeconds) return false;
+            BigInteger bookedDuration = (BigInteger)charge[1];
+            return bookedDuration == periodSeconds || now / bookedDuration > bookedAt / bookedDuration;
         }
 
         /// <summary>
@@ -254,9 +269,8 @@ namespace SmartAccount.Validators
 
             BigInteger periodSeconds = (BigInteger)record[3];
             ExecutionEngine.Assert(periodSeconds > 0, "Invalid subscription period");
-            BigInteger currentPeriod = Now() / (periodSeconds * 1000);
             Storage.Put(Storage.CurrentContext, RecordKey(Prefix_LastChargedPeriod, accountId, moduleId, subId!),
-                currentPeriod);
+                StdLib.Serialize(new object[] { Now() / 1000, periodSeconds }));
         }
 
         private static object[] ReadRecord(UInt160 accountId, BigInteger moduleId, ByteString subId)
@@ -273,7 +287,7 @@ namespace SmartAccount.Validators
 
         private static byte[] RecordKey(byte[] prefix, UInt160 accountId, BigInteger moduleId, ByteString subId)
         {
-            return Helper.Concat(ValidatorAuthority.InstanceKey(prefix, accountId, moduleId), (byte[])subId);
+            return Helper.Concat(ValidatorAuthority.InstanceKey(prefix, accountId, moduleId), (byte[])CryptoLib.Sha256(subId));
         }
 
         private static BigInteger Now()

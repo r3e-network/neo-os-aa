@@ -58,6 +58,24 @@ namespace Neo.SmartContract.Native
                 throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
             _hookGasSpent[accountId] = _hookGasSpent.GetValueOrDefault(accountId) + spent;
         }
+        // Keep independent validation and completion balances across all operations
+        // in this engine, including two calls entered from separate script frames.
+        private readonly Dictionary<(UInt160, SmartAccountCallbackPhase), long> _validatorGasSpent = new();
+
+        internal long ValidatorGasRemaining(UInt160 accountId, SmartAccountCallbackPhase phase) =>
+            (phase switch
+            {
+                SmartAccountCallbackPhase.Validation => SmartAccountModuleProtocol.ValidationAggregateGasLimit,
+                SmartAccountCallbackPhase.Completion => SmartAccountModuleProtocol.CompletionAggregateGasLimit,
+                _ => throw new ArgumentOutOfRangeException(nameof(phase)),
+            }) - _validatorGasSpent.GetValueOrDefault((accountId, phase));
+
+        internal void ChargeValidator(UInt160 accountId, SmartAccountCallbackPhase phase, long spent)
+        {
+            if (spent < 0 || spent > ValidatorGasRemaining(accountId, phase))
+                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
+            _validatorGasSpent[(accountId, phase)] = _validatorGasSpent.GetValueOrDefault((accountId, phase)) + spent;
+        }
         private object _generation = new();
 
         internal sealed class AccountExecution

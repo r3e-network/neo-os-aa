@@ -24,6 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using SHA256 = System.Security.Cryptography.SHA256;
 using Array = Neo.VM.Types.Array;
 using Boolean = Neo.VM.Types.Boolean;
 
@@ -240,18 +241,13 @@ namespace Neo.SmartContract.Native
                 SmartAccountModuleProtocol.ErrorOperationMalformed);
             ModuleInstance module = RequireModuleInstance(engine.SnapshotCache, accountId, moduleId);
 
+            Require(!IsMemberOfActivePolicy(module), SmartAccountModuleProtocol.ErrorIntentConflict);
             // Callback first, while the instance is still installed and its
             // phase authorization is meaningful; a fault reverts the removal.
             await CallModuleLifecycleAsync(engine, accountId, moduleId, module, "onUninstall", deInitData);
             DeleteModuleInstance(engine, accountId, moduleId, module);
             if (module.IsHook) control.HookOrderRevision = checked(control.HookOrderRevision + 1);
-            // R-08-08/R-11-12: removing a validator never rewrites the
-            // built-in switches (R-07-14). An account whose operation switch
-            // was closed explicitly keeps it closed here — but the custody can
-            // re-open it through setBuiltinAuthorization at any time, so an
-            // account that uninstalls down to zero validators is never
-            // stranded; there is only no AUTOMATIC custody fallback.
-
+            // The caller checks the final route after its single action or atomic batch.
             Notify(engine, SmartAccountModuleProtocol.EventNameModuleInstanceRemoved, accountId.ToArray(), moduleId);
             Notify(engine, "ModuleRemoved", accountId.ToArray(),
                 SmartAccountModulePolicy.SmartAccountModuleTypeName(module.ModuleType),
@@ -267,28 +263,31 @@ namespace Neo.SmartContract.Native
             AccountControl control, Array actions)
         {
             foreach (StackItem item in actions)
+                await ApplyModuleActionAsync(engine, accountId, control, RequireActionArray(item));
+        }
+
+        private async ContractTask ApplyModuleActionAsync(ApplicationEngine engine, UInt160 accountId,
+            AccountControl control, Array action)
+        {
+            switch (ActionCode(action))
             {
-                Array action = RequireActionArray(item);
-                switch (ActionCode(action))
-                {
-                    case SmartAccountModuleProtocol.ActionInstallModule:
-                        // [ActionInstallModule, moduleType, moduleContractHash, profileDigest, initData[]]
-                        Require(action.Count == 5, SmartAccountModuleProtocol.ErrorOperationMalformed);
-                        await InstallModuleCoreAsync(engine, accountId, control,
-                            RequireModuleTypeCode(SmartAccountRecordCodec.Unsigned(action[1])),
-                            SmartAccountRecordCodec.Address(action[2]),
-                            SmartAccountRecordCodec.Fixed(action[3], 32),
-                            RequireActionArray(action[4]));
-                        break;
-                    case SmartAccountModuleProtocol.ActionUninstallModule:
-                        // [ActionUninstallModule, moduleId, deInitData[]]
-                        Require(action.Count == 3, SmartAccountModuleProtocol.ErrorOperationMalformed);
-                        await RemoveModuleCoreAsync(engine, accountId, control,
-                            SmartAccountRecordCodec.Unsigned(action[1]), RequireActionArray(action[2]));
-                        break;
-                    default:
-                        throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
-                }
+                case SmartAccountModuleProtocol.ActionInstallModule:
+                    // [ActionInstallModule, moduleType, moduleContractHash, profileDigest, initData[]]
+                    Require(action.Count == 5, SmartAccountModuleProtocol.ErrorOperationMalformed);
+                    await InstallModuleCoreAsync(engine, accountId, control,
+                        RequireModuleTypeCode(SmartAccountRecordCodec.Unsigned(action[1])),
+                        SmartAccountRecordCodec.Address(action[2]),
+                        SmartAccountRecordCodec.Fixed(action[3], 32),
+                        RequireActionArray(action[4]));
+                    break;
+                case SmartAccountModuleProtocol.ActionUninstallModule:
+                    // [ActionUninstallModule, moduleId, deInitData[]]
+                    Require(action.Count == 3, SmartAccountModuleProtocol.ErrorOperationMalformed);
+                    await RemoveModuleCoreAsync(engine, accountId, control,
+                        SmartAccountRecordCodec.Unsigned(action[1]), RequireActionArray(action[2]));
+                    break;
+                default:
+                    throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
             }
         }
 
@@ -402,6 +401,7 @@ namespace Neo.SmartContract.Native
             RequireModuleAdministration(engine, accountId, control);
 
             await RemoveModuleCoreAsync(engine, accountId, control, moduleId, deInitData ?? new Array());
+            RequireFinalOperationRoute(engine, accountId, control);
             control.Advance();
             SaveControl(engine, accountId, control);
         }
@@ -419,6 +419,7 @@ namespace Neo.SmartContract.Native
         /// </summary>
         private void RequireModuleAdministration(ApplicationEngine engine, UInt160 accountId, AccountControl control)
         {
+            Require(control.RequiredPolicyId == 0, SmartAccountModuleProtocol.ErrorUnauthorized);
             if (Witness(engine, control.Custody)) return;
             foreach (BigInteger moduleId in EnumerateModuleIds(engine.SnapshotCache, accountId,
                          SmartAccountModuleProtocol.ModuleTypeCodeValidator, BigInteger.Zero,
@@ -449,7 +450,9 @@ namespace Neo.SmartContract.Native
         /// (spec §11.5/§12.5). The governance module calls it once an intent has
         /// matured and been confirmed; the custody may call it directly on its
         /// own account. The authority domain is re-checked here because the
-        /// core is the only writer of the 0x51 record.
+        /// core is the only writer of the 0x51 record. <paramref name="ownerOnlyRecovery"/>
+        /// is a retained record field with no authorization meaning; only false
+        /// is a legal input in this protocol.
         /// </summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private void SetRecoveryPolicy(ApplicationEngine engine, UInt160 accountId, UInt160 recoveryAuthority,
@@ -463,6 +466,15 @@ namespace Neo.SmartContract.Native
             AssertAccountIdle(engine, accountId);
             RequireModuleAdministration(engine, accountId, control);
 
+            ApplyRecoveryPolicy(engine, accountId, control, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery);
+            control.Advance();
+            SaveControl(engine, accountId, control);
+        }
+
+        private void ApplyRecoveryPolicy(ApplicationEngine engine, UInt160 accountId, AccountControl control,
+            UInt160 recoveryAuthority, BigInteger recoveryTimelockMs, bool ownerOnlyRecovery)
+        {
+            Require(!ownerOnlyRecovery, SmartAccountModuleProtocol.ErrorOperationMalformed);
             Require(recoveryAuthority != UInt160.Zero && recoveryAuthority != control.Custody, SmartAccountModuleProtocol.ErrorOperationMalformed);
             Require(recoveryTimelockMs >= AccountControl.RecoveryTimelockMinMs
                 && recoveryTimelockMs <= AccountControl.RecoveryTimelockMaxMs,
@@ -474,8 +486,6 @@ namespace Neo.SmartContract.Native
             control.RecoveryAuthority = recoveryAuthority;
             control.RecoveryTimelockMs = (ulong)recoveryTimelockMs;
             control.OwnerOnlyRecovery = ownerOnlyRecovery;
-            control.Advance();
-            SaveControl(engine, accountId, control);
             Notify(engine, SmartAccountModuleProtocol.EventNameRecoveryPolicySet, accountId.ToArray(),
                 recoveryAuthority.ToArray(), new BigInteger(control.RecoveryTimelockMs), ownerOnlyRecovery);
         }
@@ -487,7 +497,7 @@ namespace Neo.SmartContract.Native
         /// switches change ONLY here or through the §12.5 recovery reset;
         /// install/remove/revoke/recode/freeze never rewrite them implicitly.
         /// The state gate precedes the authority re-check, mirroring the other
-        /// restricted landing entries; migration is answered with the generic
+        /// restricted landing entries; an invalid status is answered with the generic
         /// account-status error because the account must be Active to reroute.
         /// </summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
@@ -505,22 +515,96 @@ namespace Neo.SmartContract.Native
             AssertAccountIdle(engine, accountId);
             RequireModuleAdministration(engine, accountId, control);
 
-            // Last-route guard (R-07-14/R-08-08): closing the built-in operation
-            // switch while no validator instance is installed would leave the
-            // account without any routing subject — there is no automatic
-            // custody fallback once the switch is closed. Closing the message
-            // switch has no symmetric guard: the operation route, built-in or
-            // validator, stays available.
-            if (!defaultOperationAuthorization && CountModulesOfType(engine.SnapshotCache, accountId,
-                    SmartAccountModuleProtocol.ModuleTypeCodeValidator) == 0)
-                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorBuiltinRouteRequired);
-
-            control.DefaultOperationAuthorization = defaultOperationAuthorization;
-            control.DefaultMessageAuthorization = defaultMessageAuthorization;
+            ApplyBuiltinPolicy(engine, accountId, control, defaultOperationAuthorization, defaultMessageAuthorization);
+            RequireFinalOperationRoute(engine, accountId, control);
             control.Advance();
             SaveControl(engine, accountId, control);
+        }
+
+        private void RequireFinalOperationRoute(ApplicationEngine engine, UInt160 accountId, AccountControl control)
+        {
+            Require(control.DefaultOperationAuthorization || CountModulesOfType(engine.SnapshotCache, accountId,
+                SmartAccountModuleProtocol.ModuleTypeCodeValidator) > 0, SmartAccountModuleProtocol.ErrorBuiltinRouteRequired);
+        }
+
+        private void ApplyBuiltinPolicy(ApplicationEngine engine, UInt160 accountId, AccountControl control,
+            bool operationEnabled, bool messageEnabled)
+        {
+            control.DefaultOperationAuthorization = operationEnabled;
+            control.DefaultMessageAuthorization = messageEnabled;
             Notify(engine, SmartAccountModuleProtocol.EventNameBuiltinAuthorizationSet, accountId.ToArray(),
-                defaultOperationAuthorization, defaultMessageAuthorization);
+                operationEnabled, messageEnabled);
+        }
+
+        /// <summary>Applies the ordered core-owned part of one configuration intent under one account
+        /// lock. Recipient consent and profile digests are checked by the same code as single writes.
+        /// The operation route is a final-state invariant; no user operation may enter during callbacks.</summary>
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
+        private async ContractTask ApplyConfigurationActions(ApplicationEngine engine, UInt160 accountId, Array actions)
+        {
+            RequireApplication(engine);
+            RequireAccountId(accountId);
+            Require(actions is { Count: > 0 }, SmartAccountModuleProtocol.ErrorOperationMalformed);
+            Require(actions.Count <= SmartAccountModuleProtocol.MaxConfigurationActions, SmartAccountModuleProtocol.ErrorModuleLimitActions);
+            using var locked = Context(engine).EnterAccount(accountId);
+            var control = RequireControl(engine.SnapshotCache, accountId);
+            _ = RequireActive(control);
+            AssertAccountIdle(engine, accountId);
+            RequireModuleAdministration(engine, accountId, control);
+
+            bool hasPriorAction = false;
+            foreach (StackItem item in actions)
+            {
+                Require(control.RequiredPolicyId == 0, SmartAccountModuleProtocol.ErrorUnauthorized);
+                Array action = RequireActionArray(item);
+                switch (ActionCode(action))
+                {
+                    case SmartAccountModuleProtocol.ActionInstallModule:
+                    case SmartAccountModuleProtocol.ActionUninstallModule:
+                        // A later lifecycle callback may query the results of earlier actions.
+                        // Expose the staged control with the old nonce until the whole group succeeds.
+                        if (hasPriorAction) SaveControl(engine, accountId, control);
+                        await ApplyModuleActionAsync(engine, accountId, control, action);
+                        break;
+                    case SmartAccountModuleProtocol.ActionConfigureModule:
+                        RequireGovernedPolicyCaller(engine, accountId);
+                        Require(action.Count == 3, SmartAccountModuleProtocol.ErrorOperationMalformed);
+                        var moduleId = SmartAccountRecordCodec.Unsigned(action[1]);
+                        var data = RequireActionArray(action[2]);
+                        Require(data.Count <= SmartAccountModuleProtocol.ArgsCountMax, SmartAccountModuleProtocol.ErrorOperationMalformed);
+                        var module = RequireModuleInstance(engine.SnapshotCache, accountId, moduleId);
+                        var target = SmartAccountModulePolicy.RequireDeployed(engine.SnapshotCache, module.ContractHash);
+                        SmartAccountModulePolicy.RequireMethod(target, "configure", ContractParameterType.Void, null,
+                            ContractParameterType.Hash160, ContractParameterType.Integer, ContractParameterType.Integer, ContractParameterType.Array);
+                        if (hasPriorAction) SaveControl(engine, accountId, control);
+                        await CallModuleLifecycleAsync(engine, accountId, moduleId, module, "configure", data);
+                        Notify(engine, "ModuleInstanceConfigured", accountId.ToArray(), moduleId, new BigInteger(module.CredentialGeneration));
+                        break;
+                    case SmartAccountModuleProtocol.ActionSetThresholdPolicy:
+                    case SmartAccountModuleProtocol.ActionSetMessageSubjects:
+                        RequireGovernedPolicyCaller(engine, accountId);
+                        if (ActionCode(action) == SmartAccountModuleProtocol.ActionSetThresholdPolicy)
+                            await ExecuteSetThresholdPolicyAction(engine, accountId, control, action);
+                        else await ExecuteSetMessageSubjectsAction(engine, accountId, action);
+                        break;
+                    case SmartAccountModuleProtocol.ActionSetBuiltinAuthorization:
+                        Require(action.Count == 3, SmartAccountModuleProtocol.ErrorOperationMalformed);
+                        ApplyBuiltinPolicy(engine, accountId, control, SmartAccountRecordCodec.Boolean(action[1]),
+                            SmartAccountRecordCodec.Boolean(action[2]));
+                        break;
+                    case SmartAccountModuleProtocol.ActionSetRecoveryPolicy:
+                        Require(action.Count == 4, SmartAccountModuleProtocol.ErrorOperationMalformed);
+                        ApplyRecoveryPolicy(engine, accountId, control, SmartAccountRecordCodec.Address(action[1]),
+                            SmartAccountRecordCodec.Unsigned(action[2]), SmartAccountRecordCodec.Boolean(action[3]));
+                        break;
+                    default:
+                        throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
+                }
+                hasPriorAction = true;
+            }
+            RequireFinalOperationRoute(engine, accountId, control);
+            control.Advance();
+            SaveControl(engine, accountId, control);
         }
 
         /// <summary>
@@ -546,7 +630,7 @@ namespace Neo.SmartContract.Native
             Require(module.IsValidator, SmartAccountModuleProtocol.ErrorModuleTypeUnsupported);
             if (module.CredentialGeneration == ulong.MaxValue)
                 throw new InvalidOperationException("The credential generation is exhausted.");
-            module.CredentialGeneration += 1;
+            module.CredentialGeneration = checked(module.CredentialGeneration + 1);
             SaveModuleInstance(engine, accountId, moduleId, module);
             control.Advance();
             SaveControl(engine, accountId, control);
@@ -607,25 +691,23 @@ namespace Neo.SmartContract.Native
                 Notify(engine, SmartAccountModuleProtocol.EventNameModuleInstanceRemoved, accountId.ToArray(), id);
             }
 
-            // Steps 2–3 (§12.5): every nonce cursor, every channel digest and
-            // the migration state of the account. The core writes no 0x5A row
-            // itself, but a legacy full-profile row may still sit there.
+            // Clear every threshold policy, nonce cursor and channel digest.
+            DeleteAccountPrefix(engine, SmartAccountModuleProtocol.PrefixThresholdPolicy, accountId);
             DeleteAccountPrefix(engine, SmartAccountModuleProtocol.PrefixNonceCursor, accountId);
             DeleteAccountPrefix(engine, SmartAccountModuleProtocol.PrefixNonceNamespace, accountId);
-            DeleteAccountPrefix(engine, SmartAccountModuleProtocol.PrefixMigrationState, accountId);
 
             // Steps 4–5 (§12.5): custody rotation (zero keeps the current
             // holder), registration defaults, epoch advance. The id allocator
             // is deliberately NOT reset (R-12-09).
             if (newCustody != UInt160.Zero) control.Custody = newCustody;
+            ResetMessageSubjects(engine, accountId, control);
             control.RecoveryAuthority = UInt160.Zero;
             control.OwnerOnlyRecovery = false;
+            control.RequiredPolicyId = 0;
             control.DefaultOperationAuthorization = true;
             control.DefaultMessageAuthorization = true;
             control.Status = SmartAccountStatus.Active;
-            control.AuthorityEpoch += 1;
-            control.ConfigurationNonce += 1;
-            control.ControlRevision += 1;
+            control.AdvanceAuthority();
             SaveControl(engine, accountId, control);
 
             // Step 6 (§12.5).
@@ -727,11 +809,10 @@ namespace Neo.SmartContract.Native
             try
             {
                 bool isHook = phase is SmartAccountCallbackPhase.HookPre or SmartAccountCallbackPhase.HookPost;
-                if (isHook)
-                {
-                    budget = Math.Min(budget, context.HookGasRemaining(accountId));
-                    Require(budget > 0, SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
-                }
+                bool isValidator = phase is SmartAccountCallbackPhase.Validation or SmartAccountCallbackPhase.Completion;
+                if (isHook) budget = Math.Min(budget, context.HookGasRemaining(accountId));
+                if (isValidator) budget = Math.Min(budget, context.ValidatorGasRemaining(accountId, phase));
+                Require(budget > 0, SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
                 long before = engine.GasLeft;
                 try
                 {
@@ -753,6 +834,7 @@ namespace Neo.SmartContract.Native
                 {
                     // A callback that faults still consumed transaction GAS.
                     if (isHook) context.ChargeHook(accountId, before - engine.GasLeft);
+                    if (isValidator) context.ChargeValidator(accountId, phase, before - engine.GasLeft);
                 }
             }
             finally
@@ -937,5 +1019,168 @@ namespace Neo.SmartContract.Native
             "recovery" => SmartAccountModuleProtocol.ModuleTypeCodeRecovery,
             _ => throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleTypeUnsupported),
         };
+        private ThresholdPolicyRecord? TryThresholdPolicy(IReadOnlyStore snapshot, UInt160 accountId,
+            BigInteger policyId)
+        {
+            if (policyId < 1 || policyId >> 64 != BigInteger.Zero) return null;
+            return TryRead(snapshot, SmartAccountProtocol.GetThresholdPolicyKey(accountId, policyId), out var value)
+                ? ThresholdPolicyRecord.Decode(ReadGovernedPayload(snapshot, accountId, SpendingPolicySlot, value))
+                : null;
+        }
+
+        /// <summary>
+        /// True while the instance is a member of an ACTIVE threshold policy.
+        /// Active-policy members are never independently routable (spec §5) and
+        /// cannot be uninstalled while referenced. The member record carries the
+        /// back-pointer, so routing and uninstall checks are one read.
+        /// </summary>
+        private static bool IsMemberOfActivePolicy(ModuleInstance module) =>
+            module.ActivePolicyId != BigInteger.Zero;
+
+        private static void AssertNotMemberOfOtherActivePolicy(ModuleInstance member, BigInteger policyId)
+        {
+            Require(member.ActivePolicyId == BigInteger.Zero || member.ActivePolicyId == policyId,
+                SmartAccountModuleProtocol.ErrorIntentConflict);
+        }
+
+        /// <summary>
+        /// Routing eligibility (spec §5): the selected validator must be an
+        /// installed validator instance that is not a member of an active
+        /// threshold policy — a single-member entry must never bypass the
+        /// threshold.
+        /// </summary>
+        private ModuleInstance RequireRoutableValidator(IReadOnlyStore snapshot, UInt160 accountId,
+            BigInteger validatorId)
+        {
+            ModuleInstance module = RequireModuleInstance(snapshot, accountId, validatorId);
+            Require(module.IsValidator, SmartAccountModuleProtocol.ErrorModuleNotRoutable);
+            Require(!IsMemberOfActivePolicy(module), SmartAccountModuleProtocol.ErrorModuleNotRoutable);
+            return module;
+        }
+
+        private ModuleInstance RequireActiveValidator(IReadOnlyStore snapshot, UInt160 accountId,
+            BigInteger validatorId)
+        {
+            ModuleInstance module = RequireModuleInstance(snapshot, accountId, validatorId);
+            Require(module.IsValidator, SmartAccountModuleProtocol.ErrorValidatorNotFound);
+            return module;
+        }
+
+        private async ContractTask ExecuteSetThresholdPolicyAction(ApplicationEngine engine, UInt160 accountId,
+            AccountControl control, Array action)
+        {
+            // [ActionSetThresholdPolicy, policyId, threshold, memberIds[], active]
+            // policyId 0 requests a NEW policy from the SAME monotonic allocator
+            // as module instances, so a policy id can never alias a module id.
+            Require(action.Count == 5, SmartAccountModuleProtocol.ErrorOperationMalformed);
+            BigInteger requestedId = SmartAccountRecordCodec.Unsigned(action[1]);
+            BigInteger threshold = SmartAccountRecordCodec.Unsigned(action[2]);
+            BigInteger[] memberIds = SmartAccountRecordCodec.Integers(action[3],
+                SmartAccountModuleProtocol.MaxThresholdPolicyMembers);
+            bool active = SmartAccountRecordCodec.Boolean(action[4]);
+
+            Require(active && requestedId.IsZero && control.RequiredPolicyId == 0,
+                SmartAccountModuleProtocol.ErrorIntentConflict);
+            BigInteger policyId = control.AllocateModuleId();
+            Require(threshold >= SmartAccountModuleProtocol.MinThresholdPolicyValue
+                && threshold <= SmartAccountModuleProtocol.MaxThresholdPolicyValue,
+                SmartAccountModuleProtocol.ErrorModuleLimitThreshold);
+            Require(memberIds.Length > 0
+                && memberIds.Length <= SmartAccountModuleProtocol.MaxThresholdPolicyMembers,
+                SmartAccountModuleProtocol.ErrorModuleLimitMembers);
+            Require(threshold <= memberIds.Length, SmartAccountModuleProtocol.ErrorModuleLimitThreshold);
+            // A mandatory spending policy may only be exited through the preset delayed seat.
+            Require(control.RecoveryAuthority != UInt160.Zero, SmartAccountModuleProtocol.ErrorAccountStatus);
+            var recovery = EnumerateModuleIds(engine.SnapshotCache, accountId,
+                SmartAccountModuleProtocol.ModuleTypeCodeRecovery, BigInteger.Zero, 1).SingleOrDefault();
+            Require(recovery > 0, SmartAccountModuleProtocol.ErrorModuleNotInstalled);
+            RequireStandardPolicyModule(engine, RequireModuleInstance(engine.SnapshotCache, accountId, recovery),
+                RecoveryNefSha256, RecoveryManifestSha256);
+            var memberKeys = new HashSet<string>();
+            for (int i = 0; i < memberIds.Length; i++)
+            {
+                ModuleInstance member = RequireActiveValidator(engine.SnapshotCache, accountId, memberIds[i]);
+                Require(member.ThresholdMemberEligible, SmartAccountModuleProtocol.ErrorOperationMalformed);
+                for (int j = 0; j < i; j++)
+                    Require(memberIds[j] != memberIds[i],
+                        SmartAccountModuleProtocol.ErrorOperationMalformed);
+                AssertNotMemberOfOtherActivePolicy(member, policyId);
+                RequireStandardPolicyModule(engine, member, MemberNefSha256, MemberManifestSha256);
+                var key = await engine.CallFromNativeContractWithGasLimitAsync(Hash, member.ContractHash,
+                    "getMemberKey", CallFlags.ReadOnly, SmartAccountModuleProtocol.ValidationPerCallGasLimit,
+                    new StackItem[] { accountId.ToArray(), memberIds[i] });
+                Require(key is ByteString publicKey && publicKey.Size == 33
+                    && memberKeys.Add(Convert.ToHexString(publicKey.GetSpan())),
+                    SmartAccountModuleProtocol.ErrorOperationMalformed);
+            }
+            control.RequiredPolicyId = (ulong)policyId;
+            ApplyBuiltinPolicy(engine, accountId, control, false, control.DefaultMessageAuthorization);
+            // Retire recovery requests that were already maturing at enrollment.
+            control.AuthorityEpoch = checked(control.AuthorityEpoch + 1);
+            var policy = new ThresholdPolicyRecord { Threshold = (ulong)threshold, MemberIds = memberIds,
+                Active = true, CredentialGeneration = 1 };
+            var reference = await StoreGovernedPayload(engine, accountId, SpendingPolicySlot, policy.Serialize());
+            Write(engine, SmartAccountProtocol.GetThresholdPolicyKey(accountId, policyId), reference!);
+            foreach (BigInteger memberId in memberIds)
+            {
+                var member = RequireActiveValidator(engine.SnapshotCache, accountId, memberId);
+                member.ActivePolicyId = policyId;
+                SaveModuleInstance(engine, accountId, memberId, member);
+            }
+            Notify(engine, SmartAccountModuleProtocol.EventNameThresholdPolicySet, accountId.ToArray(),
+                policyId, new BigInteger(policy.Threshold),
+                new Array(policy.MemberIds.Select(id => (StackItem)id).ToArray()));
+        }
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
+        private Array GetThresholdPolicy(IReadOnlyStore snapshot, UInt160 accountId, BigInteger policyId)
+        {
+            if (!policyId.IsZero) return TryThresholdPolicy(snapshot, accountId, policyId)?.ToStackItem() ?? new Array();
+            ulong required = TryControl(snapshot, accountId)?.RequiredPolicyId ?? 0;
+            if (required == 0) return new Array();
+            var policy = TryThresholdPolicy(snapshot, accountId, required)
+                ?? throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
+            var row = policy.ToStackItem();
+            row.Add(new Integer(required));
+            return row;
+        }
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
+        private Array GetMessageSubjects(IReadOnlyStore snapshot, UInt160 accountId) =>
+            TryMessageSubjects(snapshot, accountId)?.ToStackItem() ?? new Array();
+
+        // The standard governance binary enforces maturity, expiry, authority epoch, exact action
+        // bytes and one-shot consumption. Match the live ABI as well: a NEF alone does not bind
+        // manifest dispatch offsets. An ordinary custody or validator witness is insufficient.
+        private void RequireGovernedPolicyCaller(ApplicationEngine engine, UInt160 accountId)
+        {
+            var caller = engine.CallingScriptHash;
+            Require(caller is not null, SmartAccountModuleProtocol.ErrorUnauthorized);
+            var id = FindModuleIdByContract(engine.SnapshotCache, accountId, SmartAccountModuleProtocol.ModuleTypeCodeValidator, caller!);
+            Require(id > 0, SmartAccountModuleProtocol.ErrorUnauthorized);
+            var instance = RequireModuleInstance(engine.SnapshotCache, accountId, id);
+            var deployed = SmartAccountModulePolicy.RequireDeployed(engine.SnapshotCache, caller!);
+            SmartAccountModulePolicy.AssertCodeBinding(deployed, instance);
+            Require(deployed.UpdateCounter == 0 && instance.NefSha256.AsSpan().SequenceEqual(Convert.FromHexString(GovernanceNefSha256))
+                && SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(deployed.Manifest.ToJson().ToString()))
+                    .AsSpan().SequenceEqual(Convert.FromHexString(GovernanceManifestSha256)),
+                SmartAccountModuleProtocol.ErrorUnauthorized);
+        }
+        private static void RequireStandardPolicyModule(ApplicationEngine engine, ModuleInstance instance,
+            string nefDigest, string manifestDigest)
+        {
+            var deployed = SmartAccountModulePolicy.RequireDeployed(engine.SnapshotCache, instance.ContractHash);
+            SmartAccountModulePolicy.AssertCodeBinding(deployed, instance);
+            Require(deployed.UpdateCounter == 0
+                && instance.NefSha256.AsSpan().SequenceEqual(Convert.FromHexString(nefDigest))
+                && SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(deployed.Manifest.ToJson().ToString()))
+                    .AsSpan().SequenceEqual(Convert.FromHexString(manifestDigest)),
+                SmartAccountModuleProtocol.ErrorModuleCodeBindingMismatch);
+        }
+        internal const string RecoveryNefSha256 = "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e";
+        internal const string RecoveryManifestSha256 = "c703f946a35e8d6c977e18b01f32148ddf38e84b813465acc60d462cfab6c6d7";
+        internal const string MemberNefSha256 = "908a226009c775d4661b4d36b2225b7aad731180a5dc95be07c5e40b0c1d0a00";
+        internal const string MemberManifestSha256 = "01ba484b1c29115a4eef446aa6b804ad351254297743c955e9d9f716d2730945";
+        internal const string GovernanceNefSha256 = "d604aa62813606b08a9f9aa4b780bbf4f5e3f19fa2e887a69fb3863613ca6410";
+        internal const string GovernanceManifestSha256 = "02d1f0e4d8bbfb68c179c803920eb625567a8d4b4fe84815ed973b9b36883815";
+
     }
 }

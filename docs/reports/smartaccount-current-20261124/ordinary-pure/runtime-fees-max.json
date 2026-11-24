@@ -1,0 +1,769 @@
+{
+  "status": "PASS_SAMPLED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "engineSha256": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "rows": [
+    {
+      "name": "getAccountImplementationId",
+      "label": "no argument",
+      "scriptGzip": "H4sIAAAAAAAAEzskwCOVnlrimJycX5pX4plbkJOam5pXkliSmZ/nmcIjImn\u002BwOnwfre66w\u002BszW4vKcrx/yPc4phUGx3kAABGqs/wOgAAAA==",
+      "expected": "org.r3e.neo.aa.unified-smart-wallet.v3",
+      "fee": 41434800,
+      "trace": "439f4f08ada36ae54db43f84be050741e079d90be0a97b64cc13b42b882e77fc",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41434800,
+          "fee": 41434800,
+          "state": "HALT",
+          "error": null,
+          "trace": "439f4f08ada36ae54db43f84be050741e079d90be0a97b64cc13b42b882e77fc"
+        },
+        {
+          "budget": 41434799,
+          "fee": 41434800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "e5d57c4987f9008cc446910af05318e17b8aca2791537405322bd27681ed6cbf"
+        },
+        {
+          "budget": 0,
+          "fee": 1600,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "7efe35572837961c9aeb3fac27073a31daa905be407bfd01a60c968092169811"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "single",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNhK87MS89JFTwgwCNaXFpQkF9UUuxakZpcWpKZn\u002Bebn5LKIyJp/sDp8H63uusPrM1uLynK8f8j3OKYVBsd5AAA2mzkTT4AAAA=",
+      "expected": true,
+      "fee": 41649700,
+      "trace": "c8f477d809fb8e3d857efed09349a56b78db0346a30105f1a076d2b439df2faa",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41649700,
+          "fee": 41649700,
+          "state": "HALT",
+          "error": null,
+          "trace": "c8f477d809fb8e3d857efed09349a56b78db0346a30105f1a076d2b439df2faa"
+        },
+        {
+          "budget": 41649699,
+          "fee": 41649700,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "6fcc422f8f9d80e465d28cca368fbb86ab1bf5fdf31d3655dd2dd3c625216a18"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "batch",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNhTUosSc4QPCDAI1pcWlCQX1RS7FqRmlxakpmf55ufksojImn\u002BwOnwfre66w\u002BszW4vKcrx/yPc4phUGx3kAADW5nJOPQAAAA==",
+      "expected": true,
+      "fee": 41653600,
+      "trace": "6cbe09464e72033344b2f3ddceff313a8ae7b4814b1d6c38f88f8ff4651cb402",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41653600,
+          "fee": 41653600,
+          "state": "HALT",
+          "error": null,
+          "trace": "6cbe09464e72033344b2f3ddceff313a8ae7b4814b1d6c38f88f8ff4651cb402"
+        },
+        {
+          "budget": 41653599,
+          "fee": 41653600,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "e03c04a84d6f13ab56cfefee4eb5b1227e751b8743593a6e2f34e7f9595f0855"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "batch-atomic",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BPhSUosSc7QTSzJz81MFjwgwCNaXFpQkF9UUuxakZpcWpKZn\u002Bebn5LKIyJp/sDp8H63uusPrM1uLynK8f8j3OKYVBsd5AAA9HxuNEQAAAA=",
+      "expected": true,
+      "fee": 41657500,
+      "trace": "379a07289b9a7286cf6ac940fd1e80d1aa42035b4bcfc10a8fd4e1e6e135c5f1",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41657500,
+          "fee": 41657500,
+          "state": "HALT",
+          "error": null,
+          "trace": "379a07289b9a7286cf6ac940fd1e80d1aa42035b4bcfc10a8fd4e1e6e135c5f1"
+        },
+        {
+          "budget": 41657499,
+          "fee": 41657500,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "b6f9ed5ac918fd8543a628fa56ed3e4f86a2eb2780d267c541813d6c661baec3"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "empty",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNhEDwgwCNaXFpQkF9UUuxakZpcWpKZn\u002Bebn5LKIyJp/sDp8H63uusPrM1uLynK8f8j3OKYVBsd5AAAwuGT3jgAAAA=",
+      "expected": false,
+      "fee": 41657500,
+      "trace": "a58252387b1f7bf428a7f7fb51ada862907eaa705209713e5d8bf4a6d686fc22",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41657500,
+          "fee": 41657500,
+          "state": "HALT",
+          "error": null,
+          "trace": "a58252387b1f7bf428a7f7fb51ada862907eaa705209713e5d8bf4a6d686fc22"
+        },
+        {
+          "budget": 41657499,
+          "fee": 41657500,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "ffb34515eb9aad4c60d212c9f5f875074bf523626f4357560f033234ac345161"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "unknown",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNhzS/JSC0SPCDAI1pcWlCQX1RS7FqRmlxakpmf55ufksojImn\u002BwOnwfre66w\u002BszW4vKcrx/yPc4phUGx3kAADhW50RPQAAAA==",
+      "expected": false,
+      "fee": 41657500,
+      "trace": "1a408362a23e279ea6c473700e69ec1dc22ca854f74600bbb88e1527485e6935",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41657500,
+          "fee": 41657500,
+          "state": "HALT",
+          "error": null,
+          "trace": "1a408362a23e279ea6c473700e69ec1dc22ca854f74600bbb88e1527485e6935"
+        },
+        {
+          "budget": 41657499,
+          "fee": 41657500,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "d8dc96fae816ed3ccff951e9a1631441b3de5890276292fed48c8c9201e9b6aa"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "integer",
+      "scriptGzip": "H4sIAAAAAAAAExMXPCDAI1pcWlCQX1RS7FqRmlxakpmf55ufksojImn\u002BwOnwfre66w\u002BszW4vKcrx/yPc4phUGx3kAACddT4lNwAAAA==",
+      "expected": false,
+      "fee": 41656800,
+      "trace": "08760f39b03998cd3654afa63696a634be04d01c47d93e8fab9201b3ff2eeda1",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41656800,
+          "fee": 41656800,
+          "state": "HALT",
+          "error": null,
+          "trace": "08760f39b03998cd3654afa63696a634be04d01c47d93e8fab9201b3ff2eeda1"
+        },
+        {
+          "budget": 41656799,
+          "fee": 41656800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "5418b3048c5c1737d83d214899a24125cedf5c3129fdc48c3a22df72f6201791"
+        },
+        {
+          "budget": 0,
+          "fee": 100,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "eb087ac4dc36d6aba8545dbac00fc8186342d94ea865941a29dd80e01db12919"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "bytes255",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BP5zzCygeABAR7R4tKCgvyikmLXitTk0pLM/Dzf/JRUHhFJ8wdOh/e71V1/YG12e0lRjv8f4RbHpNroIAcAIFnlLTcBAAA=",
+      "expected": false,
+      "fee": 41657500,
+      "trace": "c1ea6fb7f8f29245da8da1b629354484d170efb6e2447ec15daef08468b4152f",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41657500,
+          "fee": 41657500,
+          "state": "HALT",
+          "error": null,
+          "trace": "c1ea6fb7f8f29245da8da1b629354484d170efb6e2447ec15daef08468b4152f"
+        },
+        {
+          "budget": 41657499,
+          "fee": 41657500,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "56a0e2e54d5d5d85be799aae41b37f37723244ebb61928ef91adc22837dd18b9"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "bytes256",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNlYGQY4UDwgACPaHFpQUF\u002BUUmxa0VqcmlJZn6eb35KKo\u002BIpPkDp8P73equP7A2u72kKMf/j3CLY1JtdJADAGdw9zo5AQAA",
+      "expected": false,
+      "fee": 41707900,
+      "trace": "23e2a7997d64bf0a08c65980a967159a61c556de54d6be76c7f5ccf20870578d",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41707900,
+          "fee": 41707900,
+          "state": "HALT",
+          "error": null,
+          "trace": "23e2a7997d64bf0a08c65980a967159a61c556de54d6be76c7f5ccf20870578d"
+        },
+        {
+          "budget": 41707899,
+          "fee": 41707900,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "8a62a596f7b296c17be9cd77fbdb1877ffc98ddc87e42c5c0d2c110c9c80eb20"
+        },
+        {
+          "budget": 0,
+          "fee": 51200,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "07504671d65a4ee745c1d73b2d7d5c22cfe0b2b9b8bb3a5242c131ddd842bdf0"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "bytes65535",
+      "scriptGzip": "H4sIAAAAAAAAE\u002B3BPQ7BYAAA0O8AlRAMLsJgQVKbSKw2dJCIr\u002BlPYmFyFPcgcQiDpQeR1EXee522DQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBC79VNhmWd57GoyvSS7evqGM\u002BreMiSwWjSLN7P5e3TTMffR3Fa//r3\u002Be663cz\u002BZKS1UTgAAQA=",
+      "expected": false,
+      "fee": 41707900,
+      "trace": "4e2c6159059d178d745a7f861d995ebd5b2213371ca50f3a30e798b6b44b94c3",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41707900,
+          "fee": 41707900,
+          "state": "HALT",
+          "error": null,
+          "trace": "4e2c6159059d178d745a7f861d995ebd5b2213371ca50f3a30e798b6b44b94c3"
+        },
+        {
+          "budget": 41707899,
+          "fee": 41707900,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "682e6ce6cec74711f8c5d6ab1d42cd4e73278ebea55b531aa5c835df6ce58836"
+        },
+        {
+          "budget": 0,
+          "fee": 51200,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "07504671d65a4ee745c1d73b2d7d5c22cfe0b2b9b8bb3a5242c131ddd842bdf0"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "limit",
+      "scriptGzip": "H4sIAAAAAAAAE\u002B3BOw4BUQAAwKffCEHhIhQaNqETiVaHLSTibfaTaKgcxT1IHEKh2YMoxD1mph1CKwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMBf99lJBmWd57Goyvk529XVIZ6WcZ8l/eG4SV\u002BPxfXdTEafe3FcfXu32fayWU9/H2rhHzsAAQA=",
+      "expected": false,
+      "fee": 42066300,
+      "trace": "07a782758fe8da054e8ee526e70c173040fb5b011641423c3c162ac9878bd579",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 42066300,
+          "fee": 42066300,
+          "state": "HALT",
+          "error": null,
+          "trace": "07a782758fe8da054e8ee526e70c173040fb5b011641423c3c162ac9878bd579"
+        },
+        {
+          "budget": 42066299,
+          "fee": 42066300,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "bcb9010c5eff4c9293cff5f3c43cc54729f9ee53ab058820a465ff94476b2317"
+        },
+        {
+          "budget": 0,
+          "fee": 409600,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "4e45fa2f1101a74bba4764bb00a1b39cdbca97b0db74f13151ae4c19fe51b2c1"
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "over limit",
+      "scriptGzip": "H4sIAAAAAAAAE\u002B3BPQ7BYAAA0HZvhNDBRRgsSNgaidWGDhLxNf1JLEyO4h4kDmGw9CAGiXO89zpxFEcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADw13t2k7RqiiKUdbU457umPoRTFvZ5MhiO2/nrsby\u002B28nocy\u002BPq2//NtteNuvpDz\u002BeMVM8AAEA",
+      "expected": null,
+      "fee": 42057300,
+      "trace": "79bb26f6553c83f057ba7e89da81a9a0f61e627a5aa667bbc00e5d6ac1e92e86",
+      "state": "FAULT",
+      "error": "The operand exceeds the maximum comparable size, 65537/65536.",
+      "samples": [
+        {
+          "budget": 42057300,
+          "fee": 42057300,
+          "state": "FAULT",
+          "error": "The operand exceeds the maximum comparable size, 65537/65536.",
+          "trace": "79bb26f6553c83f057ba7e89da81a9a0f61e627a5aa667bbc00e5d6ac1e92e86"
+        },
+        {
+          "budget": 42057299,
+          "fee": 42057300,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "79bb26f6553c83f057ba7e89da81a9a0f61e627a5aa667bbc00e5d6ac1e92e86"
+        },
+        {
+          "budget": 0,
+          "fee": 409600,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "4e45fa2f1101a74bba4764bb00a1b39cdbca97b0db74f13151ae4c19fe51b2c1"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "validator",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BPhLEvMyUxJLMkvEjwgwCNUXFpQkF9UUuybn1KakxpSWZDKIyJp/sDp8H63uusPrM1uLynK8f8j3OKYVBsd5AAAogHyQT4AAAA=",
+      "expected": true,
+      "fee": 41649700,
+      "trace": "ab5ac57ba392126bffbb096e65144724d452d294d10c9c471ba82912e7889d75",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41649700,
+          "fee": 41649700,
+          "state": "HALT",
+          "error": null,
+          "trace": "ab5ac57ba392126bffbb096e65144724d452d294d10c9c471ba82912e7889d75"
+        },
+        {
+          "budget": 41649699,
+          "fee": 41649700,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "ffc3b02746fb1081454a869fd1a2fbd91276df23609d9af73aa129896efba5f2"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "verifier",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BPhKEstykzLTC0SPCDAI1RcWlCQX1RS7JufUpqTGlJZkMojImn\u002BwOnwfre66w\u002BszW4vKcrx/yPc4phUGx3kAAA9TkZJPQAAAA==",
+      "expected": true,
+      "fee": 41653600,
+      "trace": "2fe8199be273ec18c933aea988004e8a8ac99a5306a28be5bc8b9eb01d2aab25",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41653600,
+          "fee": 41653600,
+          "state": "HALT",
+          "error": null,
+          "trace": "2fe8199be273ec18c933aea988004e8a8ac99a5306a28be5bc8b9eb01d2aab25"
+        },
+        {
+          "budget": 41653599,
+          "fee": 41653600,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "4cc9d3f759cb4c389a522b5a597c38cfdad5b734f0cab73170b12999dcc228ba"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "hook",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNhycjPzxY8IMAjVFxaUJBfVFLsm59SmpMaUlmQyiMiaf7A6fB\u002Bt7rrD6zNbi8pyvH/I9zimFQbHeQAAI54aLo5AAAA",
+      "expected": true,
+      "fee": 41657500,
+      "trace": "2a1c91be8b4b3a27a4282f0edd658e93048a5c32bb5bd6f500e4269e321e7385",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41657500,
+          "fee": 41657500,
+          "state": "HALT",
+          "error": null,
+          "trace": "2a1c91be8b4b3a27a4282f0edd658e93048a5c32bb5bd6f500e4269e321e7385"
+        },
+        {
+          "budget": 41657499,
+          "fee": 41657500,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "6ac514ea1a842e75219ea64efe7fed0a551e4457cd908bb9e08e7534f622f9b4"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "empty",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNhEDwgwCNUXFpQkF9UUuybn1KakxpSWZDKIyJp/sDp8H63uusPrM1uLynK8f8j3OKYVBsd5AAAMrU/zTUAAAA=",
+      "expected": false,
+      "fee": 41657500,
+      "trace": "8bce992f23ef3fe06605c6c9c3912bdbebbe6ab68ff0496415c75ac7f9dea07c",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41657500,
+          "fee": 41657500,
+          "state": "HALT",
+          "error": null,
+          "trace": "8bce992f23ef3fe06605c6c9c3912bdbebbe6ab68ff0496415c75ac7f9dea07c"
+        },
+        {
+          "budget": 41657499,
+          "fee": 41657500,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "6b8f3a2acc5e6f3102702a87caad6215db0267a09086ce972c331eadacbc582b"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "unknown",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNhzS/JSC0SPCDAI1RcWlCQX1RS7JufUpqTGlJZkMojImn\u002BwOnwfre66w\u002BszW4vKcrx/yPc4phUGx3kAADB7519OgAAAA==",
+      "expected": false,
+      "fee": 41657500,
+      "trace": "c8b22427d4ce0e5dcae80bab8074f662c139082ee24063a947281e2d6f04f12a",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41657500,
+          "fee": 41657500,
+          "state": "HALT",
+          "error": null,
+          "trace": "c8b22427d4ce0e5dcae80bab8074f662c139082ee24063a947281e2d6f04f12a"
+        },
+        {
+          "budget": 41657499,
+          "fee": 41657500,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "ac2cf1f27cec05a69f7d80e4258ff91d7dba141f1dce5617427e9c2d046b18ad"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "integer",
+      "scriptGzip": "H4sIAAAAAAAAExMXPCDAI1RcWlCQX1RS7JufUpqTGlJZkMojImn\u002BwOnwfre66w\u002BszW4vKcrx/yPc4phUGx3kAAC0qeKUNAAAAA==",
+      "expected": false,
+      "fee": 41656800,
+      "trace": "10cca7b5377a624905e99a4e61fe719d59058d60e828ef998993c62aaf454709",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41656800,
+          "fee": 41656800,
+          "state": "HALT",
+          "error": null,
+          "trace": "10cca7b5377a624905e99a4e61fe719d59058d60e828ef998993c62aaf454709"
+        },
+        {
+          "budget": 41656799,
+          "fee": 41656800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "adb22cb868433f191873ede7802529ef2f2abad4ca6e01379641f82e1671e9b9"
+        },
+        {
+          "budget": 0,
+          "fee": 100,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "eb087ac4dc36d6aba8545dbac00fc8186342d94ea865941a29dd80e01db12919"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "bytes255",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BP5zzCygeABAR6h4tKCgvyikmLf/JTSnNSQyoJUHhFJ8wdOh/e71V1/YG12e0lRjv8f4RbHpNroIAcAtQCiLjQBAAA=",
+      "expected": false,
+      "fee": 41657500,
+      "trace": "27767eec089dc077f519704ccaf122b93f55b696f372576ed63bacdf0bf2842c",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41657500,
+          "fee": 41657500,
+          "state": "HALT",
+          "error": null,
+          "trace": "27767eec089dc077f519704ccaf122b93f55b696f372576ed63bacdf0bf2842c"
+        },
+        {
+          "budget": 41657499,
+          "fee": 41657500,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "aa4f2aa688bb48e7f867a3e89c073ec1a789cb7b4edf44ce33fd9e955b54095c"
+        },
+        {
+          "budget": 0,
+          "fee": 800,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "a67466788496866a82ac5e792c874539154bc727d72e09d7a21dc78ca7be4a3f"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "bytes256",
+      "scriptGzip": "H4sIAAAAAAAAE\u002BNlYGQY4UDwgACPUHFpQUF\u002BUUmxb35KaU5qSGVBKo\u002BIpPkDp8P73equP7A2u72kKMf/j3CLY1JtdJADADCIIE02AQAA",
+      "expected": false,
+      "fee": 41707900,
+      "trace": "f68e9b3a1e02a7a6c41158cc353619de02e455add0f6ffa14d849f71fd567e4c",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41707900,
+          "fee": 41707900,
+          "state": "HALT",
+          "error": null,
+          "trace": "f68e9b3a1e02a7a6c41158cc353619de02e455add0f6ffa14d849f71fd567e4c"
+        },
+        {
+          "budget": 41707899,
+          "fee": 41707900,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "0122f8203efc475afc19bc03a37d9deba7d498dd47f25a585f5292f842c9953f"
+        },
+        {
+          "budget": 0,
+          "fee": 51200,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "07504671d65a4ee745c1d73b2d7d5c22cfe0b2b9b8bb3a5242c131ddd842bdf0"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "bytes65535",
+      "scriptGzip": "H4sIAAAAAAAAE\u002B3BuwnCUAAAwDdABH\u002BNi5jCRi3sRBA7O0m6QB6JKSy0chT3UMgQKWwyiBAXubvRMAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIYfIZJ9O6ibGsrvW\u002BzJoiP91inswXab9t37tH16\u002BW31dVHH6z5\u002BZyPx/Xf4v1gsA1AAEA",
+      "expected": false,
+      "fee": 41707900,
+      "trace": "a939bea63f6cff5abc0ce491d88331ccda34725cae56212af930afa547e30bb8",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 41707900,
+          "fee": 41707900,
+          "state": "HALT",
+          "error": null,
+          "trace": "a939bea63f6cff5abc0ce491d88331ccda34725cae56212af930afa547e30bb8"
+        },
+        {
+          "budget": 41707899,
+          "fee": 41707900,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "63eb4d4f1b911436ad7463fc59973ddabf0f9424b753f79a81de55632a4b94e1"
+        },
+        {
+          "budget": 0,
+          "fee": 51200,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "07504671d65a4ee745c1d73b2d7d5c22cfe0b2b9b8bb3a5242c131ddd842bdf0"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "limit",
+      "scriptGzip": "H4sIAAAAAAAAE\u002B3BLQrCYAAA0M8\u002BxL/iRTRY1GATYazZxLXBPjYXDFvyKN5DwUMYLDuIQbzHe28YwiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADA3/g5SiZ1E2NZXep9eW6KPLvGPJnNl/329dh17361\u002BNyr4vCd3jan9piufyzOaiw4AAEA",
+      "expected": false,
+      "fee": 42066300,
+      "trace": "ed8a328c27e29be25a1ca6b244c648e5836942113b292d91d7013379fe814ec3",
+      "state": "HALT",
+      "error": null,
+      "samples": [
+        {
+          "budget": 42066300,
+          "fee": 42066300,
+          "state": "HALT",
+          "error": null,
+          "trace": "ed8a328c27e29be25a1ca6b244c648e5836942113b292d91d7013379fe814ec3"
+        },
+        {
+          "budget": 42066299,
+          "fee": 42066300,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "01a090bd7600ab98f3a29d17ccb944376ecc473e17e87524fb0712a9de46c243"
+        },
+        {
+          "budget": 0,
+          "fee": 409600,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "4e45fa2f1101a74bba4764bb00a1b39cdbca97b0db74f13151ae4c19fe51b2c1"
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "over limit",
+      "scriptGzip": "H4sIAAAAAAAAE\u002B3BPQ7BYAAA0HZvRLG4CIOlOthEIjab6NakX/ozGJgcxT1IHMJg6UEMTZzjvTeKozgCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAv/Q1TiZNF0JVt822OndlcbiEIpnNl33\u002Bfm5un361\u002BD7qcveb3ten63GfDXp5to45AAEA",
+      "expected": null,
+      "fee": 42057300,
+      "trace": "3601ddbd06c3cff2e77d8bb4996d3483b337e34d252fcfc8d02276df66481f44",
+      "state": "FAULT",
+      "error": "The operand exceeds the maximum comparable size, 65537/65536.",
+      "samples": [
+        {
+          "budget": 42057300,
+          "fee": 42057300,
+          "state": "FAULT",
+          "error": "The operand exceeds the maximum comparable size, 65537/65536.",
+          "trace": "3601ddbd06c3cff2e77d8bb4996d3483b337e34d252fcfc8d02276df66481f44"
+        },
+        {
+          "budget": 42057299,
+          "fee": 42057300,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "3601ddbd06c3cff2e77d8bb4996d3483b337e34d252fcfc8d02276df66481f44"
+        },
+        {
+          "budget": 0,
+          "fee": 409600,
+          "state": "FAULT",
+          "error": "Insufficient GAS.",
+          "trace": "4e45fa2f1101a74bba4764bb00a1b39cdbca97b0db74f13151ae4c19fe51b2c1"
+        }
+      ]
+    }
+  ]
+}

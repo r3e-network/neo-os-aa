@@ -1,0 +1,7 @@
+Deployed module profile bytes matched in NeoVM.
+ValidatorTemplate: common module interface verified
+[plugin templates] validator: compiled NEP interface and deployed profile verified, shared layer in use
+Deployed module profile bytes matched in NeoVM.
+HookTemplate: common module interface verified
+[plugin templates] hook: compiled NEP interface and deployed profile verified, shared layer in use
+[plugin templates] PASS

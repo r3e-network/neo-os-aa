@@ -679,13 +679,26 @@ const HISTORICAL_SNIPPET_SCOPE = /retained as historical security context|as a d
 // The two halves are why the rule keys on the artifact rather than on letter case: refusing every
 // PascalCase name would kill the second class, and accepting every case variant would keep the
 // first invisible.
+const namedModuleInterfaces = JSON.parse(read('docs/proposals/smartaccount-named-module-interfaces.json'));
+function isModuleDirectoryMethod(name, file) {
+  if (file !== 'contracts/modules/README.md') return false;
+  const row = read(file).split('\n').find(line => line.startsWith('| [') && line.includes('`' + name + '`') &&
+    Object.hasOwn(namedModuleInterfaces[line.match(/^\| \[(\w+)\]/)?.[1]]?.methods ?? {}, name));
+  return row !== undefined;
+}
 function isLiveName(name, file) {
+  if (isModuleDirectoryMethod(name, file)) return true;
   if (deployedAbi.has(name)) return true;
   if (deployedSpelling(name) !== undefined) return false;
   if (sourceDefinitions.has(name) || definedNames.has(name) || sdkMethods.has(name)) return true;
   if (actionNames.has(name)) return true;
   if (NATIVE_PROFILE_DOCS.includes(docClass(file)) && nativeAbiNames.has(name)) return true;
   return false;
+}
+
+// These drafts retain the source vocabulary of the experiments they describe.
+function isResearchDocument(file) {
+  return file.startsWith('docs/proposals/') || file.startsWith('docs/archive/native-research/');
 }
 
 // The names a single fenced line asserts. `claim` is a property of the line's own syntax, so a
@@ -857,7 +870,7 @@ function fenceScan({ mirrors = false } = {}) {
   const mentions = {};
   const snippetScopes = new Set();
   const files = tracked.filter((file) => file.endsWith('.md')
-    && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
+    && !isResearchDocument(file) && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
     && !CURRENT_DOCS.includes(docClass(file))
     && (mirrors ? isMirrorDoc(file) : !isMirrorDoc(file)));
   for (const file of files) {
@@ -954,6 +967,7 @@ function failures() {
       const markedRemoved = REMOVED.test(line) || historical[index];
       if (/^\s*```/.test(line)) { fence = !fence; return; }
       if (nameRules) for (const { name } of callableNames(line)) {
+        if (isModuleDirectoryMethod(name, classFile)) continue;
         if (isSourceBridgeName(classFile, name)) continue;
         if (deployedAbi.has(name)) continue;
         if (deployedAbiLower.has(name.toLowerCase())) {
@@ -1334,10 +1348,15 @@ function digestReportInventoryAllowances() {
     // their three mirrored external native-core pins) were re-read through
     // formal/verify.py's own digest functions; no key was added or removed, so the
     // count stays 341 and the full-text hash moved.
-    // Native v4 also binds module projects, restored package locks, shared code and parameters.
+    // Re-pinned for the 2026-11-24 recovery-policy decision: six existing digests moved
+    // (RecoveryModule.cs, SmartAccount.Modules.cs, SmartAccountRecords.cs,
+    // SA-MODULE-PROTOCOL.md, nep-smartaccount-module-profiles.mediawiki and
+    // smartaccount-named-module-interfaces.json); no key was added or removed, so the
+    // count stays 341 and the full-text hash moved.
+    // Core and module proposal inputs are bound alongside the reviewed model sources.
     entry('sa-formal-source-lock-content-digests',
-      'formal/source-lock.json', 358,
-      '0d15fbc0182594b56729e87359785f3a8e5349c3256c144d9aedef76f12593a8'),
+      'formal/source-lock.json', 361,
+      '556c9d0efd6fcf78b525b55f7276c6d56d13685bc9e5063d2088731b90fe216f'),
     entry('sa-artifact-reproducibility-20261025-content-digests',
       'docs/reports/sa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
@@ -2129,7 +2148,7 @@ test('CU-163: bounded security claims retain their explicit open boundaries', ()
 // makes a reviewer read two different issues under one name (DS-CU-163 section 4.3 V4).
 test('CU-163: only the ledger numbers issues VULN-00N', () => {
   const markdown = tracked.filter((file) => file.endsWith('.md')
-    && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/'));
+    && !isResearchDocument(file) && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/'));
   const collisions = [];
   for (const file of markdown) {
     read(file).split('\n').forEach((line, index) => {
@@ -2145,7 +2164,7 @@ test('CU-163: only the ledger numbers issues VULN-00N', () => {
 test('CU-163: no document closes VULN-001 for the public build while the deployed core has no bounded call', () => {
   if (gasBoundedSites.length > 0) return;
   const markdown = tracked.filter((file) => file.endsWith('.md')
-    && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/'));
+    && !isResearchDocument(file) && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/'));
   const claims = [];
   for (const file of markdown) {
     // A paragraph is the unit: the prose wraps, so the qualifier can sit on the next line.
@@ -2193,7 +2212,7 @@ function ratchetDebt({ mirrors = false, only = null } = {}) {
   };
   const found = {};
   const files = only ?? tracked.filter((file) => file.endsWith('.md')
-    && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
+    && !isResearchDocument(file) && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
     && !CURRENT_DOCS.includes(docClass(file))
     && (mirrors ? isMirrorDoc(file) : !isMirrorDoc(file)));
   for (const file of files) {
@@ -2233,7 +2252,7 @@ test('CU-163: the V2-era documents do not grow new dead references (ratchet)', (
 test('CU-163: a Chinese counterpart records exactly the debt of the document it mirrors', () => {
   const recorded = ratchetDebt();
   const mirrors = tracked.filter((file) => file.endsWith('.md') && isMirrorDoc(file)
-    && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
+    && !isResearchDocument(file) && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
     && !CURRENT_DOCS.includes(docClass(file)));
   for (const file of mirrors) {
     const source = docClass(file);
@@ -2315,7 +2334,7 @@ test('CU-210: fenced blocks assert nothing the code does not, and the ratchet st
   assert.deepEqual(mirrorScan.claims, {},
     `a translated fenced block calls a name the repository does not define:\n${JSON.stringify(mirrorScan.claims, null, 2)}`);
   for (const file of tracked.filter((entry) => entry.endsWith('.md') && isMirrorDoc(entry)
-    && !entry.startsWith('docs/proposals/') && !entry.startsWith('docs/reports/') && !entry.startsWith('docs/plans/')
+    && !isResearchDocument(entry) && !entry.startsWith('docs/reports/') && !entry.startsWith('docs/plans/')
     && !CURRENT_DOCS.includes(docClass(entry)))) {
     assert.deepEqual(mirrorScan.mentions[file] ?? [], scan.mentions[docClass(file)] ?? [],
       `${file}: the translation's justified fence mentions differ from ${docClass(file)}`);
@@ -3209,7 +3228,7 @@ test('CU-212 R2: a call the sentence punctuates is read, and its drift is report
   //    so this compares the two rules over every line of every document the ratchet scans. A name the
   //    r1 parser read and the R2 parser does not would be enforcement silently lost.
   const scanned = tracked.filter((file) => file.endsWith('.md')
-    && !file.startsWith('docs/proposals/') && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
+    && !isResearchDocument(file) && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/')
     && !CURRENT_DOCS.includes(file));
   const lost = [];
   let linesScanned = 0;

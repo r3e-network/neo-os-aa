@@ -280,7 +280,7 @@ export interface ProxyWitnessTransaction {
 export declare function createProxyVerificationScript(input: {
   coreHash: string;
   accountId: string;
-  callFlags?: number;
+  callFlags?: 5;
 }): string;
 
 export declare function createProxyWitness(input: {
@@ -289,7 +289,7 @@ export declare function createProxyWitness(input: {
   proxyHash: string;
   feePayer: string;
   expectedProxyHash?: string;
-  callFlags?: number;
+  callFlags?: 5;
 }): ProxyWitnessArtifacts;
 
 /**
@@ -312,7 +312,7 @@ export declare function buildProxyWitnessTransaction(input: {
   feePayer: string;
   feePayerScope?: SignerScope;
   feePayerAllowedContracts?: readonly string[];
-  callFlags?: number;
+  callFlags?: 5;
 }): ProxyWitnessTransaction;
 
 export declare function buildProxyWalletSignRequest(input: {
@@ -330,7 +330,7 @@ export declare function resolveProxyWitnessTransaction(input: {
   readState: (state: { coreHash: string; accountId: string }) => Promise<{ proxyHash?: string }>;
   feePayerScope?: SignerScope;
   feePayerAllowedContracts?: readonly string[];
-  callFlags?: number;
+  callFlags?: 5;
 }): Promise<ProxyWitnessTransaction>;
 
 // ---------------------------------------------------------------------------
@@ -469,7 +469,7 @@ export declare function decodeValidationPreviewStack(item: unknown): {
   operationDigest: string;
 };
 
-/** The raw 16-field `getAccount` Array, decoded without a client identity. */
+/** The raw 15-field `getAccount` Array, decoded without a client identity. */
 export interface DecodedAccountDescriptor {
   readonly exists: true;
   readonly status: number;
@@ -481,13 +481,13 @@ export interface DecodedAccountDescriptor {
   readonly recoveryTimelockMs: string;
   readonly defaultOperationAuthorization: boolean;
   readonly defaultMessageAuthorization: boolean;
-  readonly ownerOnlyRecovery: boolean;
+  /** Retained record field with no authorization meaning; current protocol accepts only false. */
+  readonly ownerOnlyRecovery: false;
   readonly hookOrderRevision: string;
   readonly controlRevision: string;
   readonly recoveryPending: boolean;
   readonly recoveryMatureAt: string;
   readonly marketEscrowActive: boolean;
-  readonly legacyRow: boolean;
 }
 
 export interface DecodedModuleDescriptor {

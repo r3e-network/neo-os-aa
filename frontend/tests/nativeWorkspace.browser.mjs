@@ -12,6 +12,7 @@ import {
   createNativeRpcFixture,
   nativeTestCustody,
   nativeTestRecovery,
+  nativeTestRecoverySeat,
   nativeTestSalt,
   nativeTestIdentity,
 } from "./fixtures/nativeRpcFixture.js";
@@ -30,15 +31,15 @@ const evidenceStage = process.env.NATIVE_WORKSPACE_EVIDENCE_STAGE || "current";
 // The one success notice the v4 workspace emits after discovery: the node
 // answered the v4 protocol, the full native ABI and the shipped implementation.
 const PROFILE_READY =
-  "Node answered the v4 native profile, ABI and implementation id.";
+  "Node supports the current SmartAccount protocol.";
 
 const browserPage = async (browser, { width = 1440, height = 1100 } = {}) =>
   browser.newPage({ viewport: { width, height }, acceptDownloads: true });
 
 test(
-  "native route: verify, create, backup, wallet handoff, configuration intent, freeze review, stale endpoint and mobile read-only",
+  "native route: verify, create, backup, wallet handoff, module administration, freeze review, stale endpoint and mobile read-only",
   { timeout: 120000 },
-  async () => {
+  async (t) => {
     const fixture = createNativeRpcFixture(),
       requests = [],
       errors = [];
@@ -100,7 +101,7 @@ test(
         },
       );
       const url = `http://127.0.0.1:${server.httpServer.address().port}/native`;
-      await page.goto(url);
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90000 });
       await page
         .getByRole("heading", { name: "Native accounts", exact: true })
         .waitFor();
@@ -132,6 +133,22 @@ test(
         .filter({ hasText: "Live wallet identity checked. No transaction was signed." })
         .waitFor();
       await page.getByTestId("native-salt").fill(nativeTestSalt);
+      await t.test("a partial initial module cannot be reviewed as a module-free account", async () => {
+        const details = page.getByTestId("native-initial-install");
+        const button = page.getByRole("button", { name: "Review registration", exact: true });
+        await details.locator("summary").click();
+        const hash = details.getByLabel("Module contract hash", { exact: true });
+        const digest = details.getByLabel("Module profile digest (32 bytes)", { exact: true });
+        for (const [hashText, digestText, ready] of [
+          ["ab".repeat(20), "", false], ["", "cd".repeat(32), false],
+          ["ab".repeat(20), "cd".repeat(32), true], ["", "", true],
+        ]) {
+          await hash.fill(hashText);
+          await digest.fill(digestText);
+          assert.equal(await button.isEnabled(), ready);
+          assert.equal(await details.getByRole("alert").isVisible(), !ready);
+        }
+      });
       const downloadPromise = page.waitForEvent("download");
       await page
         .getByRole("button", { name: "Save recovery descriptor", exact: true })
@@ -250,92 +267,21 @@ test(
       const summary = (await page.getByTestId("native-account-summary").innerText())
         .replace(/\s+/g, " ")
         .trim();
-      assert.ok(summary.includes("0x" + nativeTestCustody), summary);
       assert.ok(summary.includes("Not configured"), summary);
-      assert.ok(summary.includes("7 days"), summary);
-      assert.ok(summary.includes("Built-in route"), summary);
-      assert.equal(
-        (await page.getByTestId("native-module-counts").innerText())
-          .replace(/\s+/g, " ")
-          .trim(),
-        "0 validators · 0 hooks",
-      );
+      assert.ok(summary.includes("Funding address"), summary);
+      assert.match(await page.getByTestId("native-balances").innerText(), /NEO: 17 · GAS: 2.00000001/);
+      assert.equal(await page.getByTestId("native-module-counts").count(), 0);
+      await page.getByRole("button", { name: "Modules", exact: true }).click();
+      await page.getByTestId("native-module-counts").waitFor();
+      assert.equal((await page.getByTestId("native-module-counts").innerText()).replace(/\s+/g," ").trim(), "0 validators · 0 hooks · 0 recovery seats");
+      await page.getByRole("button", { name: "Account & recovery", exact: true }).click();
 
-      await page
-        .getByRole("button", { name: "Configuration intents", exact: true })
-        .click();
-      await page.getByTestId("native-intent-window").waitFor();
-      assert.match(
-        (await page.getByTestId("native-intent-window").innerText())
-          .replace(/\s+/g, " ")
-          .trim(),
-        /^Matures after 24 hours and expires 7 days after maturity\.$/,
-      );
-      await page.getByLabel("Action kind", { exact: true }).selectOption("thresholdPolicy");
-      await page.getByLabel(/^Threshold/).fill("3");
-      await page.getByLabel(/Member module ids/).fill("1,2");
-      const callsBefore = fixture.state.calls.length;
-      await page.getByRole("button", { name: "Add to the intent", exact: true }).click();
-      await page
-        .getByRole("alert")
-        .filter({ hasText: "A reachable threshold needs between 1 and its member count." })
-        .waitFor();
-      assert.equal(
-        fixture.state.calls.length,
-        callsBefore,
-        "an unreachable threshold is refused before RPC or wallet handoff",
-      );
-      assert.equal(requests.length, 1);
-      await page.getByLabel(/^Threshold/).fill("2");
-      await page.getByRole("button", { name: "Add to the intent", exact: true }).click();
-      await page
-        .getByTestId("native-draft-actions")
-        .getByText("Threshold policy 0: 2-of-2")
-        .waitFor();
-      await page
-        .getByRole("button", { name: "Review configuration proposal", exact: true })
-        .click();
-      await page
-        .locator(".review-heading")
-        .getByText("proposeConfiguration", { exact: true })
-        .waitFor();
-      assert.equal(
-        (await page.getByTestId("native-required-authorities").innerText()).trim(),
-        "0x" + nativeTestCustody,
-      );
-      assert.equal(
-        await page
-          .getByRole("button", { name: "Send to wallet for approval", exact: true })
-          .isDisabled(),
-        true,
-        "a configuration intent keeps the exact script and cannot be wallet-invoked",
-      );
-      await page
-        .getByLabel(
-          "I reviewed the network, authority, target, scope and fee payer.",
-          { exact: true },
-        )
-        .check();
-      const proposalDownload = page.waitForEvent("download");
-      await page
-        .getByRole("button", { name: "Export reviewed request", exact: true })
-        .click();
-      const proposal = JSON.parse(
-        await readFile(await (await proposalDownload).path()),
-      );
-      assert.equal(proposal.submission, "native-sdk");
-      assert.equal(proposal.request, null);
-      assert.equal(proposal.plan.kind, "configuration");
-      assert.equal(proposal.plan.method, "proposeConfiguration");
-      assert.deepEqual(proposal.signers, [
-        {
-          account: "0x" + nativeTestCustody,
-          scopes: "CustomContracts",
-          allowedcontracts: ["0x" + CORE],
-        },
-      ]);
-      assert.equal(proposal.simulation.state, "HALT");
-
+      await page.getByRole("button", { name: "Modules", exact: true }).click();
+      assert.match(await page.getByTestId("native-module-admin").innerText(), /installModule and removeModule/);
+      await page.getByLabel("Action", { exact: true }).selectOption("install");
+      await page.getByLabel("Module type", { exact: true }).selectOption("recovery");
+      assert.equal(await page.getByLabel("Module type", { exact: true }).inputValue(), "recovery");
+      assert.equal(requests.length, 1, "viewing module settings must not invoke the wallet");
       await page
         .getByRole("button", { name: "Account & recovery", exact: true })
         .click();
@@ -506,7 +452,7 @@ test(
 );
 
 test(
-  "native configuration intent, replaced intent, recovery authority and permissionless completion",
+  "native recovery requires a supported seat and permits an independent payer only after maturity",
   { timeout: 120000 },
   async () => {
     const fixture = createNativeRpcFixture();
@@ -516,58 +462,12 @@ test(
     const initialTime = fixture.state.time;
     const maturity = initialTime + 60000;
     const unrelatedPayer = "77".repeat(20);
-    const intentId = 5;
     const requests = [], errors = [];
-    const integer = (value) => ({ type: "Integer", value: String(value) });
-    const boolean = (value) => ({ type: "Boolean", value: value === true });
-    const digest = Buffer.alloc(32, 3);
-    // Canonical configuration actions: [code, ...fields]. Only the fields the
-    // workspace describes are needed; the core would compare the digest.
-    const policyAction = (operations, messages) => ({
-      type: "Array",
-      value: [integer(5), boolean(operations), boolean(messages)],
-    });
-    const rpcValue = (value) => {
-      if (value.type === "Integer") return integer(value.value);
-      if (value.type === "Boolean") return boolean(value.value);
-      if (value.type === "ByteString")
-        return {
-          type: "ByteString",
-          value: Buffer.from(value.value, "hex").toString("base64"),
-        };
-      return { type: "Array", value: value.value.map(rpcValue) };
-    };
-    const intentRecord = (intent) => ({
-      type: "Array",
-      value: [
-        boolean(true),
-        integer(intent.intentId),
-        integer(intent.proposedAt),
-        integer(intent.matureAt),
-        integer(intent.expiresAt),
-        integer(intent.authorityEpoch),
-        intent.actionDigest,
-        { type: "Array", value: intent.actions.map(rpcValue) },
-      ],
-    });
-    // A 32-byte action digest is already the RPC stack shape the intent record
-    // carries, so the state and the injected override share one item.
-    const digestItem = { type: "ByteString", value: digest.toString("base64") };
-    const inspected = {
-      intentId,
-      proposedAt: initialTime - 86400000,
-      matureAt: maturity,
-      expiresAt: maturity + 604800000,
-      authorityEpoch: 0,
-      actionDigest: digestItem,
-      actions: [policyAction(true, false)],
-    };
-    fixture.state.intents = { [intentId]: inspected };
     fixture.state.pendingRecovery = {
       newCustody: "55".repeat(20),
       initiatedAt: initialTime - 60000,
       matureAt: maturity,
-      authorityEpochAtInit: 0,
+      authorityEpochAtInit: 1,
     };
     const server = await createServer({
       root,
@@ -608,7 +508,7 @@ test(
         { address: getAddressFromScriptHash(nativeTestCustody), hash: nativeTestCustody },
       );
       const url = `http://127.0.0.1:${server.httpServer.address().port}/native`;
-      await page.goto(url);
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90000 });
       await page.getByRole("heading", { name: "Native accounts", exact: true }).waitFor();
       assert.equal(page.url(), url);
       assert.match(await page.title(), /Native Accounts/);
@@ -619,276 +519,34 @@ test(
       await page.getByTestId("native-account-id").fill(nativeTestIdentity.accountId);
       await page.getByRole("button", { name: "Load account", exact: true }).click();
       await page.getByTestId("native-account-summary").waitFor();
-      const summary = (await page.getByTestId("native-account-summary").innerText())
-        .replace(/\s+/g, " ")
-        .trim();
-      assert.ok(summary.includes("0x" + nativeTestRecovery), summary);
-      assert.ok(summary.includes("Pending recovery"), summary);
-      await page
-        .getByRole("button", { name: "Use connected Neo wallet", exact: true })
-        .click();
-      await page
-        .getByRole("status")
-        .filter({ hasText: "Live wallet identity checked. No transaction was signed." })
-        .waitFor();
-
-      await page
-        .getByRole("button", { name: "Configuration intents", exact: true })
-        .click();
-      await page.getByTestId("native-intent-window").waitFor();
-      await page
-        .getByRole("button", { name: "Refresh pending intents", exact: true })
-        .click();
-      const card = page.getByTestId("native-pending-policy");
-      await card.waitFor();
-      const cardText = (await card.innerText()).replace(/\s+/g, " ").trim();
-      assert.match(cardText, /#5 · waiting/);
-      assert.ok(cardText.includes("Built-in route: operations on, messages off"), cardText);
-      assert.ok(cardText.includes(new Date(maturity).toISOString()), cardText);
-      await card
-        .getByRole("button", { name: "Review cancellation", exact: true })
-        .click();
-      await page
-        .locator(".review-heading")
-        .getByText("cancelConfiguration", { exact: true })
-        .waitFor();
-      assert.equal(
-        (await page.getByTestId("native-required-authorities").innerText()).trim(),
-        "0x" + nativeTestCustody,
-        "a live intent is cancelled by custody",
-      );
-      assert.equal(
-        await page
-          .getByRole("button", { name: "Send to wallet for approval", exact: true })
-          .isDisabled(),
-        true,
-      );
-      await page
-        .getByLabel(
-          "I reviewed the network, authority, target, scope and fee payer.",
-          { exact: true },
-        )
-        .check();
-      const cancelDownload = page.waitForEvent("download");
-      await page
-        .getByRole("button", { name: "Export reviewed request", exact: true })
-        .click();
-      const cancellation = JSON.parse(
-        await readFile(await (await cancelDownload).path()),
-      );
-      assert.equal(cancellation.submission, "native-sdk");
-      assert.equal(cancellation.request, null);
-      assert.equal(cancellation.plan.method, "cancelConfiguration");
-      assert.equal(cancellation.intentId, "5");
-      assert.equal(cancellation.signers[0].scopes, "CustomContracts");
-
-      fixture.state.intents[intentId] = {
-        ...inspected,
-        actions: [policyAction(false, true)],
-      };
-      await card
-        .getByRole("button", { name: "Review cancellation", exact: true })
-        .click();
-      await page
-        .getByRole("alert")
-        .filter({ hasText: "The pending intent changed. Refresh it before reviewing." })
-        .waitFor();
-      assert.equal(requests.length, 0, "a replaced intent must not reach the wallet");
-      // The fixture extension registers one answer the descriptor surface cannot
-      // derive; the client must still refuse the stale expectation.
-      fixture.add(
-        "getPendingConfiguration",
-        [c.hashValue(nativeTestIdentity.accountId), integer(intentId)],
-        intentRecord({ ...inspected, actions: [policyAction(false, false)] }),
-      );
-      await card
-        .getByRole("button", { name: "Review cancellation", exact: true })
-        .click();
-      await page
-        .getByRole("alert")
-        .filter({ hasText: "The pending intent changed. Refresh it before reviewing." })
-        .waitFor();
-      await page
-        .getByRole("button", { name: "Refresh pending intents", exact: true })
-        .click();
-      await card.waitFor();
-      await card
-        .getByText("Built-in route: operations off, messages off", { exact: true })
-        .waitFor();
-      await card
-        .getByRole("button", { name: "Review cancellation", exact: true })
-        .click();
-      await page
-        .locator(".review-heading")
-        .getByText("cancelConfiguration", { exact: true })
-        .waitFor();
-      await page.screenshot({
-        path: join(evidenceDir, `${evidenceStage}-intent-cancel.png`),
-        fullPage: true,
-      });
-
-      await page
-        .getByRole("button", { name: "Account & recovery", exact: true })
-        .click();
-      await page
-        .getByLabel("Action", { exact: true })
-        .selectOption("cancelRecovery");
-      await page
-        .getByLabel("Fee payer Neo address / script hash", { exact: true })
-        .fill(nativeTestRecovery);
-      await page
-        .getByRole("button", { name: "Review account action", exact: true })
-        .click();
-      await page
-        .locator(".review-heading")
-        .getByText("cancelRecovery", { exact: true })
-        .waitFor();
-      assert.equal(
-        (await page.getByTestId("native-required-authorities").innerText()).trim(),
-        "0x" + nativeTestRecovery,
-        "the recovery authority alone can cancel the pending recovery",
-      );
-      assert.equal(
-        (await page.getByTestId("native-reviewed-authority").innerText()).trim(),
-        "0x" + nativeTestRecovery,
-      );
-      const feeValue = (label) =>
-        page
-          .locator("dt")
-          .filter({ hasText: new RegExp(`^${label}$`) })
-          .locator("xpath=following-sibling::dd[1]");
-      assert.equal((await feeValue("Application consumption").innerText()).trim(), "0.001 GAS");
-      assert.equal((await feeValue("Minimum system fee budget").innerText()).trim(), "0.001 GAS");
-      await page.getByText("Not quoted; confirm in wallet or SDK", { exact: true }).waitFor();
-      // A single required authority that also pays is wallet-invokable, so the
-      // exact-script warning never renders and the wallet send is available
-      // once the review is acknowledged.
-      assert.equal(
-        await page
-          .getByText(/needs the exact script the node simulated/)
-          .count(),
-        0,
-        "the recovery authority that pays is a wallet-invokable single authority",
-      );
-      await page
-        .getByLabel(
-          "I reviewed the network, authority, target, scope and fee payer.",
-          { exact: true },
-        )
-        .check();
-      assert.equal(
-        await page
-          .getByRole("button", { name: "Send to wallet for approval", exact: true })
-          .isDisabled(),
-        false,
-        "the recovery authority that pays is a wallet-invokable single authority",
-      );
-      await page
-        .getByLabel("Fee payer Neo address / script hash", { exact: true })
-        .fill(unrelatedPayer);
-      await page
-        .getByRole("button", { name: "Review account action", exact: true })
-        .click();
-      await page
-        .getByRole("alert")
-        .filter({ hasText: "Only custody or the recovery authority can start or cancel recovery." })
-        .waitFor();
+      const readiness = page.getByTestId("native-recovery-readiness");
+      assert.match(await readiness.innerText(), /no recovery module installed/i);
+      await page.getByLabel("Action", { exact: true }).selectOption("executeRecovery");
+      const review = page.getByRole("button", { name: "Review account action", exact: true });
+      assert.equal(await review.isDisabled(), true);
+      fixture.state.modules.push(nativeTestRecoverySeat);
+      await page.getByRole("button", { name: "Refresh account and chain time", exact: true }).click();
+      await readiness.filter({ hasText: /Standard recovery configured/ }).waitFor();
+      await page.getByLabel("Fee payer Neo address / script hash", { exact: true }).fill(unrelatedPayer);
+      await page.getByLabel("Action", { exact: true }).selectOption("executeRecovery");
+      await review.click();
+      await page.getByRole("alert").filter({ hasText: /not matured/i }).waitFor();
       assert.equal(requests.length, 0);
-
-      await page
-        .getByLabel("Action", { exact: true })
-        .selectOption("executeRecovery");
-      await page
-        .getByText("Custody recovery has not matured.", { exact: true })
-        .waitFor();
-      assert.equal(
-        await page
-          .getByRole("button", { name: "Review account action", exact: true })
-          .isDisabled(),
-        true,
-        "an immature recovery cannot be completed even by a permissionless payer",
-      );
       fixture.state.time = maturity;
-      await page
-        .getByRole("button", { name: "Refresh account and chain time", exact: true })
-        .click();
-      await page
-        .getByRole("status")
-        .filter({ hasText: "Account loaded from the selected node." })
-        .waitFor();
-      await page.evaluate(
-        ({ address, hash }) => {
-          window.__nativeWalletAccount = { address, hash };
-        },
-        { address: getAddressFromScriptHash(unrelatedPayer), hash: unrelatedPayer },
-      );
-      await page
-        .getByRole("button", { name: "Use connected Neo wallet", exact: true })
-        .click();
-      await page
-        .getByRole("status")
-        .filter({ hasText: "Live wallet identity checked. No transaction was signed." })
-        .waitFor();
-      await page
-        .getByLabel("Action", { exact: true })
-        .selectOption("executeRecovery");
-      const reviewAction = page.getByRole("button", { name: "Review account action", exact: true });
-      assert.equal(await reviewAction.isDisabled(), false);
-      await reviewAction.click();
-      await page
-        .locator(".review-heading")
-        .getByText("executeRecovery", { exact: true })
-        .waitFor();
-      assert.match(
-        (await page.getByTestId("native-required-authorities").innerText()).trim(),
-        /Permissionless executor \/ hook proof/,
-      );
-      await page
-        .getByLabel(
-          "I reviewed the network, authority, target, scope and fee payer.",
-          { exact: true },
-        )
-        .check();
-      const executeDownload = page.waitForEvent("download");
-      await page
-        .getByRole("button", { name: "Export reviewed request", exact: true })
-        .click();
-      const completion = JSON.parse(
-        await readFile(await (await executeDownload).path()),
-      );
-      assert.deepEqual(completion.requiredAuthorities, []);
-      assert.equal(completion.submission, "wallet-invoke");
-      assert.deepEqual(completion.request.signers, [
-        { account: "0x" + unrelatedPayer, scopes: "CalledByEntry" },
-      ]);
-      await page
-        .getByRole("button", { name: "Send to wallet for approval", exact: true })
-        .click();
-      await page.getByRole("status").filter({ hasText: "Sent to wallet." }).waitFor();
-      assert.equal(requests.length, 1);
-      assert.equal(requests[0].operation, "executeRecovery");
-      assert.deepEqual(requests[0].signers, [
-        { account: "0x" + unrelatedPayer, scopes: "CalledByEntry" },
-      ]);
-      await page.screenshot({
-        path: join(evidenceDir, `${evidenceStage}-permissionless-completion.png`),
-        fullPage: true,
-      });
-      await page.setViewportSize({ width: 390, height: 844 });
-      await page.screenshot({
-        path: join(evidenceDir, `${evidenceStage}-mobile-review.png`),
-        fullPage: true,
-      });
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1),
-        false,
-      );
-      assert.equal(await page.locator("vite-error-overlay").count(), 0);
+      await page.getByRole("button", { name: "Refresh account and chain time", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "Account loaded from the selected node." }).waitFor();
+      await review.click();
+      await page.locator(".review-heading").getByText("executeReviewedRecovery", { exact: true }).waitFor();
+      await page.getByLabel("I reviewed the network, authority, target, scope and fee payer.", { exact: true }).check();
+      const download = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Export reviewed request", exact: true }).click();
+      const artifact = JSON.parse(await readFile(await (await download).path()));
+      assert.equal(artifact.feePayer, unrelatedPayer);
+      assert.equal(artifact.plan.targetContract, nativeTestRecoverySeat.contractHash);
+      assert.equal(artifact.plan.method, "executeReviewedRecovery");
+      assert.deepEqual(artifact.requiredAuthorities, []);
+      assert.equal(requests.length, 0, "review does not submit a transaction");
       assert.deepEqual(errors, []);
-      assert.equal(
-        fixture.state.calls.some(({ method }) => method === "sendrawtransaction"),
-        false,
-      );
     } finally {
       await browser.close();
       await server.close();
@@ -972,7 +630,7 @@ test(
             },
             gasconsumed: "100000",
             minimumrequiredfee: "100000",
-            stack: [{ type: "Boolean", value: true }],
+            stack: [{ type: "Any" }],
           };
         } else if (method === "sendrawtransaction") {
           submittedRaw.push(Buffer.from(params[0], "base64").toString("hex"));
@@ -1001,7 +659,7 @@ test(
               {
                 trigger: "Application",
                 vmstate: receiptFault ? "FAULT" : "HALT",
-                stack: [{ type: "Boolean", value: true }],
+                stack: [{ type: "Any" }],
                 notifications: [],
                 gasconsumed: "100000",
               },

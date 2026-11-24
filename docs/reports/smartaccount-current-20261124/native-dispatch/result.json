@@ -1,0 +1,18 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "methods": 29,
+  "flagCombinations": 464,
+  "deniedRuntimeCases": 311,
+  "coqchkPassed": true,
+  "assemblySha256": "3b19a2b22e9a21eee7c22b3deec2761d1cc5acbe6e309e7df43479e3e58a4aae",
+  "dispatchSha256": "16fbfd96676f8cef017ff4e97c757ff52deb45111525cd11c334d70dfab985e1",
+  "manifestSha256": "b9dbf2484c1757f1946198727e87f6335ec37469f7365d2ffb2b3b7e74861d20",
+  "certificateSha256": "2fc4fbc7a4a9ebe1c03c5e95f8466962fc321e5d9f5b2690523050d443c4aab8",
+  "controls": {
+    "wrong handler": "rejected",
+    "weakened permission": "rejected",
+    "shifted pc": "rejected"
+  },
+  "boundary": "Active local dispatch table, wrapper and metadata. Does not prove CLR dispatch code, argument conversion, host charging, method bodies, activation or rollback."
+}

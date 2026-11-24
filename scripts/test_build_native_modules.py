@@ -21,9 +21,9 @@ class NativeBuildTests(unittest.TestCase):
 
     def fixture(self, root):
         contracts = root / "contracts"; native = contracts / "plugins/native-profile"; native.mkdir(parents=True)
-        parameters = root / "docs/proposals/smartaccount-native-profile-v4-parameters.json"
+        parameters = root / "docs/proposals/smartaccount-native-profile-parameters.json"
         parameters.parent.mkdir(parents=True)
-        parameters.write_bytes((Path(__file__).resolve().parents[1] / "docs/proposals/smartaccount-native-profile-v4-parameters.json").read_bytes())
+        parameters.write_bytes((Path(__file__).resolve().parents[1] / "docs/proposals/smartaccount-native-profile-parameters.json").read_bytes())
         (root / "Directory.Build.props").write_text("<Project><PropertyGroup><NeoSmartContractFrameworkVersion>3.10.1</NeoSmartContractFrameworkVersion><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile><RestoreLockedMode>true</RestoreLockedMode></PropertyGroup></Project>")
         (root / "nuget.config").write_text('<configuration><packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources></configuration>')
         (native / "profiles.json").write_text(json.dumps({"NeoWitnessValidator": {"project": "Verifier.Native.csproj", "role": "verifier", "configurationMethods": ["setConfig"], "compositeVerifier": False, "compositeProfile": ""}}))
@@ -48,7 +48,7 @@ class NativeBuildTests(unittest.TestCase):
             root = Path(tmp).resolve(); contracts = self.fixture(root)
             lock = contracts / "plugins/native-profile/packages.Verifier.Native.lock.json"; lock.write_text('{"version":1}')
             _, pins = builder.collect_inputs(contracts)
-            self.assertEqual({"Directory.Build.props", "nuget.config", "contracts/plugins/native-profile/profiles.json", "docs/proposals/smartaccount-native-profile-v4-parameters.json",
+            self.assertEqual({"Directory.Build.props", "nuget.config", "contracts/plugins/native-profile/profiles.json", "docs/proposals/smartaccount-native-profile-parameters.json",
                               "contracts/plugins/native-profile/Verifier.Native.csproj", "contracts/plugins/native-profile/Second.Native.csproj", "contracts/module.cs",
                               "contracts/plugins/native-profile/packages.Verifier.Native.lock.json"}, set(pins))
             lock.unlink(); lock.symlink_to(contracts / "module.cs")

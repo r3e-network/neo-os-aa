@@ -15,6 +15,7 @@ import {
   validateNativeReceipt,
   describeConfigurationAction,
   installModuleAction,
+  parseModuleInstallData,
   uninstallModuleAction,
   configureModuleAction,
   rebindModuleCodeAction,
@@ -53,7 +54,7 @@ const profile = {
   contract: NATIVE_SMART_ACCOUNT_CONTRACT,
   networkMagic: 123,
   protocolVersion: 4,
-  implementationId: "NativeSmartAccount/v4",
+  implementationId: "NativeSmartAccount",
 };
 const Client = createNativeClientClass(nativeCodec, {
   callFlags: NATIVE_PROXY_CALL_FLAGS,
@@ -104,9 +105,8 @@ test("the workspace exports the v4 surface and no v3 alias", async () => {
     setThresholdPolicy: 7,
     setRecoveryPolicy: 8,
     setMessageSubjects: 9,
-    migrateAccount: 10,
   });
-  assert.deepEqual(NATIVE_STATUS_NAMES, ["Active", "Frozen", "MigrationRequired"]);
+  assert.deepEqual(NATIVE_STATUS_NAMES, ["Active", "Frozen"]);
   assert.equal(NATIVE_PROXY_CALL_FLAGS, 5, "the native proxy calls verify read-only");
   assert.deepEqual(NATIVE_ACTIONS.map((entry) => entry.value), [
     "freezeAccount",
@@ -127,9 +127,7 @@ test("kernel limits track the contract source and the intent window is not promi
     "contracts/native/SmartAccount/SmartAccountModuleProtocol.cs",
   );
   const records = read("contracts/native/SmartAccount/SmartAccountRecords.cs");
-  const threshold = read(
-    "contracts/modules/ThresholdPolicyModule/ThresholdPolicyModule.cs",
-  );
+
   const governance = read(
     "contracts/modules/GovernanceModule/GovernanceModule.cs",
   );
@@ -167,9 +165,9 @@ test("kernel limits track the contract source and the intent window is not promi
     recovery: constant(moduleProtocol, "ModuleTypeCodeRecovery"),
   });
   assert.deepEqual(NATIVE_THRESHOLD_LIMITS, {
-    maxMembers: constant(threshold, "MaxPolicyMembers"),
-    minValue: 1,
-    maxValue: constant(threshold, "MaxPolicyMembers"),
+    maxMembers: constant(moduleProtocol, "MaxThresholdPolicyMembers"),
+    minValue: constant(moduleProtocol, "MinThresholdPolicyValue"),
+    maxValue: constant(moduleProtocol, "MaxThresholdPolicyValue"),
   });
   // The 24-hour proposal window is the governance module's constant now. It is
   // asserted where it lives instead of being promised by the kernel workspace.
@@ -213,21 +211,37 @@ test("configuration actions serialize to the positional Arrays the core dispatch
     A([I(5), BOOL(false), BOOL(true)]),
   );
   assert.deepEqual(
-    setThresholdPolicyAction({ policyId: 2, threshold: 2, memberIds: [1, 2] }),
-    A([I(7), I(2), I(2), A([I(1), I(2)]), BOOL(true)]),
+    setThresholdPolicyAction({ policyId: 0, threshold: 2, memberIds: [1, 2] }),
+    A([I(7), I(0), I(2), A([I(1), I(2)]), BOOL(true)]),
   );
-  assert.deepEqual(
-    setThresholdPolicyAction({ threshold: 1, memberIds: [], active: false }),
-    A([I(7), I(0), I(1), A([]), BOOL(false)]),
-  );
+  assert.throws(() => setThresholdPolicyAction({ policyId: 3, threshold: 0, memberIds: [], active: false }), /recovery/);
   assert.deepEqual(
     setRecoveryPolicyAction({
       recoveryAuthority: recovery,
       recoveryTimelockMs: String(RECOVERY_TIMELOCK_MIN_MS),
+      ownerOnlyRecovery: false,
+    }),
+    A([I(8), nativeCodec.hashValue(recovery), I(RECOVERY_TIMELOCK_MIN_MS), BOOL(false)]),
+  );
+  assert.throws(
+    () => setRecoveryPolicyAction({
+      recoveryAuthority: recovery,
+      recoveryTimelockMs: String(RECOVERY_TIMELOCK_MIN_MS),
       ownerOnlyRecovery: true,
     }),
-    A([I(8), nativeCodec.hashValue(recovery), I(RECOVERY_TIMELOCK_MIN_MS), BOOL(true)]),
+    /ownerOnlyRecovery is reserved/,
   );
+});
+
+test("named module install input preserves command, address, integer and hook-order wire types", () => {
+  const target = "0102030405060708090a0b0c0d0e0f1011121314";
+  assert.deepEqual(parseModuleInstallData(" "), []);
+  assert.deepEqual(parseModuleInstallData(JSON.stringify(["allowTarget", { type: "Hash160", value: target }])),
+    [nativeCodec.stringValue("allowTarget"), nativeCodec.hashValue(target)]);
+  assert.deepEqual(parseModuleInstallData("[[2,5],false]"), [A([I(2), I(5)]), BOOL(false)]);
+  assert.deepEqual(parseModuleInstallData('[{"type":"Integer","value":"9007199254740993"}]'), [I("9007199254740993")]);
+  for (const text of ["[9007199254740993]", "not JSON", "{}", '[{"type":"Hash160","value":"00"}]'])
+    assert.throws(() => parseModuleInstallData(text));
 });
 
 test("configuration actions reject unreachable, duplicate and out-of-range inputs", () => {
@@ -238,6 +252,7 @@ test("configuration actions reject unreachable, duplicate and out-of-range input
     () => installModuleAction({ moduleType: "validator", contractHash: custody, profileDigest: "ab" }),
     () => installModuleAction({ moduleType: "validator", contractHash: custody, profileDigest: digest, initData: Array(65).fill(I(1)) }),
     () => uninstallModuleAction({ moduleId: -1 }),
+    () => uninstallModuleAction({ moduleId: 0 }),
     () => setHookOrderAction({ hookIds: [1, 1] }),
     () => setHookOrderAction({ hookIds: Array(NATIVE_MODULE_LIMITS.hook + 1).fill(0).map((_, index) => index + 1) }),
     () => setThresholdPolicyAction({ threshold: 0, memberIds: [1] }),
@@ -374,8 +389,8 @@ test("discovery gates network magic, kernel identity, protocol version and imple
   for (const [change, expected] of [
     [(state) => (state.magic = 456), /network magic/i],
     [(state) => (state.nativeId = 1), /not available/i],
-    [(state) => (state.protocolVersion = 3), /v4 protocol/i],
-    [(state) => (state.implementationId = "NativeSmartAccount/v3"), /implementation id/i],
+    [(state) => (state.protocolVersion = 3), /current SmartAccount protocol/i],
+    [(state) => (state.implementationId = "DifferentSmartAccount"), /implementation id/i],
   ]) {
     const rpc = createNativeRpcFixture();
     change(rpc.state);
@@ -426,7 +441,7 @@ test("a malformed account record is refused before the workspace shows it", asyn
   );
 });
 
-test("load reads the account, modules, hook order and pending intents from the core", async () => {
+test("account overview reads native balances; a separate request reads the module roster", async () => {
   const moduleHash = "77".repeat(20);
   const f = await connected({
     registered: true,
@@ -461,18 +476,54 @@ test("load reads the account, modules, hook order and pending intents from the c
   assert.equal(snapshot.account.custodyAddress, custody);
   assert.equal(snapshot.account.recoveryAuthority, recovery);
   assert.equal(snapshot.account.recoveryTimelockMs, String(RECOVERY_TIMELOCK_MIN_MS));
-  assert.equal(snapshot.protocol.protocolVersion, "4");
-  assert.equal(snapshot.protocol.migrationModeOpen, false);
-  assert.deepEqual(snapshot.modules.validators.map((m) => m.moduleId), ["1"]);
-  assert.equal(snapshot.modules.validators[0].moduleTypeName, "validator");
-  assert.equal(snapshot.modules.validators[0].credentialGeneration, "1");
-  assert.deepEqual(snapshot.modules.hooks.map((m) => m.moduleId), ["2"]);
-  assert.deepEqual(snapshot.hookOrder, { hookIds: ["2"], revision: "3" });
-  assert.deepEqual(snapshot.pending, []);
+  assert.deepEqual(snapshot.balances, { NEO: "17", GAS: "200000001" });
+  assert.ok(!Object.hasOwn(snapshot, "modules"));
+  const modules = await f.workspace.loadModules(snapshot.account.accountId, snapshot.account.configurationNonce);
+  assert.deepEqual(modules.validators.map((m) => m.moduleId), ["1"]);
+  assert.equal(modules.validators[0].credentialGeneration, "1");
+  assert.deepEqual(modules.hooks.map((m) => m.moduleId), ["2"]);
+  assert.equal(snapshot.account.hookOrderRevision, "3");
   assert.equal(snapshot.chainTime, f.rpc.state.time);
   assert.equal(snapshot.account.pendingRecovery, null);
 });
 
+test("overview RPC count does not grow with validators and hooks; an unreadable balance is not zero", async () => {
+  for (const count of [0, 32]) {
+    const f = await connected({ registered: true, mutate: state => {
+      state.modules = Array.from({ length: count }, (_, i) => ({ moduleId: i + 1, moduleType: 1, credentialGeneration: 1, contractHash: "44".repeat(20) }));
+      state.neoBalance = null; state.gasBalance = "0";
+    } });
+    f.rpc.state.calls.length = 0;
+    const snapshot = await f.workspace.load(nativeTestIdentity.accountId);
+    assert.deepEqual(snapshot.balances, { NEO: null, GAS: "0" });
+    assert.equal(f.rpc.state.calls.length, 9);
+  }
+});
+
+test("module details reject configuration changes before and during enumeration", async () => {
+  const f = await connected({ registered: true });
+  await assert.rejects(f.workspace.loadModules(nativeTestIdentity.accountId, "4"), /configuration changed/);
+  const getAccount = f.client.getAccount.bind(f.client);
+  f.client.getAccount = async id => ({ ...await getAccount(id), configurationNonce: "5" });
+  await assert.rejects(f.workspace.loadModules(nativeTestIdentity.accountId, "0"), /configuration changed/);
+});
+
+test("the transfer draft uses the funding proxy and exact units, and binds the node nonce, route and network", async () => {
+  const f = await connected({ registered: true });
+  const input = { accountId: nativeTestIdentity.accountId, recipient: stranger, symbol: "GAS", amount: "0.00000001" };
+  const draft = await f.workspace.transferDraft(input);
+  assert.deepEqual(draft.operation.args, [nativeCodec.hashValue(nativeTestIdentity.accountAddress),
+    nativeCodec.hashValue(stranger), I(1), { type: "Null" }]);
+  assert.equal(draft.operation.configurationNonce, "0");
+  assert.equal(draft.operation.credentialGeneration, await f.client.resolveCredentialGeneration(input.accountId, 0));
+  assert.notEqual(draft.operation.nonce, "1");
+  assert.equal(draft.operation.deadline, String(f.rpc.state.time + 900000));
+  assert.equal(draft.digest, nativeCodec.operationDigest({ accountId: input.accountId, networkMagic: 123, coreContractHash: NATIVE_SMART_ACCOUNT_CONTRACT }, draft.operation));
+  for (const [symbol, amount] of [["NEO", "0.1"], ["GAS", "0.000000001"], ["GAS", "0"]])
+    await assert.rejects(f.workspace.transferDraft({ ...input, symbol, amount }));
+  f.rpc.state.status = 1;
+  await assert.rejects(f.workspace.transferDraft(input), /active account/);
+});
 test("discovery must complete before a review and invalidation discards every review", async () => {
   const rpc = createNativeRpcFixture();
   const workspace = createNativeWorkspace({
@@ -744,6 +795,11 @@ test("the recovery lifecycle stays a module concern and is never planned against
   f.rpc.state.pendingRecovery.nonce = 2;
   await assert.rejects(() => f.client.revalidatePlan(cancel.plan), /changed/);
   f.rpc.state.pendingRecovery = null;
+  const beginScript = nativeCodec.dynamicCall(nativeTestRecoverySeat.contractHash, "beginRecovery",
+    [nativeCodec.hashValue(account), nativeCodec.hashValue(stranger)]);
+  f.rpc.setInvocationResult(beginScript, I(0));
+  await assert.rejects(f.workspace.lifecycle({ accountId: account, action: "beginRecovery", newCustody: stranger }), /positive nonce/);
+  f.rpc.setInvocationResult(beginScript, I(2));
   const begin = await f.workspace.lifecycle({ accountId: account, action: "beginRecovery", newCustody: stranger });
   assert.deepEqual(begin.requiredAuthorities, [custody, stranger]);
   assert.equal(begin.plan.targetContract, nativeTestRecoverySeat.contractHash);
@@ -753,17 +809,41 @@ test("the recovery lifecycle stays a module concern and is never planned against
 test("actionBlockReason checks core status and recovery seat availability", () => {
   const active = { statusName: "Active", pendingRecovery: null };
   const frozen = { ...active, statusName: "Frozen" };
-  const migration = { ...active, statusName: "MigrationRequired" };
+  const invalid = { ...active, statusName: "invalid" };
   assert.equal(actionBlockReason(active, "freezeAccount"), "");
   assert.match(actionBlockReason(frozen, "freezeAccount"), /already frozen/);
   assert.match(actionBlockReason(active, "unfreezeAccount"), /not frozen/);
   assert.equal(actionBlockReason(frozen, "unfreezeAccount"), "");
-  assert.match(actionBlockReason(migration, "freezeAccount"), /migration/i);
-  assert.match(actionBlockReason(migration, "unfreezeAccount"), /migration/i);
+  assert.match(actionBlockReason(invalid, "freezeAccount"), /unrecognized/i);
+  assert.match(actionBlockReason(invalid, "unfreezeAccount"), /unrecognized/i);
   assert.equal(actionBlockReason(null, "freezeAccount"), "Load an account first.");
   for (const action of ["beginRecovery", "cancelRecovery", "executeRecovery"])
     assert.match(actionBlockReason(active, action), /no supported recovery module/i);
 
+});
+
+test("mandatory spending policy blocks custody settings and still permits preset recovery", async () => {
+  const f = await connected({ registered: true, mutate(state) {
+    state.recovery = recovery;
+    state.defaultOperationAuthorization = false;
+    state.modules = [nativeTestRecoverySeat];
+  } });
+  const accountId = nativeTestIdentity.accountId;
+  let unreadable = false, policy = { policyId: "42" };
+  f.client.getThresholdPolicy = async () => {
+    if (unreadable) throw new Error("policy body unavailable");
+    return policy;
+  };
+  for (unreadable of [false, true]) {
+    const account = (await f.workspace.load(accountId)).account;
+    assert.equal(actionBlockReason(account, "beginRecovery"), "");
+    for (const action of ["freezeAccount", "unfreezeAccount", "setRecoveryPolicy"])
+      await assert.rejects(f.workspace.lifecycle({ accountId, action }),
+        unreadable ? /verify the spending policy/ : /Mandatory multisig/);
+  }
+  unreadable = false;
+  policy = null;
+  assert.equal(actionBlockReason((await f.workspace.load(accountId)).account, "freezeAccount"), "");
 });
 
 test("module administration is an action inside a signed script, never a core intent", async () => {
@@ -837,7 +917,7 @@ test("an execution review carries the canonical proxy signer and refuses wallet 
     deadline: String(f.rpc.state.time + 60_000),
     validatorId: "0",
     credentialGeneration: "1",
-    authorityEpoch: "0",
+    authorityEpoch: "1",
     configurationNonce: "0",
     signature: "cd".repeat(64),
     hookProofs: [],
@@ -895,7 +975,7 @@ test("execution is refused unless the account is active and the envelope is boun
     deadline: String(Date.now() + 60_000),
     validatorId: "0",
     credentialGeneration: "1",
-    authorityEpoch: "0",
+    authorityEpoch: "1",
     configurationNonce: "0",
     signature: "cd".repeat(64),
   };
@@ -939,7 +1019,7 @@ test("an exported review rebuilds from its recipe and binds plan, authority and 
 
   for (const [change, expected] of [
     [(copy) => copy.plan.script = "abcd", /changed|mismatch/i],
-    [(copy) => (copy.profile.implementationId = "NativeSmartAccount/v3"), /profile/i],
+    [(copy) => (copy.profile.implementationId = "DifferentSmartAccount"), /profile/i],
     [(copy) => (copy.requiredAuthorities = []), /authority/i],
     [(copy) => (copy.signers[0].scopes = "None"), /signer|scope/i],
     [(copy) => (copy.feePayer = recovery), /authority|signer|payer/i],
@@ -972,7 +1052,7 @@ test("receipt validation requires a mined transaction, the reviewed script and a
           deadline: "2000",
           validatorId: "0",
           credentialGeneration: "1",
-          authorityEpoch: "0",
+          authorityEpoch: "1",
           configurationNonce: "0",
           signature: "cd".repeat(64),
         }),
@@ -1004,8 +1084,10 @@ test("receipt validation requires a mined transaction, the reviewed script and a
     [{ log: { txid: "0x" + "cc".repeat(32), executions: [] } }, /identity/i],
     [{ log: { txid: hash, executions: [{ trigger: "Verification", vmstate: "HALT" }] } }, /Application/i],
     [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "FAULT", stack: [] }] } }, /successful/i],
+    [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", exception: "inconsistent application result", stack: [{ type: "Boolean", value: true }] }] } }, /exception/i],
+    [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Boolean", value: true }, { type: "Boolean", value: true }] }] } }, /exactly one/i],
     [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Boolean", value: false }] }] } }, /transfer/i],
-    [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [] }] } }, /transfer/i],
+    [{ log: { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [] }] } }, /exactly one/i],
   ])
     assert.throws(
       () =>
@@ -1032,7 +1114,7 @@ test("confirmation reads the mined transaction and refuses to publish it after a
     script: Buffer.from(review.plan.script, "hex").toString("base64"),
     signers: review.signers,
   };
-  const log = { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [] }] };
+  const log = { txid: hash, executions: [{ trigger: "Application", vmstate: "HALT", stack: [{ type: "Any" }] }] };
   const send = f.client.rpc.send;
   f.client.rpc.send = async (method, params) => {
     if (method === "getrawtransaction") return transaction;
@@ -1248,4 +1330,12 @@ test("the native workspace UI is bound to the v4 surface only", () => {
   // What it must offer instead: the two action codes the core still executes.
   assert.match(source, /installModuleAction\(/);
   assert.match(source, /uninstallModuleAction\(/);
+});
+
+test("an active spending policy can only be replaced through delayed recovery", () => {
+  const input = { policyId: 5, threshold: 0, memberIds: [], active: false };
+  assert.throws(() => setThresholdPolicyAction(input), /recovery/);
+  for (const changed of [{policyId: 0}, {threshold: 1}, {memberIds: [2]}, {active: "false"}])
+    assert.throws(() => setThresholdPolicyAction({...input, ...changed}));
+  assert.throws(() => setThresholdPolicyAction({threshold: 1, memberIds: [0]}));
 });

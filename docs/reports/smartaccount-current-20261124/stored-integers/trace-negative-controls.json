@@ -1,0 +1,48 @@
+{
+  "archive": [
+    {
+      "control": "byte order",
+      "method": "getMarketEscrowListingId",
+      "input": "0100",
+      "wrongResult": "256",
+      "rejected": true
+    },
+    {
+      "control": "conversion limit",
+      "method": "getMarketEscrowListingId",
+      "input": "000000000000000000000000000000000000000000000000000000000000000000",
+      "wrongResult": "0",
+      "rejected": true
+    },
+    {
+      "control": "checked addition",
+      "method": "getAdminTransferAvailableAt",
+      "input": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "wrongResult": "57896044618658097711785492504343953926634992332820282019728792003957169619967",
+      "rejected": true
+    }
+  ],
+  "main": [
+    {
+      "control": "byte order",
+      "method": "getMarketEscrowListingId",
+      "input": "0100",
+      "wrongResult": "256",
+      "rejected": true
+    },
+    {
+      "control": "conversion limit",
+      "method": "getMarketEscrowListingId",
+      "input": "000000000000000000000000000000000000000000000000000000000000000000",
+      "wrongResult": "0",
+      "rejected": true
+    },
+    {
+      "control": "checked addition",
+      "method": "getAdminTransferAvailableAt",
+      "input": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+      "wrongResult": "57896044618658097711785492504343953926634992332820282019728792003957169619967",
+      "rejected": true
+    }
+  ]
+}

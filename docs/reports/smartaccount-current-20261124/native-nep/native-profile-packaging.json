@@ -1,0 +1,34 @@
+{
+  "status": "PASS",
+  "nefRewritten": false,
+  "artifacts": {
+    "NeoWitnessValidator": {
+      "nefSha256": "147bde2a6a27e5c46aadf95daee84e94c8f41415656f7204e1d02404e2ae7e1f",
+      "manifestSha256": "936a52464501cc0dde780354f71438c4c3d09b1eb61fbb05b0676b65bdcea53d"
+    },
+    "WhitelistHook": {
+      "nefSha256": "aa01fb79af3af5f01512755866ca588823ac5febde06fa3296b700bc9b85980e",
+      "manifestSha256": "6fb88927992a757156094ada8f37794d743d9cfa0580f09ee144d20437a0e4c1"
+    },
+    "SessionKeyValidator": {
+      "nefSha256": "9b6c367b3cc83d0fda966b6eba9b75bd1a83814d7577f49bcb3518a5a8a5420c",
+      "manifestSha256": "4ebfb320cce6add9bb4abd56e21b8c51631eb15c3d639de8304681a619421627"
+    },
+    "DailyLimitHook": {
+      "nefSha256": "fd16319f40f7ffb5d4d07827f787e5eb0e9b7717d5ca40aa0642d62b672a7d2a",
+      "manifestSha256": "bfe33fdee45f59e9ff17fa4dbabdc3e91e8a4705a70228e021f6359ec2c0a6d4"
+    },
+    "TokenRestrictedHook": {
+      "nefSha256": "015c0aaae98f6ff6a9229dffff3a3231483ab757a676e8041e193a226f9ed8d9",
+      "manifestSha256": "bb08445102354ce0e9999b0c6ca2182e248444ef771ee1abcf207c03c8965ddd"
+    },
+    "MultiSigValidator": {
+      "nefSha256": "cb84aeb23a2ba2145dc2f264dbfac099112d7d1a92f2e2b695261612a734e8ca",
+      "manifestSha256": "28bc691ba6c6c53ae40b67647f0ee997ec9f74781b8b482383f5aaff77050a10"
+    }
+  },
+  "descriptorSha256": "5641d731a507173dd52ec11a67ee691b889e88a06568dd4a492deeb70e7b3c72",
+  "profileParametersSha256": "120b885f99bdda6f59e2165e0adcfab80c26cf4b1df33fcbdd8ef5caa51c7fee",
+  "profileDigest": "0cab62cf2a69b5682bf0d976406ddce15d7afbd67db4c1bc4e4950cf180a6dd0",
+  "recipeSha256": "cb4e5af570f56bdb1efcee0c38a6132d864988ad8c47073477fd340796ba6d85"
+}

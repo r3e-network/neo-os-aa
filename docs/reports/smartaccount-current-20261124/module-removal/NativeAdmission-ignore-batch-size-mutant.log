@@ -1,0 +1,16 @@
+File "./NativeAdmission.v", line 1, characters 5-8:
+Warning: "From Coq" has been replaced by "From Stdlib".
+[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
+Closed under the global context
+Closed under the global context
+Closed under the global context
+Closed under the global context
+Closed under the global context
+Closed under the global context
+Closed under the global context
+Closed under the global context
+Closed under the global context
+File "./NativeAdmission.v", line 141, characters 38-59:
+Error: Found no subterm matching
+"(1 <=? length actions) && (length actions <=? 16)" in the current goal.
+

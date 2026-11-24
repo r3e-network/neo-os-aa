@@ -197,6 +197,18 @@ test('one signed operation yields the field-11 value and the digests that were s
   );
 });
 
+test('two of three includes the absent member as empty bytes', () => {
+  const members = [
+    { moduleId: 1, credentialGeneration: 1, signature: sig('aa') },
+    { moduleId: 2, credentialGeneration: 1, signature: '' },
+    { moduleId: 3, credentialGeneration: 1, signature: sig('cc') },
+  ];
+  const expected = independentBundle([[1, sig('aa')], [2, ''], [3, sig('cc')]]);
+  assert.equal(thresholdTools.assembleSignature({ members }), expected);
+  assert.equal(thresholdTools.assembleOperationSignature({ operationDigest: OPERATION_DIGEST, members }).signatureHex, expected);
+  assert.throws(() => thresholdTools.assembleSignature({ members: [{moduleId: 1}] }), /64 bytes/);
+});
+
 test('the tools refuse a malformed digest and a short signature', () => {
   assert.throws(
     () => thresholdTools.prepareMembers({ operationDigest: '00', members: [{ moduleId: 1, credentialGeneration: 1 }] }),

@@ -1,0 +1,18 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "assemblySha256": "2b498dcb83e762f6fb9b2ff07a44d7a7aadeb6a7de8f2baf65760e25ac3009e2",
+  "runtimeSha256": "115b2bda2904b4ee735418f6d0e3c23045deb462dc81aef8606a2a43373e5704",
+  "dispatchSha256": "ebdb8cd440676f5ea373ff79f66d0d306b10b224e833d1dd239de76875224fb2",
+  "theoremSha256": "9078a90768ff23a6d18685047fec76977c78fba60e1880bd8cba2d93b4dc2523",
+  "modelSha256": "f89c51b5b1fcfc98a8784ada8050cbd980efb0f6b60895a4279808ab67468873",
+  "coqchkPassed": true,
+  "mutationsRejected": 4,
+  "fixedPriceBudgetCases": 20,
+  "huyaoBudgetCases": 22,
+  "fixedPriceUnits": 67611,
+  "huyaoCoefficientSum": 65551523,
+  "huyaoDenominator": 10000000,
+  "huyaoMinimum": 1966546,
+  "boundary": "Canonical non-whitelisted invocation, successful argument/handler path, no host overflow or other fault. Fixed schedule uses integral fee factors; Huyao uses pico factors and rounds the total once. Opcode prices, run statistics and VM correspondence are trusted."
+}

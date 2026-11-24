@@ -7,11 +7,13 @@
 
 ## 按角色导航
 
+模块作者可从[模块标准接入说明](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md)进入公共接口草案、各模块条款和编译后的 ABI。
+
 | 读者 | 读这里 | 它回答什么 |
 | --- | --- | --- |
 | 普通用户与钱包操作员 | [GUIDE.zh-CN.md](GUIDE.zh-CN.md) · [EN](GUIDE.md) | 端到端心智模型与运营者 / 签名方实操指南、快速参考、交易生命周期与提交流程、原生账户工作台、交易守卫、恢复与操作会话、阈值恢复、已签名交易导入（合并自 HOW_IT_WORKS、QUICK_REFERENCE、WORKFLOWS、四份 NATIVE_ACCOUNT_* 页面与 RECOVERY_AND_SESSIONS） |
 | DApp / SDK 开发者 | [SDK.zh-CN.md](SDK.zh-CN.md) · [EN](SDK.md) | 原生 SDK 使用、阈值会话、EIP-712 签名、代理转账、待处理配置更新读取（合并自 NATIVE_SDK、MULTISIG_SDK、SA-EIP-712-SPEC、SA-PROXY-TRANSFERS、PENDING_CONFIG_UPDATE_READ_ABI） |
-| 模块（插件）开发者 | [SA-MODULE-PROTOCOL.zh-CN.md](SA-MODULE-PROTOCOL.zh-CN.md) · [EN](SA-MODULE-PROTOCOL.md) | 协议 v4 共享模块规范（双内核共同遵循），文末附录 "Appendix: Module developer guide"（仅英文）收录插件安全、生命周期与清理 |
+| 模块（插件）开发者 | [SA-MODULE-PROTOCOL.zh-CN.md](SA-MODULE-PROTOCOL.zh-CN.md) · [EN](SA-MODULE-PROTOCOL.md) | 协议模块设计；集成前核对开头的原生范围说明及协议原稿 §16.2 差距表，文末附录 "Appendix: Module developer guide"（仅英文）收录插件安全、生命周期与清理 |
 | 架构师 | [ARCHITECTURE.zh-CN.md](ARCHITECTURE.zh-CN.md) · [EN](ARCHITECTURE.md) —— 以及 —— [SECURITY.zh-CN.md](SECURITY.zh-CN.md) · [EN](SECURITY.md) | 架构书：技术架构、原生系统架构、仓库布局与验证地图、系统状态与能力边界、数据流与存储、与以太坊 AA 对比（合并自 architecture、NATIVE_SYSTEM_ARCHITECTURE、ORGANIZATION、SA-SYSTEM-STATUS、DATA_FLOW 与 ETHEREUM_AA_COMPARISON）；安全书：当前威胁模型与信任假设，含协议完备性审计（附录 A）与前端依赖安全评估（附录 B） |
 | 节点与运维 | [OPERATIONS.zh-CN.md](OPERATIONS.zh-CN.md) · [EN](OPERATIONS.md) | 先干跑再上链的测试网校验与只读的主网校验 runbook、部署后的前端冒烟清单、实测的原生预算与费用行为（合并自 validation-runbooks、POST_DEPLOY_SMOKE_TEST 与 NATIVE_ACCOUNT_PERFORMANCE） |
 | 协议规范全文 | [Neo-Smart-Account-Documentation-zh-CN.pdf](Neo-Smart-Account-Documentation-zh-CN.pdf) | 完整规范手稿（中文，PDF） |
@@ -29,28 +31,16 @@
 
 过程层（仅英文）随每次门禁运行变化。文档重组第二阶段已把七份原过程文档合并为 [engineering/](engineering/) 下的两本书，每本开头带章节目录：
 
-- [engineering/VERIFICATION-AND-GATES.md](engineering/VERIFICATION-AND-GATES.md) —— SA 形式化验证（有界 Coq 模型、运行时对应关系、未覆盖边界）、可复现构建（固定工具链、逐字节重建、pin 升级）、决定某个入口点能否算作已验证的集成精化闭合门禁、逐入口点闭合清单，以及旧版到 v4 的迁移 manifest 与幂等规则
+- [engineering/VERIFICATION-AND-GATES.md](engineering/VERIFICATION-AND-GATES.md) —— SA 形式化验证（有界 Coq 模型、运行时对应关系、未覆盖边界）、可复现构建（固定工具链、逐字节重建、pin 升级）、决定某个入口点能否算作已验证的集成精化闭合门禁、逐入口点闭合清单
 - [engineering/HANDOFF-RECORDS.md](engineering/HANDOFF-RECORDS.md) —— 合约内部交接的内核检查结论（第十八号闭合作用域）与源码前端与编译器的对应关系记录
 - 这一层的中文导读：[SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md)
 - 构建打包：[../sdk/js/PACKAGING.md](../sdk/js/PACKAGING.md) 与经审计的 Neo 平台包固定值 [../contracts/neo-platform-packages.json](../contracts/neo-platform-packages.json)（SA 可复现构建章的依据）
 
 闭合回执是刻意失败关闭的：`status: NO-GO` 且已验证入口点为零，是诚实状态，不是回归。当前集成回执：[reports/sa-closure-gate-20261117.json](reports/sa-closure-gate-20261117.json)。
 
-## 原生 SmartAccount 设计记录（proposals）
+## 当前协议
 
-- [proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md) —— ABI 2 规范草案（Neo proposals #242/#243）
-- [proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md) —— 六个原生工件、打包、形式化边界
-- [proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-MULTISIG.md) —— 组合验证器、瞬态批准回执、参数隔离
-- [proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md) · [EN](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md) —— 模块生命周期与恢复撤销
-- [proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md](proposals/SMARTACCOUNT-NATIVE-PRIVATE-VALIDATION.md)（仅英文）—— 源码构建运行时、代理、配置与恢复证据
-- [proposals/smartaccount-native-profile-v2-vectors.json](proposals/smartaccount-native-profile-v2-vectors.json) —— 当前的授权与执行向量
-- [proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md)（仅英文）—— 必需的协议章节、证据、未决的激活门禁
-- [proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md](proposals/SA-VERIFIER-GAS-BUDGET-EXTENSION-20260920.md)（仅英文）—— NeoVM / DevPack 验证器预算扩展
-- [proposals/nep-smartaccount-entry-verifier.mediawiki](proposals/nep-smartaccount-entry-verifier.mediawiki) —— 入口验证器的 NEP 草案
-- [contracts/plugins/templates/](../contracts/plugins/templates/) —— 最小验证器 / 钩子起点（目录内有 `README.md`）
-- [reports/sa-native-open-boundaries-20261008.json](reports/sa-native-open-boundaries-20261008.json) —— 本地测试与模型证明都没有确立的主张
-
-早期的原生回执只描述它记录的源码与运行时。它们不校验当前 ABI 2 信封；某份回执若不在本检出中，就不是当前发布证据。
+[模块协议](SA-MODULE-PROTOCOL.zh-CN.md)定义协议行为；[参数](proposals/smartaccount-native-profile-parameters.json)和[实现清单](../contracts/native/profile.json)定义钱包、打包与验收共同使用的配置。仅有这一份未发布协议。带日期的报告只说明所记录的源码与实验。
 
 ## 证据回执
 

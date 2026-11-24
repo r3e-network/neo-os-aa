@@ -2060,15 +2060,27 @@ class ClosureTests(unittest.TestCase):
             control = b'Lemma control_body : True.\n'
             (kernel/'StorageGetterArtifact.v').write_bytes(artifact)
             (kernel/'StorageGetter.v').write_bytes(model)
+            support = ['IntegerSemantics', 'NumericCoercions', 'StorageGetterVm']
+            for n in support:
+                (kernel/(n + '.v')).write_bytes(model)
+            vm = b'Lemma getter_trace : True. Proof. exact I. Qed.\n'
+            (kernel/'VmCert_getValue_vm.v').write_bytes(vm)
             (kernel/'Control.v').write_bytes(control)
             report = {'kernelDirectory': str(kernel),
-                      'closedDeclarations': {'StorageGetterArtifact': ['getter_body'], 'StorageGetter': []},
-                      'modelSha256': {'StorageGetter': self.module.sha(model)},
+                      'certificateSha256': self.module.sha(artifact + vm),
+                      'storageGetterSourceVerified': ['getValue'],
+                      'closedDeclarations': {'StorageGetterArtifact': ['getter_body'], 'StorageGetter': [],
+                                             'VmCert_getValue_vm': ['getter_trace'], **dict.fromkeys(support, [])},
+                      'modelSha256': dict.fromkeys(['StorageGetter', *support], self.module.sha(model)),
                       'semanticControls': [{'definitionsSha256': self.module.sha(control),
                                             'assertionSha256': self.module.sha(control)}],
                       'vmSemanticControls': [{'baselineSha256': self.module.sha(control),
                                               'definitionsSha256': self.module.sha(control)}]}
             self.module.validate_storage_getter_files(report, root)
+            (kernel/'VmCert_getValue_vm.v').write_bytes(vm.replace(b'True', b'1 = 1'))
+            with self.assertRaisesRegex(ValueError, 'written certificate content mismatch'):
+                self.module.validate_storage_getter_files(report, root)
+            (kernel/'VmCert_getValue_vm.v').write_bytes(vm)
             sibling = outer/'elsewhere'; sibling.mkdir()
             for field, value in (('kernelDirectory', str(sibling)),
                                  ('kernelDirectory', str(root/'absent')),

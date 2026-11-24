@@ -1,0 +1,26 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "methods": 29,
+  "checkedArgumentCounts": 29,
+  "checkedSignatures": 29,
+  "checkedParameterSlots": 65,
+  "flagCombinations": 464,
+  "deniedRuntimeCases": 311,
+  "coqchkPassed": true,
+  "assemblySha256": "c4d9b734600864fc3af8bbfbd9eefe9643c43f20ea1c221a4a70ad85ddea57d6",
+  "dispatchSha256": "880ae495a51e91c928d73b3e8904b178b6daf129f6f977e5fea702d48afe193c",
+  "manifestSha256": "b9dbf2484c1757f1946198727e87f6335ec37469f7365d2ffb2b3b7e74861d20",
+  "certificateSha256": "360b28aea3eabc4431ceadf0c5a9d2031ca4b02f6ae79bdbe117c36d3151a2f0",
+  "controls": {
+    "wrong handler": "rejected",
+    "weakened permission": "rejected",
+    "shifted pc": "rejected",
+    "wrong argument count": "rejected",
+    "swapped routed parameters": "rejected",
+    "wrong wire type": "rejected",
+    "wrong task result": "rejected",
+    "missing host injection": "rejected"
+  },
+  "boundary": "Active local dispatch table, wrapper and metadata. Does not prove CLR dispatch code, argument conversion, host charging, method bodies, activation or rollback."
+}

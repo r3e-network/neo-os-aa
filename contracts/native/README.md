@@ -1,7 +1,6 @@
 # Native SmartAccount implementation
 
-This directory holds the native SmartAccount v4 implementation. ABI 2 is an earlier
-external proposal. The native builds of the shared plugins live in
+This directory holds the native SmartAccount implementation of the single unpublished protocol. The native builds of the shared plugins live in
 [`../plugins/native-profile/`](../plugins/native-profile/), and the native SDK
 and UI stay with the rest of the client code; [`profile.json`](profile.json)
 records the canonical roots and the native-only verification commands.
@@ -24,12 +23,6 @@ requires consent for newly introduced nonzero authority addresses. The revised
 parameter fingerprint binds that policy. This closes the source-level omission;
 current-digest runtime/module builds and deployed-byte readback remain separate
 evidence gates, as do formal refinement and public activation.
-
-Historical evidence for earlier draft revisions is recorded in
-[`sa-native-protocol-review-20261009.json`](../../docs/reports/sa-native-protocol-review-20261009.json)
-and [`sa-native-open-boundaries-20261008.json`](../../docs/reports/sa-native-open-boundaries-20261008.json).
-Those receipts retain their original source and digest identities; they do not
-validate the current revision.
 
 ## Neo core checkout location
 

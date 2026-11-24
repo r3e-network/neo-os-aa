@@ -61,7 +61,6 @@ export const ACTION = Object.freeze({
 export const ACCOUNT_STATUS = Object.freeze({
   0: 'active',
   1: 'frozen',
-  2: 'migrationRequired',
 });
 
 /** Called by every builder so a UI failure names the field, never the array. */
@@ -194,36 +193,8 @@ export function rebindModuleCodeAction(moduleId, profileDigest) {
   };
 }
 
-/** [7, policyId, threshold, memberIds[], active] — policyId 0 allocates a fresh id. */
-export function setThresholdPolicyAction({
-  policyId = 0,
-  threshold,
-  memberIds = [],
-  active = true,
-}) {
-  const members = [...memberIds];
-  if (active) {
-    const limit = Number(threshold);
-    if (!Number.isInteger(limit) || limit < 1 || limit > members.length) {
-      fail('A threshold policy needs a threshold between 1 and its member count');
-    }
-    if (members.length < 1 || members.length > 10) {
-      fail('A threshold policy needs 1 through 10 members');
-    }
-  } else if (members.length !== 0) {
-    fail('A deactivated threshold policy carries no members');
-  }
-  return {
-    type: 'Array',
-    value: [
-      integerValue(ACTION.setThresholdPolicy),
-      integerValue(policyId, 'policy id'),
-      integerValue(threshold, 'threshold'),
-      integerArray(members),
-      boolValue(active),
-    ],
-  };
-}
+// Both wallet entry points encode the same governed enrollment action.
+export { setThresholdPolicyAction } from '../features/native/nativeWorkspace.js';
 
 /** [8, recoveryAuthority, timelockMs, ownerOnly] — ownerOnly is monotonic. */
 export function setRecoveryPolicyAction({
@@ -388,16 +359,15 @@ function requireArray(item, label) {
 }
 
 /**
- * getAccount -> the 16-field control descriptor:
+ * getAccount -> the 15-field control descriptor:
  * [exists, status, custody, recoveryAuthority, authorityEpoch,
  *  configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
  *  defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
- *  controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive,
- *  legacyRow]
+ *  controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive]
  */
 export function decodeAccountDescriptor(item) {
   const fields = requireArray(item, 'the account descriptor');
-  if (fields.length !== 16) fail('Cannot decode the account descriptor');
+  if (fields.length !== 15) fail('Cannot decode the account descriptor');
   return {
     exists: stackBool(fields[0]),
     status: ACCOUNT_STATUS[Number(stackInt(fields[1]))] || 'unknown',
@@ -414,7 +384,6 @@ export function decodeAccountDescriptor(item) {
     recoveryPending: stackBool(fields[12]),
     recoveryMatureAt: stackInt(fields[13]),
     marketEscrowActive: stackBool(fields[14]),
-    legacyRow: stackBool(fields[15]),
   };
 }
 

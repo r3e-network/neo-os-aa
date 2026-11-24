@@ -1,0 +1,130 @@
+{
+  "status": "PASS_SAMPLED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "engineSha256": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "rows": [
+    {
+      "fixedOuter": false,
+      "fixedInner": false,
+      "budget": 10000000000,
+      "total": 13414650,
+      "state": "HALT",
+      "consumed": 13414650,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": false,
+      "fixedInner": false,
+      "budget": 13414650,
+      "total": 13414650,
+      "state": "HALT",
+      "consumed": 13414650,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": false,
+      "fixedInner": false,
+      "budget": 13414649,
+      "total": 13414650,
+      "state": "FAULT",
+      "consumed": 13414650,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": false,
+      "fixedInner": true,
+      "budget": 10000000000,
+      "total": 2022561,
+      "state": "HALT",
+      "consumed": 2022561,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": false,
+      "fixedInner": true,
+      "budget": 2022561,
+      "total": 2022561,
+      "state": "HALT",
+      "consumed": 2022561,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": false,
+      "fixedInner": true,
+      "budget": 2022560,
+      "total": 2022561,
+      "state": "FAULT",
+      "consumed": 2022561,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": true,
+      "fixedInner": false,
+      "budget": 10000000000,
+      "total": 12442875,
+      "state": "HALT",
+      "consumed": 12442875,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": true,
+      "fixedInner": false,
+      "budget": 12442875,
+      "total": 12442875,
+      "state": "HALT",
+      "consumed": 12442875,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": true,
+      "fixedInner": false,
+      "budget": 12442874,
+      "total": 12442875,
+      "state": "FAULT",
+      "consumed": 12442875,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": true,
+      "fixedInner": true,
+      "budget": 10000000000,
+      "total": 1050786,
+      "state": "HALT",
+      "consumed": 1050786,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": true,
+      "fixedInner": true,
+      "budget": 1050786,
+      "total": 1050786,
+      "state": "HALT",
+      "consumed": 1050786,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    },
+    {
+      "fixedOuter": true,
+      "fixedInner": true,
+      "budget": 1050785,
+      "total": 1050786,
+      "state": "FAULT",
+      "consumed": 1050786,
+      "WalletSteps": 173,
+      "ResumedOuter": true
+    }
+  ]
+}

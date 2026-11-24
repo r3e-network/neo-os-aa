@@ -13,7 +13,9 @@ on:
       - 'contracts/**'
       - 'contracts/native/**'
       - 'tests/SmartAccount.Native.Tests/**'
-      - 'docs/proposals/*native*'
+      - 'docs/SA-MODULE-PROTOCOL*.md'
+      - 'docs/proposals/smartaccount-native-profile-parameters.json'
+      - 'docs/proposals/validate-native-smartaccount-profile.py'
       - 'docs/proposals/SMARTACCOUNT-NATIVE*'
       - 'docs/reports/sa-native-ci-probe-consistency-20261009.json'
       - 'scripts/*native*'
@@ -43,7 +45,9 @@ on:
       - 'contracts/**'
       - 'contracts/native/**'
       - 'tests/SmartAccount.Native.Tests/**'
-      - 'docs/proposals/*native*'
+      - 'docs/SA-MODULE-PROTOCOL*.md'
+      - 'docs/proposals/smartaccount-native-profile-parameters.json'
+      - 'docs/proposals/validate-native-smartaccount-profile.py'
       - 'docs/proposals/SMARTACCOUNT-NATIVE*'
       - 'docs/reports/sa-native-ci-probe-consistency-20261009.json'
       - 'scripts/*native*'
@@ -138,32 +142,28 @@ jobs:
           node scripts/check_neo_platform_packages.mjs --compiler-only
       - name: Verify native module isolation
         env:
+          NEOOS_NATIVE_TEST_RESULTS: ${{ runner.temp }}/native-profile-receipts
           NEOOS_NATIVE_EPOCH_RECEIPT: ${{ runner.temp }}/native-profile-receipts/native-epoch.json
           # SmartAccount.sln is native-only and builds against this checkout, so point the
           # solution build and native unit-test gate at it instead of the default sibling.
           NEOOS_NATIVE_CORE_SOURCE: ${{ github.workspace }}/native-core
         run: ./scripts/verify_repo.sh --profile native --contracts-only
-      - name: Build pinned core and two module copies, then execute native VM matrix
+      - name: Rebuild current native module packages twice
         run: |
-          python3 scripts/native_profile_ci.py \
-            --core "$GITHUB_WORKSPACE/native-core" \
-            --core-commit "$NATIVE_CORE_COMMIT" \
-            --compiler "$NCCS_BIN" \
-            --cache "$NUGET_PACKAGES" \
-            --work "$RUNNER_TEMP/native-profile-work" \
-            --output "$RUNNER_TEMP/native-profile-receipts"
-      # The epoch fixture and pinned native core VM are distinct checks; neither
-      # substitutes for the separate full-chain acceptance runner.
+          python3 scripts/build_native_modules.py \
+            --contracts "$PWD/contracts" --compiler "$NCCS_BIN" --cache "$NUGET_PACKAGES" \
+            --output "$RUNNER_TEMP/native-module-artifacts" \
+            --receipt "$RUNNER_TEMP/native-profile-receipts/module-build.json"
+      - name: Verify packaged native modules against their named NEPs in NeoVM
+        run: python3 scripts/check_module_neps.py --native-packages "$RUNNER_TEMP/native-module-artifacts"
       - name: Retain minimal build and VM receipts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: native-profile-receipts
           path: |
-            ${{ runner.temp }}/native-profile-receipts/native-profile-ci.json
             ${{ runner.temp }}/native-profile-receipts/native-epoch.json
-            ${{ runner.temp }}/native-profile-receipts/core-build-manifest.json
+            ${{ runner.temp }}/native-profile-receipts/native.trx
             ${{ runner.temp }}/native-profile-receipts/module-build.json
-            ${{ runner.temp }}/native-profile-receipts/multisig-probe.json
           if-no-files-found: warn
           retention-days: 14

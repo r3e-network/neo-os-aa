@@ -298,7 +298,7 @@ Definition step (ins : Ins) (m : Machine) : option Machine :=
       match pop m with
       | Some (GInt b, m1) =>
           match pop m1 with
-          | Some (GInt a, m2) => Some (pushv (GInt (a + b)) m2)
+          | Some (GInt a, m2) => if integer_fitsb (a + b) then Some (pushv (GInt (a + b)) m2) else None
           | _ => None
           end
       | _ => None

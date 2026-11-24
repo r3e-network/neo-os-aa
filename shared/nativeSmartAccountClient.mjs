@@ -74,12 +74,18 @@ export function parseNativeRpcFees(result, requireMinimum = false) {
   };
 }
 
+// SHA-256 of the domain-prefixed, canonical v4 parameters (including the batch action set).
+export const NATIVE_PROFILE_PARAMETER_DIGEST = "0cab62cf2a69b5682bf0d976406ddce15d7afbd67db4c1bc4e4950cf180a6dd0";
+
 // Exact NEF built from the standard recovery seat with the repository compiler.
 export const NATIVE_STANDARD_RECOVERY_NEF_SHA256 = "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e";
 
 export const NATIVE_REQUIRED_ABI = {
   verify: requiredMethod(account, "Boolean", true),
   getAccountImplementationId: requiredMethod([], "String", true),
+  getMessageSubjects: requiredMethod(account, "Array", true),
+  getThresholdPolicy: requiredMethod([...account, ["policyId", "Integer"]], "Array", true),
+  isValidSignature: requiredMethod([...account, ["hash", "ByteArray"], ["signatureEnvelope", "Array"]], "ByteArray", true),
   getProtocolInfo: requiredMethod([], "Array", true),
   getAccount: requiredMethod(account, "Array", true),
   createAccount: requiredMethod(
@@ -103,6 +109,7 @@ export const NATIVE_REQUIRED_ABI = {
     "Void",
     false,
   ),
+  applyConfigurationActions: requiredMethod([...account, ["actions", "Array"]], "Void", false),
   freezeAccount: accountAction,
   // The core holds no thaw timelock: leaving Frozen is immediate, and any
   // delay a deployment wants is the policy of a user-space governance module.
@@ -273,7 +280,7 @@ freeze(NATIVE_ACCOUNT_ADDRESS_ABI);
 // Presence-only event gate: the client never decodes these payloads, so the
 // parameter names are not pinned (renaming a parameter is not an ABI break for
 // a byte-positional event), while a missing lifecycle event still fails.
-// The minimal core emits exactly these fourteen: registration, freeze/unfreeze,
+// The core emits registration, freeze/unfreeze,
 // operation execution, the module instance lifecycle, nonce channels and the
 // four landing-path transitions (credential revocation, the recovery-policy
 // write, the built-in authorization switches, the recovery reset).
@@ -288,9 +295,12 @@ export const NATIVE_REQUIRED_EVENTS = Object.freeze([
   "ModuleRemoved",
   "ModuleInstanceInstalled",
   "ModuleInstanceRemoved",
+  "ModuleInstanceConfigured",
   "ModuleCredentialsRevoked",
   "RecoveryPolicySet",
   "BuiltinAuthorizationSet",
+  "MessageSubjectUpdated",
+  "ThresholdPolicySet",
   "AccountReset",
   "NonceChannelOpened",
   "NonceChannelExhausted",
@@ -392,7 +402,20 @@ export function validateNativeInvocationResult(plan, stack) {
         error(`unsupported RPC result stack type ${item.type}`);
     }
   }
-  if (plan.kind !== "execution") return [];
+  if (plan.kind !== "execution") {
+    if (stack.length !== 1) error("account method result stack must contain exactly one item");
+    const item = stack[0];
+    if (plan.kind === "account" && plan.method === "installModule") {
+      if (item.type !== "Integer" || BigInt(item.value) < 1n || BigInt(item.value) >= 0xffffffffffffffffn)
+        error("installModule must return an allocated module ID");
+    } else if (plan.kind === "recovery" && plan.method === "beginRecovery") {
+      if (item.type !== "Integer" || BigInt(item.value) < 1n)
+        error("beginRecovery must return a positive nonce");
+    } else if (item.type !== "Any") {
+      error("void account method must return the VM null item");
+    }
+    return [];
+  }
   const operations = plan.operations;
   const results = plan.batch ? stack[0].value : stack;
   if (
@@ -408,10 +431,18 @@ export function validateNativeInvocationResult(plan, stack) {
   );
 }
 
+export function validateNativeApplicationExecution(plan, execution) {
+  if (execution?.vmstate !== "HALT")
+    error(`No successful Application result: ${execution?.vmstate ?? "unknown"}`);
+  if (execution.exception != null)
+    error("Application reported both HALT and an exception");
+  return validateNativeInvocationResult(plan, execution.stack);
+}
+
 // The implementation id is the one identity the ABI cannot express, so the
 // launch pins it: a core that answers a different id is not the build this
 // client was reviewed against, even at the same script hash.
-const IMPLEMENTATION_ID = "NativeSmartAccount/v4";
+const IMPLEMENTATION_ID = "NativeSmartAccount";
 
 export function createNativeClientClass(codec, {
   // Defaults for one kernel build. They are identity, not configuration: the
@@ -432,6 +463,56 @@ export function createNativeClientClass(codec, {
       callFlags: coreFlags,
     });
   const H = codec.hashValue;
+  function recoveryPolicyFields({ recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery = false }) {
+    const recipient = codec.hex(recoveryAuthority, 20);
+    const delay = codec.unsigned(recoveryTimelockMs, 64, "recovery timelock");
+    if (delay < 604800000n || delay > 7776000000n || ownerOnlyRecovery !== false)
+      error("invalid recovery policy: ownerOnlyRecovery is reserved and must be false");
+    return { recipient, fields: [H(recipient), I(delay), { type: "Boolean", value: ownerOnlyRecovery }] };
+  }
+  function configurationBatch(coreHash, { accountId, actions }) {
+    const id = codec.hex(accountId, 20);
+    if (!Array.isArray(actions) || actions.length < 1 || actions.length > 16)
+      error("configuration batch must contain 1 to 16 actions");
+    const bool = (value) => {
+      if (typeof value !== "boolean") error("configuration switch must be boolean");
+      return { type: "Boolean", value };
+    };
+    const data = (values = []) => {
+      if (!Array.isArray(values) || values.length > 64) error("invalid module data");
+      return A(values.map((value) => codec.canonicalValue(value)));
+    };
+    // Copy the reviewed operands before the RPC yields. Never read a caller's mutable action
+    // twice to build the script and determine which addresses must consent.
+    const recipients = [];
+    const operands = Array.from(actions, (step) => {
+      switch (step?.method) {
+        case "installModule": {
+          if (![1, 4, 5].includes(step.moduleType)) error("unsupported module type");
+          const contract = codec.hex(step.moduleContractHash, 20);
+          if (contract === ZERO) error("invalid module address");
+          return A([I(1), I(step.moduleType), H(contract),
+            codec.byteStringValue(codec.hex(step.profileDigest, 32)), data(step.initData)]);
+        }
+        case "removeModule": {
+          const moduleId = codec.unsigned(step.moduleId, 64, "module ID");
+          if (moduleId === 0n) error("invalid module ID");
+          return A([I(2), I(moduleId), data(step.deInitData)]);
+        }
+        case "setBuiltinAuthorization":
+          return A([I(5), bool(step.defaultOperationAuthorization), bool(step.defaultMessageAuthorization)]);
+        case "setRecoveryPolicy": {
+          const { recipient, fields } = recoveryPolicyFields(step);
+          recipients.push(recipient);
+          return A([I(8), ...fields]);
+        }
+        default: return error("unsupported configuration batch action");
+      }
+    });
+    const script = codec.dynamicCall(coreHash, "applyConfigurationActions", [H(id), A(operands)]);
+    return { id, script, recipients };
+  }
+
   const base64ToBytes = (text) =>
     Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
   const bytesToBase64 = (value) => {
@@ -503,7 +584,7 @@ export function createNativeClientClass(codec, {
   };
   const accountDescriptor = (item, accountId, coreHash, coreFlags) => {
     if (item === null) return null;
-    const a = array(item, 16, "account");
+    const a = array(item, 15, "account");
     const exists = a[0];
     if (typeof exists !== "boolean") error("malformed account existence flag");
     if (!exists) {
@@ -517,18 +598,19 @@ export function createNativeClientClass(codec, {
       error("invalid custody identity");
     if (recovery !== ZERO && [custody, address, coreHash].includes(recovery))
       error("invalid recovery identity");
-    const status = Number(a[1]);
-    if (![0, 1, 2].includes(status)) error("unknown account status");
+    const status = Number(uint(a[1], 8, "account status"));
+    if (![0, 1].includes(status)) error("unknown account status");
     const authorityEpoch = uint(a[4], 64, "authority epoch");
     const configurationNonce = uint(a[5], 64, "configuration nonce");
-    if (BigInt(authorityEpoch) > BigInt(configurationNonce))
-      error("authority epoch exceeds configuration nonce");
+    // Registration starts at epoch 1 and configuration nonce 0.
+    if (authorityEpoch === "0" || BigInt(authorityEpoch) > BigInt(configurationNonce) + 1n)
+      error("invalid authority epoch for configuration nonce");
     return freeze({
       accountId: codec.hex(accountId, 20),
       accountAddress: address,
       exists: true,
       status,
-      statusName: ["Active", "Frozen", "MigrationRequired"][status],
+      statusName: ["Active", "Frozen"][status],
       custodyAddress: custody,
       recoveryAuthority: recovery,
       authorityEpoch,
@@ -542,7 +624,6 @@ export function createNativeClientClass(codec, {
       recoveryPending: a[12],
       recoveryMatureAt: uint(a[13], 64, "recovery maturity"),
       marketEscrowActive: a[14],
-      legacyRow: a[15],
     });
   };
   const moduleDescriptor = (item, coreHash) => {
@@ -579,7 +660,7 @@ export function createNativeClientClass(codec, {
         8,
         "proxy call flags",
       );
-      if (flags > 15n) error("proxy call flags must fit CallFlags");
+      if (flags !== 5n) error("proxy call flags must be ReadOnly (5)");
       Object.defineProperties(this, {
         networkMagic: {
           value: Number(
@@ -587,9 +668,7 @@ export function createNativeClientClass(codec, {
           ),
           enumerable: true,
         },
-        // The two kernels differ in exactly two constants: which script hash
-        // answers and which call flags the proxy verification script pushes.
-        // Both are identity, not configuration, so they are read-only.
+        // Both values are part of the account address preimage.
         contractHash: { value: core, enumerable: true },
         callFlags: { value: Number(flags), enumerable: true },
       });
@@ -611,7 +690,7 @@ export function createNativeClientClass(codec, {
         bytesToBase64(codec.bytes(script)),
         signers,
       ]);
-      if (result?.state !== "HALT" || !Array.isArray(result.stack))
+      if (result?.state !== "HALT" || result.exception != null || !Array.isArray(result.stack))
         error(
           `script failed: ${result?.exception ?? result?.state ?? "invalid RPC result"}`,
         );
@@ -634,6 +713,7 @@ export function createNativeClientClass(codec, {
 
     async discover() {
       if (this._discovery) return this._discovery;
+      this.profile = null;
       const request = this._discover();
       this._discovery = request;
       try {
@@ -657,6 +737,10 @@ export function createNativeClientClass(codec, {
         state?.manifest?.name !== "SmartAccount"
       )
         error("SmartAccount contract is not available");
+      const declaredProfile = state.manifest.extra?.smartAccount;
+      if (declaredProfile?.abiVersion !== PROTOCOL_VERSION ||
+          declaredProfile.profileParameterDigest !== NATIVE_PROFILE_PARAMETER_DIGEST)
+        error("native profile parameters do not match the current protocol");
       const methods = descriptors(state.manifest.abi?.methods, "methods");
       const events = descriptors(state.manifest.abi?.events, "events");
       // A native contract registers with a negative id; the address query is
@@ -678,16 +762,18 @@ export function createNativeClientClass(codec, {
           );
         if (matches.length !== 1) error(`native ABI mismatch: ${name}`);
       }
+      if (methods.length !== Object.keys(requiredAbi).length) error("unexpected native ABI method");
       const eventNames = new Set(events.map((event) => event.name));
       for (const name of NATIVE_REQUIRED_EVENTS)
         if (!eventNames.has(name)) error(`native ABI event mismatch: ${name}`);
-      const [protocolVersion, migrationOpen] = array(
+      if (events.length !== NATIVE_REQUIRED_EVENTS.length) error("unexpected native ABI event");
+      const [protocolVersion] = array(
         await this._read("getProtocolInfo"),
-        2,
+        1,
         "protocol info",
       );
-      if (uint(protocolVersion, 64, "protocol version") !== String(PROTOCOL_VERSION) || typeof migrationOpen !== "boolean")
-        error("native contract is not running the v4 protocol");
+      if (uint(protocolVersion, 64, "protocol version") !== String(PROTOCOL_VERSION))
+        error("native contract is not running the current SmartAccount protocol");
       // The RPC returns a string as UTF8 bytes; `decode` keeps them as bytes so
       // a hash and a text are never confused. Decode here, once.
       const reported = new TextDecoder().decode(
@@ -749,10 +835,9 @@ export function createNativeClientClass(codec, {
 
     async getProtocolInfo() {
       await this._ready();
-      const info = array(await this._read("getProtocolInfo"), 2, "protocol info");
+      const info = array(await this._read("getProtocolInfo"), 1, "protocol info");
       return freeze({
         protocolVersion: uint(info[0], 64, "protocol version"),
-        migrationModeOpen: info[1],
       });
     }
 
@@ -789,6 +874,42 @@ export function createNativeClientClass(codec, {
       );
     }
 
+    async getThresholdPolicy(accountId, policyId = 0) {
+      await this._ready();
+      const row = array(await this._read("getThresholdPolicy", [
+        H(accountId), I(codec.unsigned(policyId, 64, "policy id")),
+      ]), undefined, "threshold policy");
+      if (!row.length) return null;
+      const lookup = codec.unsigned(policyId, 64, "policy id");
+      if (row.length !== (lookup === 0n ? 5 : 4) || typeof row[2] !== "boolean") error("malformed threshold policy");
+      const required = lookup === 0n ? uint(row[4], 64, "required policy id") : lookup.toString();
+      if (required === "0" || (lookup === 0n && !row[2])) error("malformed threshold policy");
+      const members = array(row[1], undefined, "policy members").map(v => uint(v, 64, "member id"));
+      const threshold = Number(uint(row[0], 8, "threshold"));
+      const generation = uint(row[3], 64, "policy generation");
+      if (generation === "0" || members.includes("0") || new Set(members).size !== members.length ||
+          (row[2] ? threshold < 1 || threshold > members.length || members.length > 10 : threshold !== 0 || members.length !== 0))
+        error("malformed threshold policy");
+      return freeze({ policyId: required, threshold, memberIds: members, active: row[2], credentialGeneration: generation });
+    }
+
+    async getMessageSubjects(accountId) {
+      await this._ready();
+      const row = array(await this._read("getMessageSubjects", [H(accountId)]), undefined, "message subjects");
+      if (!row.length) return null;
+      if (row.length !== 3) error("malformed message subjects");
+      const subjects = array(row[0], undefined, "subjects").map(v => {
+        const raw = bytes(v, undefined, "script identity");
+        if (raw.length !== 20 && raw.length !== 32) error("invalid script identity width");
+        return toHex(raw);
+      });
+      const threshold = Number(uint(row[1], 8, "threshold"));
+      const subjectRevision = uint(row[2], 64, "subject revision");
+      if (subjectRevision === "0" || threshold < 1 || threshold > subjects.length || subjects.length > 16 ||
+          new Set(subjects).size !== subjects.length) error("malformed message subjects");
+      return freeze({ subjects, threshold, subjectRevision });
+    }
+
     async isModuleInstalled(
       accountId,
       moduleType,
@@ -812,34 +933,35 @@ export function createNativeClientClass(codec, {
           networkMagic: this.networkMagic,
           coreContractHash: this.contractHash,
           accountId: codec.hex(accountId, 20),
-          authorityEpoch: routing.authorityEpoch,
         },
         routing,
       );
     }
 
-    /**
-     * The routing generation the kernel itself would use, read from the chain.
-     *
-     * Built-in (validator 0) → the account's 0x57 SubjectRevision. Installed
-     * validators → the instance's CredentialGeneration, which is published by
-     * `getModule`. Neither is defaulted here: the built-in revision has no ABI
-     * getter, so it is reported as unresolvable rather than guessed as 1.
-     */
+    /** Native v4 uses generation 1 for custody and the installed instance's
+     * current generation for validator routes (ResolveCredentialGeneration). */
     async resolveCredentialGeneration(accountId, validatorId = 0) {
       await this._ready();
       const id = codec.unsigned(validatorId, 64, "validator id");
-      if (id === 0n)
-        error(
-          "the built-in validator's generation is the account SubjectRevision, " +
-            "which the kernel does not publish; supply the reviewed generation explicitly",
-        );
+      if (id === 0n) {
+        if (!await this.getAccount(accountId)) error("account is not registered");
+        return "1";
+      }
       const module = await this.getModule(accountId, id);
-      if (module) return module.credentialGeneration;
-      error("validator is not installed and has no active threshold policy: " + id);
+      if (module?.moduleType === 1) return module.credentialGeneration;
+      if (!module) {
+        const policy = await this.getThresholdPolicy(accountId, id);
+        if (policy?.active) return policy.credentialGeneration;
+      }
+      error("validator is not installed: " + id);
     }
 
     async getNonce(accountId, { authorityEpoch, validatorId = 0, credentialGeneration, nonceSubkey }) {
+      if ((authorityEpoch === undefined) !== (credentialGeneration === undefined))
+        error("nonce cross-check requires both credential generation and authority epoch");
+      const derived = credentialGeneration === undefined ? undefined : this.deriveNonceRouting(accountId, {
+        authorityEpoch, validatorId, credentialGeneration, nonceSubkey,
+      });
       await this._ready();
       codec.hex(nonceSubkey, NONCE_SUBKEY_BYTES);
       const packed = await this._read("getNonce", [
@@ -850,19 +972,12 @@ export function createNativeClientClass(codec, {
       if (typeof packed !== "bigint" || packed < 0n || packed >= 1n << 255n)
         error("malformed packed nonce");
       // The kernel resolves the routing generation internally (§6: built-in →
-      // the 0x57 SubjectRevision, instance → its CredentialGeneration, policy →
-      // the policy generation), so it is the authority for the channel and this
+      // generation 1, installed validator → its CredentialGeneration), so it is the authority for the channel and this
       // client never supplies a default. A caller that passes a generation gets
       // a cross-check: a mismatch means the caller's view is stale, which the
       // operation would hit as ErrorCredentialStale, so it is refused here.
       const channel = (packed >> 64n).toString();
-      if (credentialGeneration !== undefined) {
-        const derived = this.deriveNonceRouting(accountId, {
-          authorityEpoch,
-          validatorId,
-          credentialGeneration,
-          nonceSubkey,
-        });
+      if (derived !== undefined) {
         if (packed >> 64n !== BigInt(derived))
           error(
             "nonce channel does not match the derived namespace: the supplied " +
@@ -900,7 +1015,7 @@ export function createNativeClientClass(codec, {
         },
         operation,
       );
-      if (chainDigest !== local) error("core digest disagrees with the local v4 codec");
+      if (chainDigest !== local) error("core digest disagrees with the local SmartAccount codec");
       return chainDigest;
     }
 
@@ -997,7 +1112,7 @@ export function createNativeClientClass(codec, {
     async buildRecoveryModulePlan({ accountId, action, authority, newCustody }) {
       const id = codec.hex(accountId, 20);
       const state = await this.getAccount(id);
-      if (!state || state.status === 2 || state.recoveryAuthority === ZERO) error("recovery is not configured");
+      if (!state || state.recoveryAuthority === ZERO) error("recovery is not configured");
       const route = await this.getRecoverySeat(id);
       if (!route?.supported) error("no supported recovery seat installed");
       if (!["beginRecovery", "cancelRecovery", "executeRecovery"].includes(action)) error("unsupported recovery operation");
@@ -1037,12 +1152,14 @@ export function createNativeClientClass(codec, {
         script: codec.dynamicCall(seat.contractHash, method, args) });
     }
 
-    async buildRecoveryPolicyPlan({ accountId, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery = false }) {
-      const id = codec.hex(accountId, 20);
-      const recipient = codec.hex(recoveryAuthority, 20);
-      const delay = codec.unsigned(recoveryTimelockMs, 64, "recovery timelock");
-      if (delay < 604800000n || delay > 7776000000n || typeof ownerOnlyRecovery !== "boolean")
-        error("invalid recovery policy");
+    buildRecoveryPolicyScript(input) {
+      return codec.dynamicCall(this.contractHash, "setRecoveryPolicy",
+        [H(codec.hex(input.accountId, 20)), ...recoveryPolicyFields(input).fields]);
+    }
+
+    async buildRecoveryPolicyPlan(input) {
+      const id = codec.hex(input.accountId, 20);
+      const { recipient, fields } = recoveryPolicyFields(input);
       const state = await this.getAccount(id);
       if (!state || state.status !== 0) error("account is not active");
       if ([ZERO, state.custodyAddress, this.contractHash, state.accountAddress].includes(recipient))
@@ -1052,13 +1169,37 @@ export function createNativeClientClass(codec, {
         kind: "account", method: "setRecoveryPolicy", accountId: id, accountAddress: state.accountAddress,
         recoveryAuthority: recipient, configurationNonce: state.configurationNonce, signers,
         script: codec.dynamicCall(this.contractHash, "setRecoveryPolicy",
-          [H(id), H(recipient), I(delay), { type: "Boolean", value: ownerOnlyRecovery }]),
+          [H(id), ...fields]),
       });
+    }
+
+    /** Canonical bytes for audit and historical receipts, independent of current account state. */
+    buildConfigurationBatchScript(input) {
+      return configurationBatch(this.contractHash, input).script;
+    }
+
+    /** Direct custody administration. Resolve all recipient witnesses from one account read. */
+    async buildConfigurationBatchPlan(input) {
+      const { id, script, recipients } = configurationBatch(this.contractHash, input);
+      const state = await this.getAccount(id);
+      if (!state || state.status !== 0) error("account is not active");
+      const signers = new Set([state.custodyAddress]);
+      let current = state.recoveryAuthority;
+      for (const recipient of recipients) {
+        if ([ZERO, state.custodyAddress, this.contractHash, state.accountAddress].includes(recipient))
+          error("invalid recovery authority");
+        if (current !== recipient) signers.add(recipient);
+        current = recipient;
+      }
+      if (signers.size > 16) error("configuration batch requires more than 16 transaction signers");
+      return freeze({ kind: "account", method: "applyConfigurationActions", accountId: id,
+        accountAddress: state.accountAddress, configurationNonce: state.configurationNonce, signers: [...signers], script });
     }
 
     buildAccountActionScript({ method, accountId, args = [] }) {
       if (method === "setRecoveryPolicy") error("use buildRecoveryPolicyPlan to resolve the required signers");
-      if (!NATIVE_REQUIRED_ABI[method]) error(`unknown account action ${method}`);
+      if (method === "applyConfigurationActions") error("use buildConfigurationBatchPlan to resolve the required signers");
+      if (!Object.hasOwn(NATIVE_REQUIRED_ABI, method) || NATIVE_REQUIRED_ABI[method][2]) error(`unknown account action ${method}`);
       const id = codec.hex(accountId, 20);
       return freeze({
         kind: "account",
@@ -1080,7 +1221,9 @@ export function createNativeClientClass(codec, {
         bytesToBase64(codec.bytes(plan.script)),
         signers,
       ]);
-      const halted = result?.state === "HALT" && Array.isArray(result.stack);
+      if (result?.state === "HALT" && (result.exception != null || !Array.isArray(result.stack)))
+        error("HALT simulation has an exception or a missing result stack");
+      const halted = result?.state === "HALT";
       const fees = halted
         ? parseNativeRpcFees(result)
         : { gasConsumed: null, minimumRequiredFee: null };
@@ -1124,10 +1267,10 @@ export function createNativeClientClass(codec, {
         if (JSON.stringify(current) !== JSON.stringify(plan)) error("recovery record or authority changed; review again");
         return true;
       }
-      if (plan.method === "setRecoveryPolicy") {
+      if (plan.method === "setRecoveryPolicy" || plan.method === "applyConfigurationActions") {
         const state = await this.getAccount(plan.accountId);
         if (!state || state.status !== 0 || state.configurationNonce !== plan.configurationNonce)
-          error("recovery policy changed; review the required signers again");
+          error("account configuration changed; review the required signers again");
         return true;
       }
       if (plan.kind !== "execution") return true;

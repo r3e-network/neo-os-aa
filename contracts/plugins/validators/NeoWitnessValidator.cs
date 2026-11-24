@@ -24,7 +24,7 @@ namespace SmartAccount.Validators
     [DisplayName("NeoWitnessValidator")]
 #if SMARTACCOUNT_NATIVE
     [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "getAuthorizedModuleId", "getModule")]
-    [ManifestExtra("SmartAccountProfile", "native-v4")]
+    [ManifestExtra("SmartAccountProfile", "native-smartaccount")]
 #else
     [ContractPermission("*", "getAuthorizedModuleId")]
     [ContractPermission("*", "getModule")]
@@ -91,6 +91,7 @@ namespace SmartAccount.Validators
         private static void ApplyConfig(UInt160 accountId, BigInteger moduleId, object[] data)
         {
             ExecutionEngine.Assert(ModuleConfig.Command(data, 2) == "setSigners", "Unknown config command");
+            ExecutionEngine.Assert(data[2] is BigInteger, "Threshold must be an integer");
             object[] signers = (object[])data[1];
             BigInteger threshold = (BigInteger)data[2];
             ExecutionEngine.Assert(signers.Length > 0, "Empty signers list not allowed");

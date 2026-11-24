@@ -77,11 +77,8 @@ test('identity, proxy script and proxy address match the independent vector', ()
   assert.equal(identity.accountId, ACCOUNT_ID);
   assert.equal(identity.verificationScript, vectors.verificationScript);
   assert.equal(identity.accountAddress, strip(vectors.proxyAddress));
-  // The custom kernel pushes CallFlags.All; the flag is identity, never inferred.
-  assert.notEqual(
-    c.accountAddress(ACCOUNT_ID, { coreContractHash: CORE, callFlags: 15 }),
-    identity.accountAddress,
-  );
+  assert.throws(() => c.accountAddress(ACCOUNT_ID, { coreContractHash: CORE, callFlags: 15 }), /ReadOnly/);
+  assert.throws(() => c.accountAddress('00'.repeat(20)), /nonzero/);
 });
 
 test('the canonical thirteen-field operation and its digest match the vector', () => {
@@ -141,25 +138,27 @@ test('the message digest binds sender, hash and authority epoch', () => {
   };
   const base = c.messageDigest(
     { ...context, authorityEpoch: 1 },
-    { ...message, validatorId: 0, credentialGeneration: 0 },
+    { ...message, validatorId: 0, credentialGeneration: 1 },
   );
+  assert.throws(() => c.messageDigest({ ...context, authorityEpoch: 1 },
+    { ...message, credentialGeneration: 0 }), /credentialGeneration must be >= 1/);
   assert.match(base, /^[0-9a-f]{64}$/);
   const other = c.messageDigest(
     { ...context, authorityEpoch: 2 },
-    { ...message, validatorId: 0, credentialGeneration: 0 },
+    { ...message, validatorId: 0, credentialGeneration: 1 },
   );
   assert.notEqual(base, other);
   assert.notEqual(
     c.messageDigest(
       { ...context, authorityEpoch: 1 },
-      { ...message, hash: 'ac'.repeat(32), credentialGeneration: 0 },
+      { ...message, hash: 'ac'.repeat(32), credentialGeneration: 1 },
     ),
     base,
   );
   assert.notEqual(
     c.messageDigest(
       { ...context, authorityEpoch: 1 },
-      { ...message, originalSender: CORE, credentialGeneration: 0 },
+      { ...message, originalSender: CORE, credentialGeneration: 1 },
     ),
     base,
   );
@@ -176,7 +175,7 @@ test('the message digest binds sender, hash and authority epoch', () => {
         reverseBytes(ACCOUNT_ID),
         reverseBytes(CUSTODY),
         be64(0),
-        be64(0),
+        be64(1),
         be64(1),
         Buffer.from('ab'.repeat(32), 'hex'),
       ]).toString('hex'),
@@ -187,7 +186,7 @@ test('the message digest binds sender, hash and authority epoch', () => {
     () =>
       c.messageDigest(
         { ...context, authorityEpoch: 1 },
-        { originalSender: CUSTODY, credentialGeneration: 0 },
+        { originalSender: CUSTODY, credentialGeneration: 1 },
       ),
     /hex bytes/,
   );
@@ -195,7 +194,7 @@ test('the message digest binds sender, hash and authority epoch', () => {
     () =>
       c.messageDigest(
         { ...context, authorityEpoch: 1 },
-        { hash: 'ab'.repeat(32), credentialGeneration: 0 },
+        { hash: 'ab'.repeat(32), credentialGeneration: 1 },
       ),
     /hex bytes/,
   );
@@ -215,8 +214,7 @@ test('nonce channels are 191-bit namespaces derived from the routing tuple', () 
     credentialGeneration: 1,
     nonceSubkey: ZERO_SUBKEY,
   };
-  // The epoch is part of the namespace context, the rest is the routing tuple.
-  const nonceContext = { ...context, authorityEpoch: 1 };
+  const nonceContext = context;
   const channel = c.deriveNonceChannel(nonceContext, routing);
   assert.equal(BigInt(channel) < 1n << 191n, true);
   assert.equal(c.nonceNamespaceDigest(nonceContext, routing).length, 64);
@@ -228,7 +226,7 @@ test('nonce channels are 191-bit namespaces derived from the routing tuple', () 
   ];
   for (const variant of variants) {
     assert.notEqual(
-      c.deriveNonceChannel({ ...nonceContext, ...variant }, variant),
+      c.deriveNonceChannel(nonceContext, variant),
       channel,
     );
   }
@@ -272,9 +270,9 @@ test('the derived channel is the kernel vector: digest bytes 8..31, byte 8 maske
     networkMagic: NETWORK,
     coreContractHash: strip(expected.coreHash),
     accountId: strip(vector.input.accountId),
-    authorityEpoch: vector.input.authorityEpoch,
   };
   const routing = {
+    authorityEpoch: vector.input.authorityEpoch,
     validatorId: vector.input.validatorId,
     credentialGeneration: vector.input.credentialGeneration,
     nonceSubkey: vector.input.nonceSubkey,
@@ -438,12 +436,18 @@ test('built-in and threshold signature fields are serialized, not hashed', () =>
       c.builtInSignature({
         credentialGeneration: 1,
         pairs: [
-          { script: '0c21' + '11'.repeat(32) + '4156e7b327', signature: 'aa'.repeat(64) },
-          { script: '0c21' + '11'.repeat(32) + '4156e7b327', signature: 'bb'.repeat(64) },
+          { script: '0c2102' + '11'.repeat(32) + '4156e7b327', signature: 'aa'.repeat(64) },
+          { script: '0c2102' + '11'.repeat(32) + '4156e7b327', signature: 'bb'.repeat(64) },
         ],
       }),
     /distinct/,
   );
+  const pair = { script: '0c2102' + '11'.repeat(32) + '4156e7b327', signature: 'aa'.repeat(64) };
+  assert.throws(() => c.builtInSignature({credentialGeneration: 0, pairs: [pair]}), /must be >= 1/);
+  assert.throws(() => c.builtInSignature({credentialGeneration: 1, pairs: [{...pair, script: '01'}]}), /P-256/);
+  assert.throws(() => c.builtInSignature({credentialGeneration: 1, pairs: Array(17).fill(pair)}), /at most 16/);
+  assert.throws(() => c.thresholdMemberDigest(vectors.operation.digest, 0, 1), /must be positive/);
+  assert.throws(() => c.thresholdMemberDigest(vectors.operation.digest, 1, 0), /must be >= 1/);
   const memberDigest = c.thresholdMemberDigest(vectors.operation.digest, 1, 2);
   assert.match(memberDigest, /^[0-9a-f]{64}$/);
   const threshold = c.thresholdSignature([
@@ -492,4 +496,21 @@ test('execution scripts embed the operation and refuse another account', () => {
     () => c.buildExecutionScript(ACCOUNT_ID, [operation], context),
     /signature/,
   );
+});
+
+test('operation encoding and digest enforce the same route and array shapes', () => {
+  const explicit = { ...operation, signature: '01' };
+  const { validatorId, ...implicit } = explicit;
+  assert.equal(c.serializeOperation(implicit), c.serializeOperation(explicit));
+  assert.equal(c.operationDigest(context, implicit), c.operationDigest(context, explicit));
+  const empty = { ...explicit, hookProofs: [[1, '']] };
+  assert.equal(c.operationDigest(context, empty), c.operationDigest(context,
+    { ...explicit, hookProofs: [{ hookId: 1, proof: '' }] }));
+  for (const fields of [{ args: [{type: 'Array', value: Array(1)}] },
+    { hookProofs: Array(1) }, { hookProofs: [[1]] }, { hookProofs: [{hookId: 1}] },
+    { hookProofs: [[1, '', '11']] }]) {
+    const malformed = { ...explicit, ...fields };
+    assert.throws(() => c.serializeOperation(malformed), /sparse|hook proof/);
+    assert.throws(() => c.operationDigest(context, malformed), /sparse|hook proof/);
+  }
 });

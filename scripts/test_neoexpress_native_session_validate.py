@@ -88,7 +88,7 @@ class NativeSessionTests(unittest.TestCase):
         self.assertEqual(['configure'], profiles['SessionKeyValidator']['configurationMethods'])
 
     def test_signing_input_matches_published_native_vector(self):
-        vectors=json.loads((Path(__file__).resolve().parent.parent/'docs/proposals/smartaccount-native-profile-v2-vectors.json').read_text())
+        vectors=json.loads((Path(__file__).resolve().parent.parent/'docs/archive/native-research/smartaccount-native-profile-v2-vectors.json').read_text())
         published=vectors['operation']; identity=vectors['identity']
         original=A(B(bytes.fromhex(published['targetContractWire'])),S(published['methodUtf8']),
                    A(B(bytes.fromhex(published['args'][0]['value'])),I(42)),I(int(published['nonce'])),I(int(published['deadline'])),B(b''))

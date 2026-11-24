@@ -1,0 +1,269 @@
+{
+  "ActionSessionValidator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setRecoveryService":["service:Hash160"],"clearRecoveryService":[]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getRecoveryAuthority": [["Hash160"],"Hash160",true],
+      "getRecoveryService": [["Hash160","Integer"],"Hash160",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true]
+    }
+  },
+  "DailyLimitHook": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setDailyLimit":["token:Hash160","maxAmount:Integer","useRollingWindow:Boolean"],"clearDailyLimit":["token:Hash160"]},
+    "moduleType": "hook",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getDailyLimit": [["Hash160","Integer","Hash160"],"Integer",true],
+      "getLimitConfig": [["Hash160","Integer","Hash160"],"Any",true],
+      "isRollingWindow": [["Hash160","Integer","Hash160"],"Boolean",true]
+    }
+  },
+  "DelegatedIdentityValidator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setConfig":["signerPublicKey:ByteArray","provider:ByteArray","masterNullifier:ByteArray"]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":true},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getConfig": [["Hash160","Integer"],"Array",true],
+      "getMasterNullifier": [["Hash160","Integer"],"ByteArray",true],
+      "getProvider": [["Hash160","Integer"],"String",true],
+      "getPublicKey": [["Hash160","Integer"],"ByteArray",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true],
+      "getSigningDigest": [["Hash160","Integer","ByteArray","ByteArray"],"ByteArray",true]
+    }
+  },
+  "GovernanceModule": {
+    "installData": ["empty"],
+    "disabled": false,
+    "commands": {},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall"],
+    "methods": {
+      "cancelConfiguration": [["Hash160","Integer"],"Void",false],
+      "configurationExpiryWindow": [[],"Integer",true],
+      "configurationMaturity": [[],"Integer",true],
+      "confirmConfiguration": [["Hash160","Integer","Array"],"Void",false],
+      "getLastCompletion": [["Hash160"],"Array",true],
+      "getPendingConfiguration": [["Hash160","Integer"],"Array",true],
+      "getPendingConfigurationIntentIds": [["Hash160"],"Array",true],
+      "proposeConfiguration": [["Hash160","Array","Array"],"Integer",false],
+      "storeGovernedPolicy": [["Hash160","Integer","ByteArray"],"Void",false],
+      "unfreezeAccount": [["Hash160"],"Integer",false]
+    }
+  },
+  "HookOrchestratorModule": {
+    "installData": ["empty","hookOrder"],
+    "disabled": false,
+    "commands": {},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall"],
+    "methods": {
+      "getCredentialGeneration": [["Hash160","Integer"],"Integer",true],
+      "getHookOrder": [["Hash160"],"Array",true],
+      "revokeCredentials": [["Hash160","Integer"],"Void",false],
+      "setHookOrder": [["Hash160","Array"],"Void",false]
+    }
+  },
+  "MultiHook": {
+    "installData": [],
+    "disabled": true,
+    "commands": {},
+    "moduleType": "hook",
+    "capabilities": {"compositeLayer":1,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {}
+  },
+  "MultiSigValidator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setMemberKey":["publicKey:ByteArray"]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":true,"messageCapability":false,"thresholdMemberEligible":true},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getMemberDigest": [["Hash160","Integer","ByteArray"],"ByteArray",true],
+      "getMemberKey": [["Hash160","Integer"],"ByteArray",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true]
+    }
+  },
+  "NeoDIDCredentialHook": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"requireCredential":["target:Hash160","provider:String","claimType:String","claimCommitment:ByteArray"],"clearRequirement":["target:Hash160"]},
+    "moduleType": "hook",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "cancelRegistryChange": [[],"Void",false],
+      "confirmRegistry": [["Hash160"],"Void",false],
+      "getRegistry": [[],"Hash160",true],
+      "getRequiredClaimType": [["Hash160","Integer","Hash160"],"String",true],
+      "getRequiredProvider": [["Hash160","Integer","Hash160"],"String",true],
+      "proposeRegistry": [["Hash160"],"Void",false],
+      "setRegistry": [["Hash160"],"Void",false]
+    }
+  },
+  "NeoWitnessValidator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setSigners":["signers:Hash160[]","threshold:Integer"]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":true},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getConfig": [["Hash160","Integer"],"Array",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true],
+      "getThreshold": [["Hash160","Integer"],"Integer",true]
+    }
+  },
+  "P256Validator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setPublicKey":["publicKey:ByteArray"]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":true},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getPublicKey": [["Hash160","Integer"],"ByteArray",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true]
+    }
+  },
+  "RecoveryModule": {
+    "installData": ["empty"],
+    "disabled": false,
+    "commands": {},
+    "moduleType": "recovery",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall"],
+    "methods": {
+      "beginRecovery": [["Hash160","Hash160"],"Integer",false],
+      "cancelRecovery": [["Hash160"],"Void",false],
+      "cancelReviewedRecovery": [["Hash160","Integer","Integer"],"Void",false],
+      "executeRecovery": [["Hash160"],"Void",false],
+      "executeReviewedRecovery": [["Hash160","Integer","Integer"],"Void",false],
+      "getExecutedRecoveryNonce": [["Hash160"],"Integer",true],
+      "getRecoveryPolicySnapshot": [["Hash160"],"Array",true],
+      "getRecoveryStatus": [["Hash160"],"Array",true]
+    }
+  },
+  "SessionKeyValidator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setSessionKey":["publicKey:ByteArray","target:Hash160","method:String","validUntil:Integer","spendingLimit:Integer","description:String"],"clearSessionKey":[]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":true,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getGrantDigest": [["Hash160","Integer"],"ByteArray",true],
+      "getSessionKey": [["Hash160","Integer"],"Array",true],
+      "getSessionKeyMetadata": [["Hash160","Integer"],"Array",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true],
+      "getSpentAmount": [["Hash160","Integer"],"Integer",true]
+    }
+  },
+  "SigningModule": {
+    "installData": ["empty"],
+    "disabled": false,
+    "commands": {},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall"],
+    "methods": {
+      "getMessageSubjects": [["Hash160"],"Array",true]
+    }
+  },
+  "SubscriptionValidator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"createSubscription":["id:ByteArray","merchant:Hash160","token:Hash160","amount:Integer","periodSeconds:Integer"],"cancelSubscription":["id:ByteArray"]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getLastChargedPeriod": [["Hash160","Integer","ByteArray"],"Integer",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true],
+      "getSubscription": [["Hash160","Integer","ByteArray"],"Array",true]
+    }
+  },
+  "TeeKeyValidator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setPublicKey":["publicKey:ByteArray"]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":true},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getKeyId": [["Hash160","Integer"],"ByteArray",true],
+      "getPublicKey": [["Hash160","Integer"],"ByteArray",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true]
+    }
+  },
+  "ThresholdPolicyModule": {
+    "installData": ["empty"],
+    "disabled": false,
+    "commands": {},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall"],
+    "methods": {
+      "getThresholdPolicy": [["Hash160","Integer"],"Array",true]
+    }
+  },
+  "TokenRestrictedHook": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"restrictToken":["token:Hash160"],"unrestrictToken":["token:Hash160"]},
+    "moduleType": "hook",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "isRestricted": [["Hash160","Integer","Hash160"],"Boolean",true]
+    }
+  },
+  "Web3AuthValidator": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"setPublicKey":["publicKey:ByteArray"]},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":true,"thresholdMemberEligible":true},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getPublicKey": [["Hash160","Integer"],"ByteArray",true],
+      "getSignerDomains": [["Hash160","Integer"],"Array",true],
+      "getSigningPayload": [["Hash160","Integer","ByteArray","Array"],"ByteArray",true]
+    }
+  },
+  "WhitelistHook": {
+    "installData": ["empty","command"],
+    "disabled": false,
+    "commands": {"allowTarget":["target:Hash160"],"denyTarget":["target:Hash160"]},
+    "moduleType": "hook",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "isWhitelisted": [["Hash160","Integer","Hash160"],"Boolean",true]
+    }
+  },
+  "ZKEmailVerifier": {
+    "installData": [],
+    "disabled": true,
+    "commands": {},
+    "moduleType": "validator",
+    "capabilities": {"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},
+    "lifecycle": ["onInstall","onUninstall","configure"],
+    "methods": {
+      "getSignerDomains": [["Hash160","Integer"],"Array",true]
+    }
+  }
+}

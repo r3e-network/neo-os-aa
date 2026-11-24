@@ -44,10 +44,94 @@ public class FixSubscriptionCancelRuntimeTests
     /// <summary>The channel a subscription pull uses: SHA-256 of the subId (spec §6).</summary>
     private static byte[] ChannelKey(byte[] subId) => SHA256.HashData(subId);
 
+    [TestMethod]
+    [DataRow(60, 10, false)]
+    [DataRow(10, 60, true)]
+    [DataRow(13, 19, false)]
+    [DataRow(19, 13, true)]
+    [DataRow(13, 13, false)]
+    public void NewScheduleWaitsForBothBookedWindows(int original, int replacement, bool cancel)
+    {
+        PluginModuleHarness h = new("validators/SubscriptionValidator", instanceIsolation: false);
+        byte[] id = new byte[255];
+        void SetPeriod(int seconds) =>
+            h.Configure("createSubscription", id, Merchant, h.Target, (BigInteger)Amount, (BigInteger)seconds);
+        SetPeriod(original);
+        h.Fx.SetSigners(Merchant);
+        BigInteger now = h.Fx.Now();
+        // Book within a minute; include schedules whose windows do not divide one another.
+        BigInteger minute = (now / 60000 + 1) * 60000;
+        void AdvanceTo(BigInteger ms) => h.Fx.AdvanceTime(TimeSpan.FromMilliseconds((long)(ms - h.Fx.Now())));
+        AdvanceTo(minute + 5000);
+        object[] op = h.TransferOp(h.Target, Amount, Merchant, id);
+        bool Due() => h.Validate(PluginModuleHarness.Digest(h.Fx, op), op);
+        Assert.IsTrue(Due());
+        h.Complete(op, true);
+        if (cancel) h.Configure("cancelSubscription", id);
+        SetPeriod(replacement);
+        var fields = (VmArray)h.CallDirect("getSubscription", h.AccountId, h.ModuleId, id)!;
+        Assert.AreEqual((minute / 1000 + 5) / original, fields[5].GetInteger());
+        BigInteger booked = minute / 1000 + 5;
+        BigInteger firstEligibleMs = BigInteger.Max(
+            (booked / original + 1) * original,
+            (booked / replacement + 1) * replacement) * 1000;
+        AdvanceTo(firstEligibleMs - 1);
+        Assert.IsFalse(Due());
+        AdvanceTo(firstEligibleMs);
+        Assert.IsTrue(Due());
+        h.Complete(op, true);
+        Assert.IsFalse(Due());
+    }
+
+    [TestMethod]
+    public void SubscriptionIdsUseTheirFullBytes()
+    {
+        PluginModuleHarness h = new("validators/SubscriptionValidator", instanceIsolation: false);
+        byte[] first = new byte[255], second = new byte[255];
+        second[254] = 1;
+        void Add(byte[] id, int cap) =>
+            h.Configure("createSubscription", id, Merchant, h.Target, (BigInteger)cap, (BigInteger)60);
+        BigInteger Cap(byte[] id) =>
+            ((VmArray)h.CallDirect("getSubscription", h.AccountId, h.ModuleId, id)!)[2].GetInteger();
+        Add(first, 1);
+        Add(second, 2);
+        Assert.AreEqual(BigInteger.One, Cap(first));
+        Assert.AreEqual(new BigInteger(2), Cap(second));
+        Add(new byte[1], 3);
+        Assert.AreEqual(new BigInteger(3), Cap(new byte[1]));
+        Assert.ThrowsExactly<TestException>(() => Add(new byte[256], 4));
+        Assert.ThrowsExactly<TestException>(() => Add(new byte[0], 4));
+        Assert.AreEqual(BigInteger.One, Cap(first));
+    }
+
+    [TestMethod]
+    public void SubscriptionConfigurationRequiresIntegerFields()
+    {
+        PluginModuleHarness h = new("validators/SubscriptionValidator", instanceIsolation: false);
+        void Configure(object cap, object period) =>
+            h.Configure("createSubscription", SubId, Merchant, h.Target, cap, period);
+        Configure((BigInteger)9, (BigInteger)60);
+        Assert.ThrowsExactly<TestException>(() => Configure(true, (BigInteger)60));
+        Assert.ThrowsExactly<TestException>(() => Configure((BigInteger)9, new byte[] { 60 }));
+        var fields = (VmArray)h.CallDirect("getSubscription", h.AccountId, h.ModuleId, SubId)!;
+        Assert.AreEqual(new BigInteger(9), fields[2].GetInteger());
+        Assert.AreEqual(new BigInteger(60), fields[3].GetInteger());
+    }
+
     // ------------------------------------------------------------------------
     // Module ABI: the cancel branch is what removes the record, so the tombstone
     // has to be observable at the module boundary as well.
     // ------------------------------------------------------------------------
+
+    [TestMethod]
+    public void RenewedSubscriptionUsesCurrentDescriptorGeneration()
+    {
+        PluginModuleHarness h = new("validators/SubscriptionValidator", instanceIsolation: false);
+        h.SetGeneration(3);
+        h.Configure("createSubscription", SubId, Merchant, h.Target, (BigInteger)Amount, (BigInteger)PeriodSeconds);
+        var fields = (VmArray)h.CallDirect("getSubscription", h.AccountId, h.ModuleId, SubId)!;
+        Assert.AreEqual(h.Generation, fields[4].GetInteger());
+    }
 
     [TestMethod]
     public void CancelKeepsTheLastChargedPeriodTombstone()

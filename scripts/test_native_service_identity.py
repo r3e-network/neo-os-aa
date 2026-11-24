@@ -5,11 +5,12 @@ attributes of every native module and in the shared client codec. This read-only
 consistency scan fails the suite the moment any single pin drifts, so a stale
 fork cannot ship with green tests.
 
-Protocol v4 retired the v2 parameter digest pin: a module declares its profile
-through `getModuleProfile()` and clients derive the digest from that text, so a
-stray `NATIVE_PROFILE_PARAMETER_DIGEST` constant is a regression rather than a
-missing pin.
+The native candidate pins a domain-separated digest of its kernel parameters.
+Individual modules still declare their own independent profile through
+getModuleProfile(). The wallet admits only the exact current kernel digest.
 """
+import hashlib
+import json
 import re
 import unittest
 from pathlib import Path
@@ -70,14 +71,20 @@ class NativeServiceIdentityTests(unittest.TestCase):
                 self.assertEqual(SERVICE, value, f'{path.name} pins a stale native service hash')
         self.assertGreater(checked, 0)
 
-    def test_retired_parameter_digest_pin_does_not_come_back(self):
+    def test_only_the_current_kernel_parameter_pin_is_admitted(self):
+        file = ROOT / 'docs/proposals/smartaccount-native-profile-parameters.json'
+        params = json.loads(file.read_text())
+        body = json.dumps(params, sort_keys=True, separators=(',', ':'))
+        current = hashlib.sha256(b'NeoSmartAccount/Profile' + bytes([params['abiVersion']]) + body.encode()).hexdigest()
+        canonical = ROOT / 'shared/nativeSmartAccountClient.mjs'
         scanned = [ROOT / 'shared' / name for name in CLIENTS]
         scanned += sorted((ROOT / 'sdk/js/src').rglob('*.js'))
         for path in scanned:
             text = path.read_text(encoding='utf-8')
-            self.assertNotIn('NATIVE_PROFILE_PARAMETER_DIGEST =', text,
-                             f'{path} re-pins the retired v2 parameter digest')
-        # A v4 profile digest is the sha256 of the module-declared profile text.
+            pins = re.findall(r'NATIVE_PROFILE_PARAMETER_DIGEST\s*=\s*["\']([a-f0-9]{64})', text)
+            self.assertEqual([current] if path == canonical else [], pins, str(path))
+        self.assertIn('profileParameterDigest !== NATIVE_PROFILE_PARAMETER_DIGEST', canonical.read_text())
+        # Module admission commits the literal profile text independently of the kernel.
         service = (ROOT / 'frontend/src/services/moduleProfileService.js').read_text(encoding='utf-8')
         self.assertIn('sha256(toUtf8Bytes(String(profileText)))', service)
 

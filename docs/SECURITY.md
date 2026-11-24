@@ -21,7 +21,7 @@ callback-free recovery lane `beginRecovery` / `cancelRecovery` / `executeRecover
 (read back through `getRecoveryStatus`): maturity rotates custody, sweeps every module
 row without calling a plugin, and advances the authority epoch; it does not provide
 native epoch-module reinstallation.
-The normative rules are in `docs/proposals/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`.
+The normative rules are in `docs/archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md`.
 The amended native composite path uses a core-owned, single-operation receipt:
 only the first threshold of valid children obtains post-execution authority.
 Validation and post-execution still check current policy and all active binding

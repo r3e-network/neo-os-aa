@@ -18,7 +18,7 @@ import { getAddressFromScriptHash } from "../src/utils/neo.js";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const payer = "66".repeat(20);
 const PROFILE_READY =
-  "Node answered the v4 native profile, ABI and implementation id.";
+  "Node supports the current SmartAccount protocol.";
 const evidenceDir =
   process.env.NATIVE_CANCELLATION_EVIDENCE_DIR ||
   join(tmpdir(), "sa-native-recovery-cancellation");
@@ -39,7 +39,7 @@ test("recovery cancellation separates its payer and authority and invalidates st
     newCustody: "55".repeat(20),
     initiatedAt: fixture.state.time - 60000,
     matureAt: maturity,
-    authorityEpochAtInit: 0,
+    authorityEpochAtInit: 1,
   };
   const errors = [], simulations = [];
   await mkdir(evidenceDir, { recursive: true });
@@ -106,8 +106,10 @@ test("recovery cancellation separates its payer and authority and invalidates st
     const summary = (await page.getByTestId("native-account-summary").innerText())
       .replace(/\s+/g, " ")
       .trim();
-    assert.ok(summary.includes("0x" + nativeTestRecovery), summary);
+    assert.match(summary, /Standard recovery configured/);
     assert.ok(summary.includes("Pending recovery"), summary);
+    await page.getByText("Account details", { exact: true }).click();
+    assert.ok((await page.getByTestId("native-account-summary").innerText()).includes("0x" + nativeTestRecovery));
     await page
       .getByRole("button", { name: "Use connected Neo wallet", exact: true })
       .click();

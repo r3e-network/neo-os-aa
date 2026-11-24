@@ -46,12 +46,12 @@ def require(condition, message):
 def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
-def pinned_sources(cache=None):
+def pinned_sources(cache=None, extra=None):
     directory = Path(cache) if cache else Path(tempfile.gettempdir()) / 'sa-helper-gas-pinned-source'
     directory.mkdir(parents=True, exist_ok=True)
     sources = {}
     local = REPO.parent.parent / 'neo/neo'
-    for name, sha in SOURCES.items():
+    for name, sha in {**SOURCES, **(extra or {})}.items():
         path = directory / name.replace('/', '-')
         if not path.exists():
             relative = 'src/Neo/SmartContract/' + name

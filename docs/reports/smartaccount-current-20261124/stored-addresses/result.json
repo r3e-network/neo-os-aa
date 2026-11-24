@@ -1,0 +1,49 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "remoteMain": "66b1715894f1eb38354ccc02f6cbdeb1c29911aa",
+  "targets": {
+    "archive": {
+      "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+      "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+      "certificateSha256": "8c93d22186a7d23a8005eaacbccf05a9812255da298f673891cefa50cf998304",
+      "methods": [
+        "getContractAdmin",
+        "getPendingContractAdmin",
+        "getPlatformRegistrar",
+        "getPendingPlatformRegistrar",
+        "getMarketEscrowContract"
+      ]
+    },
+    "main": {
+      "nefSha256": "c634ab9821c83bdb53b342d64359183cff2b917ac2dc5bdd9b57613494d09b4b",
+      "manifestSha256": "24c4710a8ac00a3df236d2a08509726dbe2745174abf833dd52e26d89b03b1b4",
+      "certificateSha256": "3c33fc67982e9c63af0de033414f5003ce4e0d6f7b630715f76c2eb751a382e8",
+      "methods": [
+        "getContractAdmin",
+        "getPendingContractAdmin",
+        "getPlatformRegistrar",
+        "getPendingPlatformRegistrar",
+        "getMarketEscrowContract"
+      ]
+    }
+  },
+  "sourceSha256": {
+    "ordinary_stored_addresses.py": "24ddbf7ff481e75f3d74931231b2de99285f5000e9d15f9b4c0730aed92bffa3",
+    "ordinary_stored_integers.py": "83ce70fd2da1cb55abd114a79827b02fd2a8c399a0342c94ba41832d330ea887",
+    "ordinary_entry_proofs.py": "1efa6dd67dc1c0caa52d8588bbbda0f9ae49a8c7b859588ef28bbe2679bde2ec",
+    "ordinary_initializer_proofs.py": "f93febdab0bacd857eca41bef23d582fc6d005efd85498e25ca7fc5383031014",
+    "ordinary_query_references.py": "807d9fb92b8539d08d964656580040d22f4f53484429e58af82a0277374e8339",
+    "storage_getter_proofs.py": "93b446bb218429fde0cfba98d15b22da7bb82ef8191b01ee242e55fe0ae5d9b8",
+    "nef_decode.py": "a2044eadec06c0f65bf9fe303dd156b88f54106a76dc7f4afb302b4124e60848",
+    "verify.py": "2737973f386c7da4570e705ede7e6fbc897cc61b401805b02fe8ece69af0a5f5",
+    "coq/IntegerSemantics.v": "b2d8cfb443115bdda59c52abc04022ebd4b0bbea0a13f122f12ec7a0b891425c",
+    "coq/CapArithmetic.v": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "coq/CapMethodVm.v": "cffee42ebb1dbacdf49a97c9213472026e3481fc122472f94911abda7e62dfb9",
+    "coq/CapContext.v": "3fab1800231f6698890ac60ce74bd2514faca174ec4ed64e2be00cb403337995",
+    "coq/NumericCoercions.v": "2c9ec6bccb5930280bdbd99cada7704775211c0ec79662be49e94cb6408963fe",
+    "coq/StorageGetter.v": "25a86e8b269e21e7221717de704632a7efbfd4f3ef954a589fd91e8a293f4126",
+    "coq/StorageGetterVm.v": "2ec3f78682ecf98d787f467a9354661214e47fe2411ccee6ce8d32b2f59ba629"
+  },
+  "scope": "Initialized slots and getter bodies under modeled storage and instruction execution only. No resource, external call admission, storage engine or rollback correspondence."
+}

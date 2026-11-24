@@ -20,7 +20,7 @@ const {
   nativeCodec: c,
   NATIVE_SMART_ACCOUNT_CONTRACT: CORE,
 } = require("../src/native");
-const { NATIVE_ACCOUNT_ADDRESS_ABI, NATIVE_REQUIRED_ABI, NATIVE_REQUIRED_EVENTS } = require("../src/native/client");
+const coreManifest = require("../../../tests/fixtures/native-smartaccount.manifest.json");
 
 const NETWORK = 12345;
 const ACCOUNT = "11".repeat(20);
@@ -51,22 +51,9 @@ const ARG_HASH = (displayHex) => ({
 });
 const ARG_BYTES = (hex) => ({ type: "ByteString", value: hex });
 
-/** The ABI a v4 kernel must publish, built from the client's own gate. */
+/** The manifest emitted by the activated local native build. */
 function manifest() {
-  return {
-    name: "SmartAccount",
-    abi: {
-      methods: Object.entries({ ...NATIVE_REQUIRED_ABI, ...NATIVE_ACCOUNT_ADDRESS_ABI }).map(
-        ([name, [types, returntype, safe, names]]) => ({
-          name,
-          parameters: names.map((parameter, index) => ({ name: parameter, type: types[index] })),
-          returntype,
-          safe,
-        }),
-      ),
-      events: NATIVE_REQUIRED_EVENTS.map((name) => ({ name, parameters: [] })),
-    },
-  };
+  return structuredClone(coreManifest);
 }
 
 function fixture() {
@@ -78,7 +65,7 @@ function fixture() {
     hash: "0x" + CORE,
     abi: manifest(),
     protocolVersion: 4,
-    implementation: "NativeSmartAccount/v4",
+    implementation: "NativeSmartAccount",
     account: null,
     module: null,
   };
@@ -86,7 +73,7 @@ function fixture() {
     responses.set(c.dynamicCall(contract, method, args, 5), value);
   const reset = () => {
     responses.clear();
-    answer("getProtocolInfo", [], A([I(state.protocolVersion), BOOL(false)]));
+    answer("getProtocolInfo", [], A([I(state.protocolVersion)]));
     answer("getAccountImplementationId", [], TEXT(state.implementation));
     if (state.account) answer("getAccount", [ARG_HASH(ACCOUNT)], state.account);
     if (state.module) answer("getModule", [ARG_HASH(ACCOUNT), I(1)], state.module);
@@ -117,7 +104,7 @@ function fixture() {
         method.name === name ? { ...method, ...patch } : method,
       );
     },
-    /** The account descriptor as an N3 node returns it (16 fields). */
+    /** The account descriptor as an N3 node returns it (15 fields). */
     setAccount({
       status = 0,
       custody = CUSTODY,
@@ -142,7 +129,6 @@ function fixture() {
         BOOL(false),
         I(0),
         BOOL(false),
-        A([]),
       ]);
       reset();
     },
@@ -173,7 +159,7 @@ test("discovery reads one profile and answers every later read from it", async (
     contract: CORE,
     networkMagic: NETWORK,
     protocolVersion: 4,
-    implementationId: "NativeSmartAccount/v4",
+    implementationId: "NativeSmartAccount",
   });
   assert.equal(f.client.profile, profile);
   // Concurrent readers share one in-flight discovery, while an explicit call
@@ -191,6 +177,10 @@ test("discovery refuses every identity that is not this kernel build", async () 
     ["network magic", (f) => (f.state.magic = 5), /network magic/],
     ["native id sign", (f) => (f.state.id = 13), /not available/],
     ["reported hash", (f) => (f.state.hash = "0x" + "55".repeat(20)), /not available/],
+    ["incorrect parameter fingerprint", (f) => (f.state.abi.extra.smartAccount.profileParameterDigest =
+      "00".repeat(32)), /profile parameters/],
+    ["absent parameter binding", (f) => delete f.state.abi.extra, /profile parameters/],
+    ["wrong parameter ABI", (f) => (f.state.abi.extra.smartAccount.abiVersion = 2), /profile parameters/],
     ["manifest name", (f) => (f.state.abi.name = "SmartAccountV3"), /not available/],
     [
       "missing method",
@@ -212,8 +202,8 @@ test("discovery refuses every identity that is not this kernel build", async () 
       /ABI mismatch: getModule/,
     ],
     ["safe flag", (f) => f.patchMethod("getModule", { safe: false }), /ABI mismatch: getModule/],
-    ["protocol version", (f) => (f.state.protocolVersion = 3), /v4 protocol/],
-    ["implementation id", (f) => (f.state.implementation = "NativeSmartAccount/v3"), /implementation id/],
+    ["unknown wire tag", (f) => (f.state.protocolVersion = 255), /current SmartAccount protocol/],
+    ["implementation id", (f) => (f.state.implementation = "DifferentSmartAccount"), /implementation id/],
   ];
   for (const [label, mutate, pattern] of cases) {
     const f = fixture();
@@ -222,6 +212,16 @@ test("discovery refuses every identity that is not this kernel build", async () 
     await assert.rejects(() => f.client.discover(), pattern, label);
     assert.equal(f.client.profile, null, `${label} must not leave a profile`);
   }
+});
+
+test("rediscovery clears prior approval when the node exposes a different interface", async () => {
+  const f = fixture();
+  await f.client.discover();
+  f.state.abi.abi.methods.push({ ...f.state.abi.abi.methods[0], name: "foreignMethod" });
+  f.reset();
+  await assert.rejects(f.client.discover(), /unexpected native ABI method/);
+  assert.equal(f.client.profile, null);
+  await assert.rejects(f.client.getAccount(ACCOUNT), /unexpected native ABI method/);
 });
 
 test("the operation parameter is Array, never a substituted type", async () => {
@@ -256,12 +256,7 @@ test("identity derivation is custody plus salt, at this kernel's call flags", as
     callFlags: 5,
   }));
   assert.equal(f.client.proxyAddress(ACCOUNT), c.accountAddress(ACCOUNT, { coreContractHash: CORE, callFlags: 5 }));
-  // The same account id at CallFlags.All is a different proxy: the flags are in
-  // the verification script the address hashes.
-  assert.notEqual(
-    f.client.proxyAddress(ACCOUNT),
-    c.accountAddress(ACCOUNT, { coreContractHash: CORE, callFlags: 15 }),
-  );
+  assert.throws(() => c.accountAddress(ACCOUNT, { coreContractHash: CORE, callFlags: 15 }), /ReadOnly/);
   assert.throws(() => f.client.deriveIdentity({ custodyAddress: ZERO, salt }), /custody/);
 });
 
@@ -276,6 +271,33 @@ test("recovery plans distinguish a new recipient from a retained authority", asy
   assert.deepEqual(changed.signers, [CUSTODY, recipient]);
   assert.notEqual(changed.script, retained.script);
   await assert.rejects(() => f.client.buildRecoveryPolicyPlan({ ...input, recoveryAuthority: ZERO }));
+});
+
+test("batch reviews preserve action order and each change of recovery authority", async () => {
+  const f = fixture();
+  f.setAccount();
+  const next = "81".repeat(20);
+  const recovery = (recoveryAuthority) => ({ method: "setRecoveryPolicy", recoveryAuthority, recoveryTimelockMs: "604800000" });
+  const input = { accountId: ACCOUNT, actions: [
+    recovery(RECOVERY), recovery(next), recovery(next), recovery(RECOVERY),
+    { method: "removeModule", moduleId: 3 }, { method: "setBuiltinAuthorization",
+      defaultOperationAuthorization: true, defaultMessageAuthorization: false }] };
+  const pending = f.client.buildConfigurationBatchPlan(input);
+  input.actions[1].recoveryAuthority = CUSTODY;
+  const plan = await pending;
+  assert.deepEqual(plan.signers, [CUSTODY, next, RECOVERY]);
+  const row = (hash) => A([I(8), ARG_HASH(hash), I(604800000), BOOL(false)]);
+  assert.equal(plan.script, c.dynamicCall(CORE, "applyConfigurationActions", [ARG_HASH(ACCOUNT),
+    A([row(RECOVERY), row(next), row(next), row(RECOVERY), A([I(2), I(3), A([])]), A([I(5), BOOL(true), BOOL(false)])])]));
+  f.client.prepare(plan);
+  f.setAccount({ configurationNonce: 12 });
+  await assert.rejects(f.client.revalidatePlan(plan), /configuration changed/);
+  await assert.rejects(f.client.buildConfigurationBatchPlan(input), /invalid recovery authority/);
+  assert.throws(() => f.client.buildAccountActionScript({ accountId: ACCOUNT, method: "applyConfigurationActions" }), /buildConfigurationBatchPlan/);
+  assert.throws(() => f.client.buildConfigurationBatchScript({ accountId: ACCOUNT, actions: [] }), /1 to 16/);
+  assert.throws(() => f.client.buildConfigurationBatchScript({ accountId: ACCOUNT, actions: [ { method: "freezeAccount" } ] }), /unsupported/);
+  const many = Array.from({length: 16}, (_, i) => recovery((128 + i).toString(16).repeat(20)));
+  await assert.rejects(f.client.buildConfigurationBatchPlan({accountId: ACCOUNT, actions: many}), /more than 16 transaction signers/);
 });
 
 test("the account descriptor is decoded exactly and refuses impossible state", async () => {
@@ -296,7 +318,9 @@ test("the account descriptor is decoded exactly and refuses impossible state", a
   assert.equal(Object.isFrozen(account), true);
 
   for (const [label, patch, pattern] of [
-    ["epoch ahead of the configuration nonce", { epoch: 12, configurationNonce: 11 }, /authority epoch exceeds/],
+    ["invalid epoch gap", { epoch: 13, configurationNonce: 11 }, /invalid authority epoch/],
+    ["zero epoch", { epoch: 0 }, /invalid authority epoch/],
+    ["undefined status", { status: 2 }, /unknown account status/],
     ["zero custody", { custody: ZERO }, /invalid custody identity/],
     ["custody is the core", { custody: CORE }, /invalid custody identity/],
     ["recovery equals custody", { recovery: CUSTODY }, /invalid recovery identity/],
@@ -307,6 +331,9 @@ test("the account descriptor is decoded exactly and refuses impossible state", a
     await assert.rejects(() => g.client.getAccount(ACCOUNT), pattern, label);
   }
 
+  const fresh = fixture();
+  fresh.setAccount({ epoch: 1, configurationNonce: 0 });
+  assert.equal((await fresh.client.getAccount(ACCOUNT)).authorityEpoch, "1");
   const missing = fixture();
   missing.setAccount({ exists: false, custody: ZERO, recovery: ZERO });
   assert.equal(await missing.client.getAccount(ACCOUNT), null);
@@ -373,8 +400,8 @@ test("the nonce is read as a packed channel cursor and checked against the deriv
   assert.equal(
     routing,
     c.deriveNonceChannel(
-      { networkMagic: NETWORK, coreContractHash: CORE, accountId: ACCOUNT, authorityEpoch: 7 },
-      { validatorId: 2, credentialGeneration: 4, nonceSubkey: ZERO_SUBKEY },
+      { networkMagic: NETWORK, coreContractHash: CORE, accountId: ACCOUNT },
+      { authorityEpoch: 7, validatorId: 2, credentialGeneration: 4, nonceSubkey: ZERO_SUBKEY },
     ),
   );
   const packed = (BigInt(routing) << 64n) | 9n;
@@ -399,6 +426,10 @@ test("the nonce is read as a packed channel cursor and checked against the deriv
     /invalid hex/,
   );
 
+  for (const partial of [{ credentialGeneration: 4 }, { authorityEpoch: 7 }]) {
+    await assert.rejects(() => f.client.getNonce(ACCOUNT, { ...partial, validatorId: 2, nonceSubkey: ZERO_SUBKEY }),
+      /requires both/);
+  }
   // The kernel resolves the generation itself, so a caller without one is not
   // given a guessed default: only the channel the contract returned is used.
   const h = fixture();
@@ -411,8 +442,8 @@ test("the nonce is read as a packed channel cursor and checked against the deriv
   // moved to the next channel: this is the ErrorCredentialStale case.
   const advanced = (BigInt(
     c.deriveNonceChannel(
-      { networkMagic: NETWORK, coreContractHash: CORE, accountId: ACCOUNT, authorityEpoch: 7 },
-      { validatorId: 2, credentialGeneration: 5, nonceSubkey: ZERO_SUBKEY },
+      { networkMagic: NETWORK, coreContractHash: CORE, accountId: ACCOUNT },
+      { authorityEpoch: 7, validatorId: 2, credentialGeneration: 5, nonceSubkey: ZERO_SUBKEY },
     ),
   ) << 64n) | 3n;
   const k = fixture();
@@ -518,7 +549,7 @@ test("plans are the exact scripts the core answers, one shape per kind", async (
   const frozen = f.client.buildAccountActionScript({ method: "freezeAccount", accountId: ACCOUNT });
   assert.equal(frozen.script, c.dynamicCall(CORE, "freezeAccount", [c.hashValue(ACCOUNT)]));
   assert.throws(() => f.client.buildAccountActionScript({ method: "setAdmin", accountId: ACCOUNT }), /unknown account action/);
-  // The removed native surfaces are not account actions either.
+  // Module workflows and read-only verification are not account writes.
   for (const retired of ["beginRecovery", "executeRecovery", "proposeConfiguration", "isValidSignature"])
     assert.throws(() => f.client.buildAccountActionScript({ method: retired, accountId: ACCOUNT }), /unknown account action/);
 });
@@ -552,4 +583,55 @@ test("execution only runs a plan this client prepared", async () => {
   assert.equal(f.client.prepare(plan), plan);
   await assert.rejects(() => f.client.execute({ ...plan }), /unprepared plan/);
   assert.throws(() => f.client.prepare({ script: "00" }), /malformed plan/);
+});
+
+test("policy reads distinguish an active route, an inactive policy and a missing record", async () => {
+  const f = fixture();
+  const params = [ARG_HASH(ACCOUNT), I(9)];
+  f.answer("getModule", params, A([]));
+  f.answer("getThresholdPolicy", params, A([I(1), A([I(4)]), BOOL(true), I(7)]));
+  assert.deepEqual(await f.client.getThresholdPolicy(ACCOUNT, 9), {
+    policyId: "9",
+    threshold: 1, memberIds: ["4"], active: true, credentialGeneration: "7",
+  });
+  assert.equal(await f.client.resolveCredentialGeneration(ACCOUNT, 9), "7");
+  f.answer("getThresholdPolicy", params, A([I(0), A([]), BOOL(false), I(8)]));
+  await assert.rejects(f.client.resolveCredentialGeneration(ACCOUNT, 9), /not installed/);
+  f.answer("getThresholdPolicy", params, A([]));
+  assert.equal(await f.client.getThresholdPolicy(ACCOUNT, 9), null);
+  f.answer("getThresholdPolicy", params, A([I(2), A([I(4), I(4)]), BOOL(true), I(8)]));
+  await assert.rejects(f.client.getThresholdPolicy(ACCOUNT, 9), /malformed threshold policy/);
+});
+
+test("discover the mandatory spending policy without knowing its ID", async () => {
+  const f = fixture();
+  const params = [ARG_HASH(ACCOUNT), I(0)];
+  const read = () => f.client.getThresholdPolicy(ACCOUNT);
+  f.answer("getThresholdPolicy", params, A([]));
+  assert.equal(await read(), null);
+  f.answer("getThresholdPolicy", params, A([I(2), A([I(4), I(5)]), BOOL(true), I(1), I(6)]));
+  assert.deepEqual(await read(), {
+    policyId: "6", threshold: 2, memberIds: ["4", "5"], active: true, credentialGeneration: "1",
+  });
+  for (const row of [
+    [I(0), A([]), BOOL(false), I(1), I(6)],
+    [I(2), A([I(4), I(5)]), BOOL(true), I(1), I(0)],
+    [I(2), A([I(4), I(5)]), BOOL(true), I(1)],
+  ]) {
+    f.answer("getThresholdPolicy", params, A(row));
+    await assert.rejects(read(), /malformed threshold policy/);
+  }
+});
+
+test("message subject reads preserve both raw script-hash widths and the revision", async () => {
+  const f = fixture();
+  const ids = ["0123".repeat(10), "1234".repeat(16)];
+  const reply = (subjects, threshold, revision) =>
+    f.answer("getMessageSubjects", [ARG_HASH(ACCOUNT)], A([A(subjects.map(BYTES)), I(threshold), I(revision)]));
+  reply(ids, 2, 13);
+  assert.deepEqual(await f.client.getMessageSubjects(ACCOUNT), { subjects: ids, threshold: 2, subjectRevision: "13" });
+  reply([ids[0], ids[0]], 1, 13);
+  await assert.rejects(f.client.getMessageSubjects(ACCOUNT), /malformed message subjects/);
+  reply(["02".repeat(33)], 1, 13);
+  await assert.rejects(f.client.getMessageSubjects(ACCOUNT), /script identity width/);
 });

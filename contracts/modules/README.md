@@ -1,33 +1,20 @@
 # Standard modules (spec §11–§15)
 
-The five contracts in this directory are the **standard user-space modules** of
-the SmartAccount protocol. They are ordinary `SmartContract`s: they are installed
-into an account through the native core's `installModule`, they are dispatched by
-the core as validator or hook instances, and they keep their own policy state in
-their own storage.
+These contracts supply governance, recovery, hook ordering and read adapters. Governance stores confirmed custom message rosters and spending policies as well as pending proposals. Recovery keeps its own pending requests. The native core verifies the policy body against its stored reference, verifies messages and enforces the required spending route. See the [storage layout](../../docs/SA-MODULE-PROTOCOL.md).
 
-They are *not* part of the native core. The minimal core (§7) publishes
-registration, freeze/unfreeze, execution and module administration — 25 ABI
-methods — and deliberately publishes no governance, recovery, message-signing,
-hook-order or threshold policy. Those five concerns live here.
-
-| Module | Spec | Kind | Entry surface |
+| Module | Named NEP clause | Installation role | Entry surface |
 | --- | --- | --- | --- |
-| [GovernanceModule](GovernanceModule/README.md) | §11 | configuration module | `proposeConfiguration`, `confirmConfiguration`, `cancelConfiguration`, `getPendingConfiguration`, `unfreezeAccount` |
-| [RecoveryModule](RecoveryModule/README.md) | §12 | policy module | `beginRecovery`, `cancelRecovery`, `executeRecovery`, `getRecoveryStatus` |
-| [SigningModule](SigningModule/README.md) | §13 | validator module | `isValidSignature`, `updateMessageSubject`, `getMessageSubjects` |
-| [HookOrchestratorModule](HookOrchestratorModule/README.md) | §14 | hook module | `setHookOrder`, `getHookOrder`, `revokeCredentials` |
-| [ThresholdPolicyModule](ThresholdPolicyModule/README.md) | §15 | validator module | `setThresholdPolicy`, `getThresholdPolicy`, `validateUserOp` |
+| [GovernanceModule](GovernanceModule/README.md) | [Governance](../../docs/proposals/nep-smartaccount-module-profiles.mediawiki#GovernanceModule) | validator | `proposeConfiguration`, `confirmConfiguration`, `cancelConfiguration`, `getPendingConfiguration`, `unfreezeAccount` |
+| [RecoveryModule](RecoveryModule/README.md) | [Recovery](../../docs/proposals/nep-smartaccount-module-profiles.mediawiki#RecoveryModule) | recovery | `beginRecovery`, `cancelReviewedRecovery`, `executeReviewedRecovery`, `getRecoveryPolicySnapshot`, `getRecoveryStatus` |
+| [SigningModule](SigningModule/README.md) | [Signing](../../docs/proposals/nep-smartaccount-module-profiles.mediawiki#SigningModule) | validator | `getMessageSubjects`; propose action 9 via governance, verify on core |
+| [HookOrchestratorModule](HookOrchestratorModule/README.md) | [Hook ordering](../../docs/proposals/nep-smartaccount-module-profiles.mediawiki#HookOrchestratorModule) | validator | `setHookOrder`, `getHookOrder`, `revokeCredentials` |
+| [ThresholdPolicyModule](ThresholdPolicyModule/README.md) | [Threshold policy](../../docs/proposals/nep-smartaccount-module-profiles.mediawiki#ThresholdPolicyModule) | validator | `getThresholdPolicy`; propose action 7 via governance |
 
-## Status: skeletons
-
-Every module compiles and carries the published ABI shape, the storage layout
-and the authority rules. What a skeleton deliberately leaves to the integrator:
-
-* gas/limit tuning (a real deployment sets its own bounds on caller arrays);
-* migration and upgrade entry points (`update`, timelocked NEF replacement);
-* the profile JSON a plugin publishes through `getModuleProfile`;
-* event indexes and the off-chain indexer that consumes them.
+The four modules installed as validators here do not approve spending. Each module
+publishes its own canonical `getModuleProfile` response. The [common interface
+draft](../../docs/proposals/nep-smartaccount-module-interface.mediawiki) defines that
+format; the [named interface catalogue](../../docs/proposals/smartaccount-named-module-interfaces.json)
+lists the extra methods required for each profile, including plugins outside this directory.
 
 ## Shared plumbing
 

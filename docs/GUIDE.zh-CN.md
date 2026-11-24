@@ -351,27 +351,11 @@ const state = await client.getAccount(identity.accountId);
 
 #### 模块
 
-模块在注册时可以原子安装，也可以通过 `installModule(accountId, moduleType, moduleContractHash,
-initData)` 与 `removeModule(accountId, moduleId, deInitData)` 在之后安装。两者都接受托管见证或已安装
-验证器实例的见证，且都会推进配置 nonce。核心不保留提案窗口：需要成熟 24 小时的变更属于治理模块的
-合约，由该模块通过这两个方法提交成熟后的调用。
+账户可以在注册时或注册后安装模块。类型是验证器（1）、钩子（4）和恢复席位（5）。基础收款、转账无需安装任何模块。[具名模块条款](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md)列出了每个模块的权限和安装数据。
 
-```javascript
-// moduleTypeCode 是 v4 的安装代码：验证器（1）或钩子（4）。核心读取模块自身的 profile，
-// 因此公开入口不携带摘要。
-const install = client.buildAccountActionScript({
-  method: 'installModule',
-  accountId: identity.accountId,
-  args: [moduleTypeCode, moduleContractHash, initData],
-});
-```
+调用 `installModule(accountId, moduleType, moduleContractHash, initData)` 后记录返回的实例编号。卸载具名模块调用 `removeModule(accountId, moduleId, [])`。启用强制支出多签前，托管人或获准的已安装验证器可以直接管理模块。通过治理提案变更配置则须经过 24 小时延时。
 
-`getModules(accountId, 'validator' | 'hook', { cursor, limit })` 分页读取已安装实例，
-`getModule(accountId, moduleId)` 读取单个实例。`isModuleInstalled` 无需分页即可回答准入问题，
-`getAuthorizedModuleId` 报告核心为某一阶段路由到的实例。钩子顺序由已安装的钩子实例与描述符
-发布的 `hookOrderRevision` 推导，因为调用钩子的编排器是模块。每个模块也只暴露自身的只读方法
-（`getModuleProfile`、`getConfig`、`getSessionKey`、`getThreshold`、`getPublicKey`、
-`getDailyLimit` 等），因为生命周期回调由核心合约持有。
+用 `getModules(accountId, 'recovery', {cursor, limit})` 分页读取恢复席位，读取钩子或验证器时分别使用 `'hook'` 或 `'validator'`。变更前用 `getModule(accountId, moduleId)` 核对实例。生命周期回调由核心发起；钱包可直接使用的查询和管理方法以对应模块条款为准。
 
 #### 执行
 

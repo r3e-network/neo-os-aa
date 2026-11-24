@@ -126,23 +126,22 @@ function arrayValues(item, length) {
   return length === undefined || values.length === length ? values : [];
 }
 
-const ACCOUNT_STATUS_NAMES = ['Active', 'Frozen', 'MigrationRequired'];
+const ACCOUNT_STATUS_NAMES = ['Active', 'Frozen'];
 
 /**
- * Decodes the 16-field `getAccount` descriptor (docs/SA-MODULE-PROTOCOL.md §9).
+ * Decodes the 15-field `getAccount` descriptor (docs/SA-MODULE-PROTOCOL.md §9).
  *
  * [exists, status, custody, recoveryAuthority, authorityEpoch,
  *  configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
  *  defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
- *  controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive,
- *  legacyRow]
+ *  controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive]
  *
  * @param {Object} item - Array stack item from getAccount
  * @returns {Object|null} Descriptor, or null for a missing account
  */
 export function decodeAccountDescriptorStack(item) {
   if (item?.type === 'Null' || item == null) return null;
-  const values = arrayValues(item, 16);
+  const values = arrayValues(item, 15);
   if (values.length === 0) return null;
   if (!decodeStackBoolean(values[0])) return null;
   const status = Number(decodeIntegerStack(values[1]));
@@ -163,7 +162,6 @@ export function decodeAccountDescriptorStack(item) {
     recoveryPending: decodeStackBoolean(values[12]),
     recoveryMatureAt: decodeIntegerStack(values[13]).toString(),
     marketEscrowActive: decodeStackBoolean(values[14]),
-    legacyRow: decodeStackBoolean(values[15]),
   };
 }
 

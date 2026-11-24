@@ -33,7 +33,6 @@ namespace SmartAccount.Modules
         internal const int ActionRebindModule = 6;
         internal const int ActionSetThresholdPolicy = 7;
         internal const int ActionSetMessageSubjects = 9;
-        internal const int ActionMigrateImport = 10;
         internal const int ActionUnfreeze = 11;
 
         // Governance action 8: the restricted recovery-policy write. Its
@@ -47,7 +46,6 @@ namespace SmartAccount.Modules
         // Account status codes (spec §7.2).
         internal const int StatusActive = 0;
         internal const int StatusFrozen = 1;
-        internal const int StatusMigrationRequired = 2;
 
         // Module error symbols (spec Appendix C, Table 45): the spellings are
         // normative; an assertion may append a detail suffix after a single
@@ -122,11 +120,11 @@ namespace SmartAccount.Modules
 
         // getAccount(accountId) field indices (spec §7.2).
         private const int FieldExists = 0;
-        private const int FieldStatus = 1;
+        internal const int FieldStatus = 1;
         private const int FieldCustody = 2;
         private const int FieldRecoveryAuthority = 3;
-        private const int FieldAuthorityEpoch = 4;
-        private const int FieldConfigurationNonce = 5;
+        internal const int FieldAuthorityEpoch = 4;
+        internal const int FieldConfigurationNonce = 5;
         private const int FieldRecoveryTimelockMs = 6;
 
         // getModules page / getModule descriptor indices (spec §3.3).

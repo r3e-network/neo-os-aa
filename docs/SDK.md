@@ -1,23 +1,12 @@
 # SmartAccount SDK Reference
 
-This book is the developer-facing SDK reference. It merges the former NATIVE_SDK, MULTISIG_SDK,
-SA-EIP-712-SPEC, SA-PROXY-TRANSFERS and PENDING_CONFIG_UPDATE_READ_ABI topics; their content moved
-here verbatim, chapter by chapter.
-
-`NativeSmartAccountClient` targets the consensus-native kernel; `SmartAccountClient` targets a
-custom-deployed kernel. Both speak the v4 protocol: one 13-field operation, one identity derivation,
-one module/intent model and the same `SA_*` error vocabulary. A custom-kernel account does not become
-a native account by changing a core hash: the kernels differ in delivery — proxy script, call flags,
-the native contract's negative id — not in the operation they accept.
-
-`shared/nativeSmartAccountClient.mjs` is the implementation; `sdk/js/src/native.js` binds it to the
-native contract hash and to the Node transaction tools. The frontend mirror is byte-identical.
+Use `NativeSmartAccountClient` to connect to native SmartAccount. The protocol is unpublished; the client admits only the [current parameters](proposals/smartaccount-native-profile-parameters.json). The SDK and wallet use the same implementation in `shared/nativeSmartAccountClient.mjs`.
 
 ## Contents
 
 1. [SDK usage](#sdk-usage) — discovery, identity, creation, state, execution, generations, modules, actions, fees
-2. [Threshold sessions](#threshold-sessions) — threshold policy SDK, frontend session, legacy V3 child configuration
-3. [EIP-712 signing](#eip-712-signing) — typed-data layout the V3 verifiers hash on-chain
+2. [Threshold sessions](#threshold-sessions) — threshold policy SDK and wallet sessions
+3. [EIP-712 signing](#eip-712-signing) — typed data for Web3AuthValidator
 4. [Proxy transfers](#proxy-transfers) — direct proxy witness construction, fee policy, sponsorship refusal
 5. [Pending configuration update reads](#pending-configuration-update-reads) — config-update read surface
 6. [Frontend app workspace runtime](#frontend-app-workspace-runtime) — browser runtime variables, relay behavior, deployment profiles and troubleshooting
@@ -26,26 +15,7 @@ native contract hash and to the Node transaction tools. The frontend mirror is b
 
 ### Discovery and activation
 
-`discover()` is the ABI gate, and it reads the chain rather than a pinned parameter digest:
-
-1. `getversion` must report the expected network magic, and `getcontractstate` must report the
-   expected hash, the native contract id sign, and the manifest name `SmartAccount`.
-2. Every entry of `NATIVE_REQUIRED_ABI` must exist exactly once with its pinned parameter types,
-   return type and `safe` flag; every event of `NATIVE_REQUIRED_EVENTS` must exist.
-3. `getProtocolInfo()` must answer protocol version `4`.
-4. `getAccountImplementationId()` must answer the implementation id this client was reviewed
-   against (`NativeSmartAccount/v4` for the native core).
-
-It returns a frozen profile `{contract, networkMagic, protocolVersion, implementationId}`.
-The native kernel is callable only once the node activates `HF_SmartAccountV1`; private tests do not
-establish public activation.
-
-```js
-const { NativeSmartAccountClient, nativeCodec: c } = require('smart-account');
-
-const client = new NativeSmartAccountClient({ rpcUrl, networkMagic });
-const profile = await client.discover();
-```
+`discover()` checks network magic, native contract address, name and negative ID, the manifest parameter fingerprint, method signatures and event names. The node must also report the fixed wire tag and the implementation identity `NativeSmartAccount`. A mismatch prevents use; a failed recheck clears the previously accepted profile.
 
 ### Typed bytes and identity
 
@@ -108,33 +78,27 @@ never silently sign a replacement.
 
 ### Account state
 
-`getAccount(accountId)` returns `null` for an absent account, otherwise the control record: existence,
-status (`Active`/`Frozen`/`MigrationRequired`), custody, recovery authority, authority epoch,
-configuration nonce, recovery timelock, default operation and message authorization, owner-only
-recovery, hook-order revision, control revision, the pending recovery with its maturity, the market
-escrow marker and the legacy row marker. The descriptor refuses an authority epoch above the
-configuration nonce, and refuses a custody or recovery identity that is the proxy, the core, or zero
-where zero is not allowed.
+`getAccount(accountId)` returns `null` for an unknown account. A registered account is Active or Frozen. Its 15 fields contain existence, status, custody and recovery addresses, authority epoch, configuration nonce, recovery delay, the two built-in authorization flags, the retained owner-only field (always false, no authorization meaning), hook and control revisions, then three reserved recovery/market fields. Query the installed recovery seat for actual pending recovery. Registration starts at authority epoch 1 and configuration nonce 0.
 
 ### Execution
 
 `buildExecutionScript({accountId, operations})` emits `executeUserOp(accountId, op)` for one operation
-and `executeUserOps(accountId, ops)` for a batch. An operation is the 13-field v4 array: version,
+and `executeUserOps(accountId, ops)` for a batch. An operation is the 13-field array: version,
 target, method, args, nonce, nonce subkey, deadline, validator id, credential generation, authority
 epoch, configuration nonce, signature and hook proofs.
 
-`deriveNonceRouting(accountId, routing)` and `getNonce(accountId, lookup)` read the routing the
-operation must carry; `getNonceSequence` reads a channel cursor. `getOperationDigest` and
-`validateUserOp` read the digest and the core's verdict before anything is signed. The core has no
-message entry: a message signature is checked against the account's default message authorization by
-the signing module, which is the contract that owns the subject records.
+`deriveNonceRouting(accountId, routing)` computes a channel locally. `getNonce` reads its packed nonce;
+`getNonceSequence` reads the channel cursor. For signing, compute `operationDigest` locally with the
+signature empty. The core's `getOperationDigest` query requires a nonempty signature field and hashes
+the operation with that field cleared; it does not validate the signature. Use `validateUserOp` to
+preview the signed operation without consuming the nonce. Applications checking a message signature
+call the core's `isValidSignature` directly: the calling application is bound into the digest.
+SigningModule reads the effective roster; roster changes go through governance.
 
-`getNonce` takes `{validatorId, nonceSubkey}` and optionally the pair `{credentialGeneration,
-authorityEpoch}`. With the pair supplied the read is a cross-check: the channel the core returned must
-equal the one this client derives, otherwise the call fails before anything is signed. With neither
-supplied only the channel the contract returned is used, because the core resolves the generation
-itself (see *Credential generations*). `resolveCredentialGeneration` answers that value for an installed
-validator; the built-in route's is not published by the ABI, and it reports that rather than guessing.
+`getNonce` takes `{validatorId, nonceSubkey}`. Also supply both `credentialGeneration` and
+`authorityEpoch` to verify the returned channel against the local derivation, or omit both to use the
+core's result. `resolveCredentialGeneration` returns 1 for registered custody, the instance generation
+for an installed validator, or the current generation for an active threshold policy.
 
 ```js
 const plan = client.buildExecutionScript({ accountId: state.accountId, operations: [operation] });
@@ -155,40 +119,11 @@ stack is rejected. Faulted simulations stay available for diagnosis and never su
 
 ### Credential generations
 
-Three different generations reach the §4.3 domain and the §6 channel, and they are never
-interchangeable:
-
-| Route | Generation the core binds | Where it lives |
-| --- | --- | --- |
-| built-in validator (`validatorId` 0) | the account's `SubjectRevision` | 0x57 subject record |
-| installed validator | that instance's `CredentialGeneration` | 0x52 instance record, published by `getModule` |
-| active threshold policy | the policy's `CredentialGeneration` | 0x5B policy record |
-
-The core resolves the generation internally on every operation and on every `getNonce` read, so the
-channel an accepted operation lands on is the one the core derived, never a client-side guess. An
-operation that carries a generation the account has left behind fails with `SA_CREDENTIAL_STALE`, and a
-reshaped threshold policy kills the channels of its previous generation the same way.
-
-There is no default anywhere in the client stack. An offline builder has no RPC and `getAccount` does
-not carry the revision, so `UserOperationBuilder` refuses to build without an explicit
-`credentialGeneration` (`SDK_011`) and the frontend operation factory raises
-`EC_credential_generation_required`; neither substitutes 1 for the built-in route nor 2 for anything
-else. A reviewed fixture may state a generation explicitly, which is a declaration about that fixture
-and not a fallback. The digest and the channel both bind the value, so a stale generation does not
-silently move to the next channel: it is a refusal.
+Built-in custody operations use credential generation 1. Installed validators use the generation returned by `getModule`; threshold routes use the active policy generation returned by `getThresholdPolicy`. The nonce channel binds the route, generation and authority epoch. Message signing has a separate subject revision, read with `getMessageSubjects`.
 
 ### Modules
 
-Registration may carry installs atomically: the core executes at most 16 actions at registration, and
-the only actions it still runs are `installModule` and `uninstallModule`. Everything afterwards goes
-through two public methods.
-
-`installModule(accountId, moduleType, moduleContractHash, initData)` and
-`removeModule(accountId, moduleId, deInitData)` take the v4 install code — validator (1) or hook (4) —
-and no profile digest, because the core reads the module's own profile; a registration action carries
-one and the shared core compares it. Either call accepts the custody witness or the witness of an
-already installed validator instance (the governance shape a user-space governance module uses to
-administer itself), and either advances the configuration nonce.
+A basic account needs no modules. For an optional feature, look up its [named profile](proposals/nep-smartaccount-module-profiles.mediawiki) for installation data and authority. Registration accepts up to 16 install/remove actions. For an existing active account, the public installation call reads the profile from the deployed module:
 
 ```js
 const install = client.buildAccountActionScript({
@@ -198,41 +133,15 @@ const install = client.buildAccountActionScript({
 });
 ```
 
-The core keeps no configuration intent: a change that matures for 24 hours and is then confirmed or
-cancelled belongs to a governance module, which submits the matured call through those two methods. A
-client that expects a proposal window is targeting a different contract. `getAccount` still publishes
-`configurationNonce` and `hookOrderRevision` so a reader can order changes, and it keeps the recovery
-slots in the descriptor for ABI stability, reporting their inactive value.
+Choose validator (1), hook (4) or recovery (5). A successful install returns a positive instance ID. Remove an enabled named module with `removeModule(accountId, moduleId, [])`; the instance ID identifies what to remove. Registration and batch installation actions additionally bind the expected profile digest. Direct module administration requires custody or an authorized installed validator and is unavailable once mandatory threshold spending is enabled.
 
-`getModules(accountId, 'validator'|'hook', {cursor, limit})` pages installed instances;
-`getModule(accountId, moduleId)` reads one descriptor (type, contract hash and id, update counter,
-NEF and profile digests, module revision, credential generation, instance isolation, message
-capability, threshold eligibility). `isModuleInstalled` answers the admission question without paging
-and `getAuthorizedModuleId` reports the instance the core routed a phase to. A module can only read
-its own state — lifecycle callbacks belong to the core.
-
-Hook ordering is derived from the installed hook instances and the `hookOrderRevision` the descriptor
-publishes; the orchestrator that calls them is a module, so the core has no order to read and none to
-change. Credential generations are advanced by removing and reinstalling an instance, which is the
-custody-authorized `removeModule`/`installModule` pair — there is no separate revoke entry on the
-core.
+`getModules(accountId, 'recovery', {cursor, limit})` pages recovery seats; use `'validator'` or `'hook'` for the other roles. Read one descriptor with `getModule(accountId, moduleId)`. The core runs the installed hook sequence; the hook orchestrator can confirm that sequence and request credential revocation. Revocation changes the credential generation while retaining the instance. Uninstalling and installing again allocates a new ID.
 
 ### Account actions
 
-`freezeAccount(accountId)` and `unfreezeAccount(accountId)` are the two immediate transitions the core
-owns, both built with `buildAccountActionScript` and both custody-only. Freezing advances the
-authority epoch, so every signature produced before it stops validating; unfreezing is refused unless
-the account is frozen. Both are refused while the account awaits migration.
+Before mandatory threshold enrollment, custody can freeze an active account. Custody or an authorized installed validator can unfreeze a frozen account. Both transitions advance the authority epoch and configuration nonce. The recovery policy remains configured; a request tied to an earlier epoch becomes stale.
 
-Recovery is a module. `beginRecovery`, `cancelRecovery`, `executeRecovery` and `getRecoveryStatus`
-are the recovery module's own methods: the handover delay and its maturity live in that module's
-storage, so the core neither plans nor validates them, and the SDK does not derive a recovery
-authority set from a core plan. A client that needs recovery targets the recovery module's script
-hash.
-
-Freeze advances the configuration nonce and clears the core's recovery slots. Both transitions
-invalidate old signatures through the authority epoch, and the SDK re-reads state, digest and nonce
-before signing and before broadcast.
+Use `client.buildRecoveryModulePlan({ accountId, action, authority, newCustody })` to prepare a request, cancellation or execution through the installed recovery seat. A nonzero replacement custodian must consent. For cancellation and execution the SDK binds the reviewed request number and configuration nonce. Only the configured seat can complete the core reset after the preset delay. See the [recovery profile](proposals/nep-smartaccount-module-profiles.mediawiki#RecoveryModule) and its [contract methods](proposals/smartaccount-module-abis.md#recoverymodule).
 
 ### Fees and final preflight
 
@@ -275,26 +184,18 @@ preflight errors retain the original `cause`, and broadcast adds the immutable `
 
 ### Evidence and boundaries
 
-Native tests cover v4 byte vectors, epochs and counter maxima, exact envelopes, strict types, hostile
+Native tests cover wire vectors, epochs and counter maxima, exact envelopes, strict types, hostile
 RPC responses, nonce routing and batches, fee caps, real P-256 transaction signatures and preflight
 rejection. `npm run test:package` installs a real tarball outside the repo and checks CJS/ESM/types.
 
-The reproducible v4 runbook is `sdk/js/tests/testnet-v4-harness.js` and the operator scripts beside
-it. The harness loads `contracts/bin/public` (including `validators/` and `hooks/`), deploys the core
-and the modules it installs, and drives the 13-field operation, the `proposeConfiguration` /
-`confirmConfiguration` intent plans, threshold policies and recovery through the SDK. These scripts
-are runbooks, not gates: `npm test` does not run them and they are not run in the migration phase.
-`native-runtime-verifiers.py` and `native-runtime-driver.mjs` are retired v3 evidence and exit
-non-zero instead of half-driving a chain. A PASS applies only to the pinned source, runtime and
-artifacts named in its receipt. Real activated-node execution on a public network is an independent
-gate; inspect the current runtime receipt before claiming it passed.
+The local native VM suite exercises the compiled core with its standard modules. See the [native build instructions](../contracts/native/README.md). Public activation is a separate gate.
 
 Protocol requirements and remaining activation gates are mapped in the
 [issue 242 conformance review](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md).
 
 ## Threshold sessions
 
-v4 has no MultiSig root and no verifier children. A threshold is a policy over installed validator
+The core has no MultiSig root and no verifier children. A threshold is a policy over installed validator
 modules: members are module ids of one account, each member owns its credential generation, and the
 operation carries one assembled signature field. `shared/multiSigCore.mjs` is the single
 implementation; the JS SDK (`createThresholdClient`) and the frontend (`createThresholdSession`)
@@ -307,14 +208,10 @@ only bind it to a client and an RPC.
 2. Assembly is explicit. `assembleSignature({ members })` serializes `[moduleId, 64-byte signature]`
    pairs, and `assembleOperationSignature({ operationDigest, members })` returns
    `{ signatureHex, members }`, where `signatureHex` is field 11 of the 13-field operation.
-3. The policy itself is configuration. Membership and the threshold are set by a
-   `setThresholdPolicy` action — `[7, policyId, threshold, memberIds[], active]` — inside a
-   configuration intent, so they mature for 24 hours before they apply. `policyId = 0` allocates a
-   fresh id from the same monotonic allocator as module instances, so a policy id never aliases a
-   module id. Deactivating a policy carries no members and frees those members for uninstall.
+3. Install the standard recovery seat and configure its authority before enrollment. Submit `[7, 0, threshold, memberIds, true]` last in the governance proposal and confirm after 24 hours. All spending then requires the selected policy. Changing members or restoring basic transfers requires the preset delayed recovery.
 
 ```js
-const { createThresholdClient } = require('smart-account');
+const { createThresholdClient } = require('@r3e-network/neo-smart-account');
 
 const threshold = createThresholdClient({ client });
 const prepared = await threshold.prepareMembers({
@@ -324,7 +221,7 @@ const prepared = await threshold.prepareMembers({
 });
 // Each member signs prepared[i].digest with its own validator key.
 const signatureHex = threshold.assembleSignature({
-  members: [{ moduleId: 1, signature }, { moduleId: 2, signature }],
+  members: [{ moduleId: 1, signature: firstSignature }, { moduleId: 2, signature: secondSignature }, { moduleId: 3, signature: '' }],
 });
 ```
 
@@ -346,26 +243,11 @@ const prepared = await session.prepareMembers({
 // account proxy. Every read goes through the core hash the session was given.
 ```
 
-Threshold membership counts validator instances, not independent keys or people. Different modules
-can share credentials or controllers, so a successful quorum does not establish signer
-independence.
+The core requires distinct member keys. One person may still control multiple keys.
 
-### Configuring members
+### Reading the spending policy
 
-Member configuration is ordinary module configuration: `configure` on the validator instance
-takes a `configureModule` action inside a configuration intent, so it matures on the same 24-hour
-timer as every other intent and a module cannot configure itself. Rotating credentials is
-immediate instead: `revokeCredentials(accountId, moduleId)` is a custody-authorised core action
-that bumps the instance generation on the spot, which is why signatures bound to the old
-generation stop validating the moment it executes.
-
-The core exposes no policy getter. A policy is observable through the `ThresholdPolicySet`
-notification (`accountId`, `policyId`, `threshold`, `memberIds`), and each member instance is
-observable through `getModule` — the descriptor carries `credentialGeneration` and
-`thresholdMemberEligible`, which are exactly the two values a member digest binds. Read
-`getPendingConfiguration` for the outstanding intent with its maturity and action digest, and
-compare that digest against the exact intent you proposed before confirming; a pending record
-alone does not prove it carries the change you expect.
+Call `client.getThresholdPolicy(accountId)` to discover the active policy ID, threshold, members and generation. A basic account returns `null`. Use `getPendingConfiguration` on the governance module for a pending proposal and verify its action digest before confirmation.
 
 ### Evidence and boundary
 
@@ -377,68 +259,6 @@ bytes; empty hex is a ByteString and is different from null.
 SDK unit tests cover member digests, generation binding, malformed signatures and assembly order.
 Frontend tests verify RPC Array and base64 ByteArray wire encoding. No generic "multisig complete"
 badge is introduced.
-
-### Configuring V3 MultiSig children
-
-A MultiSig root forwarding to verifier children belongs to the v3 deployed-contract profile; the v4
-threshold above has no MultiSig root and no verifier children. In that legacy profile, each ordinary
-verifier requires the pinned SA core to call it with an exact
-per-account configuration context. A MultiSig root forwarding to a child cannot
-satisfy that check. The core source provides a bounded child initialization path.
-`callVerifierChild(accountId, childVerifier, method, args)` and the `getChildVerifierConfig(accountId)` read described below are absent from the pinned
-deployed artifact (`contracts/build/SmartAccount.manifest.json` exports
-neither), so a deployment must be rebuilt before an integrator can call the path
-this section describes (DS-CU-202 finding F1).
-
-- The caller must satisfy the account's backup-owner witness. The account cannot
-  be in market escrow or active execution.
-- The current root must expose a safe `getChildVerifierConfig(accountId)` read that is absent from
-  the pinned deployed artifact while returning the root's ordered children and threshold; this is a
-  source requirement, not a property of the deployment in `contracts/build`. MultiSig implements it
-  from its existing `getConfig` state; `getConfig` remains unchanged.
-- The target must be a current direct child, with complete V3 lifecycle ABI and
-  `authorizedCore()` equal to this core. The root must be bound to this core too.
-- Only `setPublicKey(Hash160, ByteArray)` and `setConfig(Hash160, Array, Integer)`
-  are accepted, and `args[0]` must equal `accountId`.
-- The first call stages the existing pending verifier-call record and returns
-  `false`. An identical second call after 24 hours invokes the child. The record
-  binds the root, child, method, arguments, ordered topology, and threshold;
-  confirmation checks the current topology again. Changed current inputs stage
-  a new 24-hour proposal. The same pending slot is shared with `callVerifier`.
-- The core grants configuration context to that child only, invokes it directly,
-  and clears the context on return. Direct child calls remain unauthorized.
-
-For example, register a MultiSig root with empty verifier params, configure its
-root `setConfig` through the existing `callVerifier` timelock, then initialize a
-Web3Auth child's `setPublicKey` and a NeoNative child's `setConfig` through separate
-`callVerifierChild` proposals — absent from the pinned deployed artifact, so this
-sequence needs a rebuilt deployment. Each proposal uses the full argument list including
-the account ID. Existing pending getters report the root module, commitment hash,
-and available time.
-
-This path initializes direct children and does not change cleanup, authority
-epochs, or ordinary root configuration. A safe getter is an explicit capability,
-not an independent trust attestation for arbitrary third-party root code.
-
-#### Child execution isolation
-
-MultiSig counts only an actual Boolean `true` as a child's approval. An Integer
-`1`, or another truthy VM value from a contract with a misleading manifest, does
-not count toward the threshold.
-
-`CallFlags.ReadOnly` limits storage and calls; it does not make VM collections
-immutable. MultiSig therefore serializes the original arguments once and
-deserializes a separate copy for every child validation and post-execution call.
-Post-execution results receive the same snapshot-and-copy treatment. A child
-cannot change another child's signed arguments or accounting input through shared
-Array, Struct, Map, or Buffer objects.
-
-Arguments and target results must be serializable by Neo StdLib. Interop and
-iterator results are unsupported and fail closed; the contract never silently
-passes an unsupported shared object to the next child. Snapshot work adds
-serialization and per-child deserialization cost; the configured child limit is
-ten. The threshold remains a threshold over configured modules, not a guarantee
-of distinct human owners or cryptographic signer domains.
 
 ## EIP-712 signing
 

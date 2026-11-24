@@ -32,6 +32,9 @@ const SA_ERRORS = {
   SA_MODULE_LIMIT_VALIDATOR: 'The account already holds the maximum number of validators',
   SA_MODULE_LIMIT_HOOK: 'The account already holds the maximum number of hooks',
   SA_MODULE_LIMIT_RECOVERY: 'The account already holds its one recovery seat',
+  SA_INTENT_CONFLICT: 'The requested policy change conflicts with an existing dependency',
+  SA_MODULE_LIMIT_MEMBERS: 'An active threshold policy requires one to ten distinct eligible members',
+  SA_MODULE_LIMIT_THRESHOLD: 'The signing threshold must be positive and cannot exceed the member count',
   SA_MODULE_LIMIT_ACTIONS: 'A registration action list exceeds the per-call limit',
   SA_MODULE_LIMIT_BATCH: 'The operation batch exceeds the per-envelope limit',
   SA_MODULE_NOT_INSTALLED: 'The referenced module is not installed on the account',
@@ -57,7 +60,6 @@ const SA_ERRORS = {
   SA_REENTRANCY_FORBIDDEN: 'The call re-enters the core in a forbidden phase',
   SA_HOOK_DATA_TOO_LARGE: 'The hook returned more than 512 bytes of state',
   SA_GAS_BUDGET_EXCEEDED: 'The bounded execution gas budget was exhausted',
-  SA_MIGRATION_REQUIRED: 'The account must complete migration before this action',
   SA_UNAUTHORIZED: 'The caller is not authorized for this action',
 };
 

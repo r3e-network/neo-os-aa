@@ -1,0 +1,57 @@
+{
+  "assemblySha256": "3b19a2b22e9a21eee7c22b3deec2761d1cc5acbe6e309e7df43479e3e58a4aae",
+  "mvid": "ddcfb681-a8f3-4311-a821-a401e3eddb6e",
+  "methods": [
+    {
+      "name": "GetAccountImplementationId",
+      "cpu": 32768,
+      "flags": 0,
+      "returnType": "System.String",
+      "il": "726f7300702a",
+      "symbols": [
+        {
+          "token": 1879077743,
+          "kind": "text",
+          "value": "NativeSmartAccount"
+        }
+      ]
+    },
+    {
+      "name": "GetProtocolInfo",
+      "cpu": 32768,
+      "flags": 0,
+      "returnType": "Neo.VM.Types.Array",
+      "il": "1a289c02000a730705000a73a802000a2a",
+      "symbols": [
+        {
+          "token": 167772828,
+          "kind": "vmInt",
+          "value": "Neo.VM.Types.StackItem Neo.VM.Types.StackItem::op_Implicit(System.Int32)"
+        },
+        {
+          "token": 167773447,
+          "kind": "singleton",
+          "value": "System.Void <>z__ReadOnlySingleElementList`1<Neo.VM.Types.StackItem>::.ctor(T)"
+        },
+        {
+          "token": 167772840,
+          "kind": "vmArray",
+          "value": "System.Void Neo.VM.Types.Array::.ctor(System.Collections.Generic.IEnumerable`1<Neo.VM.Types.StackItem>)"
+        }
+      ]
+    }
+  ],
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "coqchkPassed": true,
+  "rejectedControls": [
+    "wrong identity",
+    "wrong version literal",
+    "wrong constructor mapping"
+  ],
+  "manifestSha256": "b9dbf2484c1757f1946198727e87f6335ec37469f7365d2ffb2b3b7e74861d20",
+  "parametersSha256": "120b885f99bdda6f59e2165e0adcfab80c26cf4b1df33fcbdd8ef5caa51c7fee",
+  "modelSha256": "428b8535dc566dc295e939bf68529b6c619c89ada8037519f31e04623a9de544",
+  "certificateSha256": "72bfaa4e1c517688db92853295bb989e788abc6e00751399303c1914da282d92",
+  "boundary": "Direct parameterless CIL body return, successful allocations, trusted metadata reader and three library operation summaries. Native dispatch, CLR/JIT correspondence, host metering, activation and return marshalling are outside this theorem."
+}

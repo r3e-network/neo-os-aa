@@ -6,6 +6,7 @@
    getter_outcome reads one key, which is what every pinned getter does. *)
 From Coq Require Import ZArith List Bool Lia PeanoNat.
 Require Import IntegerSemantics.
+Require NumericCoercions.
 Import ListNotations.
 Open Scope Z_scope.
 
@@ -27,23 +28,20 @@ Inductive Outcome :=
 
 (* NeoVM (BigInteger) cast on storage payload: little-endian two's complement.
    The empty payload decodes to zero, matching the framework contract. *)
-Fixpoint le_accum (acc : Z) (b : bytes) : Z :=
-  match b with
-  | [] => acc
-  | n :: rest => le_accum (acc + Z.of_nat n * 256 ^ Z.of_nat (length rest)) rest
+Definition decode_integer (b : bytes) : Outcome :=
+  match NumericCoercions.byte_string_integer b with
+  | Some n => OK (GInt n)
+  | None => Fault
   end.
 
-Definition decode_integer (b : bytes) : Outcome :=
-  if valid_bytes b then
-    match b with
-    | [] => OK (GInt 0)
-    | _ => let magnitude := le_accum 0 b in
-           let width := 256 ^ Z.of_nat (length b) in
-           let signed := if width / 2 <=? magnitude
-                         then magnitude - width else magnitude in
-           OK (GInt signed)
-    end
-  else Fault.
+Theorem stored_integer_exact : forall b, NumericCoercions.valid_bytes b ->
+  (length b <= 32)%nat -> decode_integer b = OK (GInt (NumericCoercions.signed_le b)).
+Proof. intros. unfold decode_integer. now rewrite NumericCoercions.byte_string_integer_accepts. Qed.
+Theorem stored_integer_oversized : forall b,
+  (32 < length b)%nat -> decode_integer b = Fault.
+Proof. intros. unfold decode_integer. now rewrite NumericCoercions.oversized_byte_string_rejected. Qed.
+Print Assumptions stored_integer_exact.
+Print Assumptions stored_integer_oversized.
 
 (* NeoVM (UInt160) cast: exactly 20 valid payload bytes. *)
 Definition decode_hash160 (b : bytes) : Outcome :=

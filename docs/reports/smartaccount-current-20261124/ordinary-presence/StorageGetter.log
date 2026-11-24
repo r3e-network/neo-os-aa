@@ -1,0 +1,51 @@
+File "./StorageGetter.v", line 7, characters 5-8:
+Warning: "From Coq" has been replaced by "From Stdlib".
+[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]
+File "./StorageGetter.v", line 17, characters 0-129:
+Warning: GVal is nested using list. No scheme for list is registered as All.
+It can be generated using command "Scheme All" e.g. "Scheme All for list.".
+[register-all,automation,default]

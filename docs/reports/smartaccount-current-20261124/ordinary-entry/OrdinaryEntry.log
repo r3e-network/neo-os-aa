@@ -1,0 +1,9 @@
+File "./OrdinaryEntry.v", line 4, characters 5-8:
+Warning: "From Coq" has been replaced by "From Stdlib".
+[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
+File "./OrdinaryEntry.v", line 44, characters 0-519:
+Warning: To avoid stack overflow, large numbers in nat are interpreted as
+applications of Init.Nat.of_num_uint. [abstract-large-number,numbers,default]
+Closed under the global context
+Closed under the global context
+Closed under the global context

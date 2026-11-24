@@ -235,7 +235,7 @@ const validatorModule = '7b7c7d7e7f808182838485868788898a8b8c8d8e';
 function accountControl() {
   return array([
     boolItem(true), intItem('1'), hashItem(account), hashItem(verifier), intItem('1'), intItem('3'), intItem('86400000'),
-    boolItem(true), boolItem(true), boolItem(false), intItem('0'), intItem('4'), boolItem(false), intItem('0'), boolItem(false), boolItem(false),
+    boolItem(true), boolItem(true), boolItem(false), intItem('0'), intItem('4'), boolItem(false), intItem('0'), boolItem(false),
   ]);
 }
 

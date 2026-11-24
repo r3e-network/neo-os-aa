@@ -85,7 +85,7 @@ internal sealed class PluginModuleHarness
     {
         Fx.CallVoid(Core, "setAuthorizedModuleId", AccountId, (BigInteger)PhaseConfiguration, ModuleId);
         Fx.CallVoid(Core, "forward", Module, "configure",
-            new object?[] { AccountId, ModuleId, Generation, configData });
+            new object?[] { AccountId, ModuleId, (BigInteger)_moduleType, configData });
     }
 
     /// <summary>Runs <c>onInstall</c> under the Configuration writer phase (§10).</summary>
@@ -93,7 +93,7 @@ internal sealed class PluginModuleHarness
     {
         Fx.CallVoid(Core, "setAuthorizedModuleId", AccountId, (BigInteger)PhaseConfiguration, ModuleId);
         Fx.CallVoid(Core, "forward", Module, "onInstall",
-            new object?[] { AccountId, ModuleId, Generation, initData });
+            new object?[] { AccountId, ModuleId, (BigInteger)_moduleType, initData });
     }
 
     /// <summary>Runs <c>onUninstall</c> under the Configuration writer phase (§10).</summary>
@@ -101,7 +101,7 @@ internal sealed class PluginModuleHarness
     {
         Fx.CallVoid(Core, "setAuthorizedModuleId", AccountId, (BigInteger)PhaseConfiguration, ModuleId);
         Fx.CallVoid(Core, "forward", Module, "onUninstall",
-            new object?[] { AccountId, ModuleId, Generation, deInitData });
+            new object?[] { AccountId, ModuleId, (BigInteger)_moduleType, deInitData });
     }
 
     /// <summary>Runs <c>validateUserOp</c> under the Validation writer phase (§10).</summary>

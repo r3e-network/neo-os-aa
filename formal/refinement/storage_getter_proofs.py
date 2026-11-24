@@ -31,9 +31,9 @@ The lane renders a Coq certificate pinning
 prefix/default/decode semantics over an abstract storage map, models
 every pinned region at the bytecode level (StorageGetterVm: decoded
 instruction sequences, branch-slot targets, call/return frames, callee
-parameter bindings, syscall pop order, cast widths) and proves every
-reachable behavior class of each getter in the kernel to agree with the
-source-level outcome.
+parameter bindings, syscall pop order, cast widths) and proves the listed
+conditional behavior classes agree with the source-level outcome.
+Successful time-offset sums require signed 256-bit representability.
 StdLib.Deserialize is a pinned token index whose behavior is a
 universally quantified oracle - the certificates state agreement relative
 to that oracle and assume nothing about it in the kernel. Full
@@ -563,7 +563,7 @@ Print Assumptions {name}_zero_payload_is_zero.
             out.append(f'Definition {name}_prefix : bytes := {prefix}.\n'
                        f'Definition {name}_decode (b : bytes) : Outcome :=\n'
                        ' match decode_integer b with\n'
-                       f' | OK (GInt v) => OK (GInt (v + {offset_txt}))\n'
+                       f' | OK (GInt v) => if integer_fitsb (v + {offset_txt}) then OK (GInt (v + {offset_txt})) else Fault\n'
                        ' | OK _ => Fault\n'
                        ' | Fault => Fault\n'
                        ' end.\n'
@@ -577,11 +577,11 @@ Proof. intros sto account H. unfold {name}_binding, getter_outcome.
 Print Assumptions {name}_missing_key_default.
 Theorem {name}_present_key_offsets : forall sto account payload value,
  sto ({name}_prefix ++ account) = Some payload ->
- decode_integer payload = OK (GInt value) ->
+ decode_integer payload = OK (GInt value) -> integer_fitsb (value + {offset_txt}) = true ->
  {name}_binding sto account = OK (GInt (value + {offset_txt})).
-Proof. intros sto account payload value Hstore Hdecode.
+Proof. intros sto account payload value Hstore Hdecode Hsum.
  unfold {name}_binding, getter_outcome, {name}_decode.
- rewrite Hstore, Hdecode. reflexivity. Qed.
+ rewrite Hstore, Hdecode, Hsum. reflexivity. Qed.
 Print Assumptions {name}_present_key_offsets.
 ''')
         elif kind == 'direct-raw':
@@ -739,10 +739,10 @@ Print Assumptions {name}_source_hit.
                 offset_txt = '%d%%Z' % row['offset']
                 default = 'OK (GInt 0%Z)'
                 project = ('match nth_error xs %d with\n'
-                           '                     | Some (GInt z) => OK (GInt (z + %s))\n'
+                           '                     | Some (GInt z) => if integer_fitsb (z + %s) then OK (GInt (z + %s)) else Fault\n'
                            '                     | Some _ => Fault\n'
                            '                     | None => Fault\n'
-                           '                     end' % (index, offset_txt))
+                           '                     end' % (index, offset_txt, offset_txt))
                 hit_decl = 'payload xs z'
                 hit_extra = ('tok {t}%nat (GBytes payload) = GArray xs ->\n'
                              ' nth_error xs {i} = Some (GInt z) ->'.format(i=index, t=DESERIALIZE_TOKEN_INDEX))
@@ -766,9 +766,10 @@ Print Assumptions {name}_source_miss.
 Theorem {name}_source_hit : forall tok sto account {hit_decl},
  sto ({name}_prefix ++ account) = Some payload ->
  {hit_extra}
+ {('integer_fitsb (z + %s) = true ->' % offset_txt) if row['decode'] == 'integer' else ''}
  {name}_binding tok sto account = OK {hit_value}.
-Proof. intros tok sto account {hit_decl} H Htok Hnth.
- unfold {name}_binding. rewrite H, Htok, Hnth. reflexivity. Qed.
+Proof. intros tok sto account {hit_decl} H Htok Hnth{(" Hsum" if row["decode"] == "integer" else "")}.
+ unfold {name}_binding. rewrite H, Htok, Hnth{(", Hsum" if row["decode"] == "integer" else "")}. reflexivity. Qed.
 Print Assumptions {name}_source_hit.
 ''')
         elif kind == 'inline-record-time':
@@ -788,10 +789,10 @@ Print Assumptions {name}_source_hit.
             offset_txt = '%d%%Z' % row['offset']
             default = 'OK (GInt 0%Z)'
             project = ('match nth_error xs %d with\n'
-                       '                     | Some (GInt z) => OK (GInt (z + %s))\n'
+                       '                     | Some (GInt z) => if integer_fitsb (z + %s) then OK (GInt (z + %s)) else Fault\n'
                        '                     | Some _ => Fault\n'
                        '                     | None => Fault\n'
-                       '                     end' % (index, offset_txt))
+                       '                     end' % (index, offset_txt, offset_txt))
             hit_decl = 'payload xs z'
             hit_extra = ('tok {t}%nat (GBytes payload) = GArray xs ->\n'
                          ' nth_error xs {i} = Some (GInt z) ->'.format(
@@ -816,9 +817,10 @@ Print Assumptions {name}_source_miss.
 Theorem {name}_source_hit : forall tok sto account {hit_decl},
  sto ({name}_prefix ++ account) = Some payload ->
  {hit_extra}
+ {('integer_fitsb (z + %s) = true ->' % offset_txt) if row['decode'] == 'integer' else ''}
  {name}_binding tok sto account = OK {hit_value}.
-Proof. intros tok sto account {hit_decl} H Htok Hnth.
- unfold {name}_binding. rewrite H, Htok, Hnth. reflexivity. Qed.
+Proof. intros tok sto account {hit_decl} H Htok Hnth{(" Hsum" if row["decode"] == "integer" else "")}.
+ unfold {name}_binding. rewrite H, Htok, Hnth{(", Hsum" if row["decode"] == "integer" else "")}. reflexivity. Qed.
 Print Assumptions {name}_source_hit.
 ''')
         elif kind == 'raw-call-presence':
@@ -878,7 +880,7 @@ Print Assumptions {name}_source_hit.
                        f'{_prefix_literal(source["prefixBytes"])}.\n'
                        f'Definition {name}_decode (b : bytes) : Outcome :=\n'
                        ' match decode_integer b with\n'
-                       f' | OK (GInt v) => OK (GInt (v + {offset_txt}))\n'
+                       f' | OK (GInt v) => if integer_fitsb (v + {offset_txt}) then OK (GInt (v + {offset_txt})) else Fault\n'
                        ' | OK _ => Fault\n'
                        ' | Fault => Fault\n'
                        ' end.\n'
@@ -892,11 +894,11 @@ Proof. intros sto account H. unfold {name}_binding, getter_outcome.
 Print Assumptions {name}_source_miss.
 Theorem {name}_source_hit : forall sto account payload value,
  sto ({name}_prefix ++ account) = Some payload ->
- decode_integer payload = OK (GInt value) ->
+ decode_integer payload = OK (GInt value) -> integer_fitsb (value + {offset_txt}) = true ->
  {name}_binding sto account = OK (GInt (value + {offset_txt})).
-Proof. intros sto account payload value Hstore Hdecode.
+Proof. intros sto account payload value Hstore Hdecode Hsum.
  unfold {name}_binding, getter_outcome, {name}_decode.
- rewrite Hstore, Hdecode. reflexivity. Qed.
+ rewrite Hstore, Hdecode, Hsum. reflexivity. Qed.
 Print Assumptions {name}_source_hit.
 ''')
         else:
@@ -1000,12 +1002,9 @@ def _concrete_eqb(a, b):
 
 def _decode_le(payload):
     """Pinned little-endian signed decode matching IntegerSemantics."""
-    z = 0
-    for i, b in enumerate(payload):
-        z |= b << (8 * i)
-    if payload and payload[-1] & 0x80:
-        z -= 1 << (8 * len(payload))
-    return z
+    require(len(payload) <= 32 and all(0 <= b <= 255 for b in payload),
+            'Unrepresentable integer payload in getter certificate')
+    return int.from_bytes(bytes(payload), 'little', signed=True)
 
 
 def _stack_lit(stack):
@@ -1126,7 +1125,7 @@ def _simulate_trace(parts, static_term, seed, static_terms=None):
             v = stack.pop()
             if int(arg) == CONVERT_INTEGER:
                 if v.inner is not None and v.inner.startswith('['):
-                    payload = [_parse_z_literal(x) for x in v.inner[1:-1].split(';')]
+                    payload = [_parse_z_literal(x) for x in v.inner[1:-1].split(';') if x.strip()]
                     require(all(x is not None for x in payload),
                             'Convert 21 on malformed concrete bytes')
                     stack.append(_Val('GInt %d%%Z' % _decode_le(payload)))
@@ -1221,6 +1220,10 @@ def _simulate_trace(parts, static_term, seed, static_terms=None):
                     'ADD on non-integer values')
             za, zb = _parse_z_literal(a.term[len('GInt '):]), \
                 _parse_z_literal(b.term[len('GInt '):])
+            if za is None or zb is None:
+                needs.append(('Hsum', 'integer_fitsb (%s + %s) = true' % (_z_text(a.term), _z_text(b.term))))
+            else:
+                require(-(1 << 255) <= za + zb < (1 << 255), 'Literal ADD overflows in successful trace')
             if za is not None and zb is not None:
                 stack.append(_Val('GInt %d%%Z' % (za + zb)))
             elif za is None and zb is not None:
@@ -2003,15 +2006,16 @@ def render_vm_certificate(bound, decoded_rows):
                     'Theorem %(n)s_vm_hit_offset : forall %(q)s payload value,\n'
                     ' sto (%(k)s) = Some payload ->\n'
                     ' decode_integer payload = OK (GInt value) ->\n'
+                    ' integer_fitsb (value + %(o)s) = true ->\n'
                     ' run %(f)d 0 %(id)s_code %(ic)s'
                     ' = Done (GInt (value + %(o)s)) /\\\n'
                     ' getter_outcome %(p)s %(dv)s %(dec)s sto %(ac)s'
                     ' = OK (GInt (value + %(o)s)).\n'
                     'Proof.\n'
-                    ' intros %(q)s payload value Hstore Hdecode. split.\n'
+                    ' intros %(q)s payload value Hstore Hdecode Hsum. split.\n'
                     ' - exact (%(chain)s).\n'
                     ' - unfold getter_outcome, %(dec)s.\n'
-                    '   rewrite %(srw)sHstore, Hdecode. reflexivity.\n'
+                    '   rewrite %(srw)sHstore, Hdecode, Hsum. reflexivity.\n'
                     'Qed.\n'
                     'Print Assumptions %(n)s_vm_hit_offset.\n'
                     % {'n': name, 'p': prefix_name, 'f': fuel, 'id': ident,
@@ -2390,17 +2394,20 @@ def render_vm_certificate(bound, decoded_rows):
                 ' sto (%(p)s ++ account) = Some payload ->\n'
                 ' tok %(t)d%%nat (GBytes payload) = GArray xs ->\n'
                 ' %(pick)s ->\n'
+                '%(sum_guard)s'
                 ' run %(f)d 0 %(id)s_code (%(id)s_init tok sto account)'
                 ' = %(end)s /\\\n'
                 ' %(n)s_binding tok sto account = OK %(hv)s.\n'
                 'Proof.\n'
-                ' intros tok sto account %(prm)s Hstore Htok Hnth. split.\n'
+                ' intros tok sto account %(prm)s Hstore Htok Hnth%(sum_intro)s. split.\n'
                 ' - exact (%(chain)s).\n'
                 ' - apply %(n)s_source_hit with %(with)s; assumption.\n'
                 'Qed.\n'
                 'Print Assumptions %(n)s_vm_hit.\n'
                 % {'n': name, 'p': prefix_name, 'f': fuel, 'id': ident,
                    't': DESERIALIZE_TOKEN_INDEX, 'chain': hit_chain,
+                   'sum_guard': (' integer_fitsb (z + %s) = true ->\n' % offset_txt if row['decode'] not in ('hash160', 'raw-bytes') else ''),
+                   'sum_intro': (' Hsum' if row['decode'] not in ('hash160', 'raw-bytes') else ''),
                    'decl': record_decl, 'prm': record_prm, 'pick': pick_stmt,
                    'end': hit_end, 'hv': hit_val, 'with': src_with})
         elif kind == 'inline-record-time':
@@ -2457,11 +2464,12 @@ def render_vm_certificate(bound, decoded_rows):
                 ' sto (%(p)s ++ account) = Some payload ->\n'
                 ' tok %(t)d%%nat (GBytes payload) = GArray xs ->\n'
                 ' nth_error xs (Z.to_nat %(i)d%%Z) = Some (GInt z) ->\n'
+                ' integer_fitsb (z + %(o)s) = true ->\n'
                 ' run %(f)d 0 %(id)s_code (%(id)s_init tok sto account)'
                 ' = %(end)s /\\\n'
                 ' %(n)s_binding tok sto account = OK %(hv)s.\n'
                 'Proof.\n'
-                ' intros tok sto account payload xs z Hstore Htok Hnth. split.\n'
+                ' intros tok sto account payload xs z Hstore Htok Hnth Hsum. split.\n'
                 ' - exact (%(chain)s).\n'
                 ' - apply %(n)s_source_hit with (payload := payload) (xs := xs)'
                 ' (z := z); assumption.\n'
@@ -2469,7 +2477,7 @@ def render_vm_certificate(bound, decoded_rows):
                 'Print Assumptions %(n)s_vm_hit.\n'
                 % {'n': name, 'p': prefix_name, 'f': fuel, 'id': ident,
                    't': DESERIALIZE_TOKEN_INDEX, 'i': index, 'chain': hit_chain,
-                   'end': hit_end, 'hv': hit_val})
+                   'o': offset_txt, 'end': hit_end, 'hv': hit_val})
         elif kind in ('raw-call-presence', 'raw-call-offset'):
             # Delegating raw readers over the escrow owner-cancel latch. The
             # shared reader returns the stored payload verbatim (the null item
@@ -2554,14 +2562,15 @@ def render_vm_certificate(bound, decoded_rows):
                     'Theorem %(n)s_vm_hit : forall sto account payload value,\n'
                     ' sto (%(k)s) = Some payload ->\n'
                     ' decode_integer payload = OK (GInt value) ->\n'
+                    ' integer_fitsb (value + %(o)s) = true ->\n'
                     ' run %(f)d 0 %(id)s_code (%(id)s_init sto account)'
                     ' = %(end)s /\\\n'
                     ' %(n)s_binding sto account = OK (GInt (value + %(o)s)).\n'
                     'Proof.\n'
-                    ' intros sto account payload value Hstore Hdecode. split.\n'
+                    ' intros sto account payload value Hstore Hdecode Hsum. split.\n'
                     ' - exact (%(chain)s).\n'
                     ' - exact (%(n)s_source_hit sto account payload value'
-                    ' Hstore Hdecode).\n'
+                    ' Hstore Hdecode Hsum).\n'
                     'Qed.\n'
                     'Print Assumptions %(n)s_vm_hit.\n'
                     % {'n': name, 'k': key_expr, 'f': fuel, 'id': ident,
@@ -3029,7 +3038,7 @@ def run_proofs(inventory, output_dir):
             'Output directory must be new or empty')
     directory.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix='storage-getter-kernel-', dir=directory))
-    model_modules = ('IntegerSemantics', MODULE, VM_MODULE)
+    model_modules = ('IntegerSemantics', 'NumericCoercions', MODULE, VM_MODULE)
     models, names = {}, {}
     for module_name in model_modules:
         model = (HERE / 'coq' / (module_name + '.v')).read_bytes()
@@ -3051,10 +3060,10 @@ def run_proofs(inventory, output_dir):
         names[module_name] = declarations(text)
         kernel(['coqc', '-q', module_name + '.v'], work,
                work / (module_name + '.log'))
-        kernel(['coqchk', '-silent', module_name], work,
-               work / (module_name + '.chk.log'))
     full_certificate = certificate + ''.join(text for _, text in vm_modules)
-    kernel(['coqchk', '-silent', artifact], work, work / 'coqchk.log')
+    # Check every root in one kernel process so common imports are checked once.
+    kernel(['coqchk', '-silent', artifact, *(name for name, _ in vm_modules)],
+           work, work / 'coqchk.log')
     closed = names
     checks = ([(module_name + '.log', module_name) for module_name in models]
               + [('artifact.log', artifact)]
@@ -3151,9 +3160,9 @@ def run_proofs(inventory, output_dir):
                     'Trace-level bytecode execution of the %d pinned getter'
                     ' regions plus the shared private callees GetAccountState,'
                     ' GetPendingModuleCallRecord and'
-                    ' GetMarketEscrowOwnerCancelInitiated: every reachable behavior'
+                    ' GetMarketEscrowOwnerCancelInitiated: each stated conditional behavior'
                     ' class agrees with the source-level outcome in the kernel'
-                    ' (%s). Programs, slot targets, call/return frames, callee'
+                    ' (%s); successful epoch sums require signed 256-bit representability. Programs, slot targets, call/return frames, callee'
                     ' parameter bindings, syscall pop order and cast widths are'
                     ' rendered from the decoded region bytes; StdLib.Deserialize'
                     ' is a pinned token index whose behavior is a universally'

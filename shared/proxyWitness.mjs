@@ -27,7 +27,7 @@
  * Nothing on this path takes a signer, witness or rule from request metadata.
  */
 
-import { encodeDynamicCall, hashValue } from './nativeSmartAccount.mjs';
+import { encodeDynamicCall, hashValue, nativeProxyVerificationScript } from './nativeSmartAccount.mjs';
 
 const OPERATION_FIELDS = 13;
 const ACCOUNT_ENTRYPOINTS = ['executeUserOp', 'executeUserOps'];
@@ -50,22 +50,15 @@ function hash160(value, name) {
   return hex;
 }
 
-function reverse(hex) {
-  const pairs = hex.match(/../g) || [];
-  return pairs.reverse().join('');
-}
-
 /**
  * The fixed proxy verification script, byte-identical to the kernel's
  * GetAccountAddress preimage. Inputs use display byte order; `callFlags`
  * defaults to 5 (CallFlags.ReadOnly), the flag the native core pushes.
  */
 function createProxyVerificationScript({ coreHash, accountId, callFlags = DEFAULT_CALL_FLAGS }) {
-  if (!Number.isInteger(callFlags) || callFlags < -1 || callFlags > 16) {
-    throw new Error('proxy call flags must be -1..16');
-  }
-  const flags = (callFlags + 16).toString(16).padStart(2, '0');
-  return `0c14${reverse(hash160(accountId, 'accountId'))}11c0${flags}0c067665726966790c14${reverse(hash160(coreHash, 'coreHash'))}41627d5b52`;
+  return nativeProxyVerificationScript(hash160(accountId, 'accountId'), {
+    coreContractHash: hash160(coreHash, 'coreHash'), callFlags,
+  });
 }
 
 /**

@@ -90,11 +90,10 @@ test('the proxy verification script is the exact core derivation, at the kernel 
   );
   // The native core pushes CallFlags.ReadOnly (5), so that is the default.
   assert.equal(DEFAULT_CALL_FLAGS, 5);
-  // The same account id at a different flag is a different address, so the flag
-  // is never assumed: a caller that changes it gets the address it asked for.
-  const readStates = createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT, callFlags: 1 });
-  assert.equal(readStates, native.replace('11c015', '11c011'));
-  assert.notEqual(addressOf(readStates), addressOf(native));
+  for (let flags = 0; flags <= 15; flags++) {
+    if (flags !== 5) assert.throws(() =>
+      createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT, callFlags: flags }), /ReadOnly/);
+  }
   assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: ACCOUNT, callFlags: 17 }), /flags/);
   assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: '0'.repeat(40) }), /accountId/);
   assert.throws(() => createProxyVerificationScript({ coreHash: CORE, accountId: '11zz' }), /accountId/);

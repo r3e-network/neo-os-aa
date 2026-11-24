@@ -3,7 +3,7 @@
 Protocol v4 replaced the v2 manifest-rewriting gate with a module-declared
 profile: `getModuleProfile()` is a safe read-only callback and the core verifies
 its digest at install time. Admission here only checks that a compiler manifest
-carries the native-v4 marker, the v4 lifecycle ABI, the exact native service
+carries the native-smartaccount marker, the v4 lifecycle ABI, the exact native service
 permission allowlist and a well-formed NEF; it never rewrites the manifest.
 """
 import copy
@@ -41,17 +41,17 @@ def manifest(name="NeoWitnessValidator"):
     ]
     if name.endswith("Hook"):
         methods.extend([
-            method("preCheck", "ByteString", False, ["Hash160", "Array"]),
-            method("postCheck", "Void", False, ["Hash160", "Array", "Any", "ByteString"]),
+            method("preCheck", "ByteArray", False, ["Hash160", "Array"]),
+            method("postCheck", "Void", False, ["Hash160", "Array", "Any", "ByteArray"]),
         ])
     else:
         methods.extend([
-            method("validateUserOp", "Boolean", True, ["Hash160", "ByteString", "Array"]),
+            method("validateUserOp", "Boolean", True, ["Hash160", "ByteArray", "Array"]),
             method("onUserOpComplete", "Void", False, ["Hash160", "Array", "Any"]),
             method("getSignerDomains", "Array", True, ["Hash160", "Integer"]),
         ])
     methods.append(method("setConfig", "Void", False, ["Hash160", "Array"]))
-    return {"name": name, "extra": {"SmartAccountProfile": "native-v4"},
+    return {"name": name, "extra": {"SmartAccountProfile": "native-smartaccount"},
             "permissions": [{"contract": NATIVE_SERVICE, "methods": list(PERMISSIONS[name])}],
             "abi": {"methods": methods}}
 
@@ -72,8 +72,8 @@ class NativeModuleProfileTests(unittest.TestCase):
         admitted = self.package_manifest(original, "verifier", ["setConfig"])
         self.assertEqual(original, admitted)
         self.assertNotIn("smartAccount", admitted["extra"])
-        legacy = copy.deepcopy(original); legacy["extra"]["SmartAccountProfile"] = "native-v2"
-        with self.assertRaisesRegex(ValueError, "native-v4 profile marker"):
+        legacy = copy.deepcopy(original); legacy["extra"]["SmartAccountProfile"] = "different-profile"
+        with self.assertRaisesRegex(ValueError, "native-smartaccount profile marker"):
             self.package_manifest(legacy, "verifier", ["setConfig"])
         missing = copy.deepcopy(original); missing["extra"].clear()
         with self.assertRaises(ValueError):
@@ -110,6 +110,10 @@ class NativeModuleProfileTests(unittest.TestCase):
             self.package_manifest(wrong, "hook", ["setWhitelist"])
 
     def test_profile_getter_is_safe_read_only_and_unparameterised(self):
+        wrong = manifest()
+        next(m for m in wrong["abi"]["methods"] if m["name"] == "getModuleProfile")["returntype"] = "ByteString"
+        with self.assertRaisesRegex(ValueError, "lifecycle ABI"):
+            self.package_manifest(wrong, "verifier", ["setConfig"])
         unsafe = copy.deepcopy(manifest())
         next(m for m in unsafe["abi"]["methods"] if m["name"] == "getModuleProfile")["safe"] = False
         with self.assertRaisesRegex(ValueError, "lifecycle safety"):
@@ -180,7 +184,7 @@ class NativeModuleProfileTests(unittest.TestCase):
                 profile.validate_descriptor(bad)
 
     def parameters(self):
-        return Path(__file__).resolve().parents[1] / "docs/proposals/smartaccount-native-profile-v4-parameters.json"
+        return Path(__file__).resolve().parents[1] / "docs/proposals/smartaccount-native-profile-parameters.json"
 
     def test_packaging_publishes_compiler_artifacts_unchanged_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -229,10 +233,15 @@ class NativeModuleProfileTests(unittest.TestCase):
             self.assertEqual(original, source.read_bytes())
             self.assertEqual(b"#define SMARTACCOUNT_NATIVE\n" + original[3:], destination.read_bytes())
 
-    def test_profile_parameters_must_be_v4(self):
-        v2 = ROOT / "docs/proposals/smartaccount-native-profile-v2-parameters.json"
-        with self.assertRaisesRegex(ValueError, "ABI 4 profile parameters"):
-            profile.profile_digest(v2)
+    def test_profile_parameters_require_the_current_wire_identifiers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wrong = Path(tmp) / "parameters.json"
+            for field in ("abiVersion", "profileVersion"):
+                params = json.loads(self.parameters().read_text())
+                params[field] += 1
+                wrong.write_text(json.dumps(params))
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, "profile parameters"):
+                    profile.profile_digest(wrong)
         digest = profile.profile_digest(self.parameters())
         self.assertEqual(digest, profile.profile_digest(self.parameters()))
         self.assertTrue(re.fullmatch(r"[0-9a-f]{64}", digest))

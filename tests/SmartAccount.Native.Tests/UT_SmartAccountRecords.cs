@@ -112,6 +112,21 @@ namespace Neo.UnitTests.SmartContract.Native
         }
 
         [TestMethod]
+        [DataRow(0)]
+        [DataRow(1)]
+        [DataRow(2)]
+        public void ExhaustedAuthorityTransitionPreservesAllCounters(int exhausted)
+        {
+            var control = Control();
+            if (exhausted == 0) control.AuthorityEpoch = ulong.MaxValue;
+            if (exhausted == 1) control.ConfigurationNonce = ulong.MaxValue;
+            if (exhausted == 2) control.ControlRevision = ulong.MaxValue;
+            var before = control.Serialize();
+            Assert.ThrowsExactly<OverflowException>(control.AdvanceAuthority);
+            Assert.AreSequenceEqual(before, control.Serialize());
+        }
+
+        [TestMethod]
         public void AccountControlAllocatorsAreExhaustible()
         {
             var control = Control();

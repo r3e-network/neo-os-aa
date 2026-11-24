@@ -43,14 +43,14 @@ namespace Neo.SmartContract.Native
 
         /// <summary>
         /// sha256("NeoSmartAccount/Profile" ‖ 0x04 ‖ canonical v4 parameter
-        /// JSON), pinned in docs/proposals/smartaccount-native-profile-v4-parameters.json.
+        /// JSON), pinned in docs/proposals/smartaccount-native-profile-parameters.json.
         /// </summary>
-        internal const string ParameterDigest = "a19f919c57da04c9546e8db27913a6421b577273b1803545d92a7c4361d53635";
+        internal const string ParameterDigest = "0cab62cf2a69b5682bf0d976406ddce15d7afbd67db4c1bc4e4950cf180a6dd0";
 
-        /// <summary>Reverse index of registered native proxy addresses (including legacy entries).</summary>
+        /// <summary>Reverse index of registered native proxy addresses.</summary>
         private const byte ProxyPrefix = 0x11;
 
-        internal const string AccountImplementationId = "NativeSmartAccount/v4";
+        internal const string AccountImplementationId = "NativeSmartAccount";
 
         public override ImmutableHashSet<Hardfork?> Activations => [Hardfork.HF_SmartAccountV1];
 
@@ -68,6 +68,9 @@ namespace Neo.SmartContract.Native
         [ContractEvent(Hardfork.HF_SmartAccountV1, 11, "RecoveryPolicySet", "accountId", ContractParameterType.Hash160, "recoveryAuthority", ContractParameterType.Hash160, "recoveryTimelockMs", ContractParameterType.Integer, "ownerOnlyRecovery", ContractParameterType.Boolean)]
         [ContractEvent(Hardfork.HF_SmartAccountV1, 12, "AccountReset", "accountId", ContractParameterType.Hash160, "custody", ContractParameterType.Hash160, "authorityEpoch", ContractParameterType.Integer)]
         [ContractEvent(Hardfork.HF_SmartAccountV1, 13, "BuiltinAuthorizationSet", "accountId", ContractParameterType.Hash160, "defaultOperationAuthorization", ContractParameterType.Boolean, "defaultMessageAuthorization", ContractParameterType.Boolean)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 14, "ThresholdPolicySet", "accountId", ContractParameterType.Hash160, "policyId", ContractParameterType.Integer, "threshold", ContractParameterType.Integer, "memberIds", ContractParameterType.Array)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 15, "MessageSubjectUpdated", "accountId", ContractParameterType.Hash160, "subjectCount", ContractParameterType.Integer, "threshold", ContractParameterType.Integer, "subjectRevision", ContractParameterType.Integer)]
+        [ContractEvent(Hardfork.HF_SmartAccountV1, 16, "ModuleInstanceConfigured", "accountId", ContractParameterType.Hash160, "moduleId", ContractParameterType.Integer, "credentialGeneration", ContractParameterType.Integer)]
         // Intent and message-signature lifecycle events are gone with their
         // features: those transitions are user-space module concerns and this
         // core can no longer reach them. The four landing-path events above
@@ -83,14 +86,6 @@ namespace Neo.SmartContract.Native
                     ["abiVersion"] = SmartAccountProtocol.Version,
                     ["profileParameterDigest"] = ParameterDigest
                 } };
-        }
-
-        internal override ContractTask InitializeAsync(ApplicationEngine engine, Hardfork? hardfork)
-        {
-            if (hardfork == Hardfork.HF_SmartAccountV1)
-                engine.SnapshotCache.Add(Key(SmartAccountProtocol.GetProtocolKey()), new StorageItem(
-                    BinarySerializer.Serialize(new Array([(int)SmartAccountProtocol.Version, false]), 128, 8)));
-            return ContractTask.CompletedTask;
         }
 
         // ========================================================================
@@ -201,8 +196,6 @@ namespace Neo.SmartContract.Native
             {
                 case SmartAccountStatus.Frozen:
                     throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorAccountFrozen);
-                case SmartAccountStatus.MigrationRequired:
-                    throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorMigrationRequired);
                 case SmartAccountStatus.Active:
                     return SmartAccountStatus.Active;
                 default:
@@ -294,14 +287,13 @@ namespace Neo.SmartContract.Native
             RequireAccountId(accountId);
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
+            Require(control.RequiredPolicyId == 0, SmartAccountModuleProtocol.ErrorUnauthorized);
             RequireCustody(engine, control);
             AssertAccountIdle(engine, accountId);
             _ = RequireActive(control);
 
             control.Status = SmartAccountStatus.Frozen;
-            control.AuthorityEpoch += 1;
-            control.ConfigurationNonce += 1;
-            control.ControlRevision += 1;
+            control.AdvanceAuthority();
             SaveControl(engine, accountId, control);
             Notify(engine, "AccountFrozen", accountId.ToArray(), new BigInteger(control.AuthorityEpoch));
         }
@@ -323,8 +315,6 @@ namespace Neo.SmartContract.Native
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             AssertAccountIdle(engine, accountId);
-            Require(control.Status != SmartAccountStatus.MigrationRequired,
-                SmartAccountModuleProtocol.ErrorMigrationRequired);
             Require(control.Status == SmartAccountStatus.Frozen, SmartAccountModuleProtocol.ErrorAccountStatus);
             RequireModuleAdministration(engine, accountId, control);
 
@@ -334,9 +324,7 @@ namespace Neo.SmartContract.Native
             // freeze is stale — and it advances the control revision because
             // the control record changed. The core holds no thaw delay of its
             // own; a user-space governance module owns that policy.
-            control.AuthorityEpoch += 1;
-            control.ConfigurationNonce += 1;
-            control.ControlRevision += 1;
+            control.AdvanceAuthority();
             SaveControl(engine, accountId, control);
             Notify(engine, SmartAccountModuleProtocol.EventNameAccountUnfrozen, accountId.ToArray(),
                 new BigInteger(control.AuthorityEpoch));
@@ -349,18 +337,8 @@ namespace Neo.SmartContract.Native
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.None)]
         private static string GetAccountImplementationId() => AccountImplementationId;
 
-        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
-        private Array GetProtocolInfo(IReadOnlyStore snapshot)
-        {
-            // [version, migrationModeOpen]. A core that has not opened its
-            // migration mode yet (or a snapshot that was never initialized with
-            // the hardfork) answers the default instead of faulting a read-only
-            // query.
-            if (!TryRead(snapshot, SmartAccountProtocol.GetProtocolKey(), out var value))
-                return new Array([(BigInteger)SmartAccountProtocol.Version, false]);
-            Array record = SmartAccountRecordCodec.Decode(value);
-            return new Array([record[0], record[1]]);
-        }
+        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.None)]
+        private static Array GetProtocolInfo() => new Array([(int)SmartAccountProtocol.Version]);
 
         /// <summary>
         /// Aggregated account descriptor, non-faulting for unknown accounts.
@@ -368,7 +346,7 @@ namespace Neo.SmartContract.Native
         /// configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
         /// defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
         /// controlRevision, recoveryPending, recoveryMatureAt,
-        /// marketEscrowActive, legacyRow]. The recovery, message and hook slots
+        /// marketEscrowActive]. The recovery, message and hook slots
         /// are retained for ABI stability and report their inactive value: those
         /// transitions are user-space module concerns.
         /// </summary>
@@ -380,7 +358,7 @@ namespace Neo.SmartContract.Native
             if (control is null)
                 return new Array([false, (BigInteger)0, UInt160.Zero.ToArray(), UInt160.Zero.ToArray(),
                     (BigInteger)0, (BigInteger)0, (BigInteger)0, false, false, false,
-                    (BigInteger)0, (BigInteger)0, false, (BigInteger)0, false, false]);
+                    (BigInteger)0, (BigInteger)0, false, (BigInteger)0, false]);
             return new Array([
                 true,
                 (int)control.Status,
@@ -396,7 +374,6 @@ namespace Neo.SmartContract.Native
                 new BigInteger(control.ControlRevision),
                 false,
                 (BigInteger)0,
-                false,
                 false]);
         }
 

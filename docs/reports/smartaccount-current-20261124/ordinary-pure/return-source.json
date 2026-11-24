@@ -1,0 +1,26 @@
+{
+  "status": "PASS_SOURCE_CHECK",
+  "sources": {
+    "vm/control": {
+      "commit": "004cd6070a940405818d9357638277dd44407e2e",
+      "path": "src/Neo.VM/JumpTable/JumpTable.Control.cs",
+      "sha256": "a0ac51ff220abbfcf8fb8c19bb0f2b8be4680169ba8ba33f6ededfc5e5e6a2ec"
+    },
+    "vm/stack": {
+      "commit": "004cd6070a940405818d9357638277dd44407e2e",
+      "path": "src/Neo.VM/EvaluationStack.cs",
+      "sha256": "7190a363cd8c71010c2a98987f5aadd331adeff4d3551b1bc9e1d8cd7a56ac3e"
+    },
+    "vm/engine": {
+      "commit": "004cd6070a940405818d9357638277dd44407e2e",
+      "path": "src/Neo.VM/ExecutionEngine.cs",
+      "sha256": "ea906436ec48408abe92826547041859fb6195553f8e585816f1d96695663445"
+    },
+    "core/engine": {
+      "commit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+      "path": "src/Neo/SmartContract/ApplicationEngine.cs",
+      "sha256": "97b08bfe754bc51ed8418316b45d3805dccff76ef51fbd43ac9b663eacb4d5eb"
+    }
+  },
+  "scope": "Source identity and order of projected operations; successful, noninterfering unload effects assumed."
+}

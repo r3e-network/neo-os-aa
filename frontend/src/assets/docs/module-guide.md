@@ -2,7 +2,7 @@
 
 # Frontend module chooser guide
 
-Protocol v4 installs **modules** into an account instead of binding a single `verifier` contract.
+SmartAccount installs **modules** into an account instead of binding a single `verifier` contract.
 The module whose job is to decide authorization is a **validator** (the ERC-7579 term the protocol
 now uses); the modules that narrow what the account may do are **hooks**. The old `verifier` binding
 surface is removed without an alias, and the identity-only witness entry `verify` survives because
@@ -10,16 +10,17 @@ the proxy script embeds it.
 
 Module kinds are one-byte codes:
 
-| Type | Name | v4 |
+| Type | Name | |
 | --- | --- | --- |
 | 1 | validator | supported |
-| 2 | executor | rejected by `supportsModuleType` |
-| 3 | fallback handler | rejected by `supportsModuleType` |
+| 2 | executor | installation rejected |
+| 3 | fallback handler | installation rejected |
 | 4 | hook | supported |
+| 5 | recovery seat | one per account |
 
 ## Choose In Layers
 
-Treat an SA policy stack as three layers, installed in this order:
+A basic account needs no modules to receive or transfer assets. Add the following roles as needed:
 
 1. **Validator layer** — decides **who may authorize** an operation.
    The built-in route (the custody witness) always exists and is gated by the default policy, so an
@@ -43,9 +44,10 @@ Treat an SA policy stack as three layers, installed in this order:
    - `TokenRestrictedHook`
    - `NeoDIDCredentialHook`
 
-3. **Recovery path** — the core owns recovery: the custody witness can self-rescue, and an optional
-   recovery authority takes over only after the account's 7–90 day timelock. Recovery is not a
-   module; it removes modules and policies callback-free once it matures.
+3. **Recovery seat** — install `RecoveryModule` and set the delay in advance. Custody or the
+   configured recovery authority may start a request; a proposed new custodian must also consent.
+   Once the delay elapses, anyone can submit the approved reset through the seat. The core then
+   removes modules and policies without calling their uninstall callbacks.
 
 `MultiHook` is retired: installing it is rejected, and the migrated hook order lives in the core
 `hookOrder` list instead. `ZKEmailVerifier` is a disabled template — every callback fails closed, so
@@ -53,10 +55,9 @@ it is not an installable production validator.
 
 ### Validator notes
 
-- `MultiSigValidator` is a threshold *policy* now: one key per instance (`setMemberKey`), the member
-  set and threshold live in core state, and orchestration plus approval receipts are core-owned.
-  A threshold is 1–10 members over one layer — the members may share a key or a controller, so a
-  threshold counts modules, not independent humans.
+- Each `MultiSigValidator` instance supplies one member key. To require a quorum even for custody,
+  enroll distinct member keys in the mandatory threshold policy through governance. The threshold
+  counts keys; a wallet cannot infer how many independent people control them.
 - `SessionKeyValidator` instances are isolated: each instance owns one credential set, granted with
   `setSessionKey` and withdrawn with `clearSessionKey`. The cap is enforced on the `transfer` method
   only, so a wildcard method with a zero cap is a value-uncapped delegation.
@@ -80,7 +81,7 @@ it is not an installable production validator.
 
 ### High-Value Treasury
 
-- Validator: `MultiSigValidator` (threshold 2–10)
+- Spending: install the recovery seat and distinct member instances, then enroll the mandatory threshold policy
 - Hook: `TokenRestrictedHook`
 - Recovery: separate recovery authority with a 90 day timelock
 
@@ -97,13 +98,14 @@ core:
 
 1. `installModule(accountId, moduleType, moduleContractHash, initData)` installs one instance in the
    current transaction; `removeModule(accountId, moduleId, deInitData)` uninstalls it. Both accept the
-   custody witness or the witness of an already installed validator instance.
+   custody witness or a code-bound installed validator's witness before mandatory threshold enrollment.
+   Once enrolled, custody cannot use direct administration to restore single-signature spending.
 2. A registration action is the positional vector `[1, moduleType, moduleHash, profileDigest,
    initData]` — the install code, the module type, the module hash, the profile digest the core
    compares and the install data. Its uninstall companion is `[2, moduleId, deInitData]`.
-3. The core executes no other action code. A delay, a maturity window and a multi-action batch belong
-   to a governance module, which collects them and then calls the two methods above; the core itself
-   applies each call atomically or not at all.
+3. For an existing active account, use `applyConfigurationActions` to combine install, remove,
+   built-in authorization and recovery policy in one atomic update (§10). Direct administration
+   is immediate; the standard governance module owns proposal, maturity and confirmation.
 
 A module instance is identified by `(accountId, moduleId)`, never by contract address. `moduleId` is
 allocated once per account from 1 (0 is the built-in route) and is never reused, so an uninstalled
@@ -115,16 +117,17 @@ intent and 16 unresolved intents per account. Enumeration reads page at most 32 
 
 ## Module Commands
 
-Install data, configure data and uninstall data are `[command, ...args]` arrays. Each module owns its
-vocabulary; the core only enforces the array bound and the lifecycle gas budget.
+For the configurable validators and hooks below, a non-empty install payload uses the same
+`[command, ...args]` encoding as configuration. Empty install data skips initial configuration.
+Uninstall data is a separate lifecycle argument; it does not dispatch a configuration command.
 
 | Module | Commands |
 | --- | --- |
 | `P256Validator`, `Web3AuthValidator`, `TeeKeyValidator` | `setPublicKey` — 33-byte compressed or 65-byte uncompressed, stored compressed |
 | `NeoWitnessValidator` | `setSigners` — signer set plus threshold |
 | `MultiSigValidator` | `setMemberKey` — one key per instance |
-| `SessionKeyValidator` | `setSessionKey` — key, target, method, expiry, cap, subId; `clearSessionKey` |
-| `SubscriptionValidator` | `createSubscription` — key, payee, token, amount, period; `cancelSubscription` |
+| `SessionKeyValidator` | `setSessionKey` — key, target, method, expiry in milliseconds, spending cap, description; `clearSessionKey` |
+| `SubscriptionValidator` | `createSubscription` takes the raw subscription ID, merchant, token, amount cap and period in seconds; `cancelSubscription` takes the same ID |
 | `DelegatedIdentityValidator` | `setConfig` — public key, provider, master nullifier |
 | `ActionSessionValidator` | `setRecoveryService`; `clearRecoveryService` |
 | `DailyLimitHook` | `setDailyLimit` — token, max amount, rolling-window flag; `clearDailyLimit` |
@@ -133,7 +136,7 @@ vocabulary; the core only enforces the array bound and the lifecycle gas budget.
 | `NeoDIDCredentialHook` | `requireCredential` — target, provider, claim type, commitment; `clearRequirement` |
 | `MultiHook` | none — retired, installation rejected |
 
-`DailyLimitHook` meters the account id, not the derived virtual address, and usage accrues only
+`DailyLimitHook` meters the asset balance of the account's derived proxy address, and usage accrues only
 after a successful execution. `NeoDIDCredentialHook` stores no local credential flags: the credential
 must exist on the configured `NeoDIDRegistry`, and the commitment must be the 32-byte commitment
 registered for that provider and claim type.

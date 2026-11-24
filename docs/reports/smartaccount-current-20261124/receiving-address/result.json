@@ -1,0 +1,18 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "assemblySha256": "2b498dcb83e762f6fb9b2ff07a44d7a7aadeb6a7de8f2baf65760e25ac3009e2",
+  "extractedMethodsSha256": "58a48e14b06b67189b63d11c575c80ac778e276d421abd18146a0f80b799d232",
+  "runtimeVectorsSha256": "c03be9e44fd6e260297f4e6ad21059aa8bb816763a8c38d880cfe6b0f976113c",
+  "certificateSha256": "c418fe4ec3859bd32042bad33c335ddd03e623f51d8b73f0d3e2f9f36adb2e93",
+  "compiledMethodCount": 8,
+  "coqDeclarations": 6,
+  "rejectedControls": [
+    "flag",
+    "method",
+    "order",
+    "service endianness"
+  ],
+  "coqchkPassed": true,
+  "boundary": "CIL extraction, control-flow review and lowering are trusted. Assumes UInt160 equality/serialization, NeoVM push/pack/syscall encoders, native service identity, Hash160 and successful allocation/disposal. No CLR/JIT, hash collision, fee or rollback theorem."
+}

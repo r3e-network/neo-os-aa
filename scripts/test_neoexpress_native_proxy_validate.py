@@ -9,7 +9,7 @@ from neoexpress_validate import A, B, H, I, S, BOOL, ValidationFailure, hash_le
 
 class NativeProxyValidationTests(unittest.TestCase):
     def test_proxy_script_matches_published_identity_vector(self):
-        vectors = json.loads((Path(__file__).parent.parent / "docs/proposals/smartaccount-native-profile-v2-vectors.json").read_text())
+        vectors = json.loads((Path(__file__).parent.parent / "docs/archive/native-research/smartaccount-native-profile-v2-vectors.json").read_text())
         identity = vectors["identity"]
         account = "0x" + bytes.fromhex(identity["accountIdWire"])[::-1].hex()
         self.assertEqual(identity["verificationScript"], proxy.verification_script(account).hex())

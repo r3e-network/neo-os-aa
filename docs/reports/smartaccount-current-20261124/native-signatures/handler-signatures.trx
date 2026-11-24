@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="d1525ecc-36d3-4a8d-bce1-1db4c1a2a160" name="@Jinghuis-MacBook-Air 2026-11-24 05:27:59" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-11-24T05:27:59.5015250+08:00" queuing="2026-11-24T05:27:59.5015250+08:00" start="2026-11-24T05:27:52.5497430+08:00" finish="2026-11-24T05:27:59.5262190+08:00" />
+  <TestSettings name="default" id="da8997d0-46ab-4a81-875c-b3fa73daa02c">
+    <Deployment runDeploymentRoot="_Jinghuis-MacBook-Air_2026-11-24_05_27_59" />
+  </TestSettings>
+  <Results>
+    <UnitTestResult executionId="411d3994-2c17-4a00-b13c-e78e52e8f502" testId="1ace0a9e-7408-88c5-a875-c512be37bfc1" testName="EveryNativeWrapperResolvesItsDeclaredHandler" computerName="Jinghuis-MacBook-Air" duration="00:00:02.2506542" startTime="2026-11-24T05:27:56.1590510+08:00" endTime="2026-11-24T05:27:58.5472430+08:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" relativeResultsDirectory="411d3994-2c17-4a00-b13c-e78e52e8f502" />
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="EveryNativeWrapperResolvesItsDeclaredHandler" storage="/users/jinghuiliao/git/neo-os/neo-os-aa/tests/smartaccount.native.tests/bin/release/net10.0/neo.unittests.dll" id="1ace0a9e-7408-88c5-a875-c512be37bfc1">
+      <Execution id="411d3994-2c17-4a00-b13c-e78e52e8f502" />
+      <TestMethod codeBase="/Users/jinghuiliao/git/neo-os/neo-os-aa/tests/SmartAccount.Native.Tests/bin/Release/net10.0/Neo.UnitTests.dll" adapterTypeName="executor://mstestadapter/v4" className="Neo.UnitTests.SmartContract.Native.UT_SmartAccount" name="EveryNativeWrapperResolvesItsDeclaredHandler" />
+    </UnitTest>
+  </TestDefinitions>
+  <TestEntries>
+    <TestEntry testId="1ace0a9e-7408-88c5-a875-c512be37bfc1" executionId="411d3994-2c17-4a00-b13c-e78e52e8f502" testListId="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+  </TestEntries>
+  <TestLists>
+    <TestList name="列表中未列出的结果" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="所有已加载的结果" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="1" executed="1" passed="1" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+  </ResultSummary>
+</TestRun>

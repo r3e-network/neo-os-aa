@@ -63,23 +63,18 @@ already blocked by the export map and remain unsupported. Build and tarball
 artifacts are disposable; edit canonical source and rebuild. These checks establish
 local package usability, not npm publication or deployed-contract compatibility.
 
-## Recovery policy and the owner-only latch
+## Native v4 recovery
 
-A v4 account has no escape-hatch payload and no plugin roots to remove. `getAccount(accountId)`
-returns the control record, including `recoveryAuthority`, `recoveryTimelockMs` and
-`ownerOnlyRecovery`. The core carries no action that sets a recovery authority: that slot is changed
-by a governance module, which runs its own maturity window before it submits the change.
+For an immediate change to several settings on one active account, use
+`await client.buildConfigurationBatchPlan({ accountId, actions })`. Each action names its
+method: `installModule`, `removeModule`, `setBuiltinAuthorization` or `setRecoveryPolicy`.
+The SDK reads the account, lists custody and each newly appointed recovery address in
+`plan.signers`, and preserves the order you supplied. Use the same input and
+`buildConfigurationBatchPlan` as the transaction review recipe. For a change that should
+wait 24 hours, submit a proposal to the standard governance module instead.
 
-`ownerOnlyRecovery` is a legacy migration latch, monotonic and permanent: once set it never clears,
-and the core refuses every action that touches the module model, so such an account can never
-install, configure or uninstall a module. Read it before planning any module work.
+Use the native client for this profile. Registration can install a recovery seat but does not set a recovery authority. Check both the installed seat and the authority before telling the holder that recovery is available. The SDK's reviewed recovery flow requires the standard seat with the expected code and core binding. An installed third-party seat has its own rules.
 
-```js
-const state = await client.getAccount(accountId);
-if (state.ownerOnlyRecovery) throw new Error('This account cannot change its modules');
-```
+The core's `setRecoveryPolicy(accountId, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery)` updates the account record. The current administrator authorizes the change; a different recovery wallet must also witness its appointment. The delay is 7–90 days. `ownerOnlyRecovery` is a retained record field with no authorization meaning: the only legal input is `false`, `true` is rejected with `SA_OPERATION_MALFORMED`, and the SDK never displays it as an "owner-only recovery" promise.
 
-Recovery belongs to the recovery module: `beginRecovery(accountId)`, then the permissionless
-`executeRecovery(accountId)` once the timelock the module read when the recovery started has passed.
-That module preserves account identity, the asset address and the nonce channels; the core exposes
-no recovery entry, so a caller that needs recovery targets the module's script hash.
+On the standard seat, `beginRecovery(accountId, newCustody)` snapshots the delay, recovery authority and authority epoch. Zero keeps the current custody; a nonzero incoming custody must witness the proposal. Once mature, anyone may pay for completion, but execution fails with `SA_EPOCH_STALE` if the authority or delay changed after the request began. Read `getRecoveryPolicySnapshot(accountId)` from the seat to compare the live policy with the pending request. Changing the authority revokes old requests, changing the delay retires them, and writing the same values again leaves them executable (though a reviewed transaction must be reviewed again because the configuration nonce advances). A successful reset keeps the account ID and funding address, clears nonce channels and installed seats, advances the authority epoch and clears the recovery authority. Set up and verify recovery again after a reset.

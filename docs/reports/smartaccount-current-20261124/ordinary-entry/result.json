@@ -1,0 +1,737 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+  "coreCommit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+  "vmCommit": "004cd6070a940405818d9357638277dd44407e2e",
+  "sourceSha256": {
+    "core/engine": "97b08bfe754bc51ed8418316b45d3805dccff76ef51fbd43ac9b663eacb4d5eb",
+    "core/abi": "9313d6709261c83ce19371d3e46dc29adee143c2032433d2b607e84b95865ed2",
+    "core/basic": "51a8e0949784ec536f69a69ada6f98088ac38c27468696edef3420a65e1e757b",
+    "core/flags": "4f3fc9ded9c32eca754e735337251d0cc5ce3b7ad13aa64551d427b1688d13d1",
+    "core/method": "8b0c93a42e2cde4dcc81dd3b75115728fe049dec107b0e8e6b07c3f8d8594fa4",
+    "core/contract-state": "1cd51b08477accb23383993776026ed86348ae8427d1832939281170c9bac659",
+    "core/policy": "bde31f8af6df23a66b563081ef4f866d80ffb318ce4a1b01d7289a12f14fea62",
+    "vm/context": "c2b7809e7306d3ea3ae68f15267ab4a2994cc0e0dea0b84bd9153e9003d4a197",
+    "vm/stack": "7190a363cd8c71010c2a98987f5aadd331adeff4d3551b1bc9e1d8cd7a56ac3e",
+    "core/contract": "8958efff155cb407fef140dea11a516b9f08ab10feecf1b3c39d986d79801a96",
+    "core/state": "d08d47dc43f00070b5a2248556efa8afc7ff5f24db2d96d9a8712101eaa925d8",
+    "vm/shared": "82b9c8e71b38117eb2cb658bd5ca7b42cad682eaa38a53d32109052dece6bdda",
+    "vm/engine": "ea906436ec48408abe92826547041859fb6195553f8e585816f1d96695663445"
+  },
+  "modelSha256": {
+    "EntryDispatch": "00aec4e4daded3fa2751d2698644d60c936a920eda4d8614d6d41a5700e6c94d",
+    "ContractHandoff": "5a47c00efec1f1200df25b7338962c6307a5ef6cbc232116990f22f13ffe3582",
+    "OrdinaryEntry": "8a5f513d51c7db1b13c265baf18b3b532ef4b155d1c5f32398dea0054847fbd9"
+  },
+  "certificateSha256": "56ead579a29abe07b8dcef722b0be6bd04c4e601bfeb3ecac7b2e09b98a2be83",
+  "coqchkPassed": true,
+  "methods": [
+    {
+      "name": "computeRegistrationAccountId",
+      "arity": 5,
+      "offset": 0,
+      "theorem": "entry0",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "registerAccount",
+      "arity": 6,
+      "offset": 420,
+      "theorem": "entry1",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "registerAccounts",
+      "arity": 6,
+      "offset": 2317,
+      "theorem": "entry2",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "updateHook",
+      "arity": 2,
+      "offset": 2528,
+      "theorem": "entry3",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "confirmHookUpdate",
+      "arity": 1,
+      "offset": 3352,
+      "theorem": "entry4",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "updateVerifier",
+      "arity": 3,
+      "offset": 3830,
+      "theorem": "entry5",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "confirmVerifierUpdate",
+      "arity": 1,
+      "offset": 4307,
+      "theorem": "entry6",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "callVerifier",
+      "arity": 3,
+      "offset": 5094,
+      "theorem": "entry7",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "callHook",
+      "arity": 3,
+      "offset": 5335,
+      "theorem": "entry8",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "_deploy",
+      "arity": 2,
+      "offset": 5517,
+      "theorem": "entry9",
+      "ordinaryCall": "reserved"
+    },
+    {
+      "name": "proposeUpdate",
+      "arity": 2,
+      "offset": 5555,
+      "theorem": "entry10",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "cancelUpdate",
+      "arity": 0,
+      "offset": 5920,
+      "theorem": "entry11",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "update",
+      "arity": 2,
+      "offset": 5983,
+      "theorem": "entry12",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "confirmUpdate",
+      "arity": 2,
+      "offset": 6391,
+      "theorem": "entry13",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "getContractAdmin",
+      "arity": 0,
+      "offset": 6402,
+      "theorem": "entry14",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "proposeAdminTransfer",
+      "arity": 1,
+      "offset": 6462,
+      "theorem": "entry15",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "cancelAdminTransfer",
+      "arity": 0,
+      "offset": 6694,
+      "theorem": "entry16",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "confirmAdminTransfer",
+      "arity": 0,
+      "offset": 6760,
+      "theorem": "entry17",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "getPendingContractAdmin",
+      "arity": 0,
+      "offset": 7041,
+      "theorem": "entry18",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getAdminTransferAvailableAt",
+      "arity": 0,
+      "offset": 7101,
+      "theorem": "entry19",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "isOwnerOnlyRecovery",
+      "arity": 1,
+      "offset": 7142,
+      "theorem": "entry20",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "finalizeEscapeToOwner",
+      "arity": 1,
+      "offset": 7422,
+      "theorem": "entry21",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "initiateEscape",
+      "arity": 1,
+      "offset": 8259,
+      "theorem": "entry22",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "finalizeEscape",
+      "arity": 2,
+      "offset": 8514,
+      "theorem": "entry23",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "finalizeEscape",
+      "arity": 3,
+      "offset": 8526,
+      "theorem": "entry24",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "executeUserOp",
+      "arity": 2,
+      "offset": 9394,
+      "theorem": "entry25",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "previewUserOpValidation",
+      "arity": 2,
+      "offset": 11676,
+      "theorem": "entry26",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "executeUserOps",
+      "arity": 2,
+      "offset": 11753,
+      "theorem": "entry27",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "isExecutionActive",
+      "arity": 1,
+      "offset": 7396,
+      "theorem": "entry28",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "enterMarketEscrow",
+      "arity": 3,
+      "offset": 11921,
+      "theorem": "entry29",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "cancelMarketEscrow",
+      "arity": 2,
+      "offset": 12136,
+      "theorem": "entry30",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "settleMarketEscrow",
+      "arity": 3,
+      "offset": 12534,
+      "theorem": "entry31",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "initiateMarketEscrowCancel",
+      "arity": 1,
+      "offset": 13116,
+      "theorem": "entry32",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "forceCancelMarketEscrow",
+      "arity": 1,
+      "offset": 13260,
+      "theorem": "entry33",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "hasMarketEscrowOwnerCancel",
+      "arity": 1,
+      "offset": 13514,
+      "theorem": "entry34",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getMarketEscrowOwnerCancelTime",
+      "arity": 1,
+      "offset": 13525,
+      "theorem": "entry35",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "executeSponsoredUserOp",
+      "arity": 5,
+      "offset": 13765,
+      "theorem": "entry36",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "executeSponsoredUserOps",
+      "arity": 5,
+      "offset": 14110,
+      "theorem": "entry37",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "computePlatformAccountId",
+      "arity": 3,
+      "offset": 14754,
+      "theorem": "entry38",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "computeStablePlatformAccountId",
+      "arity": 2,
+      "offset": 14907,
+      "theorem": "entry39",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "registerPlatformAccount",
+      "arity": 4,
+      "offset": 15018,
+      "theorem": "entry40",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "registerStablePlatformAccount",
+      "arity": 4,
+      "offset": 15519,
+      "theorem": "entry41",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "rotatePlatformAccountOwner",
+      "arity": 3,
+      "offset": 15701,
+      "theorem": "entry42",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "proposePlatformAccountOwnerRotation",
+      "arity": 3,
+      "offset": 15710,
+      "theorem": "entry43",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "confirmPlatformAccountOwnerRotation",
+      "arity": 2,
+      "offset": 16144,
+      "theorem": "entry44",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "cancelPlatformAccountOwnerRotation",
+      "arity": 2,
+      "offset": 16612,
+      "theorem": "entry45",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "getPendingPlatformAccountOwnerRotation",
+      "arity": 1,
+      "offset": 16987,
+      "theorem": "entry46",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPlatformAccountOwnerRotationAvailableAt",
+      "arity": 1,
+      "offset": 17043,
+      "theorem": "entry47",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "proposePlatformRegistrar",
+      "arity": 1,
+      "offset": 17064,
+      "theorem": "entry48",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "confirmPlatformRegistrar",
+      "arity": 0,
+      "offset": 17314,
+      "theorem": "entry49",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "cancelPlatformRegistrar",
+      "arity": 0,
+      "offset": 17583,
+      "theorem": "entry50",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "getPlatformRegistrar",
+      "arity": 0,
+      "offset": 15211,
+      "theorem": "entry51",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getAccountIdByProxy",
+      "arity": 1,
+      "offset": 17661,
+      "theorem": "entry52",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingPlatformRegistrar",
+      "arity": 0,
+      "offset": 17805,
+      "theorem": "entry53",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPlatformRegistrarAvailableAt",
+      "arity": 0,
+      "offset": 17865,
+      "theorem": "entry54",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getProxyScriptHash",
+      "arity": 1,
+      "offset": 15373,
+      "theorem": "entry55",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getAccountImplementationId",
+      "arity": 0,
+      "offset": 17906,
+      "theorem": "entry56",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "supportsExecutionMode",
+      "arity": 1,
+      "offset": 17949,
+      "theorem": "entry57",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "supportsModuleType",
+      "arity": 1,
+      "offset": 18000,
+      "theorem": "entry58",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "isModuleInstalled",
+      "arity": 3,
+      "offset": 18049,
+      "theorem": "entry59",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "isValidSignature",
+      "arity": 3,
+      "offset": 18156,
+      "theorem": "entry60",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getVerifier",
+      "arity": 1,
+      "offset": 18389,
+      "theorem": "entry61",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getHook",
+      "arity": 1,
+      "offset": 18403,
+      "theorem": "entry62",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getBackupOwner",
+      "arity": 1,
+      "offset": 18417,
+      "theorem": "entry63",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getEscapeTimelock",
+      "arity": 1,
+      "offset": 18431,
+      "theorem": "entry64",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getEscapeTriggeredAt",
+      "arity": 1,
+      "offset": 18445,
+      "theorem": "entry65",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getMarketEscrowContract",
+      "arity": 1,
+      "offset": 3226,
+      "theorem": "entry66",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getMarketEscrowListingId",
+      "arity": 1,
+      "offset": 3291,
+      "theorem": "entry67",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "isMarketEscrowActive",
+      "arity": 1,
+      "offset": 3184,
+      "theorem": "entry68",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "isEscapeActive",
+      "arity": 1,
+      "offset": 18459,
+      "theorem": "entry69",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getNonce",
+      "arity": 2,
+      "offset": 18475,
+      "theorem": "entry70",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "computeArgsHash",
+      "arity": 1,
+      "offset": 18569,
+      "theorem": "entry71",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "hasPendingVerifierUpdate",
+      "arity": 1,
+      "offset": 18645,
+      "theorem": "entry72",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "hasPendingHookUpdate",
+      "arity": 1,
+      "offset": 18671,
+      "theorem": "entry73",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingVerifierUpdate",
+      "arity": 1,
+      "offset": 18696,
+      "theorem": "entry74",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingHookUpdate",
+      "arity": 1,
+      "offset": 18766,
+      "theorem": "entry75",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingVerifierUpdateTime",
+      "arity": 1,
+      "offset": 18827,
+      "theorem": "entry76",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingHookUpdateTime",
+      "arity": 1,
+      "offset": 18871,
+      "theorem": "entry77",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "hasPendingVerifierCall",
+      "arity": 1,
+      "offset": 18950,
+      "theorem": "entry78",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "hasPendingHookCall",
+      "arity": 1,
+      "offset": 18963,
+      "theorem": "entry79",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingVerifierCallModule",
+      "arity": 1,
+      "offset": 18976,
+      "theorem": "entry80",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingHookCallModule",
+      "arity": 1,
+      "offset": 19020,
+      "theorem": "entry81",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingVerifierCallHash",
+      "arity": 1,
+      "offset": 19064,
+      "theorem": "entry82",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingHookCallHash",
+      "arity": 1,
+      "offset": 19093,
+      "theorem": "entry83",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingVerifierCallTime",
+      "arity": 1,
+      "offset": 19122,
+      "theorem": "entry84",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getPendingHookCallTime",
+      "arity": 1,
+      "offset": 19151,
+      "theorem": "entry85",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "cancelVerifierUpdate",
+      "arity": 1,
+      "offset": 19180,
+      "theorem": "entry86",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "cancelHookUpdate",
+      "arity": 1,
+      "offset": 19307,
+      "theorem": "entry87",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "setMetadataUri",
+      "arity": 2,
+      "offset": 19425,
+      "theorem": "entry88",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "getMetadataUri",
+      "arity": 1,
+      "offset": 19540,
+      "theorem": "entry89",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "callVerifierChild",
+      "arity": 4,
+      "offset": 19576,
+      "theorem": "entry90",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "verify",
+      "arity": 1,
+      "offset": 21023,
+      "theorem": "entry91",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "getVerifyScopeTarget",
+      "arity": 1,
+      "offset": 21400,
+      "theorem": "entry92",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "setVerifyScopeTarget",
+      "arity": 2,
+      "offset": 24202,
+      "theorem": "entry93",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "setVerifyScopeTargets",
+      "arity": 2,
+      "offset": 24462,
+      "theorem": "entry94",
+      "ordinaryCall": "caller-permission"
+    },
+    {
+      "name": "canConfigureVerifier",
+      "arity": 2,
+      "offset": 24592,
+      "theorem": "entry95",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "canConfigureHook",
+      "arity": 2,
+      "offset": 24661,
+      "theorem": "entry96",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "canExecuteVerifier",
+      "arity": 3,
+      "offset": 24731,
+      "theorem": "entry97",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "canExecuteHook",
+      "arity": 3,
+      "offset": 24817,
+      "theorem": "entry98",
+      "ordinaryCall": "safe"
+    },
+    {
+      "name": "_initialize",
+      "arity": 0,
+      "offset": 24903,
+      "theorem": "entry99",
+      "ordinaryCall": "reserved"
+    }
+  ],
+  "boundary": "Ordinary dynamic call after interop conversion, valid flags and exact arity. CanCall and blocked inputs are observations. Frame construction assumes available resources, fresh identities, coherent ABI/initializer lookup and the default ordinary runtime. No initializer, body, fee or rollback execution.",
+  "rejectionNames": 99,
+  "rejectionScope": "Any unlisted arity; reserved names for every arity. No target frame returned.",
+  "completeEntrypointProofs": 0
+}

@@ -60,6 +60,13 @@ public class NativeEpochCore : SmartContract
         Storage.Put(Storage.CurrentContext, GenerationKey(accountId, moduleId), U64BE(generation));
 
     [Safe]
+    public static object[] GetModules(UInt160 accountId, string moduleType, BigInteger cursor, BigInteger limit)
+    {
+        ExecutionEngine.Assert(moduleType == "hook" && cursor == 0 && limit == 8);
+        return new object[] { new object[] { 2, 5 }, 0, 0 };
+    }
+
+    [Safe]
     public static UInt160 GetAccountAddress(UInt160 accountId) => accountId;
 
     /// <summary>

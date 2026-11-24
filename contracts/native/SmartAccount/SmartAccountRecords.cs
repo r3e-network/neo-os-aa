@@ -23,7 +23,7 @@ using Array = Neo.VM.Types.Array;
 
 namespace Neo.SmartContract.Native
 {
-    internal enum SmartAccountStatus { Active, Frozen, MigrationRequired }
+    internal enum SmartAccountStatus { Active, Frozen }
 
     /// <summary>
     /// Canonical record codec. Every record is a positional Array encoded with
@@ -143,6 +143,21 @@ namespace Neo.SmartContract.Native
             return result;
         }
 
+        internal static byte[][] BytesArray(StackItem item, int maximum, int entryMaximum)
+        {
+            if (item.Type != StackItemType.Array || item is not Array array || array.Count > maximum)
+                throw new FormatException("The SmartAccount record field must be a bounded ByteString Array.");
+            byte[][] result = new byte[array.Count][];
+            for (int i = 0; i < array.Count; i++) result[i] = Bytes(array[i], entryMaximum);
+            return result;
+        }
+        internal static Array BytesArray(IReadOnlyList<byte[]> values)
+        {
+            Array array = new();
+            for (int i = 0; i < values.Count; i++) array.Add(values[i]);
+            return array;
+        }
+
         internal static Array IntegerArray(IReadOnlyList<BigInteger> values)
         {
             Array array = new();
@@ -175,9 +190,9 @@ namespace Neo.SmartContract.Native
         internal bool DefaultMessageAuthorization;       // reserved
         internal ulong RecoveryTimelockMs;
         internal ulong HookOrderRevision;
-        internal ulong DefaultPolicyRevision;            // reserved
+        internal ulong RequiredPolicyId;
         internal ulong ControlRevision;
-        internal bool OwnerOnlyRecovery;                 // reserved
+        internal bool OwnerOnlyRecovery;                 // retained layout field; must stay false
 
         internal static AccountControl Create(UInt160 custody, ulong recoveryTimelockMs) => new()
         {
@@ -192,7 +207,7 @@ namespace Neo.SmartContract.Native
             DefaultMessageAuthorization = true,
             RecoveryTimelockMs = recoveryTimelockMs,
             HookOrderRevision = 0,
-            DefaultPolicyRevision = 0,
+            RequiredPolicyId = 0,
             ControlRevision = 1,
             OwnerOnlyRecovery = false,
         };
@@ -211,8 +226,14 @@ namespace Neo.SmartContract.Native
         /// </summary>
         internal void Advance()
         {
-            ConfigurationNonce += 1;
-            ControlRevision += 1;
+            (ConfigurationNonce, ControlRevision) = (checked(ConfigurationNonce + 1), checked(ControlRevision + 1));
+        }
+
+        internal void AdvanceAuthority()
+        {
+            ulong epoch = checked(AuthorityEpoch + 1);
+            Advance();
+            AuthorityEpoch = epoch;
         }
 
         internal Array ToStackItem() => new(new StackItem[]
@@ -220,7 +241,7 @@ namespace Neo.SmartContract.Native
             (int)Status, Custody.ToArray(), RecoveryAuthority.ToArray(),
             AuthorityEpoch, ConfigurationNonce, NextModuleId, NextIntentId,
             DefaultOperationAuthorization, DefaultMessageAuthorization,
-            RecoveryTimelockMs, HookOrderRevision, DefaultPolicyRevision,
+            RecoveryTimelockMs, HookOrderRevision, RequiredPolicyId,
             ControlRevision, OwnerOnlyRecovery,
         });
 
@@ -230,7 +251,7 @@ namespace Neo.SmartContract.Native
         {
             Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 14);
             BigInteger status = SmartAccountRecordCodec.Unsigned(record[0]);
-            if (status > (int)SmartAccountStatus.MigrationRequired)
+            if (status > (int)SmartAccountStatus.Frozen)
                 throw new FormatException("The account status is not defined.");
             AccountControl control = new()
             {
@@ -245,7 +266,7 @@ namespace Neo.SmartContract.Native
                 DefaultMessageAuthorization = SmartAccountRecordCodec.Boolean(record[8]),
                 RecoveryTimelockMs = (ulong)SmartAccountRecordCodec.Unsigned(record[9]),
                 HookOrderRevision = (ulong)SmartAccountRecordCodec.Unsigned(record[10]),
-                DefaultPolicyRevision = (ulong)SmartAccountRecordCodec.Unsigned(record[11]),
+                RequiredPolicyId = (ulong)SmartAccountRecordCodec.Unsigned(record[11]),
                 ControlRevision = (ulong)SmartAccountRecordCodec.Unsigned(record[12]),
                 OwnerOnlyRecovery = SmartAccountRecordCodec.Boolean(record[13]),
             };
@@ -322,6 +343,90 @@ namespace Neo.SmartContract.Native
             if (module.ContractHash == UInt160.Zero || module.ModuleRevision < 1 || module.CredentialGeneration < 1)
                 throw new FormatException("The module instance record is outside the protocol domain.");
             return module;
+        }
+    }
+    /// <summary>Core-owned threshold policy (spec §3.5), stored under 0x5B + accountId + policyId[8 BE].</summary>
+    internal sealed class ThresholdPolicyRecord
+    {
+        internal ulong Threshold;
+        internal BigInteger[] MemberIds = [];
+        internal bool Active;
+        internal ulong CredentialGeneration;
+
+        internal Array ToStackItem() => new(new StackItem[]
+        {
+            Threshold, SmartAccountRecordCodec.IntegerArray(MemberIds), Active, CredentialGeneration,
+        });
+
+        internal byte[] Serialize() => SmartAccountRecordCodec.Encode(ToStackItem());
+
+        internal static ThresholdPolicyRecord Decode(ReadOnlyMemory<byte> bytes)
+        {
+            Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 4);
+            ThresholdPolicyRecord policy = new()
+            {
+                Threshold = (ulong)SmartAccountRecordCodec.Unsigned(record[0]),
+                MemberIds = SmartAccountRecordCodec.Integers(record[1],
+                    SmartAccountModuleProtocol.MaxThresholdPolicyMembers),
+                Active = SmartAccountRecordCodec.Boolean(record[2]),
+                CredentialGeneration = (ulong)SmartAccountRecordCodec.Unsigned(record[3]),
+            };
+            // The policy record mirrors the write rules of both kernels: an
+            // active policy is routable, so its threshold, member count and
+            // membership must all be inside the profile; a deactivated policy
+            // carries no members. A repeated member would count twice towards
+            // the threshold, so membership is always distinct.
+            if (policy.Active)
+            {
+                if (policy.Threshold < (ulong)SmartAccountModuleProtocol.MinThresholdPolicyValue
+                    || policy.Threshold > (ulong)SmartAccountModuleProtocol.MaxThresholdPolicyValue)
+                    throw new FormatException("The threshold policy record has an out-of-range threshold.");
+                if (policy.MemberIds.Length < 1
+                    || policy.MemberIds.Length > SmartAccountModuleProtocol.MaxThresholdPolicyMembers
+                    || policy.Threshold > (ulong)policy.MemberIds.Length)
+                    throw new FormatException("The threshold policy record exceeds the member domain.");
+            }
+            else if (policy.MemberIds.Length != 0)
+                throw new FormatException("A deactivated threshold policy carries no members.");
+            for (int i = 0; i < policy.MemberIds.Length; i++)
+            {
+                if (policy.MemberIds[i] < 1)
+                    throw new FormatException("The threshold policy record carries a non-positive member id.");
+                for (int j = 0; j < i; j++)
+                    if (policy.MemberIds[j] == policy.MemberIds[i])
+                        throw new FormatException("The threshold policy record repeats a member id.");
+            }
+            return policy;
+        }
+    }
+    /// <summary>Message policy payload held by its governance provider and committed by the core.</summary>
+    internal sealed class MessageSubjectRecord
+    {
+        internal byte[][] Subjects = [];
+        internal ulong Threshold;
+        internal ulong SubjectRevision;
+
+        internal Array ToStackItem() => new(new StackItem[]
+        {
+            SmartAccountRecordCodec.BytesArray(Subjects), Threshold, SubjectRevision,
+        });
+
+        internal byte[] Serialize() => SmartAccountRecordCodec.Encode(ToStackItem());
+
+        internal static MessageSubjectRecord Decode(ReadOnlyMemory<byte> bytes)
+        {
+            Array record = SmartAccountRecordCodec.Exact(SmartAccountRecordCodec.Decode(bytes), 3);
+            MessageSubjectRecord subjects = new()
+            {
+                Subjects = SmartAccountRecordCodec.BytesArray(record[0],
+                    SmartAccountModuleProtocol.MessageSubjectKeysMax, 32),
+                Threshold = (ulong)SmartAccountRecordCodec.Unsigned(record[1]),
+                SubjectRevision = (ulong)SmartAccountRecordCodec.Unsigned(record[2]),
+            };
+            if (subjects.Subjects.Length > SmartAccountModuleProtocol.MessageSubjectKeysMax
+                || subjects.Threshold > (ulong)subjects.Subjects.Length)
+                throw new FormatException("The message subject record exceeds the profile bound.");
+            return subjects;
         }
     }
 }

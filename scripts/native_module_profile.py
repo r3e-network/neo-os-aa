@@ -5,7 +5,7 @@ Protocol v4 replaced the manifest-rewriting admission gate: a module declares
 its capabilities through `getModuleProfile()` and the core verifies the profile
 digest at install time, so packaging must never graft an `extra.smartAccount`
 declaration onto the compiler manifest. What remains here is the read-only
-admission check: the native-v4 marker, the v4 lifecycle ABI, the exact native
+admission check: the native-smartaccount marker, the v4 lifecycle ABI, the exact native
 service permission allowlist and the NEF checksum. Anything else fails closed.
 """
 import argparse
@@ -16,7 +16,7 @@ from pathlib import Path
 import shutil
 import re
 
-MARKER = "native-v4"
+MARKER = "native-smartaccount"
 ABI_VERSION = 4
 
 
@@ -55,9 +55,9 @@ def prepare_native_source(source, destination):
 def profile_digest(parameters):
     value = json.loads(parameters.read_text())
     if type(value) is not dict or type(value.get("profileVersion")) is not int or value["profileVersion"] != ABI_VERSION:
-        raise ValueError("Explicit ABI 4 profile parameters are required")
-    if value.get("abiVersion") != ABI_VERSION:
-        raise ValueError("Explicit ABI 4 profile parameters are required")
+        raise ValueError("Current SmartAccount profile parameters are required")
+    if type(value.get("abiVersion")) is not int or value["abiVersion"] != ABI_VERSION:
+        raise ValueError("Current SmartAccount profile parameters are required")
     canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
     return hashlib.sha256(b"NeoSmartAccount/Profile" + bytes([ABI_VERSION]) + canonical).hexdigest()
 
@@ -83,18 +83,18 @@ ROLE_CALLBACKS = {
     # `validateUserOp` is the read-only preview the core calls before executing an
     # operation, so it must be published as a safe method; the state-changing role
     # callbacks stay non-safe.
-    "verifier": (("validateUserOp", "Boolean", ["Hash160", "ByteString", "Array"], True),
+    "verifier": (("validateUserOp", "Boolean", ["Hash160", "ByteArray", "Array"], True),
                  ("onUserOpComplete", "Void", ["Hash160", "Array", "Any"], False),
                  ("getSignerDomains", "Array", ["Hash160", "Integer"], True)),
-    "hook": (("preCheck", "ByteString", ["Hash160", "Array"], False),
-             ("postCheck", "Void", ["Hash160", "Array", "Any", "ByteString"], False)),
+    "hook": (("preCheck", "ByteArray", ["Hash160", "Array"], False),
+             ("postCheck", "Void", ["Hash160", "Array", "Any", "ByteArray"], False)),
 }
 
 
 def package_manifest(original, role, capabilities, composite_verifier, parameter_digest, composite_profile=""):
     """Validate one compiler manifest against the v4 native module admission rules."""
     if role not in ("verifier", "hook") or original.get("extra", {}).get("SmartAccountProfile") != MARKER:
-        raise ValueError("Explicit native-v4 profile marker and role required")
+        raise ValueError("Explicit native-smartaccount profile marker and role required")
     if type(composite_verifier) is not bool or role == "hook" and composite_verifier:
         raise ValueError("Explicit verifier-only compositeVerifier Boolean required")
     if composite_verifier or composite_profile:
@@ -104,7 +104,7 @@ def package_manifest(original, role, capabilities, composite_verifier, parameter
     name = original.get("name")
     expected_contract_methods = NATIVE_CONTRACT_METHODS.get(name)
     if expected_contract_methods is None:
-        raise ValueError("Native-v4 module has no permission profile: " + str(name))
+        raise ValueError("Native SmartAccount module has no permission profile: " + str(name))
     permissions = original.get("permissions", [])
     native_contract_entries = [
         p for p in permissions
@@ -112,23 +112,22 @@ def package_manifest(original, role, capabilities, composite_verifier, parameter
         and p["contract"].lower().removeprefix("0x") == NATIVE_CONTRACT
     ] if isinstance(permissions, list) else []
     if len(native_contract_entries) != 1 or not isinstance(native_contract_entries[0].get("methods"), list):
-        raise ValueError("Native-v4 requires one exact native contract permission entry")
+        raise ValueError("Native SmartAccount requires one exact native contract permission entry")
     native_contract_methods = native_contract_entries[0]["methods"]
     if (any(not isinstance(method, str) for method in native_contract_methods)
             or set(native_contract_methods) != expected_contract_methods
             or len(native_contract_methods) != len(expected_contract_methods)):
-        raise ValueError("Native-v4 native contract permission allowlist mismatch for " + name)
+        raise ValueError("Native SmartAccount native contract permission allowlist mismatch for " + name)
     methods = original.get("abi", {}).get("methods", [])
 
-    def require(method, result, types, safe=None, result_any=()):
+    def require(method, result, types, safe=None):
         found = [m for m in methods if m["name"] == method and len(m["parameters"]) == len(types)]
-        accepted = (result, *result_any) if result_any else (result,)
-        if len(found) != 1 or found[0]["returntype"] not in accepted or [p["type"] for p in found[0]["parameters"]] != types:
+        if len(found) != 1 or found[0]["returntype"] != result or [p["type"] for p in found[0]["parameters"]] != types:
             raise ValueError("Incorrect native lifecycle ABI: " + method)
         if safe is not None and found[0].get("safe") is not safe:
             raise ValueError("Incorrect native lifecycle safety: " + method)
 
-    require("getModuleProfile", "String", [], True, result_any=("ByteString",))
+    require("getModuleProfile", "String", [], True)
     for method, types, safe in LIFECYCLE[1:]:
         require(method, "Void", types, safe)
     for method, result, types, safe in ROLE_CALLBACKS[role]:

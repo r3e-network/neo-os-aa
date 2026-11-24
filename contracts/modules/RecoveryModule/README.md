@@ -15,8 +15,11 @@ executeRecovery  anyone may execute once the window has passed; the reset lands
 ```
 
 The module never invents a delay. It reads `recoveryTimelockMs` from the core's
-`getAccount` at the moment the recovery starts, so a later policy change cannot
-shorten a recovery that is already running.
+`getAccount` at the moment the recovery starts and snapshots that value together
+with the recovery authority. Completion requires the live policy to match the
+snapshot: replacing the authority revokes the request, changing the delay retires
+it, and writing the same values again leaves it executable. The authority-epoch
+snapshot is checked independently.
 
 ## Surface
 
@@ -26,6 +29,7 @@ shorten a recovery that is already running.
 | `cancelRecovery(accountId)` | `Void` | custody or recovery authority |
 | `executeRecovery(accountId)` | `Void` | permissionless after maturity |
 | `getRecoveryStatus(accountId)` | `Array` recovery record | read-only |
+| `getRecoveryPolicySnapshot(accountId)` | `Array [authority, timelockMs]` or empty | read-only |
 | `getModuleProfile()` | `String` profile JSON | read-only |
 
 The module is installed as a **recovery seat** (module type code 5, spec
@@ -59,6 +63,7 @@ no other contract can start one.
 [3] executableAt  Integer  ms  (startedAt + recoveryTimelockMs)
 [4] status        Integer  0 none · 1 pending · 2 executed
 [5] newCustody    Hash160  custody the matured reset rotates to (zero keeps it)
+[6] authorityEpochAtInit Integer  authority epoch snapshotted at begin
 ```
 
 ## Storage
@@ -66,6 +71,7 @@ no other contract can start one.
 ```
 0x01 ‖ accountId   → serialized recovery record
 0x02 ‖ accountId   → last executed recovery nonce
+0x03 ‖ accountId   → serialized [recoveryAuthority, recoveryTimelockMs] at begin
 ```
 
 ## Notes for integrators
@@ -80,8 +86,8 @@ no other contract can start one.
 * The executed nonce is monotone so a cancelled-then-restarted recovery cannot
   reuse an earlier nonce, and a replay of a completed `executeRecovery` is a
   no-op fault rather than a second transition.
-* `onUninstall` clears both prefixes: an unfinished recovery must not survive the
+* `onUninstall` clears all three prefixes: an unfinished recovery must not survive the
   module it was recorded under.
 
-The reviewed entrypoints are absent from the published user-contract ABI. In the [native candidate module](RecoveryModule.cs), wallets reviewing a pending record can use `cancelReviewedRecovery` and `executeReviewedRecovery`. Each takes the account ID, pending record nonce and core configuration nonce, in that order. Both fail if the record or the core configuration has changed since review. The existing authorization and timelock checks still apply.
+The reviewed entrypoints are absent from the published user-contract ABI. In the [native candidate module](RecoveryModule.cs), wallets reviewing a pending record can use `cancelReviewedRecovery` and `executeReviewedRecovery`. Each takes the account ID, pending record nonce and core configuration nonce, in that order. Both fail if the record or the core configuration has changed since review. The existing authorization, policy-snapshot and timelock checks still apply: even an idempotent policy rewrite stales a reviewed transaction because it advances the configuration nonce, while ordinary completion remains valid when the policy values are unchanged.
 The SDK offers this flow only for the compiled standard module: the installed NEF digest, current deployment id and update counter, and the configured core must match.

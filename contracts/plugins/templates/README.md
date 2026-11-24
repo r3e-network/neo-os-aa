@@ -1,7 +1,9 @@
 # Plugin Templates
 
-The fastest correct path to a new SmartAccount protocol v4 validator or hook: copy a
-template, rename it, replace one callback, compile, install through the core.
+Start with the [common module NEP](../../../docs/proposals/nep-smartaccount-module-interface.mediawiki)
+for discovery, lifecycle and callback signatures. Implement the corresponding
+[named clause](../../../docs/proposals/nep-smartaccount-module-profiles.mediawiki) only if
+your module promises that behavior. A new kind of module can implement the common interface alone.
 
 | Template | Directory | Replace this | You get |
 | --- | --- | --- | --- |
@@ -11,21 +13,21 @@ template, rename it, replace one callback, compile, install through the core.
 ## Three steps
 
 ```sh
-# 1. Copy the template into your own directory and rename the class, DisplayName,
-#    ModuleProfileJson and storage prefix.
-cp -r validator /path/to/your/plugin/MyValidator
+# From the repository root, check the shipped starters.
+node scripts/check_plugin_templates.mjs
 
-# 2. Edit the policy: ValidateUserOp (validator) or PreCheck (hook).
-#    Keep every ceremony method — the core refuses to bind an incomplete ABI.
+# In your own project, adapt the template, preserve its shared source references,
+# and set the class, manifest name and discovery JSON to describe your module.
+nccs /path/to/MyValidator.csproj -o /path/to/build
 
-# 3. Compile and check the bind-time ABI before deploying.
-node ../../scripts/check_plugin_templates.mjs   # if kept in-tree
-nccs ./MyValidator.csproj -o build              # or compile standalone
+# Supply the exact UTF-8 bytes your getModuleProfile returns (no trailing newline).
+python3 scripts/check_module_neps.py --profile /path/to/MyValidator.profile.json \
+  --manifest /path/to/build/MyValidator.manifest.json --nef /path/to/build/MyValidator.nef
 ```
 
 ## What the template carries for you
 
-- **Exact v4 binding ABI** — `getModuleProfile`, `onInstall` / `onUninstall` /
+- **Common module ABI** — `getModuleProfile`, `onInstall` / `onUninstall` /
   `configure`, and the callback pair the core checks at install
   (`AssertCallbackAbi` in `contracts/native/SmartAccount/SmartAccountModulePolicy.cs`).
 - **Instance identity** — every key starts from

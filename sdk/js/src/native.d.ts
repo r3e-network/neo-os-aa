@@ -32,8 +32,8 @@ export interface HookProofEntry {
 /**
  * The v4 13-field operation (§4): version, target, method, args, nonce,
  * nonceSubkey, deadline, validatorId, credentialGeneration, authorityEpoch,
- * configurationNonce, signature, hookProofs. Fields 0 and 12 are derived from
- * the protocol and never supplied.
+ * configurationNonce, signature, hookProofs. The codec supplies the version;
+ * omitted hookProofs encode as an empty Array.
  */
 export interface UserOperation {
   targetContract: string;
@@ -46,8 +46,7 @@ export interface UserOperation {
   validatorId?: VMInteger;
   /**
    * Required: the routing generation is part of the §4.3 domain. Built-in
-   * validator → the account 0x57 SubjectRevision; installed validator or
-   * active threshold policy → its CredentialGeneration. There is no default.
+   * validator → 1; installed validator → its current CredentialGeneration.
    */
   credentialGeneration: VMInteger;
   authorityEpoch: VMInteger;
@@ -69,8 +68,7 @@ export interface NonceRouting {
   validatorId?: VMInteger;
   /**
    * Required by every digest and channel derivation (§6). Built-in validator →
-   * the account 0x57 SubjectRevision; installed validator or active threshold
-   * policy → its CredentialGeneration. There is no protocol default.
+   * 1; installed validator → its current CredentialGeneration.
    */
   credentialGeneration: VMInteger;
   nonceSubkey: string;
@@ -92,7 +90,7 @@ export interface MessageEnvelope {
   originalSender: string;
   hash: string;
   validatorId?: VMInteger;
-  /** Required: §8 binds it to SubjectRevision or CredentialGeneration. */
+  /** Required: use the current subject revision for built-in messages or the installed validator’s generation. */
   credentialGeneration: VMInteger;
 }
 
@@ -149,17 +147,17 @@ export interface ProtocolCodec {
   splitNonce(nonce: VMInteger): NonceSplit;
   verificationScript(
     accountId: string,
-    options?: { coreContractHash?: string; callFlags?: number },
+    options?: { coreContractHash?: string; callFlags?: 5 },
   ): string;
   accountAddress(
     accountId: string,
-    options?: { coreContractHash?: string; callFlags?: number },
+    options?: { coreContractHash?: string; callFlags?: 5 },
   ): string;
   deriveIdentity(input: {
     custodyAddress: string;
     salt: string;
     coreContractHash?: string;
-    callFlags?: number;
+    callFlags?: 5;
   }): NativeIdentity;
   nonceNamespaceDigest(context: ProtocolContext, routing: NonceRouting): string;
   deriveNonceChannel(context: ProtocolContext, routing: NonceRouting): string;
@@ -198,6 +196,7 @@ export type RequiredAbiEntry = readonly [
   boolean,
   readonly string[],
 ];
+export declare const NATIVE_PROFILE_PARAMETER_DIGEST: string;
 export declare const NATIVE_REQUIRED_ABI: Readonly<
   Record<string, RequiredAbiEntry>
 >;
@@ -248,15 +247,15 @@ export interface InvocationResult {
   readonly [key: string]: unknown;
 }
 
-/** Account status: 0 Active, 1 Frozen, 2 MigrationRequired. */
-export type AccountStatus = 0 | 1 | 2;
+/** Account status: 0 Active, 1 Frozen. */
+export type AccountStatus = 0 | 1;
 
 export interface AccountDescriptor {
   readonly accountId: string;
   readonly accountAddress: string;
   readonly exists: true;
   readonly status: AccountStatus;
-  readonly statusName: "Active" | "Frozen" | "MigrationRequired";
+  readonly statusName: "Active" | "Frozen";
   readonly custodyAddress: string;
   readonly recoveryAuthority: string;
   readonly authorityEpoch: string;
@@ -264,13 +263,13 @@ export interface AccountDescriptor {
   readonly recoveryTimelockMs: string;
   readonly defaultOperationAuthorization: boolean;
   readonly defaultMessageAuthorization: boolean;
-  readonly ownerOnlyRecovery: boolean;
+  /** Retained record field with no authorization meaning; current protocol accepts only false. */
+  readonly ownerOnlyRecovery: false;
   readonly hookOrderRevision: string;
   readonly controlRevision: string;
   readonly recoveryPending: boolean;
   readonly recoveryMatureAt: string;
   readonly marketEscrowActive: boolean;
-  readonly legacyRow: unknown;
 }
 
 export interface ModuleBinding {
@@ -296,7 +295,6 @@ export interface ModulePage {
 
 export interface ProtocolInfo {
   readonly protocolVersion: string;
-  readonly migrationModeOpen: unknown;
 }
 
 export interface NonceState {
@@ -351,7 +349,7 @@ export interface ExecutionPlan extends PlanBase {
   readonly kind: "execution";
   readonly accountId: string;
   readonly accountAddress: string;
-  readonly proxyCallFlags: number;
+  readonly proxyCallFlags: 5;
   readonly batch: boolean;
   readonly operations: readonly UserOperation[];
 }
@@ -407,6 +405,15 @@ export interface AccountActionInput {
   accountId: string;
   args?: VMValue[];
 }
+
+/** Ordered direct updates to an existing account. The normal SDK path uses custody. */
+export type ConfigurationBatchAction =
+  | { method: "installModule"; moduleType: 1 | 4 | 5; moduleContractHash: string; profileDigest: string; initData?: VMValue[] }
+  | { method: "removeModule"; moduleId: VMInteger; deInitData?: VMValue[] }
+  | { method: "setBuiltinAuthorization"; defaultOperationAuthorization: boolean; defaultMessageAuthorization: boolean }
+  | { method: "setRecoveryPolicy"; recoveryAuthority: string; recoveryTimelockMs: VMInteger; ownerOnlyRecovery?: false };
+export interface RecoveryPolicyInput { accountId: string; recoveryAuthority: string; recoveryTimelockMs: VMInteger; ownerOnlyRecovery?: false }
+export interface ConfigurationBatchInput { accountId: string; actions: readonly ConfigurationBatchAction[] }
 
 /** One member's IEEE P1363 r‖s signature and its compressed P-256 public key. */
 export interface WalletMemberSignature {
@@ -576,7 +583,7 @@ export interface BroadcastResult {
 export interface SmartAccountKernel {
   readonly networkMagic: number;
   readonly contractHash: string;
-  readonly callFlags: number;
+  readonly callFlags: 5;
   readonly profile: NativeProfile | null;
   proxyAddress(accountId: string): string;
   invokeScript(
@@ -596,6 +603,8 @@ export interface SmartAccountKernel {
     options?: { cursor?: VMInteger; limit?: number },
   ): Promise<ModulePage>;
   getModule(accountId: string, moduleId: VMInteger): Promise<ModuleBinding | null>;
+  getThresholdPolicy(accountId: string, policyId?: VMInteger): Promise<{ policyId: string; threshold: number; memberIds: readonly string[]; active: boolean; credentialGeneration: string } | null>;
+  getMessageSubjects(accountId: string): Promise<{ subjects: readonly string[]; threshold: number; subjectRevision: string } | null>;
   isModuleInstalled(
     accountId: string,
     moduleType: string,
@@ -619,7 +628,10 @@ export interface SmartAccountKernel {
   buildExecutionScript(input: ExecutionInput): ExecutionPlan;
   getRecoverySeat(accountId: string): Promise<{ readonly seat: { readonly contractHash: string; readonly moduleId: string }; readonly supported: boolean; readonly pending?: { readonly nonce: string; readonly matureAt: string; readonly newCustody: string } | null } | null>;
   buildRecoveryModulePlan(input: { accountId: string; action: "beginRecovery" | "cancelRecovery" | "executeRecovery"; authority?: string; newCustody?: string }): Promise<RecoveryModulePlan>;
-  buildRecoveryPolicyPlan(input: { accountId: string; recoveryAuthority: string; recoveryTimelockMs: VMInteger; ownerOnlyRecovery?: boolean }): Promise<AccountActionPlan & { readonly recoveryAuthority: string; readonly configurationNonce: string }>;
+  buildRecoveryPolicyScript(input: RecoveryPolicyInput): string;
+  buildRecoveryPolicyPlan(input: RecoveryPolicyInput): Promise<AccountActionPlan & { readonly recoveryAuthority: string; readonly configurationNonce: string }>;
+  buildConfigurationBatchScript(input: ConfigurationBatchInput): string;
+  buildConfigurationBatchPlan(input: ConfigurationBatchInput): Promise<AccountActionPlan & { readonly configurationNonce: string }>;
   buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
     plan: NativePlan,
@@ -657,11 +669,11 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
     rpcClient?: { send(method: string, params: unknown[]): Promise<any> };
     networkMagic: VMInteger;
     contractHash?: string;
-    callFlags?: number;
+    callFlags?: 5;
   });
   readonly networkMagic: number;
   readonly contractHash: string;
-  readonly callFlags: number;
+  readonly callFlags: 5;
   profile: NativeProfile | null;
   proxyAddress(accountId: string): string;
   invokeScript(
@@ -686,6 +698,8 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
     options?: { cursor?: VMInteger; limit?: number },
   ): Promise<ModulePage>;
   getModule(accountId: string, moduleId: VMInteger): Promise<ModuleBinding | null>;
+  getThresholdPolicy(accountId: string, policyId?: VMInteger): Promise<{ policyId: string; threshold: number; memberIds: readonly string[]; active: boolean; credentialGeneration: string } | null>;
+  getMessageSubjects(accountId: string): Promise<{ subjects: readonly string[]; threshold: number; subjectRevision: string } | null>;
   isModuleInstalled(
     accountId: string,
     moduleType: string,
@@ -709,7 +723,10 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
   buildExecutionScript(input: ExecutionInput): ExecutionPlan;
   getRecoverySeat(accountId: string): Promise<{ readonly seat: { readonly contractHash: string; readonly moduleId: string }; readonly supported: boolean; readonly pending?: { readonly nonce: string; readonly matureAt: string; readonly newCustody: string } | null } | null>;
   buildRecoveryModulePlan(input: { accountId: string; action: "beginRecovery" | "cancelRecovery" | "executeRecovery"; authority?: string; newCustody?: string }): Promise<RecoveryModulePlan>;
-  buildRecoveryPolicyPlan(input: { accountId: string; recoveryAuthority: string; recoveryTimelockMs: VMInteger; ownerOnlyRecovery?: boolean }): Promise<AccountActionPlan & { readonly recoveryAuthority: string; readonly configurationNonce: string }>;
+  buildRecoveryPolicyScript(input: RecoveryPolicyInput): string;
+  buildRecoveryPolicyPlan(input: RecoveryPolicyInput): Promise<AccountActionPlan & { readonly recoveryAuthority: string; readonly configurationNonce: string }>;
+  buildConfigurationBatchScript(input: ConfigurationBatchInput): string;
+  buildConfigurationBatchPlan(input: ConfigurationBatchInput): Promise<AccountActionPlan & { readonly configurationNonce: string }>;
   buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
     plan: NativePlan,

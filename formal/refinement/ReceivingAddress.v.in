@@ -1,0 +1,44 @@
+From Coq Require Import List Arith Lia.
+Import ListNotations.
+Inductive part := Args | Flags | Method | Core | Syscall.
+Definition order : list part := @ORDER@.
+Definition flag : nat := @FLAG@.
+Definition method : list nat := @METHOD@.
+Definition core : list nat := @CORE@.
+Definition push (b:list nat) := [12; length b] ++ b.
+Definition emit (id:list nat) (p:part) : list nat :=
+  match p with
+  | Args => push id ++ [17;192] | Flags => [16+flag] | Method => push method
+  | Core => push core | Syscall => [65;98;125;91;82] end.
+Definition generated id := flat_map (emit id) order.
+Definition canonical id := [12;20] ++ id ++ [17;192;21;12;6;118;101;114;105;102;121;12;20]
+  ++ [132;128;21;12;57;55;153;206;213;62;83;197;250;126;125;34;240;195;141;57]
+  ++ [65;98;125;91;82].
+Theorem same_bytes : forall id, length id = 20 -> generated id = canonical id.
+Proof. intros id L. unfold generated, order, canonical. cbn [flat_map emit push].
+  unfold push, method, core, flag. simpl. rewrite L. repeat rewrite <- app_assoc. reflexivity. Qed.
+Theorem exact_length : forall id, length id = 20 -> length (generated id) = 60.
+Proof. intros id L. rewrite same_bytes by exact L. unfold canonical.
+  repeat rewrite app_length. simpl. lia. Qed.
+Theorem decode_id : forall id, length id = 20 -> firstn 20 (skipn 2 (generated id)) = id.
+Proof. intros id L. rewrite same_bytes by exact L. unfold canonical. cbn [app skipn].
+  rewrite firstn_app, <- L, firstn_all, Nat.sub_diag. simpl. apply app_nil_r. Qed.
+Theorem distinct_preimages : forall a b, length a = 20 -> length b = 20 ->
+  generated a = generated b -> a = b.
+Proof. intros a b A B E. rewrite <- (decode_id a A), <- (decode_id b B), E. reflexivity. Qed.
+Definition address (hash:list nat -> list nat) (input:option (list nat)) :=
+  match input with None => None | Some id =>
+    if list_eq_dec Nat.eq_dec id (repeat 0 20) then None else Some (hash (generated id)) end.
+Theorem address_valid : forall hash id, length id = 20 -> id <> repeat 0 20 ->
+  address hash (Some id) = Some (hash (canonical id)).
+Proof. intros hash id L NZ. unfold address. destruct (list_eq_dec _ _ _); [contradiction|].
+  rewrite same_bytes by exact L. reflexivity. Qed.
+Theorem address_invalid : forall hash,
+  address hash None = None /\ address hash (Some (repeat 0 20)) = None.
+Proof. intro hash. split; [reflexivity|]. unfold address. destruct (list_eq_dec _ _ _); congruence. Qed.
+Print Assumptions same_bytes.
+Print Assumptions exact_length.
+Print Assumptions decode_id.
+Print Assumptions distinct_preimages.
+Print Assumptions address_valid.
+Print Assumptions address_invalid.

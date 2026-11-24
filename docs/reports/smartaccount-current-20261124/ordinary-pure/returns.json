@@ -1,0 +1,374 @@
+{
+  "status": "PASS_SAMPLED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "engineSha256": "cb1b4db8076847dc23fda920ded773adaeeda07895effd350d2d8a99595a7f3a",
+  "vmSha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "rows": [
+    {
+      "name": "getAccountImplementationId",
+      "label": "no argument",
+      "expected": "org.r3e.neo.aa.unified-smart-wallet.v3",
+      "state": "HALT",
+      "error": null,
+      "pc": 17948,
+      "continuation": 62,
+      "fee": 12431040,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 0
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "single",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "continuation": 66,
+      "fee": 12495510,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "batch",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "continuation": 65,
+      "fee": 12496680,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "batch-atomic",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "continuation": 72,
+      "fee": 12497850,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "empty",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "continuation": 60,
+      "fee": 12497850,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "unknown",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "continuation": 65,
+      "fee": 12497850,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "integer",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "continuation": 59,
+      "fee": 12497640,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "limit",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 17999,
+      "continuation": 65599,
+      "fee": 12620490,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsExecutionMode",
+      "label": "over limit",
+      "expected": null,
+      "state": "FAULT",
+      "error": "The operand exceeds the maximum comparable size, 65537/65536.",
+      "pc": 17961,
+      "continuation": 65600,
+      "fee": 12617760,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "validator",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "continuation": 66,
+      "fee": 12495510,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "verifier",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "continuation": 65,
+      "fee": 12496680,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "hook",
+      "expected": true,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "continuation": 61,
+      "fee": 12497850,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "empty",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "continuation": 57,
+      "fee": 12497850,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "unknown",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "continuation": 62,
+      "fee": 12497850,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "integer",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "continuation": 56,
+      "fee": 12497640,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "limit",
+      "expected": false,
+      "state": "HALT",
+      "error": null,
+      "pc": 18048,
+      "continuation": 65596,
+      "fee": 12620490,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        },
+        {
+          "Shared": false,
+          "Rv": 1,
+          "Count": 1
+        }
+      ]
+    },
+    {
+      "name": "supportsModuleType",
+      "label": "over limit",
+      "expected": null,
+      "state": "FAULT",
+      "error": "The operand exceeds the maximum comparable size, 65537/65536.",
+      "pc": 18015,
+      "continuation": 65597,
+      "fee": 12617760,
+      "returns": [
+        {
+          "Shared": true,
+          "Rv": 0,
+          "Count": 1
+        }
+      ]
+    }
+  ]
+}

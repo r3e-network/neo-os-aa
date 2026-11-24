@@ -1,0 +1,38 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+  "inventorySha256": "1504bf3c5c3a72821b40394aa00c4a929081b403a3954ece710c92eea453ae17",
+  "sourceSha256": {
+    "UnifiedSmartWallet.State.cs": "83d70a55943b3904587258e9fbed02953391c06e81b3477dbd5953d5928cd437",
+    "UnifiedSmartWallet.Paymaster.cs": "85cc25838737641c1884038b685343562aa9787b17ec73b2eb8e72dcb3b08543",
+    "UnifiedSmartWallet.MarketEscrow.cs": "1dbd226147a66d8a03f0b28b152e9dcd395231f68574ef8e6a6ef750ccf005df",
+    "UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
+    "UnifiedSmartWallet.VerifierChildren.cs": "f0bfc1ff7835bf237e445bcb20a085ec52951388ba48a7477cf543f9389cd28f",
+    "UnifiedSmartWallet.Admin.cs": "74fa83c1f5e39a3cc1661a71efa5b061e87374b8d7904b9d61e9662c39738f52",
+    "UnifiedSmartWallet.Accounts.cs": "a03dab3c8b1f9fb8b3fd7937deb539ceacd14b1a9383fcbcce351ea22d6e9627",
+    "UnifiedSmartWallet.VerifyContext.cs": "459f7631dd06d0b01698d7f6b390e81951da7f1fdcf7a2c55774306239ce8025",
+    "UnifiedSmartWallet.Models.cs": "bd3b2743cdb0adb5382d552c375d6b351b7b8765fd364945dbee5fbd781181f4",
+    "UnifiedSmartWallet.Execution.cs": "e313f0c82e9b1c0d73a8ca73dac8c657d0297e9e1db43e5a5f81b411c046e5bc",
+    "UnifiedSmartWallet.Escape.cs": "9c9b4b574e5e879fb9175e84e5233a82371b93e6be79cb3a310c989cbb78130a",
+    "UnifiedSmartWallet.Proxy.cs": "46427b4d2046f03d29bd51130c902d2ef7e2239f97617e85c6e0d51d1bb123e6",
+    "UnifiedSmartWallet.cs": "38c0a815c429233d53cd0b3ca8f0f9ff813401b06b401593e776820d6109aaa8",
+    "UnifiedSmartWallet.PlatformRegistrar.cs": "c524c6db9682caa5e18b3e26f66ffc2430ddf733416af81a7212ecfeb6e9b098",
+    "UnifiedSmartWallet.Events.cs": "361b616f6557bd8b845c2c790d32152653e0b09668ac4c2baeea302429fa8f2f"
+  },
+  "modelSha256": {
+    "IntegerSemantics": "b2d8cfb443115bdda59c52abc04022ebd4b0bbea0a13f122f12ec7a0b891425c",
+    "CapArithmetic": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "CapMethodVm": "cffee42ebb1dbacdf49a97c9213472026e3481fc122472f94911abda7e62dfb9",
+    "CapContext": "3fab1800231f6698890ac60ce74bd2514faca174ec4ed64e2be00cb403337995"
+  },
+  "certificateSha256": "ce2be7f7097245d8b9e96dc6c18f95a23ebe4d5d40c8775cd91fd11e9755604e",
+  "initOffset": 24903,
+  "byteCount": 654,
+  "instructionCount": 170,
+  "staticSlotCount": 53,
+  "coqchkPassed": true,
+  "boundary": "Initializer opcode reference semantics; byte buffers represented by value. VM fees, limits, fault rollback, RET context unload and actual method execution are separate obligations."
+}

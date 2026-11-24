@@ -46,6 +46,7 @@ namespace SmartAccount.Modules
     [ContractPermission("*", "getAccount")]
     [ContractPermission("*", "getModules")]
     [ContractPermission("*", "getModule")]
+    [ContractPermission("*", "getThresholdPolicy")]
     [ContractPermission("*", "getAuthorizedModuleId")]
     [ContractPermission("*", "getModuleProfile")]
     [ContractPermission("*", "installModule")]
@@ -53,10 +54,8 @@ namespace SmartAccount.Modules
     [ContractPermission("*", "unfreezeAccount")]
     [ContractPermission("*", "setRecoveryPolicy")]
     [ContractPermission("*", "setBuiltinAuthorization")]
-    [ContractPermission("*", "configure")]
+    [ContractPermission("*", "applyConfigurationActions")]
     [ContractPermission("*", "setHookOrder")]
-    [ContractPermission("*", "setThresholdPolicy")]
-    [ContractPermission("*", "updateMessageSubject")]
     [ManifestExtra("Description", "Configuration-intent governance module (spec §11)")]
     public class GovernanceModule : SmartContract
     {
@@ -73,6 +72,17 @@ namespace SmartAccount.Modules
         private static readonly byte[] Prefix_Intent = new byte[] { 0x01 };
         private static readonly byte[] Prefix_IntentCount = new byte[] { 0x02 };
         private static readonly byte[] Prefix_Completion = new byte[] { 0x03 };
+        private static readonly byte[] Prefix_MessagePolicy = new byte[] { 0x04 };
+        private static readonly byte[] Prefix_SpendingPolicy = new byte[] { 0x05 };
+
+        // Called during atomic confirmation. One bounded row per account; removing
+        // the governance instance does not invalidate a policy already confirmed.
+        public static void StoreGovernedPolicy(UInt160 accountId, BigInteger kind, ByteString policy)
+        {
+            ModuleSupport.RequireCore();
+            ExecutionEngine.Assert(kind == 4 || kind == 5, ModuleProtocol.ErrOperationMalformed);
+            Storage.Put(Storage.CurrentContext, ModuleSupport.Key(kind == 4 ? Prefix_MessagePolicy : Prefix_SpendingPolicy, accountId), policy);
+        }
 
         /// <summary>§11: a configuration intent matures 24 hours after it is proposed.</summary>
         private const long ConfigurationMaturityMs = 24L * 60 * 60 * 1000;
@@ -101,9 +111,6 @@ namespace SmartAccount.Modules
         /// <summary>§11 Table 16: every readSet entry is a ByteString of at most 64 bytes.</summary>
         private const int MaxResourceKeyLength = 64;
 
-        /// <summary>§11 Table 16, action 10: a migration classification is at most 64 bytes of UTF-8.</summary>
-        private const int MaxClassificationLength = 64;
-
         /// <summary>§11 Table 16, action 1: an install payload carries at most 64 initData items.</summary>
         private const int MaxInitDataEntries = 64;
 
@@ -112,14 +119,13 @@ namespace SmartAccount.Modules
 
         // R-11-05 fixed resource labels: the manuscript fixes that hook order,
         // the builtin switches, the recovery policy, the subject roster,
-        // migration and unfreeze each declare one fixed label, without fixing
+        // and unfreeze each declare one fixed label, without fixing
         // the label bytes; these readable spellings are the implementation's
         // choice (task report item).
         private const string ResourceHookOrder = "hookOrder";
         private const string ResourceBuiltinPolicy = "builtinPolicy";
         private const string ResourceRecoveryPolicy = "recoveryPolicy";
         private const string ResourceMessageSubjects = "messageSubjects";
-        private const string ResourceMigration = "migration";
         private const string ResourceUnfreeze = "unfreeze";
 
         /// <summary>
@@ -132,21 +138,6 @@ namespace SmartAccount.Modules
         {
             0x22, 0x63, 0x6F, 0x6D, 0x70, 0x6F, 0x73, 0x69, 0x74, 0x65, 0x4C, 0x61, 0x79,
             0x65, 0x72, 0x22, 0x3A, 0x31, 0x2C,
-        };
-
-        /// <summary>ASCII <c>"contractName":"ThresholdPolicyModule"</c> — the §15 instance marker.</summary>
-        private static readonly byte[] ThresholdPolicyModuleMarker = new byte[]
-        {
-            0x22, 0x63, 0x6F, 0x6E, 0x74, 0x72, 0x61, 0x63, 0x74, 0x4E, 0x61, 0x6D, 0x65, 0x22, 0x3A, 0x22,
-            0x54, 0x68, 0x72, 0x65, 0x73, 0x68, 0x6F, 0x6C, 0x64, 0x50, 0x6F, 0x6C, 0x69, 0x63, 0x79, 0x4D,
-            0x6F, 0x64, 0x75, 0x6C, 0x65, 0x22,
-        };
-
-        /// <summary>ASCII <c>"contractName":"SigningModule"</c> — the §13 instance marker.</summary>
-        private static readonly byte[] SigningModuleMarker = new byte[]
-        {
-            0x22, 0x63, 0x6F, 0x6E, 0x74, 0x72, 0x61, 0x63, 0x74, 0x4E, 0x61, 0x6D, 0x65, 0x22, 0x3A, 0x22,
-            0x53, 0x69, 0x67, 0x6E, 0x69, 0x6E, 0x67, 0x4D, 0x6F, 0x64, 0x75, 0x6C, 0x65, 0x22,
         };
 
         // R-11-05 resource-key spellings, ASCII: "module:", "moduleId:", "policy:".
@@ -178,7 +169,11 @@ namespace SmartAccount.Modules
         private const int FieldDigest = 7;
         private const int FieldActions = 8;
         private const int FieldReadSet = 9;
-        private const int RecordFields = 10;
+        // A separate, internal checkpoint keeps the reviewed proposal nonce immutable.
+        // Only single callback-free writes of the built-in or recovery policy qualify.
+        // A ten-field record from an earlier deployment retains exact-nonce semantics.
+        private const int FieldPolicyCheckpoint = 10;
+        private const int RecordFields = 11;
 
         public delegate void ConfigurationProposedHandler(UInt160 accountId, BigInteger intentId, string kind,
             BigInteger matureAt, int actionCount);
@@ -311,9 +306,7 @@ namespace SmartAccount.Modules
         /// the intent is bound to the authority epoch and configuration nonce
         /// the account holds at proposal time. R-11-08: the unfreeze action
         /// [11] may only travel alone, and only <c>Active</c> or <c>Frozen</c>
-        /// accounts may propose it; every other intent is <c>Active</c>-only,
-        /// and a <c>MigrationRequired</c> account only accepts an intent that
-        /// carries the migration action (10).
+        /// accounts may propose it; every other intent requires an active account.
         /// </summary>
         public static BigInteger ProposeConfiguration(UInt160 accountId, object[] actions, object[] readSet)
         {
@@ -325,7 +318,8 @@ namespace SmartAccount.Modules
             // changing any runtime behaviour (the null check already ran).
             ExecutionEngine.Assert(actions!.Length <= MaxActionsPerIntent, ModuleProtocol.ErrModuleLimitActions);
             bool unfreeze = ValidateActions(actions);
-            RequireProposalStatus(accountId, actions, unfreeze);
+            object[] account = ModuleSupport.AccountRecord(accountId);
+            RequireProposalStatus((BigInteger)account[ModuleSupport.FieldStatus], unfreeze);
 
             // R-11-15: expired records keep occupying their slots until someone
             // cleans them; the next proposal is one of the two cleaning
@@ -333,7 +327,7 @@ namespace SmartAccount.Modules
             CleanupExpired(accountId);
 
             ByteString encoded = StdLib.Serialize(ModuleSupport.Copy(actions));
-            object[] resources = Resources(actions, readSet);
+            object[] resources = Resources(accountId, actions, readSet);
             ByteString digest = CryptoLib.Sha256(encoded);
             RequireCapacityAndUnique(accountId, digest, resources);
 
@@ -348,8 +342,10 @@ namespace SmartAccount.Modules
             record[FieldProposedAt] = proposedAt;
             record[FieldMatureAt] = matureAt;
             record[FieldExpiresAt] = matureAt + ConfigurationExpiryMs;
-            record[FieldAuthorityEpoch] = ModuleSupport.AccountAuthorityEpoch(accountId);
-            record[FieldConfigurationNonce] = ModuleSupport.AccountConfigurationNonce(accountId);
+            record[FieldAuthorityEpoch] = account[ModuleSupport.FieldAuthorityEpoch];
+            record[FieldConfigurationNonce] = account[ModuleSupport.FieldConfigurationNonce];
+            record[FieldPolicyCheckpoint] = IsCorePolicyGroup(actions)
+                ? (BigInteger)record[FieldConfigurationNonce] : -BigInteger.One;
             record[FieldDigest] = digest;
             record[FieldActions] = encoded;
             record[FieldReadSet] = StdLib.Serialize(resources);
@@ -382,9 +378,11 @@ namespace SmartAccount.Modules
             // state that needs it — a frozen account can confirm its thaw
             // intent, and an Active account faults in the core's unfreeze
             // gate without state effect. Every other intent keeps the Active
-            // gate (Frozen → SA_ACCOUNT_FROZEN), and a MigrationRequired
-            // account only confirms an intent carrying the migration action.
-            RequireConfirmStatus(accountId, record, unfreeze);
+            // gate (Frozen → SA_ACCOUNT_FROZEN).
+            object[] account = ModuleSupport.AccountRecord(accountId);
+            object[] committed = (object[])StdLib.Deserialize((ByteString)record[FieldActions]!);
+            RequireProposalStatus((BigInteger)account[ModuleSupport.FieldStatus], unfreeze);
+            BigInteger beforeNonce = (BigInteger)account[ModuleSupport.FieldConfigurationNonce];
 
             ExecutionEngine.Assert(Runtime.Time >= (BigInteger)record[FieldMatureAt], ModuleProtocol.ErrIntentImmature);
             ExecutionEngine.Assert(Runtime.Time <= (BigInteger)record[FieldExpiresAt], ModuleProtocol.ErrIntentExpired);
@@ -394,10 +392,10 @@ namespace SmartAccount.Modules
             // change or recovery in between advances them, and an old intent
             // must not confirm against the new permission state.
             ExecutionEngine.Assert(
-                ModuleSupport.AccountAuthorityEpoch(accountId) == (BigInteger)record[FieldAuthorityEpoch],
+                (BigInteger)account[ModuleSupport.FieldAuthorityEpoch] == (BigInteger)record[FieldAuthorityEpoch],
                 ModuleProtocol.ErrEpochStale);
             ExecutionEngine.Assert(
-                ModuleSupport.AccountConfigurationNonce(accountId) == (BigInteger)record[FieldConfigurationNonce],
+                beforeNonce == ExpectedNonce(record),
                 ModuleProtocol.ErrEpochStale + " configurationNonce");
 
             // The confirmation re-submits the actions, and only the exact bytes
@@ -409,7 +407,6 @@ namespace SmartAccount.Modules
                 StdLib.MemoryCompare((ByteString)record[FieldActions]!, submitted) == 0,
                 ModuleProtocol.ErrOperationMalformed);
 
-            object[] committed = (object[])StdLib.Deserialize((ByteString)record[FieldActions]!);
             object[] resources = (object[])StdLib.Deserialize((ByteString)record[FieldReadSet]!);
 
             // Committed (§11.4): the record leaves the pending table before the
@@ -422,7 +419,7 @@ namespace SmartAccount.Modules
 
             // R-11-11: invalidate only the epoch-stale or resource-conflicting
             // intents of the same account; unrelated ones keep their state.
-            InvalidateStaleAndConflicting(accountId, resources);
+            InvalidateStaleAndConflicting(accountId, resources, beforeNonce, HasPolicyCheckpoint(record));
 
             OnConfigurationConfirmed(accountId, intentId);
         }
@@ -468,7 +465,7 @@ namespace SmartAccount.Modules
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, IntentKey(accountId, intentId));
             if (data == null) return new object[0];
-            object[] record = (object[])StdLib.Deserialize(data!);
+            object[] record = DecodeIntent(data!);
             object[] actions = (object[])StdLib.Deserialize((ByteString)record[FieldActions]!);
             return new object[]
             {
@@ -497,7 +494,7 @@ namespace SmartAccount.Modules
             while (iterator.Next())
             {
                 ExecutionEngine.Assert(count < MaxPendingIntents, ModuleProtocol.ErrIntentLimit);
-                object[] record = (object[])StdLib.Deserialize((ByteString)iterator.Value);
+                object[] record = DecodeIntent((ByteString)iterator.Value);
                 ids[count++] = record[FieldId];
             }
             object[] result = new object[count];
@@ -512,11 +509,12 @@ namespace SmartAccount.Modules
         ///
         /// H-2: the proposal is open to a <c>Frozen</c> account as well — the
         /// thaw path is otherwise unusable by the only account state that needs
-        /// it. <c>MigrationRequired</c> is still refused (R-11-14).
+        /// it.
         /// </summary>
         public static BigInteger UnfreezeAccount(UInt160 accountId)
         {
-            ModuleSupport.RequireActiveOrFrozenAccount(accountId);
+            object[] account = ModuleSupport.AccountRecord(accountId);
+            RequireProposalStatus((BigInteger)account[ModuleSupport.FieldStatus], true);
             ModuleSupport.RequireAccountAdministration(accountId);
 
             // R-11-15: a proposal also cleans the expired records first.
@@ -535,8 +533,9 @@ namespace SmartAccount.Modules
             record[FieldProposedAt] = proposedAt;
             record[FieldMatureAt] = matureAt;
             record[FieldExpiresAt] = matureAt + ConfigurationExpiryMs;
-            record[FieldAuthorityEpoch] = ModuleSupport.AccountAuthorityEpoch(accountId);
-            record[FieldConfigurationNonce] = ModuleSupport.AccountConfigurationNonce(accountId);
+            record[FieldAuthorityEpoch] = account[ModuleSupport.FieldAuthorityEpoch];
+            record[FieldConfigurationNonce] = account[ModuleSupport.FieldConfigurationNonce];
+            record[FieldPolicyCheckpoint] = -BigInteger.One;
             record[FieldDigest] = CryptoLib.Sha256(empty);
             record[FieldActions] = empty;
             record[FieldReadSet] = StdLib.Serialize(resources);
@@ -563,7 +562,14 @@ namespace SmartAccount.Modules
         {
             ByteString? data = Storage.Get(Storage.CurrentContext, IntentKey(accountId, intentId));
             ExecutionEngine.Assert(data != null, ModuleProtocol.ErrIntentNotFound);
-            return (object[])StdLib.Deserialize(data!);
+            return DecodeIntent(data!);
+        }
+
+        private static object[] DecodeIntent(ByteString data)
+        {
+            object[] record = (object[])StdLib.Deserialize(data);
+            ExecutionEngine.Assert(record.Length == RecordFields, ModuleProtocol.ErrOperationMalformed);
+            return record;
         }
 
         /// <summary>
@@ -576,6 +582,7 @@ namespace SmartAccount.Modules
         /// </summary>
         private static void RequireCapacityAndUnique(UInt160 accountId, ByteString digest, object[] resources)
         {
+            var indexed = ResourceSet(resources);
             Iterator iterator = Storage.Find(Storage.CurrentContext,
                 Helper.Concat(Prefix_Intent, (byte[])accountId), FindOptions.ValuesOnly);
             int pending = 0;
@@ -583,32 +590,33 @@ namespace SmartAccount.Modules
             {
                 pending++;
                 ExecutionEngine.Assert(pending <= MaxPendingIntents, ModuleProtocol.ErrIntentLimit);
-                object[] record = (object[])StdLib.Deserialize((ByteString)iterator.Value);
+                object[] record = DecodeIntent((ByteString)iterator.Value);
                 // An identical action digest re-submits an intent that is
                 // already pending — refused like any other conflict.
                 ExecutionEngine.Assert(
                     StdLib.MemoryCompare((ByteString)record[FieldDigest]!, digest) != 0,
                     ModuleProtocol.ErrIntentConflict);
                 object[] theirs = (object[])StdLib.Deserialize((ByteString)record[FieldReadSet]!);
-                if (Intersects(theirs, resources))
+                if (Intersects(theirs, indexed))
                     ExecutionEngine.Assert(false, ModuleProtocol.ErrIntentConflict);
             }
             ExecutionEngine.Assert(pending < MaxPendingIntents, ModuleProtocol.ErrIntentLimit);
         }
 
         /// <summary>Byte-for-byte intersection of two stored resource sets (R-11-05).</summary>
-        private static bool Intersects(object[] pending, object[] proposed)
+        // VM map keys use byte equality. Build the submitted set once per scan
+        // instead of comparing every pair of keys for every pending intent.
+        private static Map<ByteString, bool> ResourceSet(object[] resources)
+        {
+            Map<ByteString, bool> indexed = new();
+            for (int i = 0; i < resources.Length; i++) indexed[(ByteString)resources[i]] = true;
+            return indexed;
+        }
+
+        private static bool Intersects(object[] pending, Map<ByteString, bool> indexed)
         {
             for (int i = 0; i < pending.Length; i++)
-            {
-                ByteString theirs = (ByteString)pending[i];
-                for (int j = 0; j < proposed.Length; j++)
-                {
-                    ByteString mine = (ByteString)proposed[j];
-                    if (theirs!.Length == mine!.Length && StdLib.MemoryCompare(theirs, mine) == 0)
-                        return true;
-                }
-            }
+                if (indexed.HasKey((ByteString)pending[i])) return true;
             return false;
         }
 
@@ -622,6 +630,8 @@ namespace SmartAccount.Modules
         private static bool ValidateActions(object[] actions)
         {
             bool unfreeze = false;
+            bool haveCoreAction = false;
+            bool endedCoreGroup = false;
             for (int i = 0; i < actions.Length; i++)
             {
                 // nccs supports `is` patterns only for scalar VM types, so the
@@ -630,6 +640,14 @@ namespace SmartAccount.Modules
                 object[] action = (object[])actions[i];
                 ExecutionEngine.Assert(action.Length >= 1, ModuleProtocol.ErrOperationMalformed);
                 BigInteger code = (BigInteger)action[0];
+                // Do not reorder the signed actions across a module call. Two separate
+                // native groups necessarily advance the version twice and cannot commit.
+                if (IsCoreAction(code))
+                {
+                    ExecutionEngine.Assert(!endedCoreGroup, ModuleProtocol.ErrPhaseViolation + " separate core action groups");
+                    haveCoreAction = true;
+                }
+                else if (haveCoreAction) endedCoreGroup = true;
                 if (code == ModuleProtocol.ActionUnfreeze)
                 {
                     // [11]: no parameters, and R-11-08 pins it to a
@@ -671,6 +689,7 @@ namespace SmartAccount.Modules
                     ExecutionEngine.Assert(action[1] is BigInteger configureId && configureId >= 1,
                         ModuleProtocol.ErrOperationMalformed);
                     object[] configData = (object[])action[2];
+                    ExecutionEngine.Assert(configData.Length <= MaxInitDataEntries, ModuleProtocol.ErrOperationMalformed);
                 }
                 else if (code == ModuleProtocol.ActionSetHookOrder)
                 {
@@ -707,6 +726,7 @@ namespace SmartAccount.Modules
                         ModuleProtocol.ErrOperationMalformed);
                     ExecutionEngine.Assert(action[2] is ByteString rebindDigest && rebindDigest.Length == 32,
                         ModuleProtocol.ErrOperationMalformed);
+                    ExecutionEngine.Assert(false, ModuleProtocol.ErrPhaseViolation + " module rebind entry not deployed");
                 }
                 else if (code == ModuleProtocol.ActionSetThresholdPolicy)
                 {
@@ -721,15 +741,12 @@ namespace SmartAccount.Modules
                     BigInteger policyThreshold = (BigInteger)action[2];
                     ExecutionEngine.Assert(action[4] is bool, ModuleProtocol.ErrOperationMalformed);
                     bool policyActive = (bool)action[4];
-                    ExecutionEngine.Assert(policyId >= 0, ModuleProtocol.ErrOperationMalformed);
-                    if (policyId == 0) ExecutionEngine.Assert(policyActive, ModuleProtocol.ErrOperationMalformed);
-                    ExecutionEngine.Assert(memberIds.Length >= 1 && memberIds.Length <= MaxPolicyMembers,
-                        ModuleProtocol.ErrModuleLimitMembers);
-                    ExecutionEngine.Assert(policyThreshold >= 1 && policyThreshold <= memberIds.Length,
-                        ModuleProtocol.ErrModuleLimitThreshold);
+                    ExecutionEngine.Assert(policyId == 0 && policyActive && i == actions.Length - 1, ModuleProtocol.ErrIntentConflict);
+                    ExecutionEngine.Assert(memberIds.Length >= 1 && memberIds.Length <= MaxPolicyMembers, ModuleProtocol.ErrModuleLimitMembers);
+                    ExecutionEngine.Assert(policyThreshold >= 1 && policyThreshold <= memberIds.Length, ModuleProtocol.ErrModuleLimitThreshold);
                     for (int j = 0; j < memberIds.Length; j++)
                     {
-                        ExecutionEngine.Assert(memberIds[j] is BigInteger && (BigInteger)memberIds[j] >= 1,
+                        ExecutionEngine.Assert(memberIds[j] is BigInteger && (BigInteger)memberIds[j] >= 1 && (BigInteger)memberIds[j] <= ulong.MaxValue,
                             ModuleProtocol.ErrOperationMalformed);
                         for (int k = 0; k < j; k++)
                             ExecutionEngine.Assert((BigInteger)memberIds[k] != (BigInteger)memberIds[j],
@@ -776,15 +793,6 @@ namespace SmartAccount.Modules
                                 ModuleProtocol.ErrOperationMalformed);
                     }
                 }
-                else if (code == ModuleProtocol.ActionMigrateImport)
-                {
-                    // [10, manifestDigest, classification]
-                    ExecutionEngine.Assert(action.Length == 3, ModuleProtocol.ErrOperationMalformed);
-                    ExecutionEngine.Assert(action[1] is ByteString manifestDigest && manifestDigest.Length == 32,
-                        ModuleProtocol.ErrOperationMalformed);
-                    ExecutionEngine.Assert(action[2] is ByteString classification
-                        && classification.Length <= MaxClassificationLength, ModuleProtocol.ErrOperationMalformed);
-                }
                 else
                 {
                     ExecutionEngine.Assert(false, ModuleProtocol.ErrOperationMalformed);
@@ -814,6 +822,17 @@ namespace SmartAccount.Modules
                 object[] action = (object[])actions[i];
                 ExecutionEngine.Assert(action.Length >= 1, ModuleProtocol.ErrOperationMalformed);
                 BigInteger code = (BigInteger)action[0];
+                if (IsCoreAction(code) && i + 1 < actions.Length
+                    && IsCoreAction((BigInteger)((object[])actions[i + 1])[0]))
+                {
+                    int start = i;
+                    do { i++; } while (i + 1 < actions.Length && IsCoreAction((BigInteger)((object[])actions[i + 1])[0]));
+                    object[] group = new object[i - start + 1];
+                    for (int j = 0; j < group.Length; j++) group[j] = actions[start + j];
+                    Contract.Call(ModuleSupport.RequireCoreConfigured(), "applyConfigurationActions", CallFlags.All,
+                        new object[] { accountId, group });
+                    continue;
+                }
                 if (code == ModuleProtocol.ActionInstallModule)
                 {
                     // [1, moduleType, contractHash, profileDigest, initData[]]
@@ -825,18 +844,6 @@ namespace SmartAccount.Modules
                 {
                     // [2, moduleId, deInitData[]]
                     ModuleSupport.RemoveModule(accountId, (BigInteger)action[1], (object[])action[2]);
-                    continue;
-                }
-                if (code == ModuleProtocol.ActionConfigureModule)
-                {
-                    // [3, moduleId, configData]: Table 19 — the target
-                    // instance's own configure callback (Table 10:
-                    // Hash160, Integer, Integer, Array → Void); the core has
-                    // no entry and never interprets configData.
-                    object[] descriptor = ModuleSupport.ModuleDescriptor(accountId, (BigInteger)action[1]);
-                    Contract.Call((UInt160)descriptor[ModuleSupport.FieldModuleContractHash], "configure",
-                        CallFlags.All,
-                        new object[] { accountId, action[1], descriptor[ModuleSupport.FieldModuleType], action[2] });
                     continue;
                 }
                 if (code == ModuleProtocol.ActionSetHookOrder)
@@ -867,17 +874,11 @@ namespace SmartAccount.Modules
                         ModuleProtocol.ErrPhaseViolation + " module rebind entry not deployed");
                     continue;
                 }
-                if (code == ModuleProtocol.ActionSetThresholdPolicy)
+                if (code == ModuleProtocol.ActionConfigureModule || code == ModuleProtocol.ActionSetThresholdPolicy || code == ModuleProtocol.ActionSetMessageSubjects)
                 {
-                    // [7, policyId, threshold, memberIds[], active]: Table 19 —
-                    // the §15 write lands in the threshold module's own
-                    // setThresholdPolicy entry, which re-validates members and
-                    // threshold. The threshold and member list are handed
-                    // through as the confirmed intent named them.
-                    Contract.Call(
-                        RequireValidatorByProfile(accountId, ThresholdPolicyModuleMarker, "threshold policy module"),
-                        "setThresholdPolicy", CallFlags.All,
-                        new object[] { accountId, action[2], action[3] });
+                    // Forward the complete reviewed row, including policyId, active and the original member IDs.
+                    Contract.Call(ModuleSupport.RequireCoreConfigured(), "applyConfigurationActions", CallFlags.All,
+                        new object[] { accountId, new object[] { action } });
                     continue;
                 }
                 if (code == ModuleProtocol.ActionSetRecoveryPolicy)
@@ -888,27 +889,6 @@ namespace SmartAccount.Modules
                     // own witness is the installed-validator arm of that check.
                     ModuleSupport.SetRecoveryPolicy(accountId, (UInt160)action[1],
                         (BigInteger)action[2], (bool)action[3]);
-                    continue;
-                }
-                if (code == ModuleProtocol.ActionSetMessageSubjects)
-                {
-                    // [9, subjects[], threshold]: Table 19 — the §13 write
-                    // lands in the message module's own updateMessageSubject
-                    // entry, which re-validates the roster.
-                    Contract.Call(
-                        RequireValidatorByProfile(accountId, SigningModuleMarker, "message signing module"),
-                        "updateMessageSubject", CallFlags.All,
-                        new object[] { accountId, action[1], action[2] });
-                    continue;
-                }
-                if (code == ModuleProtocol.ActionMigrateImport)
-                {
-                    // [10, manifestDigest, classification]: the core's
-                    // migration import entry does not exist yet (C-15: the
-                    // executor is a later batch) — refuse rather than invent a
-                    // landing path (task-report blocking item).
-                    ExecutionEngine.Assert(false,
-                        ModuleProtocol.ErrPhaseViolation + " migration import entry not deployed");
                     continue;
                 }
                 // [11] never reaches Execute: an unfreeze-kind intent lands
@@ -923,14 +903,10 @@ namespace SmartAccount.Modules
         /// <summary>
         /// R-11-08 status gate, shared by proposal and confirmation: the
         /// unfreeze kind accepts <c>Active</c> or <c>Frozen</c>
-        /// (<c>MigrationRequired</c> is refused, R-11-14); every other intent is
-        /// <c>Active</c>-only (<c>Frozen</c> → <c>SA_ACCOUNT_FROZEN</c>), and a
-        /// <c>MigrationRequired</c> account only accepts an intent that carries
-        /// the migration action (10).
+        /// and every other intent requires an active account.
         /// </summary>
-        private static void RequireProposalStatus(UInt160 accountId, object[] actions, bool unfreeze)
+        private static void RequireProposalStatus(BigInteger status, bool unfreeze)
         {
-            BigInteger status = ModuleSupport.AccountStatus(accountId);
             if (unfreeze)
             {
                 ExecutionEngine.Assert(
@@ -940,27 +916,32 @@ namespace SmartAccount.Modules
             }
             if (status == ModuleProtocol.StatusFrozen)
                 ExecutionEngine.Assert(false, ModuleProtocol.ErrAccountFrozen);
-            if (status == ModuleProtocol.StatusMigrationRequired)
-                ExecutionEngine.Assert(ContainsMigration(actions), ModuleProtocol.ErrAccountStatus);
+            ExecutionEngine.Assert(status == ModuleProtocol.StatusActive, ModuleProtocol.ErrAccountStatus);
         }
 
-        private static void RequireConfirmStatus(UInt160 accountId, object[] record, bool unfreeze)
-        {
-            object[] committed = (object[])StdLib.Deserialize((ByteString)record[FieldActions]!);
-            RequireProposalStatus(accountId, committed, unfreeze);
-        }
+        private static bool IsCoreAction(BigInteger code) =>
+            code == ModuleProtocol.ActionInstallModule || code == ModuleProtocol.ActionUninstallModule
+                || code == ModuleProtocol.ActionConfigureModule
+                || code == ModuleProtocol.ActionSetBuiltinAuthorization || code == ModuleProtocol.ActionSetRecoveryPolicy
+                || code == ModuleProtocol.ActionSetThresholdPolicy || code == ModuleProtocol.ActionSetMessageSubjects;
 
-        private static bool ContainsMigration(object[] actions)
+        private static bool IsCorePolicyGroup(object[] actions)
         {
             for (int i = 0; i < actions.Length; i++)
             {
-                object[] action = (object[])actions[i];
-                if (action.Length >= 1
-                    && action[0] is BigInteger code && code == ModuleProtocol.ActionMigrateImport)
-                    return true;
+                BigInteger code = (BigInteger)((object[])actions[i])[0];
+                if (code != ModuleProtocol.ActionSetBuiltinAuthorization && code != ModuleProtocol.ActionSetRecoveryPolicy
+                    && code != ModuleProtocol.ActionSetThresholdPolicy && code != ModuleProtocol.ActionSetMessageSubjects)
+                    return false;
             }
-            return false;
+            return actions.Length != 0;
         }
+
+        private static bool HasPolicyCheckpoint(object[] record) =>
+            (BigInteger)record[FieldPolicyCheckpoint] >= 0;
+
+        private static BigInteger ExpectedNonce(object[] record) => HasPolicyCheckpoint(record)
+            ? (BigInteger)record[FieldPolicyCheckpoint] : (BigInteger)record[FieldConfigurationNonce];
 
         /// <summary>
         /// R-11-05: the intent's resource set — the action-derived keys ∪ the
@@ -968,20 +949,19 @@ namespace SmartAccount.Modules
         /// record. Installs declare the target contract
         /// (<c>module: ‖ contractHash</c>); uninstall, configure and rebind
         /// declare the instance (<c>moduleId: ‖ U64BE</c>); hook order, the
-        /// builtin switches, the recovery policy, the subject roster, migration
+        /// builtin switches, the recovery policy, the subject roster
         /// and unfreeze each declare one fixed label; a threshold policy
         /// declares <c>policy: ‖ U64BE</c> plus every member instance key.
         /// readSet entries are validated (ByteString ≤ 64 bytes) — the read set
         /// only widens the conflict surface (R-11-07), it never grants
         /// anything.
         /// </summary>
-        private static object[] Resources(object[] actions, object[] readSet)
+        private static object[] Resources(UInt160 accountId, object[] actions, object[] readSet)
         {
             ExecutionEngine.Assert(readSet != null && readSet.Length <= MaxReadSetEntries,
                 ModuleProtocol.ErrOperationMalformed);
-            // Upper bound: every action contributes at most 1 + MaxPolicyMembers
-            // keys (action 7: the policy key plus every member instance key).
-            object[] collected = new object[MaxActionsPerIntent * (MaxPolicyMembers + 1) + MaxReadSetEntries];
+            // Upper bound: a policy may release ten old members and bind ten new ones.
+            object[] collected = new object[MaxActionsPerIntent * (2 * MaxPolicyMembers + 2) + MaxReadSetEntries];
             int count = 0;
             for (int i = 0; i < actions.Length; i++)
             {
@@ -1007,7 +987,21 @@ namespace SmartAccount.Modules
                 }
                 else if (code == ModuleProtocol.ActionSetThresholdPolicy)
                 {
-                    collected[count++] = PolicyResourceKey((BigInteger)action[1]);
+                    BigInteger policyId = (BigInteger)action[1];
+                    collected[count++] = PolicyResourceKey(policyId);
+                    if (policyId != 0)
+                    {
+                        object[] prior = (object[])Contract.Call(ModuleSupport.RequireCoreConfigured(), "getThresholdPolicy",
+                            CallFlags.ReadOnly, new object[] { accountId, policyId });
+                        if (prior.Length == 0)
+                            collected[count++] = PolicyResourceKey(0); // creation could make this id exist
+                        else
+                        {
+                            object[] released = (object[])prior[1];
+                            for (int j = 0; j < released.Length; j++)
+                                collected[count++] = InstanceResourceKey((BigInteger)released[j]);
+                        }
+                    }
                     object[] memberIds = (object[])action[3];
                     for (int j = 0; j < memberIds.Length; j++)
                         collected[count++] = InstanceResourceKey((BigInteger)memberIds[j]);
@@ -1019,10 +1013,6 @@ namespace SmartAccount.Modules
                 else if (code == ModuleProtocol.ActionSetMessageSubjects)
                 {
                     collected[count++] = (ByteString)ResourceMessageSubjects;
-                }
-                else if (code == ModuleProtocol.ActionMigrateImport)
-                {
-                    collected[count++] = (ByteString)ResourceMigration;
                 }
                 else if (code == ModuleProtocol.ActionUnfreeze)
                 {
@@ -1067,7 +1057,7 @@ namespace SmartAccount.Modules
                 Helper.Concat(Prefix_Intent, (byte[])accountId), FindOptions.ValuesOnly);
             while (iterator.Next())
             {
-                object[] record = (object[])StdLib.Deserialize((ByteString)iterator.Value);
+                object[] record = DecodeIntent((ByteString)iterator.Value);
                 if (Runtime.Time > (BigInteger)record[FieldExpiresAt])
                 {
                     Storage.Delete(Storage.CurrentContext,
@@ -1084,25 +1074,44 @@ namespace SmartAccount.Modules
         /// unrelated intents keep their slots, numbers and maturity untouched.
         /// The committed record itself is already deleted when this runs.
         /// </summary>
-        private static void InvalidateStaleAndConflicting(UInt160 accountId, object[] resources)
+        private static void InvalidateStaleAndConflicting(UInt160 accountId, object[] resources,
+            BigInteger beforeNonce, bool confirmedCorePolicy)
         {
-            BigInteger epoch = ModuleSupport.AccountAuthorityEpoch(accountId);
+            object[] account = ModuleSupport.AccountRecord(accountId);
+            BigInteger epoch = (BigInteger)account[ModuleSupport.FieldAuthorityEpoch];
+            BigInteger afterNonce = (BigInteger)account[ModuleSupport.FieldConfigurationNonce];
+            // Includes effects of module-defined callbacks. Any unaccounted advance
+            // faults confirmation in the same VM transaction as every action and event.
+            ExecutionEngine.Assert(afterNonce == beforeNonce || afterNonce == beforeNonce + 1,
+                ModuleProtocol.ErrPhaseViolation + " configuration nonce advanced more than once");
+            bool knownStep = confirmedCorePolicy && afterNonce == beforeNonce + 1;
+            var indexed = ResourceSet(resources);
             Iterator iterator = Storage.Find(Storage.CurrentContext,
                 Helper.Concat(Prefix_Intent, (byte[])accountId), FindOptions.ValuesOnly);
             while (iterator.Next())
             {
-                object[] record = (object[])StdLib.Deserialize((ByteString)iterator.Value);
+                object[] record = DecodeIntent((ByteString)iterator.Value);
                 BigInteger reason = BigInteger.Zero;
                 if ((BigInteger)record[FieldAuthorityEpoch] != epoch)
                 {
                     reason = BigInteger.One;
                 }
-                else if (Intersects((object[])StdLib.Deserialize((ByteString)record[FieldReadSet]!), resources))
+                else if (Intersects((object[])StdLib.Deserialize((ByteString)record[FieldReadSet]!), indexed))
                 {
                     reason = BigInteger.One + BigInteger.One;
                 }
                 else
                 {
+                    // Carry only an unbroken chain of reviewed, resource-disjoint
+                    // core policy writes. Never absorb an out-of-band change, a
+                    // callback with unknown effects into another approval.
+                    if (knownStep && HasPolicyCheckpoint(record)
+                        && (BigInteger)record[FieldPolicyCheckpoint] == beforeNonce)
+                    {
+                        record[FieldPolicyCheckpoint] = afterNonce;
+                        Storage.Put(Storage.CurrentContext, IntentKey(accountId, (BigInteger)record[FieldId]),
+                            StdLib.Serialize(record));
+                    }
                     continue;
                 }
                 Storage.Delete(Storage.CurrentContext,
@@ -1114,7 +1123,7 @@ namespace SmartAccount.Modules
         /// <summary>
         /// Finds the account's installed validator instance whose capability
         /// profile contains <paramref name="marker"/> — the discovery the
-        /// Table 19 landings of actions 4, 7 and 9 need, because the core has
+        /// Table 19 landing of action 4 needs, because the core has
         /// no entry for them and the spec fixes no discovery protocol. The
         /// scan is bounded by the validator instance limit.
         /// </summary>

@@ -1,0 +1,40 @@
+{
+  "status": "PASS",
+  "implementationVerified": false,
+  "coreCommit": "e7fcc132f6546c55ad7342f26d69081a71357be5",
+  "sdk": "10.0.400",
+  "configuration": "Release",
+  "inputs": {
+    "contracts/native/Neo.csproj": "4b7f1e432affa4375b8359870166328fd027b19c86ece6c771dfa032b7e1ee09",
+    "contracts/native/packages.lock.json": "154213a21b706241a75bbd6412e3b9ecaf1365ef0dd991c0451707d25e9d7623",
+    "scripts/native-profile-core-locks.json": "c7315b3d273ba04449a0e0104d40850f30ac84ce873a273450e2e2c064144824",
+    "Directory.Build.props": "1e0b68f057bc41c7ef99b9da69901e5926f052502413093d683e1eece1e78e68",
+    "nuget.config": "d03316715c5c46428149533dbd994d81a9fcdf97c8981a05083113523db82797",
+    "contracts/native/SmartAccount/NativeContract.cs": "8a24b0e7f53fe94adcee44925d2daaeda0bc1be355868a917f1609bae58674fb",
+    "contracts/native/SmartAccount/SmartAccount.Execution.cs": "17a131a5b3417527fe65f63791a7d7494a1f39a0291d147f7c491735df066adc",
+    "contracts/native/SmartAccount/SmartAccount.Modules.cs": "503069f2da468af64f6eda1fbe08ca47db0f24345f212c04c433c0c0f2510998",
+    "contracts/native/SmartAccount/SmartAccount.cs": "7e55288182ec9d903c902e23c01c0bc30bb504137f68fef2dca9c7da0473a87b",
+    "contracts/native/SmartAccount/SmartAccountEnvelope.cs": "3f91c1a7c94bec82a867c7d4d07d40aeb8b7073288b80a2ee6669cc71c4a7df0",
+    "contracts/native/SmartAccount/SmartAccountInvocationContext.cs": "e3161129e3da61e907fae72cb9e3a5ad0782ffd633012bafaab4d172feb8e274",
+    "contracts/native/SmartAccount/SmartAccountModulePolicy.cs": "2e3a435c66834a522e6bb3427db9843777a21e488aa587180c9e52761df59be3",
+    "contracts/native/SmartAccount/SmartAccountModuleProtocol.cs": "a3ed988ff974666f967c6aca6bb9a1b89ca39475fe74fec95e67ce8ac8b8994a",
+    "contracts/native/SmartAccount/SmartAccountProtocol.cs": "3d529308f44507ba9a39b1c031492b2cc69ee4205df8641d22cce3b6c3392a3e",
+    "contracts/native/SmartAccount/SmartAccountRecords.cs": "7f692fc7735acf0d80e819b41fa9d823ba781fb0887bb5a183b3e634747a1b97",
+    "contracts/native/Runtime/ApplicationEngine.Runtime.cs": "d74e3ba2648449998f54664f2cf7d214185f942160526d3f7a0c50d6b687b158"
+  },
+  "builds": [
+    {
+      "Neo.dll": "c4d9b734600864fc3af8bbfbd9eefe9643c43f20ea1c221a4a70ad85ddea57d6",
+      "Neo.Extensions.dll": "096d3b8a8a3ac0ef38c40a184ca892cd145f3177c68b756c31c5901e9953d89b",
+      "Neo.IO.dll": "aaef74b8e01f54f5d91bc4ca9dbd5be9493633c1916d91fa35017b9ddae3d3fb",
+      "Neo.Json.dll": "a8cb1eeb77fe0e5ad97a6ac9d3aa8bf487bad83c58d9310614103b5491d93bfe"
+    },
+    {
+      "Neo.dll": "c4d9b734600864fc3af8bbfbd9eefe9643c43f20ea1c221a4a70ad85ddea57d6",
+      "Neo.Extensions.dll": "096d3b8a8a3ac0ef38c40a184ca892cd145f3177c68b756c31c5901e9953d89b",
+      "Neo.IO.dll": "aaef74b8e01f54f5d91bc4ca9dbd5be9493633c1916d91fa35017b9ddae3d3fb",
+      "Neo.Json.dll": "a8cb1eeb77fe0e5ad97a6ac9d3aa8bf487bad83c58d9310614103b5491d93bfe"
+    }
+  ],
+  "scope": "Exact bytes of the native overlay and its three project references; no method semantics or activation claim."
+}

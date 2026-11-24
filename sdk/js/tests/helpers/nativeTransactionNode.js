@@ -19,6 +19,7 @@ const {
 } = require("../../src/native");
 const {
   NATIVE_ACCOUNT_ADDRESS_ABI,
+  NATIVE_PROFILE_PARAMETER_DIGEST,
   NATIVE_REQUIRED_ABI,
   NATIVE_REQUIRED_EVENTS,
 } = require("../../src/native/client");
@@ -86,6 +87,7 @@ function wallet() {
 function manifest() {
   return {
     name: "SmartAccount",
+    extra: { smartAccount: { abiVersion: 4, profileParameterDigest: NATIVE_PROFILE_PARAMETER_DIGEST } },
     abi: {
       methods: Object.entries({ ...NATIVE_REQUIRED_ABI, ...NATIVE_ACCOUNT_ADDRESS_ABI }).map(
         ([name, [types, returntype, safe, names]]) => ({
@@ -112,7 +114,7 @@ function createNode({ network = NETWORK } = {}) {
     networkFee: "50",
     account: null,
     // A HALTed invocation with no stack is what a `Void` entry point returns.
-    simulate: { state: "HALT", stack: [], gasconsumed: "10", minimumrequiredfee: "100" },
+    simulate: { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "10", minimumrequiredfee: "100" },
     preflight: null,
     send: true,
     wire: null,
@@ -122,8 +124,8 @@ function createNode({ network = NETWORK } = {}) {
   const answer = (method, args, value, contract = CORE) =>
     discovery.set(c.dynamicCall(contract, method, args, 5), value);
   const registration = () => {
-    answer("getProtocolInfo", [], A([I(4), BOOL(false)]));
-    answer("getAccountImplementationId", [], TEXT("NativeSmartAccount/v4"));
+    answer("getProtocolInfo", [], A([I(4)]));
+    answer("getAccountImplementationId", [], TEXT("NativeSmartAccount"));
     if (state.account) answer("getAccount", [ARG_HASH(ACCOUNT)], state.account);
   };
   registration();
@@ -167,14 +169,14 @@ function createNode({ network = NETWORK } = {}) {
 
   const client = new NativeSmartAccountClient({ rpcClient, networkMagic: network });
 
-  /** The 16-field account descriptor a v4 core answers. */
+  /** The 15-field account descriptor a v4 core answers. */
   const setAccount = ({ custody, recovery = "00".repeat(20), status = 0 } = {}) => {
     state.account = A([
       BOOL(true),
       I(status),
       H(custody),
       H(recovery),
-      I(0),
+      I(1),
       I(0),
       I(0),
       BOOL(true),
@@ -185,7 +187,6 @@ function createNode({ network = NETWORK } = {}) {
       BOOL(false),
       I(0),
       BOOL(false),
-      A([]),
     ]);
     registration();
   };
@@ -210,7 +211,7 @@ function operation({
     deadline,
     validatorId: "0",
     credentialGeneration: "1",
-    authorityEpoch: "0",
+    authorityEpoch: "1",
     configurationNonce: "0",
     signature: "aa".repeat(64),
   };
@@ -244,7 +245,7 @@ const build = {
  */
 async function registrationReview(node, { payer = wallet(), custody = wallet() } = {}) {
   const { plan, recipe } = build.registration(node, { custody });
-  node.state.simulate = { state: "HALT", stack: [], gasconsumed: "10", minimumrequiredfee: "100" };
+  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "10", minimumrequiredfee: "100" };
   const prepared = await node.client.prepareTransaction(plan, {
     feePayer: payer,
     authorizers: [custody],

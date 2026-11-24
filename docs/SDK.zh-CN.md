@@ -1,41 +1,20 @@
 # SmartAccount SDK 参考
 
-> 中文版本与 `docs/SDK.md` 同构。若两者冲突，以英文版本为准。
-
-本书是面向开发者的 SDK 参考，合并了原先的 NATIVE_SDK、MULTISIG_SDK、SA-EIP-712-SPEC、
-SA-PROXY-TRANSFERS 与 PENDING_CONFIG_UPDATE_READ_ABI 五个主题；其内容按章节原样移入本书。
-
-`NativeSmartAccountClient` 面向共识层原生内核；`SmartAccountClient` 面向自定义部署的内核。两者都说 v4 协议：一个十三字段操作、一套身份推导、一套模块 / 意图模型，以及同一份 `SA_*` 错误词表。自定义内核账户不会因为改动 core hash 就变成原生账户：两个内核的差别在交付方式——代理脚本、调用标志、原生合约的负 id——而不在它们接受的操作。
-
-`shared/nativeSmartAccountClient.mjs` 是实现；`sdk/js/src/native.js` 把它绑定到原生合约哈希与 Node 交易工具上。前端镜像逐字节一致。
+请使用 `NativeSmartAccountClient` 连接原生 SmartAccount。协议尚未发布；客户端只接受[当前参数](proposals/smartaccount-native-profile-parameters.json)。
 
 ## 目录
 
 1. [SDK 使用](#sdk-使用) —— 发现、身份、创建、状态、执行、代次、模块、动作、费用
-2. [阈值会话](#阈值会话) —— 阈值策略 SDK、前端会话与旧版 V3 子配置
-3. [EIP-712 签名](#eip-712-签名) —— V3 验证器在链上哈希的类型化数据布局
+2. [阈值会话](#阈值会话) —— 阈值策略 SDK 与钱包会话
+3. [EIP-712 签名](#eip-712-签名) —— Web3AuthValidator 的类型化签名数据
 4. [代理转账](#代理转账) —— 直接代理见证的构造、费用策略、拒绝赞助
 5. [待处理配置更新读取](#待处理配置更新读取) —— 配置更新的读取面
 
 ## SDK 使用
 
-### 发现与激活
+### 节点检查
 
-`discover()` 是 ABI 门禁，而且它读取链上状态，而不是某个固定参数摘要：
-
-1. `getversion` 必须报告期望的网络 magic，`getcontractstate` 必须报告期望的哈希、原生合约 id 的正负号，以及清单名 `SmartAccount`。
-2. `NATIVE_REQUIRED_ABI` 的每个条目都必须恰好存在一次，且参数类型、返回类型与 `safe` 标志与固定值一致；`NATIVE_REQUIRED_EVENTS` 的每个事件都必须存在。
-3. `getProtocolInfo()` 必须回答协议版本 `4`。
-4. `getAccountImplementationId()` 必须回答本客户端评审所依据的实现 id（原生内核为 `NativeSmartAccount/v4`）。
-
-它返回一个冻结的配置 `{contract, networkMagic, protocolVersion, implementationId}`。只有节点激活 `HF_SmartAccountV1` 之后，原生内核才可调用；私有测试不建立公开激活。
-
-```js
-const { NativeSmartAccountClient, nativeCodec: c } = require('smart-account');
-
-const client = new NativeSmartAccountClient({ rpcUrl, networkMagic });
-const profile = await client.discover();
-```
+`discover()` 核对网络、原生合约地址、名称、负数原生 ID、清单的参数指纹、方法签名与事件名。节点还须返回固定编码标记和实现名 `NativeSmartAccount`。任何不匹配均停止操作，重新验证失败会清除原先的连接状态。
 
 ### 类型化字节与身份
 
@@ -77,15 +56,15 @@ await client.broadcastTransaction(signed);
 
 ### 账户状态
 
-`getAccount(accountId)` 对不存在的账户返回 `null`，否则返回控制记录：存在性、状态（`Active` / `Frozen` / `MigrationRequired`）、托管、恢复权限方、授权 epoch、配置 nonce、恢复时间锁、默认操作与消息授权、仅所有者恢复、钩子顺序修订、控制修订、带成熟时间的待生效恢复、市场托管标记与遗留行标记。描述符会拒绝高于配置 nonce 的授权 epoch，也会拒绝把代理、核心或（在零值不被允许时）零值当作托管或恢复身份。
+`getAccount(accountId)` 对未注册账户返回 `null`；已注册账户只可能正常或冻结。核心返回 15 个字段：存在标记、状态、托管和恢复地址、权限代际、配置计数、恢复延迟、两种内置授权开关、仅托管人恢复标记、钩子和控制记录的修订号，以及三个不承载有效恢复或市场状态的保留字段。查询已安装的恢复席位才能得知真实恢复状态。开户时权限代际为 1，配置计数为 0。
 
 ### 执行
 
-`buildExecutionScript({accountId, operations})` 对单个操作发出 `executeUserOp(accountId, op)`，对批次发出 `executeUserOps(accountId, ops)`。操作是十三字段的 v4 数组：版本、目标、方法、参数、nonce、nonce 子键、截止时间、验证器 id、凭据代次、授权 epoch、配置 nonce、签名与钩子证明。
+`buildExecutionScript({accountId, operations})` 对单个操作发出 `executeUserOp(accountId, op)`，对批次发出 `executeUserOps(accountId, ops)`。操作是十三字段的数组：版本、目标、方法、参数、nonce、nonce 子键、截止时间、验证器 id、凭据代次、授权 epoch、配置 nonce、签名与钩子证明。
 
-`deriveNonceRouting(accountId, routing)` 与 `getNonce(accountId, lookup)` 读取操作必须携带的路由；`getNonceSequence` 读取通道游标。`getOperationDigest` 与 `validateUserOp` 在签名之前读取摘要与核心的判定。核心没有消息入口：消息签名由签名模块按账户的默认消息授权校验，主体记录归该合约所有。
+`deriveNonceRouting(accountId, routing)` 在本地计算通道；`getNonce` 读取打包后的 nonce，`getNonceSequence` 读取通道游标。签名前用本地 `operationDigest` 计算摘要，签名字段可以为空。链上 `getOperationDigest` 要求传入非空签名字段，但会清空该字段再计算摘要，不验证签名。签好后用 `validateUserOp` 预检，不消耗 nonce。应用验证消息签名时直接调用核心的 `isValidSignature`，因为摘要绑定调用应用；SigningModule 可读取生效名单，修改名单要经过治理。
 
-`getNonce` 接收 `{validatorId, nonceSubkey}`，并可选地成对接收 `{credentialGeneration, authorityEpoch}`。成对提供时该读取成为交叉校验：核心返回的通道必须与客户端推导的一致，否则在签名之前就失败；两者都不提供时只采信合约返回的通道，因为代次由核心自行解析（见《凭据代次》）。`resolveCredentialGeneration` 给出已安装验证器的该值；内置通道的代次不由 ABI 发布，它会如实报告不可解析，而不是猜一个。
+`getNonce` 接收 `{validatorId, nonceSubkey}`。同时提供 `credentialGeneration` 和 `authorityEpoch` 时，客户端会校验返回的通道与本地推导一致；两者都省略时使用核心结果。`resolveCredentialGeneration` 对已注册账户的托管路径返回 1，对已安装的验证器返回实例凭据代次，对已生效的强制多签策略返回该策略的凭据代次。
 
 ```js
 const plan = client.buildExecutionScript({ accountId: state.accountId, operations: [operation] });
@@ -97,23 +76,11 @@ const plan = client.buildExecutionScript({ accountId: state.accountId, operation
 
 ### 凭据代次
 
-有三种不同的代次会进入 §4.3 的签名域和 §6 的通道，三者绝不可互换：
-
-| 路由 | 核心绑定的代次 | 存放位置 |
-| --- | --- | --- |
-| 内置验证器（`validatorId` 为 0） | 账户的 `SubjectRevision` | 0x57 subject 记录 |
-| 已安装验证器 | 该实例的 `CredentialGeneration` | 0x52 实例记录，由 `getModule` 发布 |
-| 生效中的阈值策略 | 策略的 `CredentialGeneration` | 0x5B 策略记录 |
-
-核心在每个操作和每次 `getNonce` 读取时自行解析代次，因此被链接受的操作用的永远是核心推导出的通道，而不是客户端的猜测。携带账户已离开代次的操作会以 `SA_CREDENTIAL_STALE` 失败；被重塑的阈值策略同样会让其上一代的通道失效。
-
-客户端栈里没有任何默认值。离线构建器没有 RPC，`getAccount` 也不携带该修订号，因此 `UserOperationBuilder` 在缺少显式 `credentialGeneration` 时拒绝构建（`SDK_011`），前端操作工厂则抛出 `EC_credential_generation_required`；两者都不会给内置通道填 1、给其他情况填 2。经过评审的 fixture 可以显式写明代次，那是对该 fixture 的声明，而不是默认值。摘要和通道都绑定了这个值，所以代次过期不会静默滑到下一个通道：它是一次拒绝。
+内建托管路径的操作凭据代次固定为 1。已安装的验证器使用 `getModule` 返回的凭据代次；多签路径使用 `getThresholdPolicy` 返回的已激活策略代次。过期的代次或权限代际会改变 nonce 通道，不能用于当前操作。消息主体修订号由 `getMessageSubjects` 返回，独立于托管操作凭据。
 
 ### 模块
 
-注册时可以原子地附带安装：核心在注册时最多执行 16 个动作，而它现在仍会执行的只有 `installModule` 与 `uninstallModule`。此后的一切都走两个公开方法。
-
-`installModule(accountId, moduleType, moduleContractHash, initData)` 与 `removeModule(accountId, moduleId, deInitData)` 取 v4 的安装码——验证器（1）或钩子（4）——不带配置摘要，因为核心读取模块自己的配置；注册动作会带一个，并由共享核心比对。两个调用都接受托管见证或某个已安装验证器实例的见证（用户态治理模块用它管理自身的那种形态），并且都会推进配置 nonce。
+基础账户收款和转账无需安装模块。启用可选功能时，按[具名模块条款](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md)选择权限和安装参数。注册可附带最多 16 个安装或卸载动作。已有活动账户直接调用安装入口时，核心会读取部署合约的声明：
 
 ```js
 const install = client.buildAccountActionScript({
@@ -123,19 +90,15 @@ const install = client.buildAccountActionScript({
 });
 ```
 
-核心不保留任何配置意图：需要成熟 24 小时然后被确认或取消的变更属于治理模块，由它通过这两个方法提交成熟后的调用。期待存在提案窗口的客户端，面向的是另一个合约。`getAccount` 仍会发布 `configurationNonce` 与 `hookOrderRevision`，让读者可以排序变更，同时它在描述符里保留了恢复字段以维持 ABI 稳定，报告其未激活值。
+安装类型码为验证器 1、钩子 4、恢复席位 5。安装成功返回正整数实例编号。正常卸载启用的具名模块时调用 `removeModule(accountId, moduleId, [])`，按实例编号移除。注册及批量安装动作还会比对预期声明摘要。直接管理模块需要托管见证或获准的已安装验证器；启用强制支出多签后，此路径不再可用。
 
-`getModules(accountId, 'validator'|'hook', {cursor, limit})` 分页读取已安装实例；`getModule(accountId, moduleId)` 读取一个描述符（类型、合约哈希与 id、更新计数、NEF 与配置摘要、模块修订、凭据代次、实例隔离、消息能力、阈值资格）。`isModuleInstalled` 在不分页的情况下回答准入问题，`getAuthorizedModuleId` 报告核心为某个阶段路由到的实例。模块只能读取自己持有的状态——生命周期回调属于核心。
-
-钩子顺序由已安装的钩子实例与描述符发布的 `hookOrderRevision` 推导；调用它们的编排器是一个模块，因此核心无顺序可读，也无顺序可改。凭据代次通过移除并重新安装实例推进，也就是由托管授权的 `removeModule`/`installModule` 组合——核心上没有单独的吊销入口。
+`getModules(accountId, 'recovery', {cursor, limit})` 分页读取恢复席位；另外两类使用 `'validator'`、`'hook'`。`getModule(accountId, moduleId)` 读取单个实例。核心按已安装序列执行钩子；编排模块可以确认现有顺序并请求撤销凭据。撤销会推进凭据代次，保留实例；卸载后重装则分配新的编号。
 
 ### 账户动作
 
-`freezeAccount(accountId)` 与 `unfreezeAccount(accountId)` 是核心拥有的两个即时转换，都由 `buildAccountActionScript` 构建，且都只允许托管。冻结会推进授权 epoch，因此此前产生的每个签名都不再通过校验；账户未冻结时解冻会被拒绝。账户等待迁移期间，两者都会被拒绝。
+启用强制支出多签前，托管人可以冻结活动账户；托管人或获准的已安装验证器可以解冻已冻结账户。两次转换都会推进权限代际和配置 nonce。原恢复策略保留，绑定旧代际的请求失效。
 
-恢复是一个模块。`beginRecovery`、`cancelRecovery`、`executeRecovery` 与 `getRecoveryStatus` 都是恢复模块自己的方法：交接延迟及其成熟都在该模块的存储里，因此核心既不规划也不校验它们，SDK 也不会从核心方案推导恢复权限集合。需要恢复的客户端面向的是恢复模块的脚本哈希。
-
-冻结推进配置 nonce 并清除核心的恢复字段。两个转换都通过授权 epoch 让旧签名失效，SDK 会在签名之前与广播之前重新读取状态、摘要与 nonce。
+使用 `client.buildRecoveryModulePlan({ accountId, action, authority, newCustody })`，通过已安装的恢复席位准备发起、取消或执行请求。非零新托管人必须提供见证。取消和执行会绑定用户核对过的请求编号和配置 nonce。只有预设恢复席位可以在延时届满后完成核心重置。参见[恢复模块条款](proposals/nep-smartaccount-module-profiles.mediawiki#RecoveryModule)与[模块自身的 ABI](proposals/smartaccount-module-abis.md#recoverymodule)。
 
 ### 费用与最终预检
 
@@ -157,22 +120,22 @@ const install = client.buildAccountActionScript({
 
 ### 证据与边界
 
-原生测试覆盖 v4 字节向量、epoch 与计数器最大值、确切封装、严格类型、恶意 RPC 响应、nonce 路由与批次、费用上限、真实 P-256 交易签名与预检拒绝。`npm run test:package` 会在仓库之外安装真实的 tarball，并检查 CJS / ESM / 类型。
+原生测试覆盖 编码向量、epoch 与计数器最大值、确切封装、严格类型、恶意 RPC 响应、nonce 路由与批次、费用上限、真实 P-256 交易签名与预检拒绝。`npm run test:package` 会在仓库之外安装真实的 tarball，并检查 CJS / ESM / 类型。
 
-可复现的 v4 runbook 是 `sdk/js/tests/testnet-v4-harness.js` 以及同目录下的操作脚本。它会加载 `contracts/bin/public`（含 `validators/` 与 `hooks/`），部署核心与其安装的模块，并通过 SDK 驱动 13 字段操作、`proposeConfiguration` / `confirmConfiguration` 意图计划、阈值策略与恢复。这些脚本是 runbook 而非门禁：`npm test` 不运行它们，迁移阶段也不运行它们。`native-runtime-verifiers.py` 与 `native-runtime-driver.mjs` 是已退役的 v3 证据，运行时会以非零退出而 不会半途驱动一条链。PASS 只适用于该回执中固定的源码、运行时与工件。真实已激活节点的公网执行是独立门禁；在声称其通过之前，请检查当前运行时回执。
+本地原生 VM 测试运行编译后的核心与标准模块，参见[构建说明](../contracts/native/README.md)。公共网络激活需要独立证据。
 
 协议要求与剩余的激活门禁，映射在[issue 242 一致性评审](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md) 中。
 
 ## 阈值会话
 
-v4 没有 MultiSig 根，也没有验证器子项。阈值是安装在账户上的验证器模块之上的一层策略：成员就是同一个账户的模块 id，每个成员各自持有自己的凭证代数，而操作只携带一个装配好的签名字段。`shared/multiSigCore.mjs` 是唯一实现；JS SDK（`createThresholdClient`）与前端（`createThresholdSession`）只是把它绑定到某个客户端与某个 RPC。
+核心没有 MultiSig 根，也没有验证器子项。阈值是安装在账户上的验证器模块之上的一层策略：成员就是同一个账户的模块 id，每个成员各自持有自己的凭证代数，而操作只携带一个装配好的签名字段。`shared/multiSigCore.mjs` 是唯一实现；JS SDK（`createThresholdClient`）与前端（`createThresholdSession`）只是把它绑定到某个客户端与某个 RPC。
 
 1. 成员来自核心。`prepareMembers` 读取每个成员的模块描述符——是否已安装、`thresholdMemberEligible`，以及当前的 `credentialGeneration`——并返回每个成员必须签名的 §5 成员摘要。调用方自报的代数从不被信任：过期的代数会产出一个被核心以 `SA_CREDENTIAL_STALE` 拒绝的摘要。
 2. 装配是显式的。`assembleSignature({ members })` 序列化 `[moduleId, 64 字节签名]` 对，`assembleOperationSignature({ operationDigest, members })` 返回 `{ signatureHex, members }`，其中 `signatureHex` 就是 13 字段操作的字段 11。
-3. 策略本身就是配置。成员与阈值由配置意图中的 `setThresholdPolicy` 动作设定——`[7, policyId, threshold, memberIds[], active]`——因此生效前有 24 小时成熟期。`policyId = 0` 从与模块实例相同的单调分配器取一个新 id，所以策略 id 永远不会与模块 id 冲突。停用策略不携带成员，并释放这些成员以便卸载。
+3. 先安装标准恢复模块并配置恢复授权方。在治理提案最后加入 `[7, 0, 阈值, 成员编号, true]`，24 小时后确认。生效后，账户支出均须达到门限。要更换成员或恢复基础转账，须走预设延时恢复流程。
 
 ```js
-const { createThresholdClient } = require('smart-account');
+const { createThresholdClient } = require('@r3e-network/neo-smart-account');
 
 const threshold = createThresholdClient({ client });
 const prepared = await threshold.prepareMembers({
@@ -182,7 +145,7 @@ const prepared = await threshold.prepareMembers({
 });
 // 每个成员用自己的验证器密钥签名 prepared[i].digest。
 const signatureHex = threshold.assembleSignature({
-  members: [{ moduleId: 1, signature }, { moduleId: 2, signature }],
+  members: [{ moduleId: 1, signature: firstSignature }, { moduleId: 2, signature: secondSignature }, { moduleId: 3, signature: '' }],
 });
 ```
 
@@ -203,42 +166,17 @@ const prepared = await session.prepareMembers({
 // 每一次读取都走会话被指定的那个核心哈希。
 ```
 
-阈值计的是验证器实例，而不是独立的密钥或人。不同模块可以共享凭据或控制方，因此一次成功的法定人数并不建立签名方独立性。
+核心要求每个成员使用不同的公钥。同一人仍可能控制多把密钥。
 
-### 配置成员
+### 查询支出策略
 
-成员配置就是普通的模块配置：对验证器实例调用 `configure` 需要在配置意图中携带 `configureModule` 动作，因此它与其它任何意图一样走 24 小时成熟期，且模块无法配置自身。轮换凭证则是即时的：`revokeCredentials(accountId, moduleId)` 是托管方授权的核心动作，会当场提升该实例的代数，这也是为什么绑定旧代数的签名在它执行的那一刻起就不再有效。
-
-核心没有暴露读取策略的方法。策略通过 `ThresholdPolicySet` 通知（`accountId`、`policyId`、`threshold`、`memberIds`）可观测，每个成员实例则通过 `getModule` 可观测——描述符携带 `credentialGeneration` 与 `thresholdMemberEligible`，正是成员摘要绑定的那两个值。要读取尚未生效的意图及其成熟时间与动作摘要，请用 `getPendingConfiguration`，并在确认前把该摘要与你实际提案的意图比对；仅有一条待生效记录并不能证明它携带你期望的变更。
+调用 `client.getThresholdPolicy(accountId)` 即可读取当前策略编号、门限、成员和凭据代次。基础账户返回 `null`。对于尚待确认的提案，可向治理模块查询 `getPendingConfiguration`，确认前核对动作摘要。
 
 ### 证据与边界
 
 `MultiSigSdkVectorTests.cs` 运行真实的 JS 序列化器，把其字节与 VM 的 `StdLib.Serialize` 比对，拒绝错位与重复的成员条目，并针对一次真实的核心操作演练阈值路由。序列化器上限为 10 个成员与 65,535 字节总量；空十六进制是 ByteString，与 null 不同。
 
 SDK 单元测试覆盖成员摘要、代数绑定、畸形签名与装配顺序。前端测试校验 RPC Array 与 base64 ByteArray 的传输编码。本工作不引入任何新的通用“多签已完成”徽标。
-
-### 配置 V3 MultiSig 子验证器
-
-MultiSig 根转发到验证器子项属于 v3 已部署合约配置；上文的 v4 阈值没有 MultiSig 根，也没有验证器子项。在该旧配置中，每个普通验证器都要求已固定的 SA 核心以精确的按账户配置上下文来调用它。一个转发到子验证器的 MultiSig 根无法满足该检查。核心源码提供了有界的子初始化路径。`callVerifierChild(accountId, childVerifier, method, args)` 与本节下文描述的 `getChildVerifierConfig(accountId)` 读取都不存在于已固定的部署工件中（`contracts/build` 下的核心清单两者都不导出），因此在集成方能够调用本节描述的路径之前，必须先重新构建部署（DS-CU-202 发现 F1）。
-
-- 调用方必须满足账户的备份所有者见证。账户不能处于市场托管或活跃执行中。
-- 当前根必须暴露一个安全的 `getChildVerifierConfig(accountId)` 读取，返回根的有序子列表与阈值；该读取不存在于已固定的部署工件中，属于源码要求，而不是 `contracts/build` 中部署的既有属性。MultiSig 从其既有的 `getConfig` 状态实现它；`getConfig` 本身不变。
-- 目标必须是当前的直接子验证器，具备完整的 V3 生命周期 ABI，且 `authorizedCore()` 等于本核心。根也必须绑定到本核心。
-- 只接受 `setPublicKey(Hash160, ByteArray)` 与 `setConfig(Hash160, Array, Integer)`，且 `args[0]` 必须等于 `accountId`。
-- 首次调用会暂存既有的待生效验证器调用记录并返回 `false`。24 小时之后，完全相同的第二次调用才会调用子验证器。该记录绑定根、子验证器、方法、参数、有序拓扑与阈值；确认时会再次检查当前拓扑。当前输入发生变化会暂存一个新的 24 小时提案。同一个待生效槽位与 `callVerifier` 共享。
-- 核心只为该子验证器授予配置上下文，直接调用它，并在返回时清除上下文。对子验证器的直接调用仍然不被授权。
-
-例如：以空的验证器参数注册一个 MultiSig 根，通过既有的 `callVerifier` 时间锁配置其根的 `setConfig`，然后通过各自独立的 `callVerifierChild` 提案分别初始化某个 Web3Auth 子验证器的 `setPublicKey` 与某个 NeoNative 子验证器的 `setConfig`——该路径不存在于已固定的部署工件中，因此这一序列需要重新构建的部署。每个提案都使用包含账户 ID 的完整参数列表。既有的待生效读取函数会报告根模块、承诺哈希与可用时间。
-
-该路径只初始化直接子验证器，不改变清理、权限 epoch 或常规根配置。安全读取函数是一项显式能力，不是对任意第三方根代码的独立信任证明。
-
-#### 子验证器执行隔离
-
-MultiSig 只把真正的 Boolean `true` 计为子验证器的批准。Integer `1`，或来自清单具有误导性的合约的其他真值 VM 值，都不计入阈值。
-
-`CallFlags.ReadOnly` 限制存储与调用，但不会让 VM 集合变为不可变。因此 MultiSig 会把原始参数序列化一次，并为每次子校验与执行后调用反序列化一份独立副本。执行后结果也按同样的快照加复制方式处理。子验证器无法通过共享的 Array、Struct、Map 或 Buffer 对象改变另一个子验证器签名的参数或记账输入。
-
-参数与目标结果必须能被 Neo StdLib 序列化。Interop 与迭代器结果不受支持，会失败关闭；合约绝不会悄悄把不受支持的共享对象传给下一个子验证器。快照会带来序列化与逐子反序列化的开销；配置的子验证器上限为十个。阈值仍然是对已配置模块的阈值，而不是对彼此独立的人类所有者或独立密码学签名域的保证。
 
 ## EIP-712 签名
 

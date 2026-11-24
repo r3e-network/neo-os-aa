@@ -391,31 +391,11 @@ reader never mistakes an ABI-stability slot for a pending handover.
 
 #### Modules
 
-Modules are installed either atomically at registration or afterwards through
-`installModule(accountId, moduleType, moduleContractHash, initData)` and
-`removeModule(accountId, moduleId, deInitData)`. Both accept the custody witness or the witness of an
-already installed validator instance, and both advance the configuration nonce. The core keeps no
-proposal window: a change that matures for 24 hours is a governance module's contract, which submits
-the matured call through those two methods.
+An account can install modules at registration or afterwards. Choose validator (1), hook (4) or recovery (5). A basic account needs none. Every current module has a [named profile](proposals/nep-smartaccount-module-profiles.mediawiki) that describes its permissions and accepted installation data.
 
-```javascript
-// moduleTypeCode is the v4 install code: validator (1) or hook (4). The core reads the
-// module's own profile, so the public entry carries no digest.
-const install = client.buildAccountActionScript({
-  method: 'installModule',
-  accountId: identity.accountId,
-  args: [moduleTypeCode, moduleContractHash, initData],
-});
-```
+Use `installModule(accountId, moduleType, moduleContractHash, initData)`. Record the returned instance ID. To remove a named module, call `removeModule(accountId, moduleId, [])`. Before mandatory threshold enrollment, direct administration accepts custody or an authorized installed validator. A governance proposal follows its own 24-hour delay.
 
-`getModules(accountId, 'validator' | 'hook', { cursor, limit })` pages the installed instances and
-`getModule(accountId, moduleId)` reads one. `isModuleInstalled` answers the admission question
-without paging, and `getAuthorizedModuleId` reports the instance the core routed a phase to. Hook
-ordering is derived from the installed hook instances and the `hookOrderRevision` the descriptor
-publishes, because the orchestrator that calls them is a module. Every module also exposes its own
-safe reads (`getModuleProfile`, `getConfig`, `getSessionKey`, `getThreshold`, `getPublicKey`,
-`getDailyLimit`, and so on); those are the only module methods a caller invokes directly, because
-the core owns the lifecycle callbacks.
+Page installed instances with `getModules(accountId, 'recovery', {cursor, limit})`, substituting `'hook'` or `'validator'` for other roles. Use `getModule(accountId, moduleId)` to inspect an instance before changing it. The core calls lifecycle methods; wallet-facing reads and management actions are listed in the named profile.
 
 #### Execution
 

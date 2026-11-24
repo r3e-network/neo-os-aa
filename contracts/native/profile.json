@@ -5,8 +5,8 @@
   "status": "draft-unactivated",
   "implementationVerified": false,
   "protocolVersion": 4,
-  "protocolParameters": "docs/proposals/smartaccount-native-profile-v4-parameters.json",
-  "description": "The native SmartAccount native-v4 profile (ABI 4), its modules, SDK and UI prepared for standard submission.",
+  "protocolParameters": "docs/proposals/smartaccount-native-profile-parameters.json",
+  "description": "The unpublished SmartAccount protocol: its native contract, standard modules, SDK and wallet.",
   "canonicalSourceRoots": [
     "contracts/native",
     "contracts/plugins/native-profile",
@@ -53,7 +53,7 @@
   },
   "externalBoundaries": [
     "neo-project/neo: the native VM enforcement and the generated SmartAccount copies carried by the core checkout are maintained outside this repository; contracts/native/SmartAccount/ here is the only editable true source, and the SHA-pinned core is kept in sync by scripts/sync_native_smartaccount.py --check in the native CI lane",
-    "neo-project/proposals#243: ABI 2 proposal and review acceptance are external protocol gates",
+    "Acceptance of the current SmartAccount specification by Neo is external to this repository.",
     "Hardfork activation, node integration, formal refinement and public-network readback remain required before native status can change"
   ],
   "openGates": [
@@ -61,12 +61,30 @@
     "EXTERNAL-PROTOCOL-ACCEPTANCE",
     "FORMAL-NEOVM-COMPILER-REFINEMENT",
     "FORMAL-NATIVE-FEE-RESOURCE-REFINEMENT",
-    "PUBLIC-HARDFORK-ACTIVATION"
+    "PUBLIC-HARDFORK-ACTIVATION",
+    "GOVERNANCE-CALLBACK-RESOURCE-CORRESPONDENCE",
+    "POLICY-STATE-OWNERSHIP-CORRESPONDENCE",
+    "GOVERNANCE-MODULE-CODE-REBINDING"
   ],
   "localAuthorityAdmission": {
     "status": "implemented-in-local-candidate",
     "scope": "The core checks custody at registration and a changed recovery authority at policy update. The standard recovery seat checks a new custody witness at proposal; completing the mature record is permissionless. An installed third-party recovery seat is trusted to enforce its own admission and delay.",
     "parameterSource": "docs/SA-MODULE-PROTOCOL.md#3-set-limits-and-ordering-semantics",
-    "evidenceBoundary": "Current-digest runtime builds, module packaging and deployed-byte readback must be verified independently. Earlier digests and receipts remain historical; local remediation does not establish public activation or complete formal refinement."
+    "evidenceBoundary": "Current-digest runtime builds, module packaging and deployed-byte readback must be verified independently. Local tests do not establish public activation or complete formal refinement."
+  },
+  "localGovernedPolicies": {
+    "status": "implemented-in-local-candidate",
+    "actions": [
+      7,
+      9
+    ],
+    "profileParameters": "docs/proposals/smartaccount-native-profile-parameters.json",
+    "scope": "The pinned governance module confirms reviewed policies after maturity and holds both message and spending rosters in its storage. The core authenticates each roster by provider and digest and enforces the exclusive spending route. Full VM, policy-state and callback correspondence remains open."
+  },
+  "releasePolicy": {
+    "status": "unpublished",
+    "acceptedProfiles": 1,
+    "historicalCompatibility": false,
+    "accountMigration": false
   }
 }

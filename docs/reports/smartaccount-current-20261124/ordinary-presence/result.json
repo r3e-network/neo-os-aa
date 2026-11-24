@@ -1,0 +1,79 @@
+{
+  "status": "PASS_SCOPED",
+  "implementationVerified": false,
+  "methods": {
+    "isExecutionActive": {
+      "offset": 7396,
+      "end": 7421,
+      "prefix": [
+        11
+      ],
+      "field": "Prefix_ExecutionLock",
+      "byteCount": 26,
+      "instructionCount": 13,
+      "bodySha256": "3d261446078f133ffe9740c70612b6a4feb443bee6e9b4c25cab9f8f4d33698d"
+    },
+    "hasPendingVerifierUpdate": {
+      "offset": 18645,
+      "end": 18670,
+      "prefix": [
+        9
+      ],
+      "field": "Prefix_PendingVerifierUpdate",
+      "byteCount": 26,
+      "instructionCount": 13,
+      "bodySha256": "01af1a7d3085687205f13928a5cd0f0adaebd9072ba55d0010bab74c98e8d668"
+    },
+    "hasPendingHookUpdate": {
+      "offset": 18671,
+      "end": 18695,
+      "prefix": [
+        10
+      ],
+      "field": "Prefix_PendingHookUpdate",
+      "byteCount": 25,
+      "instructionCount": 13,
+      "bodySha256": "1c2b9fc75ed67b94109d2fef408b593456dd19de629a078b6f960d24ccfdbcf4"
+    }
+  },
+  "nefSha256": "083ed325f9bdaa6b223662042f32d29f398ba055f507bbdde46daf8113c47f2a",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "inventorySha256": "1504bf3c5c3a72821b40394aa00c4a929081b403a3954ece710c92eea453ae17",
+  "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+  "modelSha256": {
+    "IntegerSemantics": "b2d8cfb443115bdda59c52abc04022ebd4b0bbea0a13f122f12ec7a0b891425c",
+    "StorageGetter": "0268806a7c4ee3642c8bf3b6128a7eb18c45ae0c83b44b223f086194884fafe5",
+    "StorageGetterVm": "266f419ca987df32af21f6d6d267161d8634827d30702159ed8651c9de071634",
+    "StorageView": "3bd813b5cf22652fc9e5232bb5e5ef5168aaffd12a304bc1c88ba048b7224909",
+    "CapArithmetic": "69e562009ac8c65935025cefafac429305a5031b483375d74229f1d047a3b406",
+    "CapMethodVm": "cffee42ebb1dbacdf49a97c9213472026e3481fc122472f94911abda7e62dfb9",
+    "CapContext": "3fab1800231f6698890ac60ce74bd2514faca174ec4ed64e2be00cb403337995"
+  },
+  "sourceSha256": {
+    "UnifiedSmartWallet.Internal.cs": "fcb47f985ec49c9b9557644fd20b76edb86652236c86c0711ef791e8f903c60b",
+    "UnifiedSmartWallet.State.cs": "83d70a55943b3904587258e9fbed02953391c06e81b3477dbd5953d5928cd437"
+  },
+  "certificateSha256": "1974e29bdd77c410d61e2e3f2378e6c92bd8f26cd23ebe07b4e2169e2575f815",
+  "coqchkPassed": true,
+  "wrongSlotRejected": [
+    "isExecutionActive",
+    "hasPendingVerifierUpdate",
+    "hasPendingHookUpdate"
+  ],
+  "coreStorageView": {
+    "commit": "d10e9ceecdabe3fcff719ee68ea5b76ba7e62c3d",
+    "sourceSha256": {
+      "src/Neo/SmartContract/ApplicationEngine.Storage.cs": "adeb3ce69a7d04a3015de35884c0f0c6203ef2dfbfbe8056395f074d69e04083",
+      "src/Neo/Persistence/DataCache.cs": "f574274c502270af0a312f6c4ea583ed6fc13da08a8e727762756bf189be1dfa",
+      "src/Neo/SmartContract/ApplicationEngine.cs": "97b08bfe754bc51ed8418316b45d3805dccff76ef51fbd43ac9b663eacb4d5eb",
+      "src/Neo/SmartContract/CallFlags.cs": "4f3fc9ded9c32eca754e735337251d0cc5ce3b7ad13aa64551d427b1688d13d1"
+    },
+    "fixedPrice": {
+      "GetContext": 16,
+      "Get": 32768
+    }
+  },
+  "initializerCertificateSha256": "ce2be7f7097245d8b9e96dc6c18f95a23ebe4d5d40c8775cd91fd11e9755604e",
+  "joinedCertificateSha256": "2817516889e12442137b4c6ff6bf73ad013b4cdfc639572aa7f9e059b54b77ec",
+  "boundary": "Storage.Get uses the resolved deployment ID and logical DataCache view. Assumes valid key equality, backend reads, noninterfering callbacks, typed ABI argument and successful frame handoff. Source shape checks do not prove CLR execution; no universal fee or rollback proof."
+}

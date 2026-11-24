@@ -31,7 +31,7 @@ namespace SmartAccount.Validators
     [DisplayName("SessionKeyValidator")]
 #if SMARTACCOUNT_NATIVE
     [ContractPermission("0x398dc3f0227d7efac5533ed5ce9937390c158084", "getAuthorizedModuleId", "getModule", "getAccountAddress")]
-    [ManifestExtra("SmartAccountProfile", "native-v4")]
+    [ManifestExtra("SmartAccountProfile", "native-smartaccount")]
 #else
     [ContractPermission("*", "getAuthorizedModuleId")]
     [ContractPermission("*", "getModule")]
@@ -122,10 +122,10 @@ namespace SmartAccount.Validators
         /// <summary>
         /// <c>initData</c>: empty, or one <c>setSessionKey</c> command (see <see cref="Configure"/>).
         /// </summary>
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
-            if (initData.Length > 0) ApplyConfig(accountId, moduleId, generation, initData);
+            if (initData.Length > 0) ApplyConfig(accountId, moduleId, initData);
         }
 
         /// <summary>
@@ -133,13 +133,13 @@ namespace SmartAccount.Validators
         /// <c>["setSessionKey", pubKey, targetContract, method, validUntil, spendingLimit, description]</c>
         /// or <c>["clearSessionKey"]</c>.
         /// </summary>
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
-            ApplyConfig(accountId, moduleId, generation, configData);
+            ApplyConfig(accountId, moduleId, configData);
         }
 
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             Storage.Delete(Storage.CurrentContext, ValidatorAuthority.InstanceKey(Prefix_Grant, accountId, moduleId));
@@ -150,12 +150,15 @@ namespace SmartAccount.Validators
             OnSessionKeyRevoked(accountId, moduleId);
         }
 
-        private static void ApplyConfig(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] data)
+        private static void ApplyConfig(UInt160 accountId, BigInteger moduleId, object[] data)
         {
             string command = ModuleConfig.Name(data);
             if (command == "setSessionKey")
             {
                 ModuleConfig.RequireArgs(data, 6);
+                ExecutionEngine.Assert(data[4] is BigInteger && data[5] is BigInteger,
+                    "Session expiry and spending limit must be integers");
+                BigInteger generation = ValidatorAuthority.CredentialGeneration(accountId, moduleId);
                 SetSessionKey(accountId, moduleId, generation, (ByteString)data[1], (UInt160)data[2], (string)data[3],
                     (BigInteger)data[4], (BigInteger)data[5], (string)data[6]);
                 return;

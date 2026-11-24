@@ -1,0 +1,26 @@
+--- a/src/Neo/Ledger/Blockchain.cs
++++ b/src/Neo/Ledger/Blockchain.cs
+@@ -452,6 +452,7 @@
+                     allApplicationExecuted.Add(applicationExecuted);
+                 }
+ 
++                NativeContract.Ledger.RecordExecutionStates(snapshot, transactionStates);
+                 using (var engine = ApplicationEngine.Create(TriggerType.PostPersist, null, snapshot, block, _system.Settings, 0))
+                 {
+                     engine.LoadScript(s_postPersistScript);
+--- a/src/Neo/SmartContract/Native/LedgerContract.cs
++++ b/src/Neo/SmartContract/Native/LedgerContract.cs
+@@ -84,6 +84,13 @@
+             return ContractTask.CompletedTask;
+         }
+ 
++        internal void RecordExecutionStates(DataCache snapshot, TransactionState[] transactions)
++        {
++            foreach (var tx in transactions)
++                snapshot.GetAndChange(CreateStorageKey(Prefix_Transaction, tx.Transaction!.Hash))!
++                    .GetInteroperable<TransactionState>().State = tx.State;
++        }
++
+         internal bool Initialized(DataCache snapshot)
+         {
+             ArgumentNullException.ThrowIfNull(snapshot);

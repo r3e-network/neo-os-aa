@@ -1,0 +1,13 @@
+{
+  "checkedMethods": 98,
+  "slotsPerMethod": 53,
+  "stepsPerMethod": 170,
+  "vmAssembly": "Neo.VM, Version=3.10.1.0, Culture=neutral, PublicKeyToken=null",
+  "vmAssemblySha256": "cea00a147add3c672bb23ffb5d98a4b1f31da135272efc258fee8fb7805bbfe9",
+  "scriptSha256": "9e8e079b2c13cc8288b5af4b303575a410ca7b41a1b5edd6d21d776fe549b8a4",
+  "manifestSha256": "e79fa04969ef3f0bdd6b9df6afe41acdd19767968575ea38c1cd011ee97e5156",
+  "rejectedControls": {
+    "ByteArray": "RegistrationAccountIdDomain",
+    "Array": "AllowedVerifierMethods"
+  }
+}

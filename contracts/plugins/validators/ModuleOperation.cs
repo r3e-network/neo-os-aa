@@ -181,9 +181,9 @@ namespace SmartAccount
     }
 
     /// <summary>
-    /// <c>initData</c>, <c>configData</c> and <c>deInitData</c> are command
-    /// arrays: <c>[command, ...args]</c>. <c>onInstall</c> accepts an empty
-    /// array (install unconfigured) or one command.
+    /// Reads a named configuration command: <c>[command, ...args]</c>.
+    /// Configurable modules may also accept one command as install data.
+    /// Ordinary removal of an enabled named module uses an empty array.
     /// </summary>
     internal static class ModuleConfig
     {

@@ -81,7 +81,7 @@ class VerificationGateTests(unittest.TestCase):
     def test_native_composite_profile_drift_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            relative = Path('docs/proposals/smartaccount-native-profile-v2-parameters.json')
+            relative = Path('docs/archive/native-research/smartaccount-native-profile-v2-parameters.json')
             destination = root / relative
             destination.parent.mkdir(parents=True)
             profile = json.loads((verify.ROOT.parent / relative).read_text())

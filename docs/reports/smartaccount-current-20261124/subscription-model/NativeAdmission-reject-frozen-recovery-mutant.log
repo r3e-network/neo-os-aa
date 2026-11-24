@@ -1,0 +1,10 @@
+File "./NativeAdmission.v", line 1, characters 5-8:
+Warning: "From Coq" has been replaced by "From Stdlib".
+[deprecated-from-Coq,deprecated-since-9.0,deprecated,default]
+File "./NativeAdmission.v", line 93, characters 7-18:
+Error:
+In environment
+seat, configured, mature, current_epoch : bool
+Unable to unify "recover Active seat configured mature current_epoch" with
+ "recover Frozen seat configured mature current_epoch".
+
