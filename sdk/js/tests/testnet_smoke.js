@@ -156,7 +156,7 @@ async function main() {
   const replayRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: custodyId, operations: [signedBuiltInOp] }),
+    h.executionPlan(sdk, { accountId: custodyId, operation: signedBuiltInOp }),
     /SA_NONCE_INVALID|nonce/i,
     "replay of the consumed operation",
   );
@@ -217,7 +217,7 @@ async function main() {
   const hookRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: hookId, operations: [signedDeniedOp] }),
+    h.executionPlan(sdk, { accountId: hookId, operation: signedDeniedOp }),
     /not in whitelist|SA_HOOK_REJECTED/i,
     "operation against a non-allowlisted target",
   );
@@ -286,7 +286,7 @@ async function main() {
   const legacyRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: web3AuthId, operations: [signedLegacyOp] }),
+    h.executionPlan(sdk, { accountId: web3AuthId, operation: signedLegacyOp }),
     /SA_MODULE_NOT_ROUTABLE/,
     "custody-signed operation on an account whose built-in route is off",
   );
@@ -343,7 +343,7 @@ async function main() {
   const rogueRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: web3AuthId, operations: [signedRogueOp] }),
+    h.executionPlan(sdk, { accountId: web3AuthId, operation: signedRogueOp }),
     /SA_VALIDATION_REJECTED|validator rejected/i,
     "operation signed by a key the validator does not hold",
   );

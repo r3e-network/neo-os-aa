@@ -17,7 +17,7 @@ namespace SmartAccount.Contracts.Tests;
 /// quietly staying "covered".
 ///
 /// The suites that cover the remaining codes are the execution-path ones
-/// (hooks, proofs, nonce channels, gas budget); this file takes the codes that
+/// (hooks, proofs, nonce channels); this file takes the codes that
 /// are reachable through the configuration and query surface.
 /// </summary>
 [TestClass]

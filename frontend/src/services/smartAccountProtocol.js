@@ -1,23 +1,28 @@
 /**
- * Neo Smart Account v4 protocol vocabulary for the frontend.
+ * Neo Smart Account v4.1 protocol vocabulary for the frontend.
  *
  * The contracts decide the grammar (contracts/native/SmartAccount/*.cs); this
  * module is the one place the frontend spells it, so a screen never hand-rolls
  * an action array or invents an RPC method name. Every builder below mirrors a
  * documented in-VM layout:
  *
- * - account identity:  computeAccountIdentity(custody, salt)
- * - registration:      createAccount(accountId, custody, salt, recoveryTimelockMs, actions[])
- * - configuration:     proposeConfiguration(accountId, actions[], readSet[]) -> intentId,
- *                      confirmConfiguration(accountId, intentId, actions[]),
- *                      cancelConfiguration(accountId, intentId)
+ * - registration:      createAccount(accountId, custody, salt, actions[])
+ * - batch:             createAccounts(accountIds[], custody, salts[])
+ * - configuration:     applyConfigurationActions(accountId, actions[])
  * - module actions:    every action is a positional array whose first element
  *                      is an ACTION_* code (spec §9 / SmartAccountModuleProtocol.cs).
  *
- * Read descriptors decode the documented array layouts (getAccount,
- * getModules, getModule, getHookOrder, getPendingConfiguration,
- * getRecoveryStatus). Anything else is refused rather than guessed: a screen
- * that cannot prove a layout must not render it as fact.
+ * v4.1 keeps exactly five configuration action codes: install (1), remove (2),
+ * configure (3), setBuiltinAuthorization (5) and setRequiredValidator (7). Codes
+ * 4, 6, 8, 9 and 10 are retired: hook order is the HookOrchestratorModule's
+ * state, the recovery policy is the RecoveryModule's, message subjects are the
+ * SigningModule's and migration is not a core action. A retired code is refused
+ * here instead of being encoded and rejected on chain.
+ *
+ * Read descriptors decode the documented v4.1 array layouts (getAccount is nine
+ * fields, getModules is a three-field page and getModule is fifteen fields).
+ * Anything else is refused rather than guessed: a screen that cannot prove a
+ * layout must not render it as fact.
  */
 
 import { EC } from '../config/errorCodes.js';
@@ -28,34 +33,25 @@ import {
   hash160Param,
 } from '../utils/stack.js';
 
-/**
- * Module type codes and their on-chain names (SmartAccount.ModuleProtocol.cs:
- * ModuleTypeCodeValidator = 1, ModuleTypeCodeHook = 4; only these two are
- * accepted by the core, so only they are ever encoded into an action).
- * The name map also names a 2-labelled descriptor as a hook: 2 is a legacy
- * alias, not a valid v4 installation code. The label predates the ERC-7579
- * numbering this frontend once wrote, and a live descriptor must never render
- * as 'unknown' just because it was read back from old state. Never encode 2
- * into an action or an installation request.
- */
-export const MODULE_TYPE = Object.freeze({ validator: 1, hook: 4 });
-/** @deprecated 2 is a legacy display-only alias; install with MODULE_TYPE. */
-export const MODULE_TYPE_LEGACY_HOOK = 2;
-export const MODULE_TYPE_NAME = Object.freeze({ 1: 'validator', 2: 'hook', 4: 'hook', 5: 'recovery' });
+/** Module type codes the core accepts at installation (SmartAccountModuleProtocol.cs). */
+export const MODULE_TYPE = Object.freeze({ validator: 1, hook: 4, recovery: 5 });
+export const MODULE_TYPE_NAME = Object.freeze({
+  1: 'validator',
+  4: 'hook',
+  5: 'recovery',
+});
 
 /** Configuration action codes (SmartAccount.Models.cs, spec §9). */
 export const ACTION = Object.freeze({
   installModule: 1,
   uninstallModule: 2,
   configureModule: 3,
-  setHookOrder: 4,
-  setDefaultPolicy: 5,
-  rebindModuleCode: 6,
-  setThresholdPolicy: 7,
-  setRecoveryPolicy: 8,
-  setMessageSubjects: 9,
-  migrateAccount: 10,
+  setBuiltinAuthorization: 5,
+  setRequiredValidator: 7,
 });
+
+/** Codes 4, 6, 8, 9 and 10 no longer dispatch; keep them named for refusals. */
+export const RETIRED_ACTION_CODES = Object.freeze([4, 6, 8, 9, 10]);
 
 /** Account status codes returned by getAccount[1]. */
 export const ACCOUNT_STATUS = Object.freeze({
@@ -96,16 +92,12 @@ function hashArray(values = []) {
   return { type: 'Array', value: values.map(hashValue) };
 }
 
-function integerArray(values = []) {
-  return { type: 'Array', value: values.map((value) => integerValue(value, 'module id')) };
-}
-
 function moduleTypeCode(moduleType) {
   const code = typeof moduleType === 'number'
     ? moduleType
     : MODULE_TYPE[String(moduleType || '').toLowerCase()];
-  if (code !== MODULE_TYPE.validator && code !== MODULE_TYPE.hook) {
-    fail('Unknown module type: expected validator or hook');
+  if (!Object.values(MODULE_TYPE).includes(code)) {
+    fail('Unknown module type: expected validator (1), hook (4) or recovery (5)');
   }
   return code;
 }
@@ -158,80 +150,35 @@ export function configureModuleAction(moduleId, configData = []) {
   };
 }
 
-/** [4, hookIds[]] — the order hooks run in, core-owned. */
-export function setHookOrderAction(hookIds = []) {
-  return {
-    type: 'Array',
-    value: [integerValue(ACTION.setHookOrder), integerArray(hookIds)],
-  };
-}
-
 /** [5, defaultOperationAuthorization, defaultMessageAuthorization] */
-export function setDefaultPolicyAction({
+export function setBuiltinAuthorizationAction({
   operationAuthorization = true,
   messageAuthorization = true,
 } = {}) {
   return {
     type: 'Array',
     value: [
-      integerValue(ACTION.setDefaultPolicy),
+      integerValue(ACTION.setBuiltinAuthorization),
       boolValue(operationAuthorization),
       boolValue(messageAuthorization),
     ],
   };
 }
 
-/** [6, moduleId, profileDigest32] — rebind an installed instance to new code. */
-export function rebindModuleCodeAction(moduleId, profileDigest) {
+/**
+ * [7, validatorId, required] — the one module instance the core refuses to
+ * operate without. Governance-only on chain, so the delay belongs to the
+ * governance module, never to this builder.
+ */
+export function setRequiredValidatorAction({ validatorId = 0, required = true } = {}) {
+  const id = Number(validatorId);
+  if (!Number.isSafeInteger(id) || id < 0) fail('Invalid required validator id');
+  if (typeof required !== 'boolean') fail('`required` must be a boolean');
+  if (required && id === 0) fail('A required validator needs a nonzero module id');
+  if (!required && id !== 0) fail('Clearing the required validator takes validator id 0');
   return {
     type: 'Array',
-    value: [
-      integerValue(ACTION.rebindModuleCode),
-      integerValue(moduleId, 'module id'),
-      digest32(profileDigest),
-    ],
-  };
-}
-
-// Both wallet entry points encode the same governed enrollment action.
-export { setThresholdPolicyAction } from '../features/native/nativeWorkspace.js';
-
-/** [8, recoveryAuthority, timelockMs, ownerOnly] — ownerOnly is monotonic. */
-export function setRecoveryPolicyAction({
-  recoveryAuthority = '0x0000000000000000000000000000000000000000',
-  timelockMs,
-  ownerOnly = false,
-}) {
-  return {
-    type: 'Array',
-    value: [
-      integerValue(ACTION.setRecoveryPolicy),
-      hashValue(recoveryAuthority),
-      integerValue(timelockMs, 'recovery timelock'),
-      boolValue(ownerOnly),
-    ],
-  };
-}
-
-/** [9, subjects[], threshold] — subjects are 20-byte script hashes or 32-byte digests. */
-export function setMessageSubjectsAction(subjects = [], threshold = 1) {
-  const encoded = subjects.map((subject) => {
-    const hex = sanitizeHex(subject || '');
-    if (hex.length !== 40 && hex.length !== 64) {
-      fail('A message subject is a 20-byte script hash or a 32-byte digest');
-    }
-    return bytesValue(hex);
-  });
-  if (encoded.length > 0 && (!Number.isInteger(Number(threshold)) || Number(threshold) < 1 || Number(threshold) > encoded.length)) {
-    fail('A message-subject threshold is between 1 and the subject count');
-  }
-  return {
-    type: 'Array',
-    value: [
-      integerValue(ACTION.setMessageSubjects),
-      { type: 'Array', value: encoded },
-      integerValue(threshold, 'subject threshold'),
-    ],
+    value: [integerValue(ACTION.setRequiredValidator), integerValue(id), boolValue(required)],
   };
 }
 
@@ -245,26 +192,20 @@ function plan(method, args, extra = {}) {
 
 /**
  * Registration (§10). The account id is derived, never supplied: it is the
- * identity the salt commits to, so a mismatch cannot be smuggled in.
+ * identity the salt commits to, so a mismatch cannot be smuggled in. Exactly
+ * four arguments — the native recovery-timelock argument is gone.
  */
-export function planCreateAccount({
-  accountId,
-  custodyAddress,
-  salt,
-  recoveryTimelockMs = 0,
-  actions = [],
-}) {
+export function planCreateAccount({ accountId, custodyAddress, salt, actions = [] }) {
   return plan('createAccount', [
     hashValue(accountId),
     hashValue(custodyAddress),
     bytesValue(salt),
-    integerValue(recoveryTimelockMs, 'recovery timelock'),
     { type: 'Array', value: actions },
   ]);
 }
 
-/** Batch form: createAccounts(accountIds[], custody, salts[], recoveryTimelockMs). */
-export function planCreateAccounts({ accountIds = [], custodyAddress, salts = [], recoveryTimelockMs = 0 }) {
+/** Batch form: createAccounts(accountIds[], custody, salts[]). */
+export function planCreateAccounts({ accountIds = [], custodyAddress, salts = [] }) {
   if (accountIds.length !== salts.length || accountIds.length < 1) {
     fail('createAccounts needs one account id per salt');
   }
@@ -272,49 +213,30 @@ export function planCreateAccounts({ accountIds = [], custodyAddress, salts = []
     hashArray(accountIds),
     hashValue(custodyAddress),
     { type: 'Array', value: salts.map((salt) => bytesValue(salt)) },
-    integerValue(recoveryTimelockMs, 'recovery timelock'),
   ]);
 }
 
-/** proposeConfiguration(accountId, actions[], readSet[]) -> intentId */
-export function planProposeConfiguration({ accountId, actions = [], readSet = [] }) {
-  if (!Array.isArray(actions) || actions.length < 1) {
-    fail('A configuration intent needs at least one action');
+/**
+ * applyConfigurationActions(accountId, actions[1..16]). The core dispatches the
+ * whole batch in one frame, so a caller cannot half-apply a configuration.
+ */
+export function planConfiguration({ accountId, actions = [] }) {
+  if (!Array.isArray(actions) || actions.length < 1 || actions.length > 16) {
+    fail('A configuration batch needs 1 to 16 actions');
   }
-  return plan('proposeConfiguration', [
+  return plan('applyConfigurationActions', [
     hashValue(accountId),
     { type: 'Array', value: actions },
-    { type: 'Array', value: readSet },
   ]);
 }
 
-/** confirmConfiguration(accountId, intentId, actions[]) — the actions must match. */
-export function planConfirmConfiguration({ accountId, intentId, actions = [] }) {
-  return plan('confirmConfiguration', [
-    hashValue(accountId),
-    integerValue(intentId, 'intent id'),
-    { type: 'Array', value: actions },
-  ]);
-}
-
-/** cancelConfiguration(accountId, intentId) */
-export function planCancelConfiguration({ accountId, intentId }) {
-  return plan('cancelConfiguration', [
-    hashValue(accountId),
-    integerValue(intentId, 'intent id'),
-  ]);
-}
-
-/** Custody-authorised account actions (freeze, recovery, credential revoke, metadata). */
+/** Custody-authorised immediate account calls published by the v4.1 core. */
 export function planAccountAction(method, accountId, args = []) {
   const supported = new Set([
     'freezeAccount',
     'unfreezeAccount',
-    'beginRecovery',
-    'cancelRecovery',
-    'executeRecovery',
-    'revokeCredentials',
-    'setMetadataUri',
+    'revokeModuleCredentials',
+    'resetAccount',
   ]);
   if (!supported.has(method)) fail(`Unsupported account action: ${method}`);
   return plan(method, [hashValue(accountId), ...args]);
@@ -359,31 +281,30 @@ function requireArray(item, label) {
 }
 
 /**
- * getAccount -> the 15-field control descriptor:
- * [exists, status, custody, recoveryAuthority, authorityEpoch,
- *  configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
- *  defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
- *  controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive]
+ * getAccount -> the nine-field v4.1 control descriptor:
+ * [exists, status, custody, authorityEpoch, configurationNonce,
+ *  defaultOperationAuthorization, defaultMessageAuthorization,
+ *  requiredValidatorId, controlRevision].
+ *
+ * The core carries no recovery authority, timelock, hook order or escrow flag;
+ * those are module state. `governanceDelayMs` is therefore reported as absent
+ * rather than invented as a native promise, and the configuration nonce is the
+ * revision a screen must re-read after a batch.
  */
 export function decodeAccountDescriptor(item) {
   const fields = requireArray(item, 'the account descriptor');
-  if (fields.length !== 15) fail('Cannot decode the account descriptor');
+  if (fields.length !== 9) fail('Cannot decode the account descriptor');
   return {
     exists: stackBool(fields[0]),
     status: ACCOUNT_STATUS[Number(stackInt(fields[1]))] || 'unknown',
     custody: decodeStackHash160(fields[2]),
-    recoveryAuthority: decodeStackHash160(fields[3]),
-    authorityEpoch: stackInt(fields[4]),
-    configurationNonce: stackInt(fields[5]),
-    recoveryTimelockMs: stackInt(fields[6]),
-    defaultOperationAuthorization: stackBool(fields[7]),
-    defaultMessageAuthorization: stackBool(fields[8]),
-    ownerOnlyRecovery: stackBool(fields[9]),
-    hookOrderRevision: stackInt(fields[10]),
-    controlRevision: stackInt(fields[11]),
-    recoveryPending: stackBool(fields[12]),
-    recoveryMatureAt: stackInt(fields[13]),
-    marketEscrowActive: stackBool(fields[14]),
+    authorityEpoch: stackInt(fields[3]),
+    configurationNonce: stackInt(fields[4]),
+    defaultOperationAuthorization: stackBool(fields[5]),
+    defaultMessageAuthorization: stackBool(fields[6]),
+    requiredValidatorId: stackInt(fields[7]),
+    controlRevision: stackInt(fields[8]),
+    governanceDelayMs: null,
   };
 }
 
@@ -403,15 +324,16 @@ export function decodeModulePage(item) {
 }
 
 /**
- * getModule -> 12-field instance descriptor, or [] when the id is not
+ * getModule -> 15-field instance descriptor, or [] when the id is not
  * installed: [moduleId, moduleType, contractHash, contractId, updateCounter,
  * nefSha256, profileSha256, moduleRevision, credentialGeneration,
- * instanceIsolation, messageCapability, thresholdMemberEligible].
+ * instanceIsolation, messageCapability, thresholdMemberEligible,
+ * compositeLayer, governance, hookPlanner].
  */
 export function decodeModuleDescriptor(item) {
   const fields = requireArray(item, 'the module descriptor');
   if (fields.length === 0) return null;
-  if (fields.length !== 12) fail('Cannot decode the module descriptor');
+  if (fields.length !== 15) fail('Cannot decode the module descriptor');
   return {
     moduleId: stackInt(fields[0]),
     moduleType: MODULE_TYPE_NAME[Number(stackInt(fields[1]))] || 'unknown',
@@ -425,52 +347,28 @@ export function decodeModuleDescriptor(item) {
     instanceIsolation: stackBool(fields[9]),
     messageCapability: stackBool(fields[10]),
     thresholdMemberEligible: stackBool(fields[11]),
-  };
-}
-
-/** getHookOrder -> [hookIds[], revision]. */
-export function decodeHookOrder(item) {
-  const fields = requireArray(item, 'the hook order');
-  if (fields.length !== 2) fail('Cannot decode the hook order');
-  return {
-    hookIds: requireArray(fields[0], 'the hook order ids').map(stackInt),
-    revision: stackInt(fields[1]),
+    compositeLayer: stackBool(fields[12]),
+    governance: stackBool(fields[13]),
+    hookPlanner: stackBool(fields[14]),
   };
 }
 
 /**
- * getPendingConfiguration -> [] when the id is unknown, else
- * [exists, intentId, proposedAt, matureAt, expiresAt, authorityEpoch,
- *  actionDigest, actions[]].
+ * RecoveryModule.getRecoveryPolicySnapshot(accountId) -> [] when no policy is
+ * configured, else [guardians[], threshold, timelockMs, authority, revision,
+ * digest]. The recovery delay is the module's policy, not a native promise.
  */
-export function decodePendingConfiguration(item) {
-  const fields = requireArray(item, 'the pending configuration');
+export function decodeRecoveryPolicySnapshot(item) {
+  const fields = requireArray(item, 'the recovery policy snapshot');
   if (fields.length === 0) return null;
-  if (fields.length !== 8) fail('Cannot decode the pending configuration');
+  if (fields.length !== 6) fail('Cannot decode the recovery policy snapshot');
   return {
-    intentId: stackInt(fields[1]),
-    proposedAt: stackInt(fields[2]),
-    matureAt: stackInt(fields[3]),
-    expiresAt: stackInt(fields[4]),
-    authorityEpoch: stackInt(fields[5]),
-    actionDigest: decodeStackByteStringHex(fields[6]),
-    actions: requireArray(fields[7], 'the pending configuration actions'),
-  };
-}
-
-/**
- * getRecoveryStatus -> [] when no recovery is pending, else
- * [exists, initiatedAt, matureAt, authorityEpochAtInit, newCustody].
- */
-export function decodeRecoveryStatus(item) {
-  const fields = requireArray(item, 'the recovery status');
-  if (fields.length === 0) return null;
-  if (fields.length !== 5) fail('Cannot decode the recovery status');
-  return {
-    initiatedAt: stackInt(fields[1]),
-    matureAt: stackInt(fields[2]),
-    authorityEpochAtInit: stackInt(fields[3]),
-    newCustody: decodeStackHash160(fields[4]),
+    guardians: requireArray(fields[0], 'the recovery guardians').map(decodeStackHash160),
+    threshold: Number(stackInt(fields[1])),
+    timelockMs: stackInt(fields[2]),
+    authority: decodeStackHash160(fields[3]),
+    revision: stackInt(fields[4]),
+    digest: decodeStackByteStringHex(fields[5]),
   };
 }
 

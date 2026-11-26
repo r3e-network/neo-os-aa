@@ -42,7 +42,7 @@ function operationTransfersFromProxy(operation, proxy) {
 }
 
 /**
- * Resolve the account's own proxy-witness transaction: the shape-bound executeUserOp(s) script, the
+ * Resolve the account's own proxy-witness transaction: the shape-bound executeUserOp script, the
  * fee payer's signer, the restricted WitnessRules proxy signer and the proxy verification witness.
  * Every one of those is produced by the SDK builder in src/shared/proxyWitness.mjs, so the relay, the
  * wallet frontend and the SDK cannot grow separate constructions of this authority.
@@ -67,6 +67,14 @@ export async function resolveProxyTransferWitness({ invocation, feePayer, rpcCli
   const proxy = proxyHashOf(coreHash, accountId);
   const transfers = ops.filter((op) => operationTransfersFromProxy(op, proxy));
   if (transfers.length === 0) return null;
+  // A batch invocation is what this path would preflight and broadcast, and the v4.1 proxy witness
+  // can only authorize one executeUserOp: refuse the list instead of constructing a batch tail or
+  // splitting it into transactions nobody signed. Historical archives stay readable; they never
+  // reach this builder.
+  if (batch)
+    throw new Error(
+      `protocol-incompatible: ${invocation.operation} is retired in v4.1; the proxy witness preflights and broadcasts one executeUserOp only`,
+    );
   // A transaction witness outlives ExecuteUserOp's hook/verification context.
   // An untrusted paymaster can reuse target scope during settlement. Keep this
   // envelope disabled until sponsorship has a separately verified authority model.

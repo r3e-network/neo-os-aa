@@ -14,10 +14,10 @@ namespace SmartAccount.Mocks
     /// operation and, when enabled, burns a known amount of gas inside <c>validateUserOp</c>.
     /// </summary>
     /// <remarks>
-    /// The core charges validator callbacks against <c>ValidationPerCallGasLimit</c>
-    /// (100_000_000 datoshi), a budget separate from the hook pool. Burning 150_000_000 proves the
-    /// validation envelope fails closed on its own accounting instead of leaning on the hook
-    /// meter. The validator is a rubber stamp by design: its only job is to spend gas.
+    /// A validator callback has no per-call budget: it runs inside the declared system fee of
+    /// the transaction. Burning 1.5 GAS proves the operation fails closed by the platform's own
+    /// accounting once the declared fee is exhausted. The validator is a rubber stamp by design:
+    /// its only job is to spend gas.
     /// </remarks>
     /// <remarks>
     /// nccs compiles every source file under <c>tests/mocks</c> as its own contract, so a mock may
@@ -27,12 +27,12 @@ namespace SmartAccount.Mocks
     /// </remarks>
     [DisplayName("GasBurningValidator")]
     [ContractPermission("*", "*")]
-    [ManifestExtra("Description", "Test-only v4 validator that overruns its callback gas budget")]
+    [ManifestExtra("Description", "Test-only v4 validator that burns a known amount of GAS in its callback")]
     public class GasBurningValidator : SmartContract
     {
         private const string ModuleProfileJson = "{\"callbacks\":[\"validateUserOp\",\"onUserOpComplete\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":true,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"GasBurningValidator\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"validator\",\"profileVersion\":1}";
 
-        /// <summary>Strictly above the per-callback validation cap of 100_000_000 datoshi.</summary>
+        /// <summary>One and a half GAS, more than any test here declares as system fee.</summary>
         private const long OverrunGas = 150_000_000;
 
         // Contract-global authority rows; the instance key below starts at 0xF1 and never collides.

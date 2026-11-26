@@ -202,12 +202,13 @@ async function invokeMarketRead(operation, args = []) {
   return result;
 }
 
-// v4 reads the account's control record instead of the removed v3 slots
-// (`getVerifier`, `getHook`, `getBackupOwner`): getAccount returns
-// [exists, status, custody, recoveryAuthority, authorityEpoch, configurationNonce,
-//  recoveryTimelockMs, defaultOperationAuthorization, defaultMessageAuthorization,
-//  ownerOnlyRecovery, hookOrderRevision, controlRevision, recoveryPending,
-//  recoveryMatureAt, marketEscrowActive].
+// v4.1 reads the account's nine-field control record instead of the removed v3
+// slots (`getVerifier`, `getHook`, `getBackupOwner`): getAccount returns
+// [exists, status, custody, authorityEpoch, configurationNonce,
+//  defaultOperationAuthorization, defaultMessageAuthorization,
+//  requiredValidatorId, controlRevision]. The recovery authority and the escrow
+// flag left the record: the policy is RecoveryModule state and no native escrow
+// flag exists, so both are reported as unavailable rather than invented.
 async function fetchAccountSnapshot(saContractHash, accountIdHash) {
   const empty = {
     exists: false,
@@ -219,18 +220,17 @@ async function fetchAccountSnapshot(saContractHash, accountIdHash) {
   try {
     const result = await invokeReadFunction(RUNTIME_CONFIG.rpcUrl, saContractHash, 'getAccount', [{ type: 'Hash160', value: `0x${accountIdHash}` }]);
     const record = result?.stack?.[0];
-    if (!record || record.type !== 'Array' || !Array.isArray(record.value) || record.value.length !== 15) {
+    if (!record || record.type !== 'Array' || !Array.isArray(record.value) || record.value.length !== 9) {
       return empty;
     }
-    const [existsItem, statusItem, custodyItem, recoveryItem, , , , , , , , , , , escrowItem] = record.value;
+    const [existsItem, statusItem, custodyItem] = record.value;
     if (existsItem?.type !== 'Boolean' || existsItem.value !== true) return empty;
-    const escrowActive = escrowItem?.type === 'Boolean' ? Boolean(escrowItem.value) : null;
     return {
       exists: true,
       status: ACCOUNT_STATUS[Number(decodeInteger(statusItem))] || 'unknown',
       custody: decodeHash160(custodyItem),
-      recoveryAuthority: decodeHash160(recoveryItem),
-      escrowActive,
+      recoveryAuthority: '',
+      escrowActive: null,
     };
   } catch (error) {
     if (import.meta.env.DEV) console.error('[addressMarketService] getAccount failed:', error?.message);

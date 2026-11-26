@@ -152,8 +152,9 @@ foreach (var scenario in scenarios)
         [account, operation, state[13].GetInteger(), state[8].GetInteger()],
         [Harness.Owner, Harness.Other, proxy], expected ? VMState.HALT : VMState.FAULT, warmupCount, samplesPerCase) : null;
     var verification = h.Verify(account, operation, state, [Harness.Owner, Harness.Other, proxy]);
-    bool expectedVerification = !scenario.Malformed && scenario.Slots.Count(c => c == '1') >= 2;
-    Require(h.LastState == (expectedVerification ? VMState.HALT : VMState.FAULT), "Verification result differs from the operation approval predicate.");
+    // Under the Verification trigger the core answers admissibility only: every well formed operation of
+    // an active account is accepted and no credential is verified there. That happens once, in executeUserOp.
+    Require(h.LastState == VMState.HALT, "Verification did not answer admissible for the well formed operation.");
     var beforeExecution = Harness.Storage(h.Snapshot);
     var trace = new GasTrace(root); h.Trace = trace;
     h.Call(Harness.Core, "executeUserOp", [account, operation, state[13].GetInteger(), state[8].GetInteger()], expectSuccess: false, signers: [Harness.Owner, Harness.Other, proxy]);
@@ -180,7 +181,7 @@ foreach (var scenario in scenarios)
         Require(storedMetadata[1].GetInteger() == 0, "Post execution rewrote immutable metadata.");
         postSessions.Add(new { childIndex = i, spentAmount = spent.ToString(), lastUsedAt = metadata[1].GetInteger().ToString(), immutableMetadataLastUsedAt = storedMetadata[1].GetInteger().ToString() });
     }
-    if (expected) Require(trace.Budgets.Count == 2 && trace.Budgets.All(x => x.Limit == 100_000_000 && x.Consumed < x.Limit), "Both native callbacks must remain strictly within the unchanged 1 GAS budget.");
+    if (expected) Require(trace.PhaseCount == 2, "Both native callback phases must be traced.");
     rows.Add(new { scenario.Roster, scenario.Slots, scenario.Maximum, scenario.BadSignature, scenario.Malformed, descriptionBytes = scenario.Maximum ? 128 : 16, amount = amount.ToString(), dataLength, methodBytes = method.Length, timestamp = h.Time.ToString(), priorSpent = growSpent ? "1" : "0", signatureBytes = signatures.Length, lastUsePostRollbackNegativeControls = scenario.Roster == "SN" && !scenario.Maximum ? 4 : 0, argumentDepth = deep ? 8 : 1, canonicalDomain = domainHex, result = execution, verification, phases = trace.Rows });
     if (measured is not null) benchmarkRows.Add(new
     {
@@ -293,7 +294,7 @@ sealed record StorageMetrics(long keyCount, long keyBytes, long valueBytes, long
         keyBytes - before.keyBytes, valueBytes - before.valueBytes, totalBytes - before.totalBytes);
 }
 
-sealed record BenchmarkSample(long elapsedTicks, string state, long feeConsumedDatoshi, long minimumRequiredFeeDatoshi,
+sealed record BenchmarkSample(long elapsedTicks, string state, long feeConsumedDatoshi,
     StorageMetrics logicalStorage, StorageMetrics storageDelta, bool committedStorageUnchanged);
 sealed record BenchmarkRun(StorageMetrics startingStorage, BenchmarkSample[] samples, long p50Ticks, long p95Ticks);
 
@@ -301,39 +302,29 @@ sealed class GasTrace(UInt160 root) : IDiagnostic
 {
     private ApplicationEngine engine = null!;
     private string? phase;
-    private readonly Dictionary<object, string> budgets = new(ReferenceEqualityComparer.Instance);
-    private static BigInteger Scale => ApplicationEngine.FeeFactor * ApplicationEngine.OpcodePriceMultiplier;
-    private static BigInteger Value(object budget, string property) => (BigInteger)budget.GetType()
-        .GetProperty(property, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)!.GetValue(budget)!;
+    private BigInteger phaseStart;
+    private readonly List<(string Phase, BigInteger Consumed)> phases = [];
 
-    // Keep the actual budget objects until execution completes, including the
-    // final RET charge. Convert from the engine's units, not from an assumed cap.
-    public List<(BigInteger Limit, BigInteger Consumed)> Budgets => budgets.Keys
-        .Select(budget => (Value(budget, "Limit") / Scale, (Value(budget, "Consumed") + Scale - 1) / Scale)).ToList();
-    public object[] Rows => budgets.Select(pair => (object)new
-    {
-        phase = pair.Value,
-        limitDatoshi = (Value(pair.Key, "Limit") / Scale).ToString(),
-        consumedDatoshi = ((Value(pair.Key, "Consumed") + Scale - 1) / Scale).ToString(),
-        remainingDatoshi = ((Value(pair.Key, "Limit") - Value(pair.Key, "Consumed")) / Scale).ToString()
-    }).ToArray();
+    // A phase's consumption is the delta of the engine's own fee counter: the
+    // declared system fee of the transaction is the only bound a callback has.
+    public object[] Rows { get { Close(null); return phases.Select(pair => (object)new { phase = pair.Phase, consumedDatoshi = pair.Consumed.ToString() }).ToArray(); } }
+    public int PhaseCount { get { Close(null); return phases.Count; } }
 
     public void Initialized(ApplicationEngine value) => engine = value;
     public void Disposed() { }
     public void CallFromNative(UInt160 target, string method, StackItem[] arguments)
     {
-        if (target == root && method is "validateCompositeSignature" or "postExecuteComposite") phase = method;
+        if (target == root && method is "validateCompositeSignature" or "postExecuteComposite") Close(method);
+    }
+    private void Close(string? next)
+    {
+        if (phase is not null) phases.Add((phase, engine.FeeConsumed - phaseStart));
+        phase = next;
+        phaseStart = engine.FeeConsumed;
     }
     public void ContextLoaded(Ctx context) { }
     public void ContextUnloaded(Ctx context) { }
-    public void PreExecuteInstruction(Instruction instruction)
-    {
-        if (phase is null || engine.CurrentScriptHash != root) return;
-        var state = engine.CurrentContext!.GetState<ExecutionContextState>();
-        var budget = typeof(ExecutionContextState).GetProperty("ContractCallGasBudget",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)!.GetValue(state);
-        if (budget is not null) budgets.TryAdd(budget, phase);
-    }
+    public void PreExecuteInstruction(Instruction instruction) { }
     public void PostExecuteInstruction(Instruction instruction) { }
 }
 
@@ -414,7 +405,6 @@ sealed class Harness : IDisposable
         {
             state = LastState.ToString(),
             gas = engine.FeeConsumed,
-            minimum = engine.MinimumRequiredFee,
             error = engine.FaultException?.Message,
             notifications = engine.Notifications.Count
         };
@@ -453,7 +443,7 @@ sealed class Harness : IDisposable
             // rollback, not the transient dirty clone that is never committed.
             var logicalStorage = state == VMState.HALT ? StorageMetrics.Of(Storage(working)) : startingStorage;
             if (i >= warmupCount) samples.Add(new(elapsed, state.ToString(), checked((long)engine.FeeConsumed),
-                checked((long)engine.MinimumRequiredFee), logicalStorage, logicalStorage.Subtract(startingStorage), true));
+logicalStorage, logicalStorage.Subtract(startingStorage), true));
             // Never Commit(), including successful warmups and samples.
         }
         long[] ordered = samples.Select(sample => sample.elapsedTicks).Order().ToArray();
@@ -466,7 +456,6 @@ sealed class Harness : IDisposable
         executionFeeFactor = NativeContract.Policy.GetExecFeeFactor(settings, Snapshot, 1),
         storagePriceDatoshi = NativeContract.Policy.GetStoragePrice(Snapshot),
         globalVerificationLimitDatoshi = Neo.SmartContract.Helper.MaxVerificationGas,
-        rootCallbackLimitDatoshi = 100_000_000,
         internalFeeScale = (ApplicationEngine.FeeFactor * ApplicationEngine.OpcodePriceMultiplier).ToString()
     };
 

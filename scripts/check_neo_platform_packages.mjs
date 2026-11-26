@@ -49,7 +49,7 @@ export const PATHS = {
   nativeRuntimeProbeProject: "tests/NativeModuleProbe/NativeModuleProbe.csproj",
   nativeMultiSigProbeProject: "tests/NativeMultiSigProbe/NativeMultiSigProbe.csproj",
   manifest: "contracts/neo-platform-packages.json",
-  doc: "docs/SA-REPRODUCIBLE-BUILD.md",
+  doc: "docs/engineering/VERIFICATION-AND-GATES.md (SA contracts: reproducible build from published packages)",
 };
 
 const NEO_OWNED = /^Neo(\.|$)/i;

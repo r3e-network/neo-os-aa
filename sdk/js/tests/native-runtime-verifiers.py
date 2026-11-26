@@ -125,11 +125,13 @@ try:
                 if expect_error:
                     require(run.returncode != 0 and expect_error in run.stderr, 'Expected SDK rejection missing: '+expect_error)
                     fault = json.loads((directory/'sdk-fault.json').read_text())
-                    require(fault['result']['state'] == 'FAULT' and 'bounded contract call gas limit' not in fault['result'].get('exception', ''),
-                            'Authorization negative was obscured by a bounded-gas failure')
+                    # Plain Neo: the node reports only the consumed gas, and the authorization
+                    # negative must be the reason of the fault the SDK saw.
+                    require(fault['result']['state'] == 'FAULT',
+                            'Authorization negative was not reported as a fault')
                     report['rejections'].append({'step': stage, 'layer': 'SDK-before-broadcast', 'reason': expect_error,
                         'rpcException': fault['result'].get('exception'), 'script': fault['params'][0],
-                        'gasConsumed': fault['result']['gasconsumed'], 'minimumRequiredFee': fault['result']['minimumrequiredfee']})
+                        'gasConsumed': fault['result']['gasconsumed']})
                     return None
                 if run.returncode: raise RuntimeError('SDK driver failed: '+run.stderr[-5000:])
                 return json.loads(run.stdout)

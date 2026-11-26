@@ -41,7 +41,6 @@ const PROXY = new NativeSmartAccountClient({
   networkMagic: NETWORK,
   contractHash: CORE,
 }).proxyAddress(ACCOUNT_ID);
-const BUYER_HASH = '49c095ce04d38642e39155f5481615c58227a498';
 // Hashes travel as ByteString in the VM value model: there is no `Hash160`
 // argument type, so nothing can smuggle a display-order conversion in.
 const hash = (value) => ({ type: 'ByteString', value });
@@ -84,7 +83,7 @@ test('a transfer that answered false is reported incomplete, not passed', async 
   const client = clientAnswering([{ type: 'Boolean', value: false }]);
   const result = await simulateUserOperation(client, {
     accountId: ACCOUNT_ID,
-    operations: [transfer(0)],
+    operation: transfer(0),
   });
   assert.equal(result.state, 'HALT');
   assert.deepEqual(result.incompleteTransfers, [0]);
@@ -95,7 +94,11 @@ test('a transfer that answered false is reported incomplete, not passed', async 
   assert.equal(result.exception, null);
 });
 
-test('a batch reports each incomplete transfer by position', async () => {
+test('an Array answer for one operation is judged conservatively, never as a shorter batch', async () => {
+  // v4.1 has one operation per transaction, so a single stack item that is an
+  // array is not a batch result: it is an answer this protocol never produces.
+  // A transfer whose own result cannot be read as Boolean true is incomplete at
+  // position 0, because silence must not read as success.
   const client = clientAnswering([
     {
       type: 'Array',
@@ -108,40 +111,39 @@ test('a batch reports each incomplete transfer by position', async () => {
   ]);
   const result = await simulateUserOperation(client, {
     accountId: ACCOUNT_ID,
-    operations: [transfer(0), transfer(1), transfer(2, BUYER_HASH, 'setSessionKey')],
+    operation: transfer(0),
   });
-  assert.equal(result.plan.method, 'executeUserOps');
-  assert.equal(result.plan.batch, true);
-  // Position 1 is the transfer that moved nothing; position 2 is not a
-  // transfer, so its false says nothing about tokens.
-  assert.deepEqual(result.incompleteTransfers, [1]);
+  assert.equal(result.plan.method, 'executeUserOp');
+  assert.equal(result.plan.operation.method, 'transfer');
+  assert.deepEqual(result.incompleteTransfers, [0]);
 });
 
 test('a false from a non-transfer method is never read as a failed transfer', async () => {
   const client = clientAnswering([{ type: 'Boolean', value: false }]);
   const result = await simulateUserOperation(client, {
     accountId: ACCOUNT_ID,
-    operations: [transfer(0, PROXY, 'setSessionKey')],
+    operation: transfer(0, PROXY, 'setSessionKey'),
   });
   assert.deepEqual(result.incompleteTransfers, []);
 });
 
-test('a batch result that cannot be attributed fails closed', async () => {
-  // Two operations, one result: silence must not read as success.
-  const client = clientAnswering([{ type: 'Array', value: [{ type: 'Boolean', value: true }] }]);
-  await assert.rejects(
+test('a result that cannot be attributed fails closed', async () => {
+  // A list input is the retired batch shape, not a longer execution: refused
+  // before any script is built.
+  const client = clientAnswering([{ type: 'Boolean', value: true }]);
+  assert.throws(
     () =>
-      simulateUserOperation(client, {
+      client.buildExecutionScript({
         accountId: ACCOUNT_ID,
         operations: [transfer(0), transfer(1)],
       }),
-    /exact Array matching the operation count/,
+    /protocol-incompatible: executeUserOps is retired in v4\.1/,
   );
 
   // A single operation must answer exactly one stack item.
   const empty = clientAnswering([]);
   await assert.rejects(
-    () => simulateUserOperation(empty, { accountId: ACCOUNT_ID, operations: [transfer(0)] }),
+    () => simulateUserOperation(empty, { accountId: ACCOUNT_ID, operation: transfer(0) }),
     /exactly one item/,
   );
 
@@ -149,7 +151,7 @@ test('a batch result that cannot be attributed fails closed', async () => {
   const faulted = clientAnswering([], { state: 'FAULT' });
   const fault = await simulateUserOperation(faulted, {
     accountId: ACCOUNT_ID,
-    operations: [transfer(0)],
+    operation: transfer(0),
   });
   assert.equal(fault.state, 'FAULT');
   assert.deepEqual(fault.incompleteTransfers, []);
@@ -157,7 +159,7 @@ test('a batch result that cannot be attributed fails closed', async () => {
 
 test('execute refuses a stack a review would have rejected', async () => {
   const client = clientAnswering([{ type: 'Boolean', value: false }]);
-  const plan = client.buildExecutionScript({ accountId: ACCOUNT_ID, operations: [transfer(0)] });
+  const plan = client.buildExecutionScript({ accountId: ACCOUNT_ID, operation: transfer(0) });
   // Simulating is allowed to show the refusal; executing is not.
   const simulated = await simulatePlan(client, plan);
   assert.deepEqual(simulated.incompleteTransfers, [0]);

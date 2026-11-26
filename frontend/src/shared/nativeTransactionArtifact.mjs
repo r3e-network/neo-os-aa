@@ -18,11 +18,12 @@
  *
  * Signer index 0 is always the fee payer. For an execution plan index 1 is the
  * account proxy, whose witness carries no signature: the chain accepts it only
- * because the script is one shaped executeUserOp(s) call on the core. The proxy
+ * because the script is one shaped executeUserOp call on the core. The proxy
  * can never be the fee payer, so the two roles cannot alias.
  */
 
 import {
+  NATIVE_PROFILE_PARAMETER_DIGEST,
   parseNativeRpcFees,
   validateNativeApplicationExecution,
   validateNativeInvocationResult,
@@ -32,16 +33,21 @@ import { createProxyWitness } from "./proxyWitness.mjs";
 
 export const NATIVE_SIGNED_ARTIFACT_MAX_CHARS = 1048576;
 const MAX_TRANSACTION_BYTES = 102400;
-const PLAN_KINDS = ["registration", "execution", "account", "recovery"];
-// The account actions of the minimal core: freezing, thawing and the two
-// module-administration calls. Recovery, credential revocation and the
-// configuration intents are user-space module concerns, so their scripts are
-// not reconstructable here and cannot be archived as native plans.
+const PLAN_KINDS = ["registration", "execution", "account", "recovery", "governance"];
+// The account actions of the minimal core: freezing and the module
+// administration calls. Thawing is archived as a governance plan: the core
+// admits the thaw only from the installed governance module. Recovery,
+// credential revocation, the built-in
+// authorization switches, the required-validator selection and the
+// configuration intents are user-space module concerns or batch actions, so
+// their scripts are not reconstructable one method at a time here and cannot be
+// archived as single account plans.
 const ACCOUNT_ACTIONS = [
   "freezeAccount",
   "unfreezeAccount",
   "installModule",
   "removeModule",
+  "configureModule",
 ];
 const WITNESS_RULE_CONDITIONS = ["CalledByContract"];
 
@@ -135,6 +141,17 @@ const accountHash = (value) => {
     fail("signer account must be canonical UInt160");
   return value;
 };
+/** A plan method name is a protocol identifier, not free text. */
+const hexStringMethod = (value) => {
+  if (!["beginRecovery", "cancelRecovery", "executeRecovery"].includes(value))
+    fail("unsupported archived recovery action");
+  return value;
+};
+const governanceMethod = (value) => {
+  if (!["unfreezeAccount", "confirmConfiguration"].includes(value))
+    fail("unsupported archived governance action");
+  return value;
+};
 
 /**
  * The discoverable v4 profile. `implementationId` is whatever the submitting
@@ -150,12 +167,22 @@ const accountHash = (value) => {
 function profile(value) {
   exactKeys(
     value,
-    ["contract", "networkMagic", "protocolVersion", "implementationId"],
+    [
+      "contract",
+      "networkMagic",
+      "protocolVersion",
+      "profileParameterDigest",
+      "implementationId",
+    ],
     "profile",
   );
   const contract = hex(value.contract, 20);
   if (/^0+$/.test(contract) || value.protocolVersion !== PROTOCOL_VERSION)
     fail("unsupported native profile");
+  // The parameter fingerprint is the protocol identity: an artifact reviewed
+  // against different atomic-configuration parameters is a different protocol.
+  if (value.profileParameterDigest !== NATIVE_PROFILE_PARAMETER_DIGEST)
+    fail("unsupported native profile parameter digest");
   if (
     typeof value.implementationId !== "string" ||
     !/^[0-9A-Za-z._:\/-]{1,128}$/.test(value.implementationId)
@@ -165,6 +192,7 @@ function profile(value) {
     contract,
     networkMagic: uint32(value.networkMagic, "network magic"),
     protocolVersion: PROTOCOL_VERSION,
+    profileParameterDigest: NATIVE_PROFILE_PARAMETER_DIGEST,
     implementationId: value.implementationId,
   };
 }
@@ -382,9 +410,11 @@ export function validateNativeSignedPreflight(c, expected, result) {
     expected.validUntilBlock <= simulation.height
   )
     fail("signed transaction expires before the simulated block");
-  const fees = parseNativeRpcFees(result, true);
-  if (BigInt(fees.minimumRequiredFee) > BigInt(expected.systemFee))
-    fail("final Application admission exceeds signed system fee");
+  // Plain Neo: the declared system fee is the transaction's only gas limit, so
+  // the signed bytes must cover what their final execution consumed.
+  const { gasConsumed } = parseNativeRpcFees(result);
+  if (BigInt(gasConsumed) > BigInt(expected.systemFee))
+    fail("signed transaction preflight consumed more gas than its system fee declares");
   if (validateNativeInvocationResult(expected.plan, result.stack).length)
     fail("signed transaction preflight token transfer did not return Boolean true");
   return freeze(result);
@@ -598,15 +628,13 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
       network = fee(artifact.transaction.networkFee, "network fee");
     if (system > approved.system || network > approved.network || system + network > approved.total)
       fail("artifact fees exceed approved caps");
-    const reviewedFees = parseNativeRpcFees({
+    // The reviewed simulation quoted the consumed gas; an artifact that
+    // declares less than that would fault for insufficient system fee.
+    const { gasConsumed } = parseNativeRpcFees({
       gasconsumed: review.simulation?.gasConsumed,
-      minimumrequiredfee:
-        review.simulation?.minimumRequiredFee === null
-          ? undefined
-          : review.simulation?.minimumRequiredFee,
     });
-    if (system < BigInt(reviewedFees.minimumRequiredFee ?? reviewedFees.gasConsumed))
-      fail("artifact system fee is below the reviewed admission requirement");
+    if (system < BigInt(gasConsumed))
+      fail("artifact system fee is below the reviewed simulation consumption");
     await client.revalidatePlan(review.plan);
     if (!same(artifact.profile, profile(client.profile)))
       fail("current native profile changed");
@@ -657,17 +685,57 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
     let plan;
     if (recipe.method === "buildCreateAccountScript" && prior.kind === "registration")
       plan = client.buildCreateAccountScript(args);
-    else if (["buildConfigurationBatchPlan", "buildRecoveryPolicyPlan"].includes(recipe.method) && prior.kind === "account") {
+    else if (recipe.method === "buildConfigurationBatchPlan" && prior.kind === "account") {
       // Receipt restoration checks signed bytes after the configuration may already have changed.
       const accountId = hex(args.accountId, 20);
-      const batch = recipe.method === "buildConfigurationBatchPlan";
-      plan = { kind: "account", method: batch ? "applyConfigurationActions" : "setRecoveryPolicy", accountId,
+      plan = { kind: "account", method: "applyConfigurationActions", accountId,
         accountAddress: client.proxyAddress(accountId),
-        script: batch ? client.buildConfigurationBatchScript(args) : client.buildRecoveryPolicyScript(args), signers: [] };
+        script: client.buildConfigurationBatchScript(args), signers: [] };
     } else if (recipe.method === "buildAccountActionScript" && prior.kind === "account") {
       if (!ACCOUNT_ACTIONS.includes(args.method))
         fail("unsupported archived account action");
       plan = client.buildAccountActionScript(args);
+    } else if (recipe.method === "buildRecoveryModulePlan" && prior.kind === "recovery") {
+      // The request may already have executed, so the script is rebuilt from the
+      // reviewed target and action alone; no seat or account read is repeated.
+      const accountId = hex(args.accountId, 20);
+      plan = {
+        kind: "recovery",
+        method: hexStringMethod(prior.method),
+        action: hexStringMethod(prior.method),
+        accountId,
+        accountAddress: hash160(prior.accountAddress, "recovery account address"),
+        targetContract: hash160(prior.targetContract, "recovery target contract"),
+        script: client.buildRecoveryScript({
+          accountId,
+          targetContract: prior.targetContract,
+          action: prior.method,
+          newCustody: args.newCustody,
+        }),
+        signers: [],
+      };
+    } else if (recipe.method === "buildGovernanceModulePlan" && prior.kind === "governance") {
+      // The request may already have executed, so the script is rebuilt from the
+      // reviewed target, the step and the intent id alone; no account or seat
+      // read is repeated.
+      const accountId = hex(args.accountId, 20);
+      const action = governanceMethod(prior.method);
+      plan = {
+        kind: "governance",
+        method: action,
+        action,
+        accountId,
+        accountAddress: hash160(prior.accountAddress, "governance account address"),
+        targetContract: hash160(prior.targetContract, "governance target contract"),
+        intentId: prior.intentId ?? null,
+        signers: [],
+        script: client.buildGovernanceScript({
+          accountId,
+          targetContract: prior.targetContract,
+          action,
+          intentId: prior.intentId ?? undefined,
+        }),
+      };
     } else if (recipe.method === "buildExecutionScript" && prior.kind === "execution")
       plan = client.buildExecutionScript(args);
     else fail("unsupported archived review recipe");
@@ -679,9 +747,7 @@ export function createNativeTransactionArtifactTools({ codec: c, sha256, walletW
       prior.method !== plan.method ||
       (prior.accountAddress !== undefined &&
         hex(prior.accountAddress, 20) !== plan.accountAddress) ||
-      (plan.kind === "execution" &&
-        (prior.batch !== plan.batch ||
-          prior.proxyCallFlags !== plan.proxyCallFlags))
+      (plan.kind === "execution" && prior.proxyCallFlags !== plan.proxyCallFlags)
     )
       fail("archived recipe and plan do not reconstruct the signed script");
     client.prepare(plan);

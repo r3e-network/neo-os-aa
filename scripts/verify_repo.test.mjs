@@ -82,7 +82,8 @@ test('a missing pinned core checkout reports the native build gate NOT RUN inste
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /native build gate: NOT RUN/);
   assert.doesNotMatch(result.trace, /dotnet build SmartAccount\.sln|dotnet test tests\/SmartAccount\.Native\.Tests/);
-  assert.match(result.stdout, /notRun=native-build/);
+  assert.match(result.stdout, /notRun=native-build,native-core-pin/);
+  assert.doesNotMatch(result.trace, /sync_native_smartaccount|native_core_pin/);
 });
 
 test('complete verification fails closed at the first unavailable native gate', (t) => {
@@ -103,18 +104,36 @@ test('native contract validation selects its required guards, native build and e
   assert.match(result.trace, /node --test scripts\/implementation_profiles\.test\.mjs/);
   assert.match(result.trace, /dotnet build SmartAccount\.sln -c Release/);
   assert.match(result.trace, /dotnet test tests\/SmartAccount\.Native\.Tests\/SmartAccount\.Tests\.csproj/);
+  // Every standard module the integration tests deploy is compiled into StandardModuleNefDir;
+  // a missing HookOrchestratorModule NEF turns UT_SmartAccountStandardModuleChanges Inconclusive
+  // and a missing DailyLimitHook NEF makes its hook-order scenarios throw FileNotFoundException.
   assert.deepEqual(result.trace.split('\n').filter(line => line.startsWith('nccs ')).map(line => line.split(' ')[1]), [
-    'contracts/modules/GovernanceModule/GovernanceModule.csproj', 'contracts/modules/SigningModule/SigningModule.csproj',
+    'contracts/modules/GovernanceModule/GovernanceModule.csproj', 'contracts/modules/HookOrchestratorModule/HookOrchestratorModule.csproj',
+    'contracts/modules/SigningModule/SigningModule.csproj',
     'contracts/modules/ThresholdPolicyModule/ThresholdPolicyModule.csproj', 'contracts/plugins/native-profile/MultiSigValidator.Native.csproj',
     'contracts/modules/RecoveryModule/RecoveryModule.csproj',
     'contracts/plugins/native-profile/WhitelistHook.Native.csproj',
+    'contracts/plugins/native-profile/DailyLimitHook.Native.csproj',
   ]);
   assert.match(result.trace, /node scripts\/check_standard_governance_artifacts\.mjs /);
   assert.match(result.trace, /node scripts\/check_standard_recovery_nef\.mjs .*RecoveryModule\.nef/);
   assert.match(result.trace, /validate-native-smartaccount-profile\.py/);
+  // Architecture gates: the ABI IDL and native purity run before the build, and the core
+  // checkout is pinned (mirror sync, then its diff against upstream Neo) before it is built.
+  assert.match(result.trace, /python3 scripts\/check_smartaccount_v41_idl\.py\n/);
+  assert.match(result.trace, /python3 scripts\/native_purity\.py\n/);
+  assert.match(result.trace, /python3 scripts\/sync_native_smartaccount\.py --check --core \S+\n/);
+  assert.match(result.trace, /python3 scripts\/native_core_pin\.py --core \S+\n/);
+  for (const gate of ['check_smartaccount_v41_idl.py', 'native_purity.py', 'sync_native_smartaccount.py', 'native_core_pin.py']) {
+    assert.ok(result.trace.indexOf(`python3 scripts/${gate}`) < result.trace.indexOf('dotnet build SmartAccount.sln'), `${gate} runs before the native build`);
+  }
+  assert.ok(result.trace.indexOf('python3 scripts/sync_native_smartaccount.py') < result.trace.indexOf('python3 scripts/native_core_pin.py'));
   assert.match(result.trace, /unittest discover -s scripts -p test_native_\*\.py/);
   assert.match(result.trace, /unittest discover -s scripts -p test_neoexpress\*\.py/);
   assert.match(result.trace, /check_module_neps\.py --compiler nccs --vm-getters --vm-commands/);
+  assert.match(result.trace, /node scripts\/check_plugin_templates\.mjs\n/);
+  assert.ok(result.trace.indexOf('check_module_neps.py --compiler nccs') < result.trace.indexOf('node scripts/check_plugin_templates.mjs'),
+    'the plugin templates compile after the module NEP check');
   assert.doesNotMatch(result.trace, /unittest discover -s docs\/proposals/);
   assert.match(result.trace, /native_epoch_probe\.py --compiler nccs/);
   assert.doesNotMatch(result.trace, /compile-public|tests\/SmartAccount\.Contracts\.Tests|npm /);
@@ -124,6 +143,13 @@ test('a gate failure blocks the native build and invalid selections fail closed'
   const failed = dispatch(t, ['--contracts-only'], 'check_neo_platform_packages.mjs');
   assert.equal(failed.status, 41);
   assert.doesNotMatch(failed.trace, /dotnet build|dotnet test/);
+  // A forbidden pattern in the native source, or a core checkout outside the reviewed diff,
+  // stops the same dispatch before the build.
+  for (const gate of ['native_purity.py', 'native_core_pin.py']) {
+    const blocked = dispatch(t, ['--contracts-only'], gate);
+    assert.equal(blocked.status, 41, gate);
+    assert.doesNotMatch(blocked.trace, /dotnet build|dotnet test/);
+  }
   for (const args of [['--profile', 'custom'], ['--profile', 'all'], ['--profile', 'unknown'], ['--profile'], ['--neoexpress']]) {
     const result = dispatch(t, args);
     assert.notEqual(result.status, 0);
@@ -140,6 +166,15 @@ test('CI runs the native acceptance gate and the native VM workflow still owns t
   assert.match(native, /python3 scripts\/build_native_modules\.py/);
   assert.doesNotMatch(native, /python3 scripts\/native_profile_ci\.py/);
   assert.match(native, /'scripts\/verify_repo\*'/);
+  // Both workflows check out the full core history (the core-tree pin diffs against an upstream
+  // commit) and run the source-only architecture gates as their own fail-fast step.
+  const fullHistory = /path: native-core\r?\s+# Full history[^]*?fetch-depth: 0/;
+  assert.match(ci, fullHistory);
+  assert.match(native, fullHistory);
+  for (const gate of ['check_smartaccount_v41_idl.py', 'native_purity.py', 'native_core_pin.py --core']) {
+    assert.match(ci, new RegExp(`python3 scripts/${gate.replaceAll('.', '\\.')}`));
+    assert.match(native, new RegExp(`python3 scripts/${gate.replaceAll('.', '\\.')}`));
+  }
 });
 
 

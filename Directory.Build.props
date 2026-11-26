@@ -5,10 +5,9 @@
       Neo.SmartContract.Testing (the contract tests). Both are published on nuget.org, which
       nuget.config makes the only package source. The audited bytes of this pin and of every
       other Neo package it pulls in are in contracts/neo-platform-packages.json; change this
-      value, that file and the packages.lock.json files together (docs/SA-REPRODUCIBLE-BUILD.md,
-      "How to bump"). scripts/check_neo_platform_packages.mjs enforces all three.
-      The private PLATFORM core uses the System.Contract.CallWithGasLimit syscall, which no published
-      framework declares; the contract declares it itself (SmartAccount.Execution.cs).
+      value, that file and the packages.lock.json files together (docs/engineering/VERIFICATION-AND-GATES.md,
+      "SA contracts: reproducible build from published packages", "How to bump"). scripts/check_neo_platform_packages.mjs enforces all three.
+      The native SmartAccount core uses only syscalls of the published framework.
     -->
     <NeoSmartContractFrameworkVersion Condition="'$(NeoSmartContractFrameworkVersion)' == ''">3.10.1</NeoSmartContractFrameworkVersion>
 
@@ -17,13 +16,14 @@
       change it fails (NU1004), so a different resolved version or different package bytes
       (NU1403) can never enter a build silently. nccs runs its own restore of each contract
       project and honours the same setting. To update a lock file deliberately, restore that
-      project with the force-evaluate switch and RestoreLockedMode set to false (docs/SA-REPRODUCIBLE-BUILD.md).
+      project with the force-evaluate switch and RestoreLockedMode set to false (same chapter of
+      docs/engineering/VERIFICATION-AND-GATES.md).
     -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <RestoreLockedMode Condition="'$(RestoreLockedMode)' == ''">true</RestoreLockedMode>
 
     <!--
-      A lock file belongs to one project. contracts/plugins/hooks, contracts/plugins/verifiers,
+      A lock file belongs to one project. contracts/plugins/hooks, contracts/plugins/validators,
       contracts/plugins/native-profile and tests/mocks hold several projects each, which would
       share one packages.lock.json, so a project in a directory with other projects gets
       packages.ProjectName.lock.json instead.

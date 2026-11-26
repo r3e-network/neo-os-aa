@@ -14,10 +14,10 @@ namespace SmartAccount.Mocks
     /// gas inside <c>preCheck</c> and/or <c>postCheck</c>.
     /// </summary>
     /// <remarks>
-    /// The core charges every module callback against a per-call budget measured as a GasLeft
-    /// delta (<c>HookCallbackGasLimit</c> = 250_000_000 datoshi). Burning 300_000_000 therefore
-    /// exercises the fail-closed budget check rather than a business rule, which is the only way
-    /// to prove the envelope is bounded without shipping a runaway module.
+    /// A callback has no per-call budget: it runs inside the declared system fee of the
+    /// transaction. Burning 300_000_000 datoshi therefore exercises the platform's own
+    /// fail-closed behaviour (FAULT and full rollback once the declared fee is exhausted)
+    /// rather than a business rule, without shipping a runaway module.
     /// </remarks>
     /// <remarks>
     /// nccs compiles every source file under <c>tests/mocks</c> as its own contract, so a mock may
@@ -27,12 +27,12 @@ namespace SmartAccount.Mocks
     /// </remarks>
     [DisplayName("GasBurningHook")]
     [ContractPermission("*", "*")]
-    [ManifestExtra("Description", "Test-only v4 hook that overruns its callback gas budget")]
+    [ManifestExtra("Description", "Test-only v4 hook that burns a known amount of GAS in its callback")]
     public class GasBurningHook : SmartContract
     {
         private const string ModuleProfileJson = "{\"callbacks\":[\"preCheck\",\"postCheck\"],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":true,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"GasBurningHook\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"hook\",\"profileVersion\":1}";
 
-        /// <summary>Strictly above the per-callback hook cap of 250_000_000 datoshi.</summary>
+        /// <summary>Three GAS, more than any test here declares as system fee.</summary>
         private const long OverrunGas = 300_000_000;
 
         // Contract-global authority rows; the instance keys below start at 0xF1 and never collide.
@@ -129,7 +129,7 @@ namespace SmartAccount.Mocks
 
         /// <summary>
         /// <c>["setBurn", pre, post]</c> arms the burn for good; <c>["setBurnUntil", pre, post, expiryMs]</c>
-        /// arms it only until <c>expiryMs</c>. The bounded form lets a suite disarm a budget fault by
+        /// arms it only until <c>expiryMs</c>. The bounded form lets a suite disarm the gas fault by
         /// letting time pass instead of committing a 24 h configuration intent, which would also roll
         /// a fixed-window daily limit over.
         /// </summary>

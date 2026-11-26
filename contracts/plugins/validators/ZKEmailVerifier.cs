@@ -61,19 +61,19 @@ namespace SmartAccount.Validators
         /// Rejects installation: a bound instance could never authorize anything,
         /// so the only correct answer is to fail the install action outright.
         /// </summary>
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             ExecutionEngine.Assert(false, Disabled);
         }
 
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             ExecutionEngine.Assert(false, Disabled);
         }
 
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             ExecutionEngine.Assert(false, Disabled);

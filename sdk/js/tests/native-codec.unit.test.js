@@ -389,7 +389,7 @@ test('operation bounds: method, target, subkey, deadline, signature, hook proofs
   /ascending/);
 });
 
-test('protocol caps: 1-based generation, 16 KiB operation, 64 KiB batch', () => {
+test('protocol caps: 1-based generation and the 16 KiB operation', () => {
   // §4.1 [8]: the core faults a zero generation with SA_OPERATION_MALFORMED, so
   // the codec refuses to encode one rather than emitting an unexecutable op.
   assert.throws(
@@ -409,8 +409,9 @@ test('protocol caps: 1-based generation, 16 KiB operation, 64 KiB batch', () => 
   // A digest does not shrink the operation: the cap is measured on the signed
   // form, because the core validates the broadcast bytes, not the preimage.
   assert.throws(() => c.serializeOperation(heavy, true), /exceeds 16384/);
-  // 32 operations that are each legal still exceed the 64 KiB batch envelope:
-  // an op of 4 KiB of arguments is well under 16 KiB, but 32 of them are not.
+  // v4.1 has no 64 KiB batch envelope to cap: a list is refused as
+  // protocol-incompatible before any size is considered, whether or not each
+  // operation would have been legal on its own.
   const bulk = {
     ...operation,
     args: [{ type: 'ByteString', value: 'aa'.repeat(4000) }],
@@ -418,8 +419,12 @@ test('protocol caps: 1-based generation, 16 KiB operation, 64 KiB batch', () => 
   };
   assert.ok(c.serializeOperation(bulk));
   assert.throws(
+    () => c.buildExecutionScript(ACCOUNT_ID, [bulk], context),
+    /protocol-incompatible: executeUserOps is retired in v4\.1/,
+  );
+  assert.throws(
     () => c.buildExecutionScript(ACCOUNT_ID, Array.from({ length: 32 }, () => bulk), context),
-    /exceeds 65536/,
+    /protocol-incompatible: executeUserOps is retired in v4\.1/,
   );
 });
 
@@ -467,33 +472,41 @@ test('built-in and threshold signature fields are serialized, not hashed', () =>
 
 test('execution scripts embed the operation and refuse another account', () => {
   const signedOp = { ...operation, signature: '11'.repeat(64) };
-  const single = c.buildExecutionScript(ACCOUNT_ID, [signedOp], context);
+  const single = c.buildExecutionScript(ACCOUNT_ID, signedOp, context);
   assert.ok(
     single.endsWith('41627d5b52'),
     'the script ends in the System.Contract.Call syscall',
   );
   assert.ok(single.includes('0c0d65786563757465557365724f70'));
+  assert.equal(
+    single.includes('0c0e65786563757465557365724f7073'),
+    false,
+    'no executeUserOps tail can be emitted',
+  );
   // An execution script carries the exact operation envelope: the unsigned
   // serialization of the signed operation is a substring of the script bytes.
   assert.ok(single.includes(c.encodeValue(c.operationValue(signedOp))));
-  const batch = c.buildExecutionScript(
-    ACCOUNT_ID,
-    [signedOp, { ...signedOp, nonce: 1 }],
-    context,
+  // A list, of any length, is the retired batch shape: refused, never split and
+  // never encoded as an operations array.
+  assert.throws(
+    () => c.buildExecutionScript(ACCOUNT_ID, [signedOp, { ...signedOp, nonce: 1 }], context),
+    /protocol-incompatible: executeUserOps is retired in v4\.1/,
   );
-  assert.notEqual(batch, single);
-  assert.ok(batch.includes('0c0e65786563757465557365724f7073'));
+  assert.throws(
+    () => c.buildExecutionScript(ACCOUNT_ID, [signedOp], context),
+    /protocol-incompatible: executeUserOps is retired in v4\.1/,
+  );
   assert.throws(
     () =>
-      c.buildExecutionScript(ACCOUNT_ID, [signedOp], {
+      c.buildExecutionScript(ACCOUNT_ID, signedOp, {
         ...context,
         accountId: CUSTODY,
       }),
     /account mismatch/,
   );
-  assert.throws(() => c.buildExecutionScript(ACCOUNT_ID, [], context));
+  assert.throws(() => c.buildExecutionScript(ACCOUNT_ID, undefined, context), /operation/);
   assert.throws(
-    () => c.buildExecutionScript(ACCOUNT_ID, [operation], context),
+    () => c.buildExecutionScript(ACCOUNT_ID, operation, context),
     /signature/,
   );
 });

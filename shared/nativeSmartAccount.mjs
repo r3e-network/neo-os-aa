@@ -19,9 +19,7 @@ export const SIGNATURE_BYTES_MAX = 8192;
 export const ARGS_ENTRIES_MAX = 64;
 export const ARGS_BYTES_MAX = 4096;
 export const ARGS_DEPTH_MAX = 8;
-export const OPERATIONS_PER_ENVELOPE_MAX = 32;
 export const OPERATION_ENCODED_SIZE_MAX = 16384;
-export const ENVELOPE_ENCODED_SIZE_MAX = 65536;
 export const HOOK_PROOFS_ENTRIES_MAX = 8;
 export const HOOK_PROOFS_BYTES_MAX = 4096;
 const ACCOUNT_IDENTITY_DOMAIN = "aa524704";
@@ -558,27 +556,26 @@ export function createProtocolCodec({ sha256, hash160 }) {
   const serializeOperation = (op, emptySignature = false) =>
     serialize(operationValue(op, emptySignature));
 
-  const buildExecutionScript = (accountId, operations, context) => {
-    if (
-      !Array.isArray(operations) ||
-      !operations.length ||
-      operations.length > OPERATIONS_PER_ENVELOPE_MAX
-    )
-      fail(`execution requires 1..${OPERATIONS_PER_ENVELOPE_MAX} operations`);
-    const batch = operations.length !== 1;
+  /// §4.1: one transaction executes exactly one complete 13-field operation.
+  /// executeUserOps is retired in v4.1, so an Array argument is a
+  /// protocol-incompatible caller instead of something to split into
+  /// transactions: the 13 fields are read from the operation object, never
+  /// from positional arguments, and hookProofs stays inside the envelope.
+  const buildExecutionScript = (accountId, operation, context) => {
+    if (Array.isArray(operation))
+      fail(
+        "protocol-incompatible: executeUserOps is retired in v4.1; executeUserOp carries exactly one 13-field operation",
+      );
+    if (!operation || typeof operation !== "object")
+      fail("execution requires one complete 13-field operation");
     const sameAccount =
       context?.accountId === undefined ||
       nativeHex(context.accountId, 20) === nativeHex(accountId, 20);
     if (!sameAccount) fail("execution context account mismatch");
-    const ops = denseArray(operations).map((op) => operationValue(op));
-    const envelope = batch ? { type: "Array", value: ops } : ops[0];
-    // §4.1 envelope cap: a batch of at most 32 operations encodes to 64 KiB.
-    if (batch && serialize(envelope).length / 2 > ENVELOPE_ENCODED_SIZE_MAX)
-      fail(`serialized batch envelope exceeds ${ENVELOPE_ENCODED_SIZE_MAX} bytes`);
     return dynamicCall(
       context?.coreContractHash ?? NATIVE_SMART_ACCOUNT_CONTRACT,
-      batch ? "executeUserOps" : "executeUserOp",
-      [hashValue(accountId), envelope],
+      "executeUserOp",
+      [hashValue(accountId), operationValue(operation)],
     );
   };
 

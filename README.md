@@ -1,6 +1,6 @@
 # Neo SmartAccount
 
-SmartAccount is an unpublished account abstraction protocol for Neo N3. This repository maintains one native implementation. There is no public SmartAccount release, deployed account population to migrate, or version for a wallet user to choose.
+SmartAccount is an unpublished account abstraction protocol for Neo N3. This repository maintains one native implementation. There is no public SmartAccount release and no protocol version for a wallet user to choose.
 
 Start with the [module protocol](docs/SA-MODULE-PROTOCOL.md) and its [current parameters](docs/proposals/smartaccount-native-profile-parameters.json). The [native profile](contracts/native/profile.json) records the implementation and its open acceptance gates. [中文](README.zh-CN.md)
 
@@ -32,7 +32,7 @@ Shared draft metadata is intentionally bounded: the frontend keeps the latest 10
 
 Use `frontend/.env.example` as the wallet configuration reference.
 
-- Apply every file in `supabase/migrations/` in filename order (`20260308_home_operations_workspace.sql` through `20261118_rename_aa_to_sa.sql`). The chain replays cleanly on a fresh database; do not cherry-pick individual files.
+- Apply every file in `supabase/migrations/` in filename order (`20260308_home_operations_workspace.sql` through `20261118_rename_aa_to_sa.sql`). Do not cherry-pick individual files: the chain is designed to be replayed as a whole, but no automated replay currently proves that it does (see the CI bullet below).
 - Treat `supabase/migrations/20260327_security_hardening.sql` as mandatory: it removes the permissive `aa_account_metadata` RLS policies, revokes direct table access on `aa_transaction_drafts`, and fixes the signature-append race.
 - Treat `supabase/migrations/20260611_draft_metadata_hardening.sql` as mandatory: it locks the remaining draft metadata writers against lost updates, bounds anonymous `create_sa_draft` payloads (64 KiB cap, array caps, inbound activity/receipt trimming), and revokes anon execute on the internal activity-scope helper.
 - Treat `supabase/migrations/20261118_rename_aa_to_sa.sql` as mandatory: it renames the `aa_transaction_drafts` / `aa_account_metadata` tables plus every `aa_` draft function, trigger, index, and read policy to their `sa_` names, and re-issues the surviving plpgsql bodies with `sa_` references (they resolve table and function names at execution time, so the renames alone would break every draft RPC at runtime), so all table and RPC references after it must use the `sa_` spelling.

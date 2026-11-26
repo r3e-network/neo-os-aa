@@ -22,7 +22,7 @@ ARTIFACTS = {"coq/NativeAdmission.v", "coq/SubscriptionBilling.v", "coq/SmartAcc
              "coq/CustomGovernance.v",
              "coq/CustomSponsorship.v",
              "coq/CustomRecovery.v",
-             "coq/CallbackPluginTopology.v", "coq/VerifierGasBudget.v",
+             "coq/CallbackPluginTopology.v",
              "coq/AuthorizationEvidence.v", "coq/WitnessRuleSemantics.v",
              "coq/NeoVmCallSubset.v", "coq/AttestationProofBinding.v",
              "coq/SignerIndependence.v", "coq/PluginLifecycle.v",
@@ -36,27 +36,33 @@ ARTIFACTS = {"coq/NativeAdmission.v", "coq/SubscriptionBilling.v", "coq/SmartAcc
              "coq/NativeRestrictedPolicy.v", "coq/NativeCompositePhase.v",
              "tla/SmartAccountSA.tla",
              "tla/SmartAccountSA.cfg", "smt/sa_core.smt2"}
-# Scope is part of the fail-closed source correspondence record. Successful
-# abstract budget proofs must never be attributed to standard public Call.
+# Scope is part of the fail-closed source correspondence record. A module callback
+# is an ordinary Contract.Call whose only bound is the declared system fee of its
+# transaction; no profile enforces a per-callback child budget.
+# "public" and "platform" describe the retired custom kernel. They are kept as
+# metadata so the archived reference-model receipts keep their recorded scope and
+# the lock's runtimeProfiles record stays comparable; no current gate builds or
+# verifies against them. The gate verifies CURRENT_PROFILE ("native-current") only,
+# and formal/refinement/ is not part of this gate.
 RUNTIME_PROFILES = {
     "public": {"artifactDirectory": "contracts/bin/public", "define": None,
            "verifierCall": "System.Contract.Call", "verifierChildBudgetEnforced": False},
+    # The PLATFORM kernel's System.Contract.CallWithGasLimit left the core; a
+    # build of that profile would reach a module through an ordinary call.
     "platform": {"artifactDirectory": "contracts/bin/platform", "define": "PLATFORM",
-                 "verifierCall": "System.Contract.CallWithGasLimit", "verifierChildBudgetEnforced": True},
+                 "verifierCall": "System.Contract.Call", "verifierChildBudgetEnforced": False},
     "native-current": {"abiVersion": 4, "identityVersion": 4, "implementationVerified": False,
                   "scope": "authority admission, recovery status, hook order, governed policy admission, resource-disjoint policy checkpoints, atomic core configuration batches and custody operation authorization, exclusive threshold spending and delayed release; optional SubscriptionValidator billing windows (model only)"},
     "native": {"artifactDirectory": "explicit native build output", "define": "SMARTACCOUNT_NATIVE",
                "core": "SmartAccount", "abiVersion": 2, "identityVersion": 1,
-               "verifierCall": "bounded native callback", "verifierChildBudgetEnforced": True,
-               "verifierBudgetDatoshi": 100000000, "hookBudgetDatoshi": 250000000},
+               "verifierCall": "System.Contract.Call", "verifierChildBudgetEnforced": False},
 }
 PUBLIC_MODELS = {"coq/SmartAccountSA.v", "coq/ProxyWitnessScript.v", "coq/MultiSigPolicy.v",
                  "coq/CustomGovernance.v",
                  "coq/CustomSponsorship.v",
                  "coq/CustomRecovery.v",
                  "tla/SmartAccountSA.tla", "tla/SmartAccountSA.cfg", "smt/sa_core.smt2"}
-MODEL_PROFILES = {name: (["platform", "native"] if name == "coq/VerifierGasBudget.v" else
-                         ["public", "platform"] if name in PUBLIC_MODELS else ["native"])
+MODEL_PROFILES = {name: (["public", "platform"] if name in PUBLIC_MODELS else ["native"])
                   for name in sorted(ARTIFACTS)}
 MODEL_PROFILES["coq/NativeAdmission.v"] = ["native-current"]
 MODEL_PROFILES["coq/SubscriptionBilling.v"] = ["native-current"]
@@ -68,7 +74,7 @@ NATIVE_CORE_REQUIRED_FILES = {
     "src/Neo/SmartContract/ApplicationEngine.Runtime.cs", "src/Neo/SmartContract/Native/NativeContract.cs",
     *{"src/Neo/SmartContract/Native/" + name for name in (
         "SmartAccount.cs", "SmartAccountProtocol.cs", "SmartAccountRecords.cs",
-        "SmartAccountEnvelope.cs", "SmartAccountInvocationContext.cs",
+        "SmartAccountInvocationContext.cs",
         "SmartAccount.Modules.cs", "SmartAccount.Execution.cs",
         "SmartAccountModulePolicy.cs", "SmartAccountModuleProtocol.cs")},
 }
@@ -81,7 +87,7 @@ NATIVE_KERNEL_SOURCES = {
     "contracts/native/Runtime/ApplicationEngine.Runtime.cs",
     *{"contracts/native/SmartAccount/" + name for name in (
         "NativeContract.cs", "SmartAccount.cs", "SmartAccount.Execution.cs",
-        "SmartAccount.Modules.cs", "SmartAccountEnvelope.cs",
+        "SmartAccount.Modules.cs",
         "SmartAccountInvocationContext.cs", "SmartAccountModulePolicy.cs",
         "SmartAccountModuleProtocol.cs", "SmartAccountProtocol.cs", "SmartAccountRecords.cs")},
 }
@@ -108,8 +114,8 @@ SOURCE_FILES = {*NATIVE_KERNEL_SOURCES,
                 "contracts/plugins/hooks/WhitelistHook.cs",
                 "contracts/plugins/hooks/DailyLimitHook.cs",
                 "contracts/plugins/hooks/TokenRestrictedHook.cs",
-                "docs/archive/native-research/smartaccount-native-profile-v2-parameters.json",
-                "docs/archive/native-research/smartaccount-native-profile-v2-vectors.json",
+                "formal/reference/smartaccount-profile-v2-parameters.json",
+                "formal/reference/smartaccount-profile-v2-vectors.json",
                 "scripts/native_module_profile.py", "scripts/build_native_modules.py",
                 "contracts/plugins/native-profile/profiles.json"}
 SOURCE_FILES.update({"contracts/modules/Shared/ModuleSupport.cs",
@@ -120,7 +126,6 @@ for _module in ("GovernanceModule", "RecoveryModule", "HookOrchestratorModule", 
 SOURCE_FILES.update({"Directory.Build.props", "nuget.config", "contracts/neo-platform-packages.json",
                      "scripts/verify_repo.sh", "scripts/check_neo_platform_packages.mjs",
                      "formal/verify.py", "formal/verify-in-docker.sh", "formal/Dockerfile",
-                     "docs/archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md",
                      "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md",
@@ -321,23 +326,6 @@ CUSTOM_RECOVERY_COQ_MUTATIONS = {
     "recovery-allows-latched-repeat": (
         "&& negb escrow && negb (owner_only before)", "&& negb escrow && true"),
 }
-VERIFIER_GAS_BUDGET_COQ_MUTATIONS = {
-    # These mutations remove the concrete budget obligations.  They must make
-    # at least one closed theorem fail, otherwise the formal gate would not
-    # depend on the ancestor/atomicity conditions.
-    "budget-limit-check": (
-        "Nat.leb (budget_consumed budget + amount) (budget_limit budget)",
-        "true"),
-    "ancestor-conjunction": (
-        "can_charge budget amount && all_can_charge rest amount",
-        "can_charge budget amount || all_can_charge rest amount"),
-    "atomic-failure-state": (
-        "| None => (false, budgets)",
-        "| None => (false, [])"),
-    "nested-ancestor-requirement": (
-        "all_can_charge rest amount",
-        "true"),
-}
 AUTHORIZATION_EVIDENCE_COQ_MUTATIONS = {
     # These mutations remove one binding or replay condition from the
     # protocol-level evidence gate. They do not claim to mutate a primitive
@@ -486,38 +474,25 @@ ABI_MANIFEST_PROJECTION_COQ_MUTATIONS = {'abi-requires-initializer': ('Nat.eqb (
  'abi-requires-empty-initializer-parameters': ('parameter_types_eqb (manifest_parameter_types method) '
                                                '[] &&',
                                                'true &&')}
-NEO_VM_CONTINUATION_COQ_MUTATIONS = {'neo-vm-child-budget-bound': ('if (0 <? requested) && (requested <=? parent) then Some requested else '
-                               'None.',
-                               'if (0 <? requested) then Some requested else None.'),
- 'neo-vm-positive-child-budget': ('if (0 <? requested) && (requested <=? parent) then Some requested '
-                                  'else None.',
-                                  'if requested <=? parent then Some requested else None.'),
- 'neo-vm-ancestor-admission': ('if forallb (fun budget => requested <=? budget) ancestors', 'if true'),
- 'neo-vm-hardfork-gate': ('if callback_gas_cap_enabled config\n'
-                          '          then match callback_chain_budget',
-                          'if true\n          then match callback_chain_budget'),
- 'neo-vm-loadscript-continuation': ('          push_continuation state target\n      | ICallback',
+# A module callback is an ordinary call frame, so only the continuation and
+# rollback obligations remain; the child/ancestor budget mutations left with the
+# per-callback budgets they mutated.
+NEO_VM_CONTINUATION_COQ_MUTATIONS = {'neo-vm-loadscript-continuation': ('          push_continuation state target\n'
+                                    '      | IRet',
                                     '          mkVmState target (vm_stack state) (vm_continuations '
                                     'state)\n'
-                                    '            (vm_budget state) (vm_ancestor_budgets state) '
-                                    '(vm_storage state) Running\n'
-                                    '      | ICallback'),
- 'neo-vm-callt-return-address': ('(SharedContinuation (S (vm_pc state)) :: vm_continuations state)',
-                                 '(SharedContinuation (vm_pc state) :: vm_continuations state)'),
- 'neo-vm-rollback-storage': ('(vm_budget final) (vm_ancestor_budgets final) (vm_storage initial) '
-                             'Faulted',
-                             '(vm_budget final) (vm_ancestor_budgets final) (vm_storage final) Faulted'),
- 'neo-vm-ancestor-charge': ('then Some (map (fun budget => budget - amount) budgets)',
-                            'then Some budgets'),
- 'neo-vm-step-ancestor-charge': ('match ancestor_charge (vm_budget state :: vm_ancestor_budgets state) '
-                                 'amount with',
-                                 'match ancestor_charge [vm_budget state] amount with'),
- 'neo-vm-bounded-return-parent': ('mkVmState continuation (vm_stack state) rest parent ancestors',
-                                  'mkVmState continuation (vm_stack state) rest (vm_budget state) '
-                                  'ancestors'),
- 'neo-vm-bounded-return-ancestors': ('mkVmState continuation (vm_stack state) rest parent ancestors',
-                                     'mkVmState continuation (vm_stack state) rest parent []'),
- 'neo-vm-atomic-chain-check': ('if forallb (fun budget => amount <=? budget) budgets', 'if true')}
+                                    '            (vm_storage state) Running\n'
+                                    '      | IRet'),
+ 'neo-vm-callt-return-address': ('(S (vm_pc state) :: vm_continuations state)',
+                                 '(vm_pc state) :: vm_continuations state'),
+ 'neo-vm-rollback-storage': ('(vm_storage initial) Faulted',
+                             '(vm_storage final) Faulted'),
+ 'neo-vm-ret-keeps-continuation': ('| continuation :: rest =>\n'
+                                   '              mkVmState continuation (vm_stack state) rest '
+                                   '(vm_storage state) Running',
+                                   '| continuation :: rest =>\n'
+                                   '              mkVmState continuation (vm_stack state) '
+                                   '(continuation :: rest) (vm_storage state) Running')}
 WITNESS_RULE_REFINEMENT_COQ_MUTATIONS = {
     # These mutations remove one correspondence condition from the executable
     # fault-aware evaluator.  The refinement theorem must fail closed rather
@@ -850,7 +825,6 @@ COQ_MODULES = {
     "MultiSigPolicy.v": MULTISIG_COQ_MUTATIONS,
     "ProxyWitnessScript.v": PROXY_WITNESS_COQ_MUTATIONS,
     "CallbackPluginTopology.v": CALLBACK_PLUGIN_COQ_MUTATIONS,
-    "VerifierGasBudget.v": VERIFIER_GAS_BUDGET_COQ_MUTATIONS,
     "AuthorizationEvidence.v": AUTHORIZATION_EVIDENCE_COQ_MUTATIONS,
     "WitnessRuleSemantics.v": WITNESS_RULE_COQ_MUTATIONS,
     "NeoVmCallSubset.v": NEO_VM_CALL_SUBSET_COQ_MUTATIONS,
@@ -892,7 +866,7 @@ def check_profile_scope(lock):
     require(lock.get("runtimeProfiles") == RUNTIME_PROFILES,
             "Runtime profile scope changed; explicit review required")
     require(lock.get("modelProfiles") == MODEL_PROFILES,
-            "Model profile scope changed; public child-budget claims are forbidden")
+            "Model profile scope changed; explicit review required")
 
 
 def native_core_hashes(core_root):
@@ -919,7 +893,9 @@ def native_core_hashes(core_root):
         if (core_root / name).is_file():
             checked(core_root / name)
             selected.add(name)
-    return {name: hashlib.sha256((core_root / name).read_bytes()).hexdigest() for name in sorted(selected)}
+    # Same LF-normalized digest as the `sources` pins (content_digest): a CRLF checkout
+    # of the core must report the same hashes as a Linux CI checkout.
+    return {name: content_digest(core_root / name) for name in sorted(selected)}
 
 
 def check_native_core_sources(lock, core_root):
@@ -1021,7 +997,7 @@ def check_native_composite_bounded(repo_root=ROOT.parent):
     membership and a first-valid-index scan for selection. Source correspondence
     still requires the reviewed lock and implementation/runtime evidence.
     """
-    profile = json.loads((repo_root / "docs/archive/native-research/smartaccount-native-profile-v2-parameters.json").read_text())
+    profile = json.loads((repo_root / "formal/reference/smartaccount-profile-v2-parameters.json").read_text())
     profile_caps = {name: profile.get(field) for name, field in {
         "children": "compositeVerifierMaxChildren", "threshold": "compositeVerifierMaxThreshold",
         "approved": "compositeVerifierMaxApprovedChildren", "domains": "compositeVerifierMaxSignerDomains"}.items()}
@@ -1286,9 +1262,8 @@ def check_coq_modules(modules, coqc, work, logs, report):
 # protocol. The general reference suite has its own scope and receipt.
 CURRENT_PROFILE = "native-current"
 CURRENT_SOURCES = SOURCE_FILES - {
-    "docs/archive/native-research/smartaccount-native-profile-v2-parameters.json",
-    "docs/archive/native-research/smartaccount-native-profile-v2-vectors.json",
-    "docs/archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md",
+    "formal/reference/smartaccount-profile-v2-parameters.json",
+    "formal/reference/smartaccount-profile-v2-vectors.json",
     "docs/proposals/SMARTACCOUNT-NATIVE-MULTISIG.md",
     "docs/proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.md",
 }

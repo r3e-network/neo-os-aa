@@ -479,8 +479,15 @@ function registrationPlan(sdk, input) {
   return { plan: sdk.buildCreateAccountScript(input), recipe: { method: "buildCreateAccountScript", input } };
 }
 
-function executionPlan(sdk, { accountId, operations }) {
-  const input = { accountId, operations: Array.isArray(operations) ? operations : [operations] };
+function executionPlan(sdk, { accountId, operation }) {
+  // v4.1 carries exactly one operation per transaction. The retired batch entry is not
+  // normalized here: a runbook that still passes a list fails loudly instead of sending
+  // several transactions nobody signed.
+  if (Array.isArray(operation))
+    throw new Error(
+      'protocol-incompatible: executeUserOps is retired in v4.1; executionPlan takes one complete 13-field operation',
+    );
+  const input = { accountId, operation };
   return { plan: sdk.buildExecutionScript(input), recipe: { method: "buildExecutionScript", input } };
 }
 
@@ -555,7 +562,7 @@ function operation({
 
 async function executeOperation(chain, sdk, { accountId, operation: op, feePayer = chain.account, systemFee, caps, label } = {}) {
   return sendPlan(chain, sdk, {
-    ...executionPlan(sdk, { accountId, operations: [op] }),
+    ...executionPlan(sdk, { accountId, operation: op }),
     feePayer,
     systemFee,
     caps,

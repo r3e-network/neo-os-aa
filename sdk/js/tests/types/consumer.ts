@@ -155,11 +155,6 @@ const channel: string = codec.deriveNonceChannel(
 );
 const packedNonce: bigint = codec.composeNonce(channel, '0');
 const split: { channel: bigint; sequence: bigint } = codec.splitNonce(packedNonce);
-const script: string = codec.buildExecutionScript(ACCOUNT_ID, [], {
-  networkMagic: NETWORK,
-  coreContractHash: CORE,
-  accountId: ACCOUNT_ID,
-});
 
 // --- UserOperationBuilder ---------------------------------------------------
 const operation: UserOperation = createUserOpBuilder({ networkMagic: NETWORK })
@@ -186,6 +181,12 @@ const digest: string = codec.operationDigest(
 );
 const serialized: string = codec.serializeOperation(operation, true);
 const value: VMValue = codec.operationValue(operation);
+// The codec takes one complete 13-field operation: there is no list form.
+const script: string = codec.buildExecutionScript(ACCOUNT_ID, operation, {
+  networkMagic: NETWORK,
+  coreContractHash: CORE,
+  accountId: ACCOUNT_ID,
+});
 
 const decodedDescriptor = decodeAccountDescriptorStack(null);
 const decodedModule = decodeModuleDescriptorStack(null);
@@ -348,12 +349,14 @@ const moduleInstall: AccountActionPlan = client.buildAccountActionScript({
 });
 const batch: AccountActionPlan = awaited(client.buildConfigurationBatchPlan({ accountId: ACCOUNT_ID, actions: [
   { method: 'setBuiltinAuthorization', defaultOperationAuthorization: true, defaultMessageAuthorization: false },
-  { method: 'setRecoveryPolicy', recoveryAuthority: TARGET, recoveryTimelockMs: '604800000' },
+  { method: 'configureModule', moduleId: 3, data: [codec.integerValue(1)] },
 ] }));
 const execution = client.buildExecutionScript({
   accountId: ACCOUNT_ID,
-  operations: [operation],
+  operation,
 });
+const executionOperation: UserOperation = execution.operation;
+const executionMethod: 'executeUserOp' = execution.method;
 const executionSigners: SignerDescriptor[] = execution.signers.map((account) => ({
   account,
   scopes: 'WitnessRules',
@@ -545,6 +548,8 @@ void [
   normalized,
   registration,
   executionSigners,
+  executionOperation,
+  executionMethod,
   thresholdMembers,
   moduleInstall,
   batch,

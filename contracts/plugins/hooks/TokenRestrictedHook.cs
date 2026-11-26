@@ -74,7 +74,7 @@ namespace SmartAccount.Hooks
         /// <c>initData</c>: empty, or one command:
         /// <c>["restrictToken", token]</c>.
         /// </summary>
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             HookAuthority.RequireLifecycle(accountId, moduleId);
             if (initData.Length > 0) ApplyConfig(accountId, moduleId, initData);
@@ -84,13 +84,13 @@ namespace SmartAccount.Hooks
         /// <c>configData</c>: <c>["restrictToken", token]</c> or
         /// <c>["unrestrictToken", token]</c>.
         /// </summary>
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             HookAuthority.RequireLifecycle(accountId, moduleId);
             ApplyConfig(accountId, moduleId, configData);
         }
 
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             HookAuthority.RequireLifecycle(accountId, moduleId);
             HookAuthority.DeleteInstancePrefix(Prefix_RestrictedTokens, accountId, moduleId);

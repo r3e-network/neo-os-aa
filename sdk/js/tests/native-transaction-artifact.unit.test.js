@@ -91,7 +91,6 @@ function preflightOf(artifact, overrides = {}) {
     relayed: false,
     mempoolChecked: false,
     gasconsumed: "10",
-    minimumrequiredfee: "100",
     stack: [{ type: "Any" }],
     ...overrides,
   };
@@ -319,7 +318,7 @@ test("import refuses a review for another network, profile, script, payer or sig
   await assert.rejects(importArtifact(other, review, artifact), /profile mismatch|network/);
 });
 
-test("import refuses fees above the caps, below the reviewed admission and an unreachable window", async () => {
+test("import refuses fees above the caps, below the reviewed consumption and an unreachable window", async () => {
   const node = createNode();
   const { artifact, review } = await registrationReview(node);
   for (const caps of [
@@ -331,9 +330,18 @@ test("import refuses fees above the caps, below the reviewed admission and an un
   ]) {
     await assert.rejects(importArtifact(node, review, artifact, caps));
   }
-  const admission = clone(review);
-  admission.simulation.minimumRequiredFee = "201";
-  await assert.rejects(importArtifact(node, admission, artifact), /admission/);
+  // The reviewed simulation is the only fee evidence: an artifact that
+  // declares less than the reviewed consumption (200) is refused.
+  const consumed = clone(review);
+  consumed.simulation.gasConsumed = "201";
+  await assert.rejects(importArtifact(node, consumed, artifact), /reviewed simulation consumption/);
+  // Exactly the consumption is accepted: no margin is required or added.
+  const exact = { ...review, simulation: { state: review.simulation.state, gasConsumed: "200" } };
+  assert.equal((await importArtifact(node, exact, artifact)).fees.system, "200");
+  // A review without a quoted consumption cannot justify any declared fee.
+  const unquoted = clone(review);
+  delete unquoted.simulation.gasConsumed;
+  await assert.rejects(importArtifact(node, unquoted, artifact), /gasconsumed/);
   for (const height of [0, -1, 200, 50, 1.5, "100"]) {
     const expired = createNode();
     const flow = await registrationReview(expired);
@@ -356,8 +364,10 @@ test("preflight checks every declared block, execution boundary and fee", async 
     { exception: "inconsistent preflight result" },
     { relayed: true },
     { mempoolChecked: true },
-    { minimumrequiredfee: "201" },
-    { minimumrequiredfee: undefined },
+    // The signed transaction declares 200: a final execution that consumed
+    // more than that is refused, and so is a node that quotes no consumption.
+    { gasconsumed: "201" },
+    { gasconsumed: undefined },
   ];
   for (const change of changes) {
     const faulted = preflightOf(artifact, change);

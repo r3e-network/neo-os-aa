@@ -453,23 +453,6 @@ export function buildExecuteUserOpInvocation({ saContractHash, accountId, operat
   };
 }
 
-/** `executeUserOps(accountId, operations)` — one envelope, 1..32 operations. */
-export function buildExecuteUserOpsInvocation({ saContractHash, accountId, operations } = {}) {
-  const core = sanitizeHex(saContractHash);
-  const account = sanitizeHex(accountId);
-  if (!/^[0-9a-f]{40}$/.test(core) || !/^[0-9a-f]{40}$/.test(account) || !Array.isArray(operations) || !operations.length) {
-    return null;
-  }
-  return {
-    scriptHash: core,
-    operation: 'executeUserOps',
-    args: [
-      smartAccountCodec.hashValue(account),
-      { type: 'Array', value: operations.map((operation) => smartAccountCodec.operationValue(operation)) },
-    ],
-  };
-}
-
 /** r‖s for a P-256 / secp256k1 validator: the recovery byte is not submitted. */
 export function toCompactEcdsaSignature(signature) {
   const parsed = Signature.from(signature);

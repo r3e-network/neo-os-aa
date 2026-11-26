@@ -52,6 +52,12 @@
             0,
             1
           ]
+        },
+        "governance": {
+          "const": true
+        },
+        "hookPlanner": {
+          "const": true
         }
       }
     },
@@ -102,7 +108,53 @@
           "const": [
             "validateUserOp",
             "onUserOpComplete",
+            "planHooks"
+          ]
+        },
+        "capabilities": {
+          "properties": {
+            "messageCapability": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "moduleType": {
+          "const": "validator"
+        },
+        "callbacks": {
+          "const": [
+            "validateUserOp",
+            "onUserOpComplete",
+            "planHooks",
             "isValidSignature"
+          ]
+        },
+        "capabilities": {
+          "properties": {
+            "messageCapability": {
+              "const": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "moduleType": {
+          "const": "validator"
+        },
+        "callbacks": {
+          "const": [
+            "validateUserOp",
+            "onUserOpComplete",
+            "planHooks",
+            "isValidSignature",
+            "isValidSignature",
+            "planHooks"
           ]
         },
         "capabilities": {
@@ -133,6 +185,20 @@
             "thresholdMemberEligible": {
               "const": false
             }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "governance"
+                ]
+              },
+              {
+                "required": [
+                  "hookPlanner"
+                ]
+              }
+            ]
           }
         }
       }
@@ -153,6 +219,20 @@
             "thresholdMemberEligible": {
               "const": false
             }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "governance"
+                ]
+              },
+              {
+                "required": [
+                  "hookPlanner"
+                ]
+              }
+            ]
           }
         }
       }

@@ -161,7 +161,7 @@ async function main() {
   const replayRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: builtInId, operations: [signedBuiltInOp] }),
+    h.executionPlan(sdk, { accountId: builtInId, operation: signedBuiltInOp }),
     /SA_NONCE_INVALID|nonce/i,
     "replay of a consumed operation",
   );
@@ -204,10 +204,10 @@ async function main() {
     sdk,
     h.executionPlan(sdk, {
       accountId: p256Id,
-      operations: [h.signOperationWithCustody(chain, core.hash, {
+      operation: h.signOperationWithCustody(chain, core.hash, {
         accountId: p256Id,
         operation: await routedOperation(sdk, p256Id, { descriptor: p256State }),
-      })],
+      }),
     }),
     /SA_MODULE_NOT_ROUTABLE/,
     "custody signature on an account whose built-in route is off",
@@ -226,7 +226,7 @@ async function main() {
   const rogueP256Refusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: p256Id, operations: [signedRogueP256] }),
+    h.executionPlan(sdk, { accountId: p256Id, operation: signedRogueP256 }),
     /SA_VALIDATION_REJECTED/,
     "a key the instance does not hold",
   );
@@ -305,7 +305,7 @@ async function main() {
   const overLimitRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: limitId, operations: [signedOverLimit] }),
+    h.executionPlan(sdk, { accountId: limitId, operation: signedOverLimit }),
     /Daily limit exceeded/,
     "a transfer above the configured daily limit",
   );
@@ -469,7 +469,7 @@ async function main() {
   const memberRouteRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: thresholdId, operations: [signWithP256(chain, core.hash, { accountId: thresholdId, operation: memberRouteOp, key: memberA, moduleId: "1" })] }),
+    h.executionPlan(sdk, { accountId: thresholdId, operation: signWithP256(chain, core.hash, { accountId: thresholdId, operation: memberRouteOp, key: memberA, moduleId: "1" }) }),
     /SA_MODULE_NOT_ROUTABLE/,
     "routing an active-policy member as a standalone validator",
   );
@@ -487,7 +487,7 @@ async function main() {
   const staleGenerationRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: thresholdId, operations: [staleSigned] }),
+    h.executionPlan(sdk, { accountId: thresholdId, operation: staleSigned }),
     /SA_CREDENTIAL_STALE/,
     "a policy generation that is not the current one",
   );
@@ -530,7 +530,7 @@ async function main() {
   const belowThresholdRefusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: thresholdId, operations: [singleSigned] }),
+    h.executionPlan(sdk, { accountId: thresholdId, operation: singleSigned }),
     /SA_VALIDATION_REJECTED/,
     "one approval against a 2-of-2 threshold",
   );
@@ -646,7 +646,7 @@ async function main() {
   const rogueWeb3Refusal = await h.expectRefusal(
     chain,
     sdk,
-    h.executionPlan(sdk, { accountId: web3Id, operations: [signedRogueWeb3] }),
+    h.executionPlan(sdk, { accountId: web3Id, operation: signedRogueWeb3 }),
     /SA_VALIDATION_REJECTED/,
     "a secp256k1 key the validator does not hold",
   );

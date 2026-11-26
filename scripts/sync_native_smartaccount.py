@@ -3,7 +3,7 @@
 
 `contracts/native/SmartAccount/` in neo-os-sa is the only editable
 home of the SmartAccount native contract. The neo-native-core checkout needs
-its own copies of those nine files to build the node standalone, so it carries
+its own copies of those eight files to build the node standalone, so it carries
 generated ones: this script rewrites them, byte-deterministically, from the
 true source (each copy is headed with a GENERATED marker).
 
@@ -24,14 +24,15 @@ import os
 import sys
 from pathlib import Path
 
-# The nine contract files that have generated copies in the core checkout.
+# The eight contract files that have generated copies in the core checkout.
 # Intent, key, message and canonical-JSON surfaces are user-space module
 # concerns in the minimal core; they no longer have native copies.
+# The transaction entry script recognizer lives inside SmartAccount.Execution.cs:
+# it is the only consumer of the transaction script and builds nothing.
 SYNCED_FILES = [
     "SmartAccount.cs",
     "SmartAccount.Execution.cs",
     "SmartAccount.Modules.cs",
-    "SmartAccountEnvelope.cs",
     "SmartAccountInvocationContext.cs",
     "SmartAccountModulePolicy.cs",
     "SmartAccountModuleProtocol.cs",

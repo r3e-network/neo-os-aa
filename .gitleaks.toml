@@ -1,4 +1,4 @@
-# gitleaks configuration for neo-os-sa.
+# gitleaks configuration for neo-os-aa.
 #
 # Keeps every default rule. Every allowlist below names one rule and one file,
 # and admits one value class on a line of that file, so the same value anywhere
@@ -57,7 +57,7 @@ The Web3AuthVerifier script hash of the canonical shared TestNet deployment. A c
 script hash is public chain data, published here in a documentation example, and is not a \
 credential. Triaged 2026-10-09 (RV-DSCU163R1-r1, minor): generic-api-key reports the \
 `name = '0x<40 hex>'` assignment shape in the SDK usage document. The same hash appears in \
-plain backticks in README.md:120, docs/PLUGIN_MATRIX.md:18 and the registry module \
+plain backticks in the registry module \
 frontend/src/config/generatedMorpheusRegistry.js, where it is not reported. The allowance is \
 one rule, one file and the exact assignment line carrying this value: a different value on \
 that line, the same value assigned anywhere else, or any other secret in this file is still \
@@ -68,79 +68,8 @@ condition = "AND"
 paths = ['''^frontend/src/assets/docs/sdk-usage\.md$''']
 regexTarget = "line"
 # The full line, anchored, with the literal reviewed value: `const web3AuthVerifierHash =
-# '0x1111f5b6b046a964c75d208998c13945ce172e85';` (sdk-usage.md:45).
+# '0x1111f5b6b046a964c75d208998c13945ce172e85';` (sdk-usage.md:39).
 regexes = ['''^[[:space:]]*const web3AuthVerifierHash = '0x1111f5b6b046a964c75d208998c13945ce172e85';[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Source-digest inventory of the native-domain-copy build runner report. Every member of its \
-sourceSha256 and builds/runtime maps is a repo-relative upstream C# source path, or a vendored \
-assembly name, mapped to the SHA-256 of that file's bytes. generic-api-key reports 32 of them \
-because the path itself carries the rule's keyword: KeyedCollectionSlim.cs, JPathToken.cs, \
-GasTokenExtensions.cs, WalletAPI.cs and the rest. Triaged 2026-10-12 (WS-CU-231-20261012.md): a \
-content digest of a public source file is a public identifier and authenticates nothing, and the \
-report carries no member of any other shape - every 64-hex value under a file-path key in it sits \
-in one of those two digest maps. The allowance admits a .cs or .dll path mapped to exactly 64 \
-lower-case hex and nothing else; the reviewed inventory pins the 736 lines it reaches and the \
-artefact's SHA-256, so an edit refuses until the bytes are reviewed again.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/native-domain-copy-20261009/runner-build\.json$''']
-regexTarget = "line"
-# One JSON member: a source path or assembly name, then a 64-character lower-case SHA-256.
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|dll)": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Compiled-artefact digest in the native-domain-copy candidate acceptance report. Its artifactHashes \
-map names each built NEF and gives the SHA-256 of the produced file; generic-api-key reports the \
-SessionKeyVerifier.nef entry because the artefact's name carries the rule's keyword. Triaged \
-2026-10-12 (WS-CU-231-20261012.md): a build-output digest is a public identifier, not a \
-credential, and it is what makes the report's reproducibility claim checkable - removing it would \
-destroy the evidence. The allowance admits a .nef name mapped to exactly 64 lower-case hex; the \
-reviewed inventory pins the 3 lines it reaches and the artefact's SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/native-domain-copy-20261009/candidate-acceptance\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.nef": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-The same compiled-artefact digest class in the native-domain-copy comparison report, which carries \
-a baselineReceipt and a candidateReceipt and therefore the SessionKeyVerifier.nef digest twice. \
-Triaged 2026-10-12 (WS-CU-231-20261012.md) on the same ground as the acceptance report: a \
-build-output digest is a public identifier. The allowance admits a .nef name mapped to exactly 64 \
-lower-case hex; the reviewed inventory pins the 6 lines it reaches and the artefact's SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/native-domain-copy-20261009/comparison\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.nef": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Private-chain script hashes of the session verifier in the native-usability private runtime \
-report. Its accounts map gives the 20-byte script hash of the deploying account and its proxies \
-map the 0x-prefixed script hash of the deployed verifier; generic-api-key reports both because \
-the member is named SessionKeyVerifier, while the sibling NeoNativeVerifier and MultiSigVerifier \
-entries carry no keyword and are not reported. Triaged 2026-10-12 (WS-CU-231-20261012.md): a Neo \
-script hash is an address, not a key, and this report declares publicNetworksTouched false with \
-networkMagic 2787300650, an ephemeral neo-express network; its proxy hash is not the shared \
-TestNet aaSessionKeyVerifier that generatedMorpheusRegistry.js carries, so it is not even a public \
-deployment. The report holds no private key material: no WIF-shaped string, and its one mention \
-of a private key is the prose field privateKeyTransport. The allowance admits the \
-SessionKeyVerifier member mapped to an optionally 0x-prefixed 40 lower-case hex; the reviewed \
-inventory pins the 2 lines it reaches and the artefact's SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/native-usability-20261009/private-runtime\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"SessionKeyVerifier": "(0x)?[0-9a-f]{40}",?[[:space:]]*$''']
 
 [[allowlists]]
 description = """\
@@ -155,96 +84,6 @@ lock's SHA-256, so any lock edit requires a fresh review.\
 targetRules = ["generic-api-key"]
 condition = "AND"
 paths = ['''^formal/source-lock\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Generated 2026-10-25 reproducibility report. Its maps associate repository-relative source, \
-project, assembly and artifact names with the SHA-256 of those public files. generic-api-key \
-reports 37 members because names such as SessionKeyVerifier or Web3AuthVerifier contain the \
-rule's keyword; every reported value is a 64-character lower-case content digest, not a \
-credential. The allowance admits only a file-shaped member name mapped to that digest width, \
-and the reviewed inventory pins the matched line count and the report SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/sa-artifact-reproducibility-20261025\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Generated 2026-10-30 reproducibility report. Its maps associate repository-relative source, \
-project, assembly and artifact names with the SHA-256 of those public files. generic-api-key \
-reports 37 members because names such as SessionKeyVerifier or Web3AuthVerifier contain the \
-rule's keyword; every reported value is a 64-character lower-case content digest, not a \
-credential. The allowance admits only a file-shaped member name mapped to that digest width, \
-and the reviewed inventory pins the matched line count and the report SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/sa-artifact-reproducibility-20261030\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Generated 2026-10-31 reproducibility report. Its maps associate repository-relative source, \
-project, assembly and artifact names with the SHA-256 of those public files. generic-api-key \
-reports 37 members because names such as SessionKeyVerifier or Web3AuthVerifier contain the \
-rule's keyword; every reported value is a 64-character lower-case content digest, not a \
-credential. The allowance admits only a file-shaped member name mapped to that digest width, \
-and the reviewed inventory pins the matched line count and the report SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/sa-artifact-reproducibility-20261031\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Generated 2026-11-13 reproducibility report. Its maps associate repository-relative source, \
-project, assembly and artifact names with the SHA-256 of those public files. generic-api-key \
-reports 37 members because names such as SessionKeyVerifier or Web3AuthVerifier contain the \
-rule's keyword; every reported value is a 64-character lower-case content digest, not a \
-credential. The allowance admits only a file-shaped member name mapped to that digest width, \
-and the reviewed inventory pins the matched line count and the report SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/sa-artifact-reproducibility-20261113\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Generated 2026-11-16 reproducibility report. Its maps associate repository-relative source, \
-project, assembly and artifact names with the SHA-256 of those public files. generic-api-key \
-reports 37 members because names such as SessionKeyVerifier or Web3AuthVerifier contain the \
-rule's keyword; every reported value is a 64-character lower-case content digest, not a \
-credential. The allowance admits only a file-shaped member name mapped to that digest width, \
-and the reviewed inventory pins the matched line count and the report SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/sa-artifact-reproducibility-20261116\.json$''']
-regexTarget = "line"
-regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
-
-[[allowlists]]
-description = """\
-Generated 2026-10-30 formal-gate receipt. Its source, model and artifact maps associate \
-repository-relative file names with SHA-256 content digests. generic-api-key reports 18 members \
-because names such as SessionKeyVerifier contain the rule's keyword; every reported value is a \
-64-character lower-case digest of a public file, not a credential. The allowance admits only a \
-file-shaped member name mapped to that digest width, and the reviewed inventory pins the matched \
-line count and the receipt SHA-256.\
-"""
-targetRules = ["generic-api-key"]
-condition = "AND"
-paths = ['''^docs/reports/sa-formal-gate-20261030\.json$''']
 regexTarget = "line"
 regexes = ['''^[[:space:]]*"[A-Za-z0-9._/-]+\.(cs|csproj|json|nef|dll|props|targets)": "[0-9a-f]{64}",?[[:space:]]*$''']
 

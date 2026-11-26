@@ -106,9 +106,32 @@ test('the native profile keeps its open gates and unverified status', () => {
   // The cross-proxy authority gate was closed in the local candidate and
   // replaced by an independent readback requirement; see
   // `localAuthorityAdmission` in the native profile.
-  assert.ok(native.openGates.includes('CURRENT-PROFILE-ARTIFACT-READBACK'));
-  assert.ok(native.openGates.includes('EXTERNAL-PROTOCOL-ACCEPTANCE'));
-  assert.ok(native.openGates.includes('PUBLIC-HARDFORK-ACTIVATION'));
+  // Every gate is machine-checkable: it names its owner and the evidence that
+  // would close it, and the open-boundaries ledger describes the same gates.
+  const ids = native.openGates.map((gate) => gate.id);
+  for (const required of ['CURRENT-PROFILE-ARTIFACT-READBACK', 'EXTERNAL-PROTOCOL-ACCEPTANCE', 'PUBLIC-HARDFORK-ACTIVATION']) {
+    assert.ok(ids.includes(required), `the native profile dropped open gate ${required}`);
+  }
+  assert.equal(native.openGates.length, 8, 'the native profile names eight open gates');
+  assert.equal(new Set(ids).size, ids.length, 'open gate ids are unique');
+  for (const gate of native.openGates) {
+    assert.deepEqual(Object.keys(gate).sort(), ['evidence', 'id', 'owner'], `${gate.id}: an open gate is id, owner and evidence`);
+    assert.ok(['repo', 'external'].includes(gate.owner), `${gate.id}: owner must be repo or external`);
+    assert.ok(gate.evidence.trim().length > 0, `${gate.id}: missing the evidence that would close it`);
+  }
+
+  const ledger = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/SA-NATIVE-OPEN-BOUNDARIES.json'), 'utf8'));
+  assert.equal(ledger.schema, 'aa-native-formal-open-boundaries/v2');
+  assert.equal(ledger.status, 'OPEN_BOUNDARIES_RETAINED');
+  assert.equal(ledger.implementationVerified, false);
+  assert.equal(ledger.profileVersion, native.version, 'the ledger must describe the shipped profile version');
+  assert.equal(ledger.abiVersion, native.protocolVersion, 'the ledger must describe the shipped ABI version');
+  assert.deepEqual(
+    ledger.boundaries.map(({ id, owner, evidence }) => ({ id, owner, evidence })),
+    native.openGates,
+    'the open-boundaries ledger and the native profile must name the same gates with the same owner and evidence',
+  );
+  assert.deepEqual(ledger.boundaries.map((boundary) => boundary.status), native.openGates.map(() => 'OPEN'));
 });
 
 test('the native implementation README entrypoint stays discoverable', () => {

@@ -7,6 +7,12 @@
 // request, so this fixture exercises the same authority path the relay and the wallet frontend use.
 // The result carries the shape-bound script, both signers and the proxy verification witness: the
 // caller may broadcast those exact bytes, or compare them with the node's own assembler.
+//
+// Target: the retired custom v4 wallet kernel (contracts/build), driven by the 'deployed' scenarios of
+// sa_rpc_scenarios.py. The six-field Struct operation and the getProxyScriptHash/getVerifyScopeTarget
+// reads are that kernel's ABI, not the v4.1 native IDL (docs/proposals/smartaccount-v4.1.idl.json).
+// shared/proxyWitness.mjs is v4.1-only: it refuses any operation that is not a 13-field Array, so as
+// it stands this fixture only reports that refusal.
 import { readFileSync } from 'node:fs';
 import { normalizeRelayContractParameter } from '../../shared/relayContractParameter.mjs';
 import { resolveProxyWitnessTransaction, buildProxyWalletSignRequest } from '../../shared/proxyWitness.mjs';
@@ -53,8 +59,10 @@ async function rpc(method, params) {
   return payload.result;
 }
 
-const operation = request.batch ? 'executeUserOps' : 'executeUserOp';
-const ops = (request.batch ? request.ops : [request]).map((entry) => ({
+// One executeUserOp(accountId, operation) invocation. The batch (executeUserOps) request shape is
+// not built here any more: nothing consumes it.
+const operation = 'executeUserOp';
+const ops = [request].map((entry) => ({
   type: 'Struct',
   value: [
     { type: 'Hash160', value: entry.target },
@@ -71,7 +79,7 @@ const invocation = {
   operation,
   args: [
     { type: 'Hash160', value: request.accountId },
-    request.batch ? { type: 'Array', value: ops } : ops[0],
+    ops[0],
   ],
 };
 

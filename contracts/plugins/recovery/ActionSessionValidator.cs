@@ -25,6 +25,17 @@ namespace SmartAccount.Validators
     /// One instance holds one service binding per account. The module never
     /// answers message checks and is never a threshold-policy member: it is a
     /// dynamic-witness authorization, not a scalar credential.
+    ///
+    /// Permission boundary (named profile <c>ActionSessionValidator</c>): this
+    /// is a standalone spending route only. On it the recovery authority's
+    /// witness approves any operation of the account at once — no target,
+    /// method, value or time scope applies — so an installed instance turns the
+    /// recovery authority into an immediate spending key that does not wait for
+    /// the recovery delay. The executor branch is bounded only by the session
+    /// the configured service reports: this contract reads the executor address,
+    /// never an expiry or a scope, so the service's own session lifetime is the
+    /// only time limit. The instance is not a recovery seat, not a threshold
+    /// member and not proof of an elapsed reset delay.
     /// </remarks>
     [DisplayName("ActionSessionValidator")]
 #if SMARTACCOUNT_NATIVE
@@ -71,7 +82,7 @@ namespace SmartAccount.Validators
         /// <summary>
         /// <c>initData</c>: empty, or one <c>setRecoveryService</c> command.
         /// </summary>
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             if (initData.Length > 0) ApplyConfig(accountId, moduleId, initData);
@@ -81,13 +92,13 @@ namespace SmartAccount.Validators
         /// <c>configData</c>: <c>["setRecoveryService", service]</c> or
         /// <c>["clearRecoveryService"]</c>.
         /// </summary>
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             ApplyConfig(accountId, moduleId, configData);
         }
 
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             Storage.Delete(Storage.CurrentContext, ValidatorAuthority.InstanceKey(Prefix_Service, accountId, moduleId));
@@ -141,7 +152,10 @@ namespace SmartAccount.Validators
         /// <summary>
         /// Approves when the account's recovery authority or the currently valid
         /// action-session executor witnessed the transaction. Rejects by
-        /// returning false.
+        /// returning false. Neither witness is scoped here (see the class
+        /// remarks): the recovery-authority branch is unconditional on this
+        /// route, the executor branch lasts as long as the configured service
+        /// keeps the session active.
         /// </summary>
         [Safe]
         public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)

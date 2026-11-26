@@ -30,9 +30,9 @@ Every module MUST expose safe <code>getModuleProfile(): String</code>. The resul
 |-
 | lifecycle || <code>["onInstall","onUninstall"]</code>; append <code>"configure"</code> if and only if the manifest exposes <code>configure/4</code>. That method MUST match the callback signature below. A method of the same name with a different arity does not implement this callback.
 |-
-| callbacks || Validator: <code>["validateUserOp","onUserOpComplete"]</code>, append <code>"isValidSignature"</code> when enabled. Hook: <code>["preCheck","postCheck"]</code>. Recovery: <code>[]</code>.
+| callbacks || Validator: <code>["validateUserOp","onUserOpComplete"]</code>, append <code>"isValidSignature"</code> when message capability is enabled and <code>"planHooks"</code> when the planner seat is declared. Hook: <code>["preCheck","postCheck"]</code>. Recovery: <code>[]</code>.
 |-
-| capabilities || Object with exactly four fields: <code>instanceIsolation</code>, <code>messageCapability</code>, <code>thresholdMemberEligible</code> (Booleans) and <code>compositeLayer</code> (integer 0 or 1). Only validators may declare message or member capability. Eligibility alone never admits a key or member to a mandatory spending policy.
+| capabilities || Object with four required fields: <code>instanceIsolation</code>, <code>messageCapability</code>, <code>thresholdMemberEligible</code> (Booleans) and <code>compositeLayer</code> (integer 0 or 1). Two optional seat fields, <code>governance</code> and <code>hookPlanner</code>, MUST be the Boolean <code>true</code> when present and MUST be omitted when false; only validators may declare them. The core accepts configuration landing, module administration and an ordinary thaw only when the calling contract is the installed validator instance that declares <code>governance</code>; the delay before landing is module state. It calls <code>planHooks</code> on the single instance declaring <code>hookPlanner</code>. Only validators may declare message or member capability. Eligibility alone never admits a key or member to a mandatory spending policy.
 |}
 
 The [[smartaccount-module-profile.schema.json|discovery JSON Schema]] checks the shape of the parsed object, including role-dependent callbacks, capabilities and lifecycle order. An editor can use it without contacting a node. Do not add a schema URL to the profile itself. A JSON Schema cannot distinguish duplicate keys discarded by the parser, measure the canonical bytes returned by the getter, or establish that the manifest and installation role match.
@@ -48,21 +48,22 @@ optional  configure(Hash160,Integer,Integer,Array) -> Void
 validator validateUserOp(Hash160,ByteArray,Array) -> Boolean [safe]
 validator onUserOpComplete(Hash160,Array,Any) -> Void
 message   isValidSignature(Hash160,Hash160,Integer,Integer,ByteArray,Array) -> Boolean [safe]
+validator planHooks(Hash160,ByteArray,Array) -> Array [safe]
 hook      preCheck(Hash160,Array) -> ByteArray
 hook      postCheck(Hash160,Array,Any,ByteArray) -> Void
 </pre>
 Lifecycle arguments dispatched by the core are account ID, instance ID, type code and data array. Configuration commands and any further interpretation of their fields belong to the named profile. A module MUST NOT trust an ID or generation supplied by a wallet as proof of callback authority. A named profile MAY expose management and read methods in addition to this interface.
 
-Validation receives the account ID, 32-byte operation digest and operation array. Only Boolean true approves. Preview MUST NOT consume the nonce or write validator state. Completion receives the account ID, operation and target result. The optional message callback receives the account ID, original caller, instance ID, generation, message digest and payload. It returns a Boolean to the core; the public core message API has a different return type. A spending grant MUST NOT silently authorize arbitrary messages.
+Validation receives the account ID, 32-byte operation digest and operation array. Only Boolean true approves. Preview MUST NOT consume the nonce or write validator state. Completion receives the account ID, operation and target result. The optional message callback receives the account ID, original caller, instance ID, generation, message digest and payload. The core never dispatches it: applications call the module contract directly, as §8 of the protocol specifies. A spending grant MUST NOT silently authorize arbitrary messages.
 
 Hooks run in the account's execution order before the target and in reverse order afterwards. Each post-check receives only its own pre-check bytes (maximum 512) along with the operation and target result. A rejected or faulting required callback MUST NOT yield a successful operation. Installation and execution MUST bind the actual deployment and its code revision. State-changing callbacks MUST authenticate their caller and applicable phase/instance. Recovery reset invalidates installation records without invoking uninstall callbacks: leftover module storage MUST NOT confer authority.
 
 ===Example===
-For a native account, governance action <code>[3, moduleId, configData]</code> requests configuration. The reviewed governance contract submits the confirmed action to the core. The core authenticates governance, resolves the installed instance, checks its callback ABI and code binding, and calls <code>configure(accountId,moduleId,moduleType,configData)</code> in the configuration phase with the lifecycle GAS limit. The module interprets the command array. An ordinary custody witness alone cannot dispatch this action. Failure rolls back the whole group. Modules which bind credentials to a generation MUST read that generation from the authenticated instance descriptor.
+For a native account, governance action <code>[3, moduleId, configData]</code> requests configuration. The reviewed governance contract submits the confirmed action to the core. The core authenticates governance, resolves the installed instance, checks its callback ABI and code binding, and calls <code>configure(accountId,moduleId,moduleType,configData)</code> in the configuration phase with <code>CallFlags.All</code>. The module interprets the command array. An ordinary custody witness alone cannot dispatch this action. Failure rolls back the whole group. Modules which bind credentials to a generation MUST read that generation from the authenticated instance descriptor.
 
 The following bytes, without a final newline, are the complete profile for a recovery seat:
 <pre>
-{"callbacks":[],"capabilities":{"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},"contractName":"RecoveryModule","lifecycle":["onInstall","onUninstall"],"moduleType":"recovery","profileVersion":1}
+{"callbacks":[],"capabilities":{"compositeLayer":0,"instanceIsolation":false,"messageCapability":false,"thresholdMemberEligible":false},"contractName":"RecoveryModule","lifecycle":["onInstall","onUninstall","configure"],"moduleType":"recovery","profileVersion":1}
 </pre>
 
 ==Rationale==

@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Shared/ModuleSupport.cs" />
+    <Compile Include="../Shared/P256.cs" />
     <Compile Include="SigningModule.cs" />
   </ItemGroup>
   <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">

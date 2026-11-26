@@ -217,12 +217,16 @@ test('a plan always carries the recipe that rebuilds it', () => {
   assert.deepEqual(registration.recipe, { method: 'buildCreateAccountScript', input: registration.plan.input });
 
   const single = { targetContract: hash160('ab'), method: 'symbol' };
-  const execution = h.executionPlan(sdk, { accountId: hash160('22'), operations: single });
-  assert.deepEqual(execution.plan.input.operations, [single], 'one operation is still a list');
+  const execution = h.executionPlan(sdk, { accountId: hash160('22'), operation: single });
+  assert.deepEqual(execution.plan.input.operation, single, 'the plan carries the one operation');
   assert.deepEqual(execution.recipe, { method: 'buildExecutionScript', input: execution.plan.input });
 
-  const many = h.executionPlan(sdk, { accountId: hash160('22'), operations: [single, single] });
-  assert.equal(many.plan.input.operations.length, 2);
+  // The retired batch entry is refused by the harness, never normalized into
+  // several signed transactions.
+  assert.throws(
+    () => h.executionPlan(sdk, { accountId: hash160('22'), operation: [single, single] }),
+    /protocol-incompatible: executeUserOps is retired in v4\.1/,
+  );
 
   const configuration = h.configurationPlan(sdk, { accountId: hash160('22'), actions: [] });
   assert.equal(configuration.recipe.method, 'buildConfigurationScript');

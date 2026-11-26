@@ -25,7 +25,7 @@ const CLIENT_SURFACE = { metaTx, execution, signedInvocation };
 // the built-ABI assertion below is what decides whether its output is legal.
 const CLIENT_SURFACE_FUNCTIONS = {
   metaTx: [
-    'assertAccountExists', 'buildExecuteUserOpInvocation', 'buildExecuteUserOpsInvocation',
+    'assertAccountExists', 'buildExecuteUserOpInvocation',
     'buildUserOperation', 'buildUserOperationTypedData', 'composeOperationNonce', 'computeArgsHash',
     'computeOperationDigest', 'decodeAccountDescriptorStack', 'decodeByteStringStackHex',
     'decodeHash160Stack', 'decodeIntegerStack', 'decodeModuleDescriptorStack',
@@ -166,10 +166,6 @@ test('the invocation builders emit only entrypoints the built ABI exports', () =
 
   const single = metaTx.buildExecuteUserOpInvocation({ saContractHash: SA_HASH, accountId: ACCOUNT_ID_HASH, operation: operation() });
   built.push(['metaTx.buildExecuteUserOpInvocation', single]);
-
-  const batch = metaTx.buildExecuteUserOpsInvocation({ saContractHash: SA_HASH, accountId: ACCOUNT_ID_HASH, operations: [operation()] });
-  built.push(['metaTx.buildExecuteUserOpsInvocation', batch]);
-
   const body = stagedBody();
   const unsigned = execution.buildClientBroadcastRequest({
     signerAddress: 'NdzSignerAddress',
@@ -203,8 +199,6 @@ test('the invocation builders emit only entrypoints the built ABI exports', () =
   assert.equal(single.args[0].type, 'ByteString');
   assert.equal(single.args[1].type, 'Array');
   assert.equal(single.args[1].value.length, 13);
-  assert.equal(batch.args[1].type, 'Array');
-  assert.equal(batch.args[1].value.length, 1);
 });
 
 test('the signed-invocation selector accepts only entrypoints the built ABI exports', () => {
@@ -213,17 +207,22 @@ test('the signed-invocation selector accepts only entrypoints the built ABI expo
   // A single-operation envelope (executeUserOp) and a batch envelope (executeUserOps) are both
   // selectable and both name a built entrypoint. The single operation is matched field by field
   // against the staged intent; a batch is anchored by the body that staged it.
+  // No client producer builds a batch any more (the retired `executeUserOps` entry), so that
+  // envelope is written by hand here: this case is about what the selector accepts, not what
+  // the client produces.
+  const single = metaTx.buildExecuteUserOpInvocation({ saContractHash: SA_HASH, accountId: ACCOUNT_ID_HASH, operation: operation() });
+  const batch = { ...single, operation: 'executeUserOps', args: [single.args[0], { type: 'Array', value: [single.args[1]] }] };
   const envelopes = {
     executeUserOp: {
-      invocation: metaTx.buildExecuteUserOpInvocation({ saContractHash: SA_HASH, accountId: ACCOUNT_ID_HASH, operation: operation() }),
+      invocation: single,
       transactionBody: { ...stagedBody(), operationBody: { targetContract: TARGET, method: 'transfer', args: [] } },
     },
     executeUserOps: {
-      invocation: metaTx.buildExecuteUserOpsInvocation({ saContractHash: SA_HASH, accountId: ACCOUNT_ID_HASH, operations: [operation()] }),
+      invocation: batch,
       transactionBody: {
         network: 'neo-n3-testnet',
         accountIdHash: ACCOUNT_ID_HASH,
-        v4Invocation: metaTx.buildExecuteUserOpsInvocation({ saContractHash: SA_HASH, accountId: ACCOUNT_ID_HASH, operations: [operation()] }),
+        v4Invocation: batch,
       },
     },
   };

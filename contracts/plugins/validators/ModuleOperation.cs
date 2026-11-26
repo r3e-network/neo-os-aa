@@ -88,7 +88,7 @@ namespace SmartAccount
         }
     }
 
-    /// <summary>Writer phases recorded by the core (spec §10).</summary>
+    /// <summary>Writer phases recorded by the core (spec §9.2).</summary>
     internal static class ModulePhase
     {
         internal const byte Validation = 1;
@@ -96,6 +96,8 @@ namespace SmartAccount
         internal const byte HookPost = 4;
         internal const byte Completion = 5;
         internal const byte Configuration = 6;
+        internal const byte MemberValidation = 8;
+        internal const byte HookPlanning = 9;
     }
 
     /// <summary>
@@ -105,10 +107,17 @@ namespace SmartAccount
     /// </summary>
     internal static class ModuleContext
     {
+        // The two plain messages of spec §9.2 step 1. The plugins under
+        // contracts/plugins assert with plain messages, not SA_* codes (spec
+        // §17): these spellings are normative for every named module and are
+        // asserted by tests/NativeEpochProbe, so they are named here once.
+        internal const string ErrCoreNotConfigured = "SA core not configured";
+        internal const string ErrUnauthorizedCaller = "Unauthorized caller";
+
         internal static void RequireCoreCaller(UInt160 core)
         {
-            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, "SA core not configured");
-            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, "Unauthorized caller");
+            ExecutionEngine.Assert(core != UInt160.Zero && core.IsValid, ErrCoreNotConfigured);
+            ExecutionEngine.Assert(Runtime.CallingScriptHash == core, ErrUnauthorizedCaller);
         }
 
         private static BigInteger AuthorizedId(UInt160 core, UInt160 accountId, byte phase)
@@ -134,16 +143,17 @@ namespace SmartAccount
         }
 
         /// <summary>
-        /// Instance for <c>validateUserOp</c>. During execution the core records
-        /// the validation phase and this returns the authorized instance (the
-        /// module itself, or a threshold member). The read-only preview records
-        /// no phase; it only ever calls the instance named by
-        /// <c>operation[validatorId]</c>, so that id is used. Either way the
-        /// caller must be the trusted core.
+        /// Instance for <c>validateUserOp</c>. Composite members run under phase
+        /// 8 and must be resolved before the parent validator under phase 1.
+        /// The read-only preview has no active phase and falls back to the
+        /// instance named by <c>operation[validatorId]</c>. The caller must be
+        /// the trusted core in every case.
         /// </summary>
         internal static BigInteger ResolveValidationInstance(UInt160 core, UInt160 accountId, object[] operation)
         {
-            BigInteger moduleId = AuthorizedId(core, accountId, ModulePhase.Validation);
+            BigInteger moduleId = AuthorizedId(core, accountId, ModulePhase.MemberValidation);
+            if (moduleId > 0) return moduleId;
+            moduleId = AuthorizedId(core, accountId, ModulePhase.Validation);
             if (moduleId > 0) return moduleId;
             moduleId = ModuleOperation.ValidatorId(operation);
             ExecutionEngine.Assert(moduleId > 0, "Unauthorized");
@@ -161,6 +171,19 @@ namespace SmartAccount
             ExecutionEngine.Assert(value >= 0 && value < (BigInteger.One << 64), "Invalid uint64");
             byte[] encoded = new byte[8];
             for (int i = 7; i >= 0; i--)
+            {
+                encoded[i] = (byte)(value & 255);
+                value >>= 8;
+            }
+            return encoded;
+        }
+
+        /// <summary>The 4-byte little-endian network field of the §4.3 domain.</summary>
+        internal static byte[] U32LE(BigInteger value)
+        {
+            ExecutionEngine.Assert(value >= 0 && value < (BigInteger.One << 32), "Invalid uint32");
+            byte[] encoded = new byte[4];
+            for (int i = 0; i < 4; i++)
             {
                 encoded[i] = (byte)(value & 255);
                 value >>= 8;

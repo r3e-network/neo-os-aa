@@ -16,7 +16,7 @@ namespace SmartAccount.Validators
     /// call only one contract and one method until a fixed expiry time. One
     /// instance holds exactly one session grant; an account that needs several
     /// concurrent sessions installs several instances of this contract
-    /// (<c>instanceIsolation</c>, docs/SA-MODULE-PROTOCOL.md §3.2), each with its
+    /// (<c>instanceIsolation</c>, docs/SA-MODULE-PROTOCOL.md §2, §12), each with its
     /// own storage, nonce channels and credential generation.
     /// A grant is bound to the credential generation it was configured under:
     /// <c>revokeCredentials</c> on the core bumps the generation and the stored
@@ -25,8 +25,10 @@ namespace SmartAccount.Validators
     /// Signature DTO (spec §5), 96 bytes: <c>grantDigest(32) ‖ r‖s(64)</c>. The
     /// grant digest names the session credential, its scope and its expiry and
     /// must equal the instance's current grant; the signature is secp256r1 over
-    /// the core operation digest. A session key never answers message checks and
-    /// is never a threshold-policy member.
+    /// <c>SHA256(opPreimage)</c>, the core operation digest. The platform applies
+    /// that single hash: the module hands <c>CryptoLib.verifyWithECDsa</c> the
+    /// operation preimage, never the digest. A session key never answers message
+    /// checks and is never a threshold-policy member.
     /// </remarks>
     [DisplayName("SessionKeyValidator")]
 #if SMARTACCOUNT_NATIVE
@@ -327,7 +329,8 @@ namespace SmartAccount.Validators
             // no debit; the check is unconditional once a cap is configured.
             if (spendingLimit > 0 && GetSpentAmount(accountId, moduleId) + operationValue > spendingLimit) return false;
 
-            return ValidatorPayload.VerifyP256(operationDigest, (ByteString)grant[0],
+            byte[] preimage = ValidatorPayload.VerifiedSigningPreimage(accountId, operationDigest, operation, moduleId);
+            return ValidatorPayload.VerifyPreimage(preimage, (ByteString)grant[0],
                 (ByteString)Helper.Range(dto, GrantDigestLength, SignatureLength));
         }
 

@@ -17,12 +17,13 @@
  * with a generic message rather than silently accepted.
  */
 
-/** Contract abort codes, v4 (the vocabulary the native core raises).
+/** Contract abort codes, v4.1 (the vocabulary the native core and its modules raise).
  *
- * The minimal core raises exactly these: the intent, recovery, message,
- * hook-order and market-escrow transitions moved to user-space modules, so
- * their codes are gone rather than aliased. A module that raises its own code
- * does so through its own profile, not through this catalog.
+ * The minimal core raises its operation/account codes; the user-space modules
+ * (SigningModule, ThresholdPolicyModule, RecoveryModule, GovernanceModule,
+ * HookOrchestratorModule) raise the intent, recovery and module-limit codes.
+ * Both sets are one catalog: a code the protocol does not raise is absent, and
+ * a class the core retired keeps no alias.
  */
 const SA_ERRORS = {
   SA_PROTOCOL_VERSION: 'The operation or module protocol version is not 4',
@@ -33,10 +34,17 @@ const SA_ERRORS = {
   SA_MODULE_LIMIT_HOOK: 'The account already holds the maximum number of hooks',
   SA_MODULE_LIMIT_RECOVERY: 'The account already holds its one recovery seat',
   SA_INTENT_CONFLICT: 'The requested policy change conflicts with an existing dependency',
+  SA_INTENT_EXPIRED: 'The configuration or module intent has expired',
+  SA_INTENT_IMMATURE: 'The intent is not yet executable: its timelock has not elapsed',
+  SA_INTENT_LIMIT: 'The account already holds the maximum number of open intents',
+  SA_INTENT_NOT_FOUND: 'The named intent does not exist on the account',
+  SA_RECOVERY_PENDING: 'A recovery request is already pending on the account',
+  SA_RECOVERY_LOCKED: 'Recovery is locked while a configuration change is in flight',
   SA_MODULE_LIMIT_MEMBERS: 'An active threshold policy requires one to ten distinct eligible members',
+  SA_MODULE_LIMIT_PLANNER: 'The account already holds the maximum number of hook planners',
   SA_MODULE_LIMIT_THRESHOLD: 'The signing threshold must be positive and cannot exceed the member count',
   SA_MODULE_LIMIT_ACTIONS: 'A registration action list exceeds the per-call limit',
-  SA_MODULE_LIMIT_BATCH: 'The operation batch exceeds the per-envelope limit',
+  SA_MODULE_LIMIT_BATCH: 'The account registration batch requires 1..64 id/salt pairs',
   SA_MODULE_NOT_INSTALLED: 'The referenced module is not installed on the account',
   SA_MODULE_ID_INVALID: 'The module id is malformed or names the wrong instance',
   SA_MODULE_INSTANCE_ISOLATION_REQUIRED: 'The module must be installed per account instance',
@@ -58,8 +66,9 @@ const SA_ERRORS = {
   SA_ACCOUNT_FROZEN: 'The account is frozen',
   SA_ACCOUNT_STATUS: 'The account status does not permit this action',
   SA_REENTRANCY_FORBIDDEN: 'The call re-enters the core in a forbidden phase',
+  SA_PHASE_VIOLATION:
+    'A grant, execution scope or scope release was requested outside the account\'s authorized transition',
   SA_HOOK_DATA_TOO_LARGE: 'The hook returned more than 512 bytes of state',
-  SA_GAS_BUDGET_EXCEEDED: 'The bounded execution gas budget was exhausted',
   SA_UNAUTHORIZED: 'The caller is not authorized for this action',
 };
 
@@ -222,11 +231,12 @@ const EC = {
   OPERATION_PROXY_TRANSFER_REFUSED: {
     code: 'OP_001',
     message:
-      'A token transfer out of the account proxy cannot be authorised by an owner or relay witness: the token checks the proxy as a witness, answers false and still spends the nonce and the fee. Proxy-sourced transfers need a proxy-witness transaction, whose script is one executeUserOp(s) call and whose rule is one Allow/CalledByContract(core)',
+      'A token transfer out of the account proxy cannot be authorised by an owner or relay witness: the token checks the proxy as a witness, answers false and still spends the nonce and the fee. Proxy-sourced transfers need a proxy-witness transaction, whose script is one executeUserOp call and whose rule is one Allow/CalledByContract(core)',
   },
   OPERATION_BATCH_EMPTY: {
     code: 'OP_002',
-    message: 'An operation batch must contain 1..32 operations',
+    message:
+      'protocol-incompatible: executeUserOps is retired in v4.1; one transaction executes exactly one complete 13-field operation, so an operation list is refused rather than split',
   },
   // The same verdict `shared/transferOutcome.mjs` states for the relay route and
   // the wallet: a transfer that answered false moved nothing and still spent

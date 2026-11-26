@@ -6,8 +6,15 @@ specification is `docs/SA-MODULE-PROTOCOL.md`; the paired constants are
 only kernel the repository still builds. The retired user-contract kernel (#39)
 these vectors were once paired against is archived under `docs/reports`.
 
+**Native v4.1 status (2026-11-26).** The native kernel executes one operation
+per transaction. There is no batch envelope, no `SmartAccountEnvelope.cs`
+(removed), no per-callback or aggregate gas budget and no `SA_GAS_BUDGET_EXCEEDED`
+(removed); see `docs/SA-MODULE-PROTOCOL.md` §4.1 and §11.1. Row F-17 below
+records the removed gas-budget lane: its driver is a custom-track test and the
+native column is empty in `matrix.json`.
+
 Every vector is **derived from the specification, not from either kernel**:
-`generate-vectors.py` reimplements the §4.2/§4.3 envelope, the §6 channel
+`generate-vectors.py` reimplements the §4.2/§4.3 operation encoding and digest, the §6 channel
 derivation and the §7.1 key table in plain Python, and writes the files in
 `golden-vectors/`. A vector therefore fails when a kernel drifts, which is the
 point — regenerating a vector to match a kernel is the wrong repair.

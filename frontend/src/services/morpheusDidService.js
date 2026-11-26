@@ -12,10 +12,8 @@ import { decodeStackHash160 } from '@/utils/stack';
 import { createAccountIdentityReader } from './saIdentityReadService.js';
 import {
   decodeAccountDescriptor,
-  decodeHookOrder,
   decodeModuleDescriptor,
   decodeModulePage,
-  decodePendingConfiguration,
 } from './smartAccountProtocol.js';
 import { buildSaActionId, requireSaSigningText, toNeoInternalHex } from './saTicketService.js';
 
@@ -178,34 +176,79 @@ const MODULE_PAGE_SIZE = 32;
 const ZERO_HASH160 = '0'.repeat(40);
 
 /**
- * Pending configuration intents (§10). Every configuration change is one
- * 24-hour intent, so the UI shows maturity and expiry instead of a verifier or
- * hook timelock that no longer exists.
+ * Pending configuration intents (§10). v4.1 has no core intent record: the
+ * 27-method surface publishes `applyConfigurationActions` and nothing about a
+ * proposal window. The queue and the maturity window are the installed
+ * governance module's state — a validator instance that publishes the
+ * governance flag — so they are read from that module, and reported absent
+ * when no such instance is installed. Nothing here promises a native queue.
  */
 export async function fetchPendingConfigurationState({ rpcUrl, saContractHash, accountIdHex } = {}) {
+  const empty = { intentIds: [], intents: [], governanceDelayMs: null, governanceModuleHash: '' };
   const core = sanitizeHex(saContractHash);
   const accountIdParam = toHash160Param(accountIdHex);
-  const idItem = await readAccountItem({
+  const page = decodeModulePage(await readAccountItem({
     rpcUrl,
     saContractHash: core,
-    operation: 'getPendingConfigurationIntentIds',
-    args: [accountIdParam],
-  }).catch(() => null);
-  const intentIds = Array.isArray(idItem?.value)
-    ? idItem.value.map((entry) => Number(entry?.value ?? 0)).filter((id) => id > 0)
-    : [];
-  const intents = [];
-  for (const intentId of intentIds) {
+    operation: 'getModules',
+    args: [accountIdParam, toStringParam('validator'), toIntegerParam(0), toIntegerParam(MODULE_PAGE_SIZE)],
+  }));
+  let governanceHash = '';
+  for (const moduleId of page.ids) {
     const item = await readAccountItem({
       rpcUrl,
       saContractHash: core,
+      operation: 'getModule',
+      args: [accountIdParam, toIntegerParam(moduleId)],
+    }).catch(() => null);
+    const descriptor = item ? decodeModuleDescriptor(item) : null;
+    if (descriptor?.governance) { governanceHash = descriptor.contractHash; break; }
+  }
+  if (!governanceHash) return empty;
+  const governanceDelayMs = await readModuleMethod({
+    rpcUrl,
+    moduleHash: governanceHash,
+    operation: 'configurationMaturity',
+    args: [],
+  }).catch(() => '');
+  const intentIdItems = await readModuleMethod({
+    rpcUrl,
+    moduleHash: governanceHash,
+    operation: 'getPendingConfigurationIntentIds',
+    args: [accountIdParam],
+  }).catch(() => []);
+  const intentIds = Array.isArray(intentIdItems) ? intentIdItems.map((value) => String(value)) : [];
+  const intents = [];
+  for (const intentId of intentIds) {
+    const view = await readModuleMethod({
+      rpcUrl,
+      moduleHash: governanceHash,
       operation: 'getPendingConfiguration',
       args: [accountIdParam, toIntegerParam(intentId)],
-    }).catch(() => null);
-    const record = item ? decodePendingConfiguration(item) : null;
-    if (record) intents.push({ ...record, actionCount: record.actions.length });
+    }).catch(() => []);
+    // getPendingConfiguration -> [id, kind, proposedAt, matureAt, expiresAt,
+    // authorityEpoch, configurationNonce, digest, actionCount].
+    if (!Array.isArray(view) || view.length !== 9) continue;
+    intents.push({
+      intentId: String(view[0]),
+      kind: String(view[1]),
+      proposedAt: String(view[2]),
+      matureAt: String(view[3]),
+      expiresAt: String(view[4]),
+      authorityEpoch: String(view[5]),
+      configurationNonce: String(view[6]),
+      actionDigest: String(view[7] || ''),
+      actions: [],
+      actionCount: Number(view[8]) || 0,
+    });
   }
-  return { intentIds, intents };
+  const delay = String(governanceDelayMs || '').trim();
+  return {
+    intentIds,
+    intents,
+    governanceDelayMs: delay ? delay : null,
+    governanceModuleHash: governanceHash,
+  };
 }
 
 /**
@@ -246,19 +289,19 @@ export async function resolveRecoveryService({ rpcUrl, saContractHash, accountId
 }
 
 /**
- * Reads the account control record, the installed module set, the pending
- * configuration intents and the recovery service state the DID console renders
- * (§9, §10, §12.2).
+ * Reads the account control record, the installed module set and the recovery
+ * service state the DID console renders (§9, §10, §12.2).
  *
- * v4 has no single verifier slot: the recovery console resolves the service the
- * installed `ActionSessionValidator` instance delegates to
- * (`getRecoveryService`) and reads that service. Pending configuration lives in
- * core intents, so the console never polls a retired verifier or hook timelock.
+ * v4.1 has no single verifier slot, no core hook order and no core intent
+ * record: the recovery console resolves the service the installed validator
+ * instance delegates to (`getRecoveryService`) and reads that service. Hook
+ * order is the HookOrchestratorModule's state, so the console reports it as
+ * module-owned instead of promising a native read that no longer exists.
  */
 export async function fetchAccountRecoveryState({ rpcUrl, saContractHash, accountIdHex } = {}) {
   const core = sanitizeHex(saContractHash);
   const accountIdParam = toHash160Param(accountIdHex);
-  const [controlItem, validatorPage, hookPage, hookOrderItem, pendingConfiguration] = await Promise.all([
+  const [controlItem, validatorPage, hookPage, pendingConfiguration] = await Promise.all([
     readAccountItem({ rpcUrl, saContractHash: core, operation: 'getAccount', args: [accountIdParam] }),
     readAccountItem({
       rpcUrl,
@@ -272,14 +315,12 @@ export async function fetchAccountRecoveryState({ rpcUrl, saContractHash, accoun
       operation: 'getModules',
       args: [accountIdParam, toStringParam('hook'), toIntegerParam(0), toIntegerParam(MODULE_PAGE_SIZE)],
     }).catch(() => null),
-    readAccountItem({ rpcUrl, saContractHash: core, operation: 'getHookOrder', args: [accountIdParam] }).catch(() => null),
     fetchPendingConfigurationState({ rpcUrl, saContractHash: core, accountIdHex })
-      .catch(() => ({ intentIds: [], intents: [] })),
+      .catch(() => ({ intentIds: [], intents: [], governanceDelayMs: null })),
   ]);
   const control = decodeAccountDescriptor(controlItem);
   const validatorIds = validatorPage ? decodeModulePage(validatorPage).ids : [];
   const hookIds = hookPage ? decodeModulePage(hookPage).ids : [];
-  const hookOrder = hookOrderItem ? decodeHookOrder(hookOrderItem) : { hookIds: [], revision: 0 };
   const { recoveryServiceHash, moduleId, moduleHash } = await resolveRecoveryService({
     rpcUrl, saContractHash: core, accountIdHex,
   });
@@ -291,7 +332,10 @@ export async function fetchAccountRecoveryState({ rpcUrl, saContractHash, accoun
     control,
     validatorIds,
     hookIds,
-    hookOrder,
+    // The hook order is the HookOrchestratorModule's state; the core publishes
+    // no getHookOrder in v4.1, so nothing here can claim a revision.
+    hookOrder: null,
+    hookOrderOwner: 'hook-orchestrator-module',
     pendingConfiguration,
     recoveryServiceHash,
     recoveryModuleId: moduleId,

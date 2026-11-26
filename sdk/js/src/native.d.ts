@@ -172,9 +172,14 @@ export interface ProtocolCodec {
     moduleId: VMInteger,
     credentialGeneration: VMInteger,
   ): string;
+  /**
+   * One transaction carries exactly one complete 13-field operation, so the
+   * argument is a single operation, never a list: the retired `executeUserOps`
+   * batch entry has no replacement and is refused as protocol-incompatible.
+   */
   buildExecutionScript(
     accountId: string,
-    operations: readonly UserOperation[],
+    operation: UserOperation,
     context?: ProtocolContext,
   ): string;
 }
@@ -212,6 +217,12 @@ export interface NativeProfile {
   readonly contract: string;
   readonly networkMagic: number;
   readonly protocolVersion: number;
+  /**
+   * The §3 configuration parameter fingerprint the core published. It is part
+   * of the protocol identity: a different digest is a different protocol, not
+   * a partial deployment this client could degrade onto.
+   */
+  readonly profileParameterDigest: string;
   readonly implementationId: string;
 }
 
@@ -257,19 +268,13 @@ export interface AccountDescriptor {
   readonly status: AccountStatus;
   readonly statusName: "Active" | "Frozen";
   readonly custodyAddress: string;
-  readonly recoveryAuthority: string;
   readonly authorityEpoch: string;
   readonly configurationNonce: string;
-  readonly recoveryTimelockMs: string;
   readonly defaultOperationAuthorization: boolean;
   readonly defaultMessageAuthorization: boolean;
-  /** Retained record field with no authorization meaning; current protocol accepts only false. */
-  readonly ownerOnlyRecovery: false;
-  readonly hookOrderRevision: string;
+  /** The one validator instance the core requires for an operation, or 0. */
+  readonly requiredValidatorId: string;
   readonly controlRevision: string;
-  readonly recoveryPending: boolean;
-  readonly recoveryMatureAt: string;
-  readonly marketEscrowActive: boolean;
 }
 
 export interface ModuleBinding {
@@ -285,6 +290,9 @@ export interface ModuleBinding {
   readonly instanceIsolation: boolean;
   readonly messageCapability: boolean;
   readonly thresholdMemberEligible: boolean;
+  readonly compositeLayer: boolean;
+  readonly governance: boolean;
+  readonly hookPlanner: boolean;
 }
 
 export interface ModulePage {
@@ -295,6 +303,7 @@ export interface ModulePage {
 
 export interface ProtocolInfo {
   readonly protocolVersion: string;
+  readonly profileParameterDigest: string;
 }
 
 export interface NonceState {
@@ -315,11 +324,10 @@ export interface SimulationResult {
   readonly stack: readonly unknown[];
   readonly incompleteTransfers: readonly number[];
   readonly gasConsumed: string | null;
-  readonly minimumRequiredFee: string | null;
 }
 
 export interface PlanBase {
-  readonly kind: "registration" | "execution" | "account" | "recovery";
+  readonly kind: "registration" | "execution" | "account" | "recovery" | "governance";
   readonly method: string;
   readonly script: string;
   readonly signers: readonly string[];
@@ -347,11 +355,12 @@ export interface BatchRegistrationPlan extends PlanBase {
 
 export interface ExecutionPlan extends PlanBase {
   readonly kind: "execution";
+  readonly method: "executeUserOp";
   readonly accountId: string;
   readonly accountAddress: string;
   readonly proxyCallFlags: 5;
-  readonly batch: boolean;
-  readonly operations: readonly UserOperation[];
+  /** The one complete 13-field operation the signed script carries. */
+  readonly operation: UserOperation;
 }
 
 export interface AccountActionPlan extends PlanBase {
@@ -362,11 +371,73 @@ export interface AccountActionPlan extends PlanBase {
 
 export interface RecoveryModulePlan extends PlanBase {
   readonly kind: "recovery";
+  readonly action: "beginRecovery" | "cancelRecovery" | "executeRecovery";
   readonly accountId: string;
   readonly targetContract: string;
   readonly moduleId: string;
   readonly configurationNonce: string;
+  readonly governanceDelayMs: null;
   readonly nefSha256: string;
+  readonly policy: RecoveryPolicySnapshot | null;
+  readonly pending: RecoveryRequest | null;
+}
+
+/** RecoveryModule policy snapshot: `[guardians[], threshold, timelockMs, authority, revision, digest]`. */
+export interface RecoveryPolicySnapshot {
+  readonly guardians: readonly string[];
+  readonly threshold: number;
+  readonly timelockMs: string;
+  readonly authority: string;
+  readonly revision: string;
+  readonly digest: string;
+}
+
+/** RecoveryModule twelve-field request record, reduced to its live pending view. */
+export interface RecoveryRequest {
+  readonly nonce: string;
+  readonly initiator: string;
+  readonly startedAt: string;
+  readonly executableAt: string;
+  readonly status: 1;
+  readonly newCustody: string;
+  readonly authorityEpochAtInit: string;
+  readonly configurationNonceAtInit: string;
+  readonly policyDigest: string;
+  readonly policyRevision: string;
+}
+
+/**
+ * One step of a thaw, addressed to the installed governance module. The core
+ * admits `unfreezeAccount` only from that module, so custody never signs a core
+ * thaw: `unfreezeAccount` proposes the single-action intent and
+ * `confirmConfiguration` lands it once the module's delay has matured. Custody
+ * signs both steps. The plan is stateless bytes plus the reviewed binding, so
+ * the same recipe rebuilds it for an archived review.
+ */
+export interface GovernanceModulePlan extends PlanBase {
+  readonly kind: "governance";
+  readonly action: "unfreezeAccount" | "confirmConfiguration";
+  readonly accountId: string;
+  readonly accountAddress: string;
+  /** The governance module's contract hash: the contract the script calls. */
+  readonly targetContract: string;
+  readonly moduleId: string;
+  readonly nefSha256: string;
+  /** The module's own configuration delay, read from its `configurationMaturity`. */
+  readonly governanceDelayMs: string | null;
+  readonly configurationNonce: string;
+  /** The intent a confirmation lands; null for a proposal. */
+  readonly intentId: string | null;
+  /** The reviewed pending intent record; null for a proposal. */
+  readonly pending: GovernanceIntent | null;
+}
+
+/** One step of a thaw through the installed governance module. */
+export interface GovernanceModulePlanInput {
+  accountId: string;
+  action: "unfreezeAccount" | "confirmConfiguration";
+  /** Required by `confirmConfiguration`: the pending unfreeze intent to land. */
+  intentId?: string;
 }
 
 export type NativePlan =
@@ -374,7 +445,8 @@ export type NativePlan =
   | BatchRegistrationPlan
   | ExecutionPlan
   | AccountActionPlan
-  | RecoveryModulePlan;
+  | RecoveryModulePlan
+  | GovernanceModulePlan;
 
 /** The method that built a reviewed plan, and the input that rebuilds it. */
 export interface PlanRecipe {
@@ -382,16 +454,29 @@ export interface PlanRecipe {
   readonly input: any;
 }
 
+/**
+ * `createAccount` input: exactly (accountId, custody, salt, actions). The v4.0
+ * recovery timelock argument is retired; the recovery timelock is a policy of
+ * the recovery module. `actions` are at most 16 typed VM Arrays in the v4.1
+ * registration grammar: install `[1, moduleType(1|4|5), contractHash,
+ * profileDigest, initData[]]` only; malformed entries are refused before signing.
+ */
 export interface CreateAccountInput {
   custodyAddress: string;
   salt: string;
-  recoveryTimelockMs?: VMInteger;
   actions?: VMValue[];
+}
+
+/** `createAccounts` input: one custody with 1..64 salts. */
+export interface CreateAccountsInput {
+  custodyAddress: string;
+  salts: string[];
 }
 
 export interface ExecutionInput {
   accountId: string;
-  operations: UserOperation[];
+  /** One complete 13-field operation; a list is protocol-incompatible. */
+  operation: UserOperation;
 }
 
 /**
@@ -406,14 +491,73 @@ export interface AccountActionInput {
   args?: VMValue[];
 }
 
-/** Ordered direct updates to an existing account. The normal SDK path uses custody. */
+/** Ordered direct updates to an existing account. The normal SDK path uses custody.
+ * v4.1 action codes are 1, 2, 3, 5 and 7; codes 4, 6, 8, 9 and 10 are retired.
+ */
 export type ConfigurationBatchAction =
   | { method: "installModule"; moduleType: 1 | 4 | 5; moduleContractHash: string; profileDigest: string; initData?: VMValue[] }
   | { method: "removeModule"; moduleId: VMInteger; deInitData?: VMValue[] }
+  | { method: "configureModule"; moduleId: VMInteger; data?: VMValue[] }
   | { method: "setBuiltinAuthorization"; defaultOperationAuthorization: boolean; defaultMessageAuthorization: boolean }
-  | { method: "setRecoveryPolicy"; recoveryAuthority: string; recoveryTimelockMs: VMInteger; ownerOnlyRecovery?: false };
-export interface RecoveryPolicyInput { accountId: string; recoveryAuthority: string; recoveryTimelockMs: VMInteger; ownerOnlyRecovery?: false }
+  | { method: "setRequiredValidator"; validatorId?: VMInteger; required?: boolean };
 export interface ConfigurationBatchInput { accountId: string; actions: readonly ConfigurationBatchAction[] }
+
+/** A message signature request: resolved against an installed message-capable module. */
+export interface MessageVerificationInput {
+  accountId: string;
+  originalSender: string;
+  validatorId?: VMInteger;
+  generation: VMInteger;
+  hash: string;
+  pairs: readonly (readonly [string, string])[];
+  module?: ModuleBinding;
+}
+
+export interface MessageVerificationResult {
+  readonly accepted: boolean;
+  readonly moduleId: string;
+  readonly contractHash: string;
+}
+
+/** A recovery seat read: the module descriptor, its policy and its pending request. */
+export interface RecoverySeat {
+  readonly seat: ModuleBinding;
+  readonly supported: boolean;
+  readonly policy?: RecoveryPolicySnapshot | null;
+  readonly pending?: RecoveryRequest | null;
+}
+
+/**
+ * One governed configuration intent, read from the installed governance module.
+ * v4.1 publishes no native intent queue, so this is module state, not core
+ * state: `matureAt` is the module's maturity window applied to `proposedAt`.
+ */
+export interface GovernanceIntent {
+  readonly intentId: string;
+  /** The module's own record kind: a configuration batch or the single unfreeze action. */
+  readonly kind: "configure" | "unfreeze";
+  readonly proposedAt: string;
+  readonly matureAt: string;
+  readonly expiresAt: string;
+  readonly authorityEpoch: string;
+  readonly configurationNonce: string;
+  readonly digest: string;
+  readonly actionCount: number;
+}
+
+/**
+ * A governance seat read: the validator instance that publishes the governance
+ * flag, its configuration delay and its pending intents. `supported` is false
+ * when no governance instance is installed or the instance answers for another
+ * core; every numeric field is a decimal string, exactly as the VM returned it.
+ */
+export interface GovernanceSeat {
+  readonly seat: ModuleBinding | null;
+  readonly supported: boolean;
+  readonly governanceDelayMs: string | null;
+  readonly intentIds: readonly string[];
+  readonly intents: readonly GovernanceIntent[];
+}
 
 /** One member's IEEE P1363 r‖s signature and its compressed P-256 public key. */
 export interface WalletMemberSignature {
@@ -458,6 +602,12 @@ export interface TransactionOptions {
   authorizers?: WalletSigner[];
   /** The plan-building call this review replays before every signature. */
   recipe: PlanRecipe;
+  /**
+   * An explicit system fee, in datoshi. Omit it and the transaction declares
+   * exactly the gas the simulation consumed (plain Neo: the declared system
+   * fee is the only gas limit and the node burns all of it; no margin is
+   * added). A supplied value must cover that consumption and the system cap.
+   */
   systemFee?: VMInteger;
   maxSystemFee: VMInteger;
   maxNetworkFee: VMInteger;
@@ -478,7 +628,6 @@ export interface ReviewedTransaction {
   readonly simulation: {
     readonly state: string | null;
     readonly gasConsumed: string | null;
-    readonly minimumRequiredFee: string | null;
   };
 }
 
@@ -502,7 +651,8 @@ export interface NativePreparedTransaction {
   readonly signData: string;
   readonly systemFee: string;
   readonly networkFee: string;
-  readonly systemFeeSource: "explicit-budget" | "minimumrequiredfee";
+  /** "simulation": the simulated consumption; "explicit": the caller's `systemFee`. */
+  readonly systemFeeSource: "simulation" | "explicit";
   readonly simulation: SimulationResult;
   readonly wallets: readonly BoundWallet[];
   readonly proxy: { readonly signer: SignerDescriptor; readonly witness: Witness } | null;
@@ -550,7 +700,6 @@ export interface NativeTransactionPreflight {
   readonly mempoolChecked: false;
   readonly state: "HALT";
   readonly gasconsumed: string;
-  readonly minimumrequiredfee: string;
   readonly stack: unknown[];
   readonly exception?: string | null;
   readonly notifications: unknown[];
@@ -603,8 +752,14 @@ export interface SmartAccountKernel {
     options?: { cursor?: VMInteger; limit?: number },
   ): Promise<ModulePage>;
   getModule(accountId: string, moduleId: VMInteger): Promise<ModuleBinding | null>;
-  getThresholdPolicy(accountId: string, policyId?: VMInteger): Promise<{ policyId: string; threshold: number; memberIds: readonly string[]; active: boolean; credentialGeneration: string } | null>;
-  getMessageSubjects(accountId: string): Promise<{ subjects: readonly string[]; threshold: number; subjectRevision: string } | null>;
+  validateMember(
+    accountId: string,
+    memberId: VMInteger,
+    operationDigest: string,
+    operation: UserOperation,
+  ): Promise<boolean>;
+  resolveMessageModule(accountId: string): Promise<ModuleBinding | null>;
+  verifyMessage(input: MessageVerificationInput): Promise<MessageVerificationResult>;
   isModuleInstalled(
     accountId: string,
     moduleType: string,
@@ -625,13 +780,16 @@ export interface SmartAccountKernel {
     operation: UserOperation,
   ): Promise<OperationValidation>;
   buildCreateAccountScript(input: CreateAccountInput): RegistrationPlan;
+  buildCreateAccountsScript(input: CreateAccountsInput): BatchRegistrationPlan;
   buildExecutionScript(input: ExecutionInput): ExecutionPlan;
-  getRecoverySeat(accountId: string): Promise<{ readonly seat: { readonly contractHash: string; readonly moduleId: string }; readonly supported: boolean; readonly pending?: { readonly nonce: string; readonly matureAt: string; readonly newCustody: string } | null } | null>;
+  getRecoverySeat(accountId: string): Promise<RecoverySeat | null>;
+  /** The installed governance validator instance: delay and pending intents. */
+  getGovernanceSeat(accountId: string): Promise<GovernanceSeat>;
   buildRecoveryModulePlan(input: { accountId: string; action: "beginRecovery" | "cancelRecovery" | "executeRecovery"; authority?: string; newCustody?: string }): Promise<RecoveryModulePlan>;
-  buildRecoveryPolicyScript(input: RecoveryPolicyInput): string;
-  buildRecoveryPolicyPlan(input: RecoveryPolicyInput): Promise<AccountActionPlan & { readonly recoveryAuthority: string; readonly configurationNonce: string }>;
+  /** Propose or confirm the thaw of a frozen account on its governance module; custody signs both steps. */
+  buildGovernanceModulePlan(input: GovernanceModulePlanInput): Promise<GovernanceModulePlan>;
   buildConfigurationBatchScript(input: ConfigurationBatchInput): string;
-  buildConfigurationBatchPlan(input: ConfigurationBatchInput): Promise<AccountActionPlan & { readonly configurationNonce: string }>;
+  buildConfigurationBatchPlan(input: ConfigurationBatchInput): Promise<AccountActionPlan & { readonly configurationNonce: string; readonly governanceDelayMs: null }>;
   buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
     plan: NativePlan,
@@ -698,8 +856,14 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
     options?: { cursor?: VMInteger; limit?: number },
   ): Promise<ModulePage>;
   getModule(accountId: string, moduleId: VMInteger): Promise<ModuleBinding | null>;
-  getThresholdPolicy(accountId: string, policyId?: VMInteger): Promise<{ policyId: string; threshold: number; memberIds: readonly string[]; active: boolean; credentialGeneration: string } | null>;
-  getMessageSubjects(accountId: string): Promise<{ subjects: readonly string[]; threshold: number; subjectRevision: string } | null>;
+  validateMember(
+    accountId: string,
+    memberId: VMInteger,
+    operationDigest: string,
+    operation: UserOperation,
+  ): Promise<boolean>;
+  resolveMessageModule(accountId: string): Promise<ModuleBinding | null>;
+  verifyMessage(input: MessageVerificationInput): Promise<MessageVerificationResult>;
   isModuleInstalled(
     accountId: string,
     moduleType: string,
@@ -720,13 +884,16 @@ export declare class NativeSmartAccountClient implements SmartAccountKernel {
     operation: UserOperation,
   ): Promise<OperationValidation>;
   buildCreateAccountScript(input: CreateAccountInput): RegistrationPlan;
+  buildCreateAccountsScript(input: CreateAccountsInput): BatchRegistrationPlan;
   buildExecutionScript(input: ExecutionInput): ExecutionPlan;
-  getRecoverySeat(accountId: string): Promise<{ readonly seat: { readonly contractHash: string; readonly moduleId: string }; readonly supported: boolean; readonly pending?: { readonly nonce: string; readonly matureAt: string; readonly newCustody: string } | null } | null>;
+  getRecoverySeat(accountId: string): Promise<RecoverySeat | null>;
+  /** The installed governance validator instance: delay and pending intents. */
+  getGovernanceSeat(accountId: string): Promise<GovernanceSeat>;
   buildRecoveryModulePlan(input: { accountId: string; action: "beginRecovery" | "cancelRecovery" | "executeRecovery"; authority?: string; newCustody?: string }): Promise<RecoveryModulePlan>;
-  buildRecoveryPolicyScript(input: RecoveryPolicyInput): string;
-  buildRecoveryPolicyPlan(input: RecoveryPolicyInput): Promise<AccountActionPlan & { readonly recoveryAuthority: string; readonly configurationNonce: string }>;
+  /** Propose or confirm the thaw of a frozen account on its governance module; custody signs both steps. */
+  buildGovernanceModulePlan(input: GovernanceModulePlanInput): Promise<GovernanceModulePlan>;
   buildConfigurationBatchScript(input: ConfigurationBatchInput): string;
-  buildConfigurationBatchPlan(input: ConfigurationBatchInput): Promise<AccountActionPlan & { readonly configurationNonce: string }>;
+  buildConfigurationBatchPlan(input: ConfigurationBatchInput): Promise<AccountActionPlan & { readonly configurationNonce: string; readonly governanceDelayMs: null }>;
   buildAccountActionScript(input: AccountActionInput): AccountActionPlan;
   simulate(
     plan: NativePlan,

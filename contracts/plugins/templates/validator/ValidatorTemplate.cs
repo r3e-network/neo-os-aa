@@ -145,9 +145,11 @@ namespace SmartAccount.Validators
         /// <summary>
         /// Core callback. Must stay read-only, bounded and boolean — a fault here aborts
         /// the operation, so reject by returning false wherever possible. The core hands
-        /// over the canonical 13-field operation view and its domain-separated digest;
-        /// <see cref="ValidatorPayload.SigningDigest"/> binds account, instance and
-        /// credential generation to that digest.
+        /// over the canonical 13-field operation view and its domain-separated digest
+        /// <c>D = SHA256(opPreimage)</c>;
+        /// <see cref="ValidatorPayload.VerifiedSigningPreimage"/> re-derives the preimage
+        /// and refuses a digest that does not hash back to it, so a stale or foreign
+        /// digest approves nothing.
         /// </summary>
         [Safe]
         public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)
@@ -166,8 +168,9 @@ namespace SmartAccount.Validators
             ByteString signature = ModuleOperation.Signature(operation);
             if (signature.Length != 64) return false;
 
-            ByteString digest = ValidatorPayload.SigningDigest(accountId, operationDigest, operation, moduleId);
-            return ValidatorPayload.VerifyP256(digest, publicKey, signature);
+            // The platform hashes the preimage once: never hand it a 32-byte digest.
+            byte[] preimage = ValidatorPayload.VerifiedSigningPreimage(accountId, operationDigest, operation, moduleId);
+            return ValidatorPayload.VerifyPreimage(preimage, publicKey, signature);
         }
 
         /// <summary>

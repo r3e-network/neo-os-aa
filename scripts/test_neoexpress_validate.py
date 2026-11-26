@@ -52,17 +52,17 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(summary["assertions"], 1)
         self.assertEqual(summary["simulatedTimeAdvancedSeconds"], 42)
 
-    def test_bounded_callback_fault_aliases_are_narrow(self):
-        expected = "The bounded contract call gas limit has been exhausted."
-        self.assertTrue(validation.fault_matches(expected, "Contract call gas limit exceeded."))
-        self.assertTrue(validation.fault_matches(expected, "The bounded contract call gas limit has been exhausted."))
-        self.assertFalse(validation.fault_matches(expected, "Contract call gas limit exceeded by another operation."))
-
-    def test_composite_root_and_leaf_budgets_fit_the_transaction_envelope(self):
-        self.assertEqual(validation.ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI,
-                         11 * validation.MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI)
-        self.assertGreater(int(validation.PRIVATE_CORE_GAS_ENVELOPE) * validation.GAS,
-                           validation.ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI)
+    def test_core_transactions_declare_a_fee_the_funded_wallets_can_pay(self):
+        # No per-callback budget remains: the declared system fee is the only bound, and every
+        # wallet the chain creates can pay the largest envelope a core transaction declares.
+        for name in ("APPLICATION_CALLBACK_GAS_LIMIT_DATOSHI", "MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI",
+                     "ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI", "NATIVE_PROFILE_VERIFIER_BUDGET_DATOSHI",
+                     "FAULT_ALIASES", "fault_matches"):
+            self.assertFalse(hasattr(validation, name), name)
+        self.assertFalse([name for name in dir(validation) if name.startswith("scenario_") and "gas_cap" in name])
+        for envelope in (validation.PRIVATE_EXECUTE_GAS_ENVELOPE, validation.PRIVATE_CORE_GAS_ENVELOPE):
+            self.assertLessEqual(int(envelope) * validation.GAS, validation.PRIVATE_WALLET_FUNDING_GAS * validation.GAS)
+        self.assertLessEqual(validation.NEO_MAX_VERIFICATION_GAS_DATOSHI, 1_500_00000)
 
     def test_raw_key_signing_uses_a_libressl_compatible_key_file(self):
         with tempfile.TemporaryDirectory() as temp:

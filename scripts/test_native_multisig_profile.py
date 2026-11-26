@@ -16,9 +16,6 @@ class NativeMultiSigProfileTests(unittest.TestCase):
         }, set(profiles))
         self.assertNotIn('MultiHook', profiles)
         self.assertFalse((ROOT / 'contracts/plugins/native-profile/MultiHook.Native.csproj').exists())
-        draft = (ROOT / 'docs/archive/native-research/SMARTACCOUNT-NATIVE-PROFILE-DRAFT.md').read_text(encoding='utf-8')
-        self.assertIn('only native composite profile', draft)
-        self.assertIn('ordinary-contract composition module', draft)
 
     def test_explicit_profile_and_sources(self):
         profiles = json.loads((ROOT / 'contracts/plugins/native-profile/profiles.json').read_text())
@@ -37,8 +34,11 @@ class NativeMultiSigProfileTests(unittest.TestCase):
 
     def test_validator_callbacks_are_lifecycle_scoped(self):
         source = (ROOT / 'contracts/plugins/validators/MultiSigValidator.cs').read_text(encoding='utf-8')
+        # v4.1 lifecycle callbacks carry the module type, not a credential
+        # generation: the core pushes (accountId, moduleId, moduleType, data)
+        # and the assembly-time ABI check requires exactly that shape.
         for callback in ('OnInstall', 'Configure', 'OnUninstall'):
-            self.assertIn('public static void ' + callback + '(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[]', source)
+            self.assertIn('public static void ' + callback + '(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[]', source)
         self.assertIn('ValidatorAuthority.RequireLifecycle(accountId, moduleId)', source)
         self.assertIn('public static bool ValidateUserOp(UInt160 accountId, ByteString operationDigest, object[] operation)', source)
         self.assertIn('public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)', source)

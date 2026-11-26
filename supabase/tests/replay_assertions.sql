@@ -1,5 +1,6 @@
 -- Post-replay assertions for the Supabase migration chain.
--- Run by .github/workflows/supabase-migrations.yml against a scratch Postgres
+-- Run by .github/workflows/supabase-migrations.yml.disabled against a scratch Postgres
+-- (the workflow is disabled at HEAD, so until it is re-enabled this file is run by hand)
 -- after every file in supabase/migrations/ has been applied in filename order.
 -- Each block raises (failing the job) when the replayed end state regresses.
 

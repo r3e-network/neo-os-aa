@@ -164,10 +164,20 @@ test(
         .getByTestId("native-application-consumption")
         .getByText("0.001 GAS", { exact: true })
         .waitFor();
+      // Plain Neo: the transaction declares the simulated consumption itself as
+      // its system fee. No minimum, allowance or margin is quoted on top.
       await page
-        .getByTestId("native-minimum-system-fee")
+        .getByTestId("native-system-fee")
         .getByText("0.001 GAS", { exact: true })
         .waitFor();
+      const reviewFacts = page.locator("dl").filter({ has: page.getByTestId("native-system-fee") });
+      assert.equal((await reviewFacts.innerText()).match(/0\.001 GAS/g).length, 2,
+        "consumption and declared system fee are the same value");
+      assert.doesNotMatch(
+        await reviewFacts.innerText(),
+        /budget|预算|capped|封顶|minimum/i,
+        "the review promises no fee cap or minimum",
+      );
       assert.equal(
         (await page.getByTestId("native-required-authorities").innerText()).trim(),
         "0x" + nativeTestCustody,
@@ -277,7 +287,7 @@ test(
       await page.getByRole("button", { name: "Account & recovery", exact: true }).click();
 
       await page.getByRole("button", { name: "Modules", exact: true }).click();
-      assert.match(await page.getByTestId("native-module-admin").innerText(), /installModule and removeModule/);
+      assert.match(await page.getByTestId("native-module-admin").innerText(), /installModule, removeModule, configureModule/);
       await page.getByLabel("Action", { exact: true }).selectOption("install");
       await page.getByLabel("Module type", { exact: true }).selectOption("recovery");
       assert.equal(await page.getByLabel("Module type", { exact: true }).inputValue(), "recovery");
@@ -294,7 +304,7 @@ test(
       await page.locator(".review-heading").getByText("freezeAccount", { exact: true }).waitFor();
       const freezeRisk = await page.getByTestId("native-freeze-risk").innerText();
       assert.match(freezeRisk, /Freezing advances the authority epoch/);
-      assert.match(freezeRisk, /custody can unfreeze through the custody route alone/);
+      assert.match(freezeRisk, /unfreezing needs the installed governance module/);
       await page
         .getByLabel(
           "I reviewed the network, authority, target, scope and fee payer.",
@@ -536,15 +546,219 @@ test(
       await page.getByRole("button", { name: "Refresh account and chain time", exact: true }).click();
       await page.getByRole("status").filter({ hasText: "Account loaded from the selected node." }).waitFor();
       await review.click();
-      await page.locator(".review-heading").getByText("executeReviewedRecovery", { exact: true }).waitFor();
+      await page.locator(".review-heading").getByText("executeRecovery", { exact: true }).waitFor();
       await page.getByLabel("I reviewed the network, authority, target, scope and fee payer.", { exact: true }).check();
       const download = page.waitForEvent("download");
       await page.getByRole("button", { name: "Export reviewed request", exact: true }).click();
       const artifact = JSON.parse(await readFile(await (await download).path()));
       assert.equal(artifact.feePayer, unrelatedPayer);
       assert.equal(artifact.plan.targetContract, nativeTestRecoverySeat.contractHash);
-      assert.equal(artifact.plan.method, "executeReviewedRecovery");
+      assert.equal(artifact.plan.method, "executeRecovery");
       assert.deepEqual(artifact.requiredAuthorities, []);
+      assert.equal(requests.length, 0, "review does not submit a transaction");
+      assert.deepEqual(errors, []);
+    } finally {
+      await browser.close();
+      await server.close();
+    }
+  },
+);
+
+test(
+  "native thaw proposes on the governance module and confirms the matured intent with custody",
+  { timeout: 120000 },
+  async () => {
+    const fixture = createNativeRpcFixture();
+    const seat = "55".repeat(20);
+    const accountId = nativeTestIdentity.accountId;
+    fixture.state.registered = true;
+    fixture.state.status = 1;
+    fixture.state.time = 1900000000000;
+    fixture.state.modules.push({
+      moduleId: 9,
+      moduleType: 1,
+      credentialGeneration: 1,
+      contractHash: seat,
+      governance: true,
+    });
+    // The module's UnfreezeAccount returns the intent id it allocated.
+    const proposeScript = c.dynamicCall(seat, "unfreezeAccount", [c.hashValue(accountId)]);
+    fixture.setInvocationResult(proposeScript, { type: "Integer", value: "4" });
+    const requests = [],
+      errors = [];
+    const server = await createServer({
+      root,
+      server: { host: "127.0.0.1", port: 0, watch: { ignored: ["**/*"] } },
+      logLevel: "error",
+    });
+    await server.listen();
+    const browser = await chromium.launch({ headless: true });
+    const page = await browserPage(browser);
+    page.setDefaultTimeout(15000);
+    try {
+      page.on("pageerror", (error) => errors.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() === "error") errors.push(message.text());
+      });
+      await page.route("https://native.fixture.test/rpc", async (route) => {
+        const { id, method, params } = route.request().postDataJSON();
+        const result = await fixture.send(method, params);
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({ jsonrpc: "2.0", id, result }),
+        });
+      });
+      await page.exposeFunction("nativeWalletInvoke", async (request) => {
+        requests.push(request);
+        return { txid: "aa".repeat(32) };
+      });
+      await page.addInitScript(
+        ({ address, hash }) => {
+          localStorage.setItem("sa_locale", "en");
+          window.neo3Dapi = {
+            getAccount: async () => ({ address, hash }),
+            getNetwork: async () => ({ magic: 123 }),
+            invoke: (request) => window.nativeWalletInvoke(request),
+          };
+        },
+        { address: getAddressFromScriptHash(nativeTestCustody), hash: nativeTestCustody },
+      );
+      const url = `http://127.0.0.1:${server.httpServer.address().port}/native`;
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 90000 });
+      await page.getByRole("heading", { name: "Native accounts", exact: true }).waitFor();
+      await page.getByTestId("native-endpoint").fill("https://native.fixture.test/rpc");
+      await page.getByTestId("native-network").fill("123");
+      await page.getByRole("button", { name: "Verify node", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: PROFILE_READY }).waitFor();
+      await page.getByTestId("native-account-id").fill(accountId);
+      await page.getByRole("button", { name: "Load account", exact: true }).click();
+      await page.getByTestId("native-account-summary").waitFor();
+      const review = page.getByRole("button", { name: "Review account action", exact: true });
+      const acknowledge = page.getByLabel(
+        "I reviewed the network, authority, target, scope and fee payer.",
+        { exact: true },
+      );
+      const exportReview = async () => {
+        await acknowledge.check();
+        const download = page.waitForEvent("download");
+        await page
+          .getByRole("button", { name: "Export reviewed request", exact: true })
+          .click();
+        return JSON.parse(await readFile(await (await download).path()));
+      };
+      const day = 86400000;
+      // The Modules tab names each pending intent's kind and uses the same
+      // delay wording as the proposal below.
+      fixture.state.pendingConfigIntents.push({
+        intentId: 2,
+        kind: "configure",
+        proposedAt: fixture.state.time,
+        matureAt: fixture.state.time + day,
+        expiresAt: fixture.state.time + 8 * day,
+        actionCount: 2,
+      });
+      await page.getByRole("button", { name: "Modules", exact: true }).click();
+      await page.getByTestId("native-governance-schedule").waitFor();
+      const schedule = (await page.getByTestId("native-governance-schedule").innerText())
+        .replace(/\s+/g, " ")
+        .trim();
+      assert.match(schedule, /Governance delay 1 day /, schedule);
+      assert.ok(
+        schedule.includes(`1 · #2 (configuration, 2 actions, mature at ${new Date(fixture.state.time + day).toISOString()})`),
+        schedule,
+      );
+      await page.getByRole("button", { name: "Account & recovery", exact: true }).click();
+
+      // Step 1: nothing pending, the review is the module's unfreeze proposal.
+      await page.getByLabel("Action", { exact: true }).selectOption("unfreezeAccount");
+      assert.match(await page.getByLabel("Action", { exact: true }).inputValue(), /unfreezeAccount/);
+      assert.equal(await review.isDisabled(), false, "a frozen account can be thawed");
+      await page.getByLabel("Signing path", { exact: true }).selectOption("wallet-invoke");
+      await review.click();
+      await page.locator(".review-heading").getByText("unfreezeAccount", { exact: true }).waitFor();
+      const proposal = (await page.locator("dl").filter({ hasText: "Signing path" }).innerText())
+        .replace(/\s+/g, " ")
+        .trim();
+      assert.ok(proposal.includes("Governance module 0x" + seat), proposal);
+      assert.match(proposal, /Signing path native-sdk/, "the exact module script is signed, never a wallet invoke");
+      assert.equal(
+        (await page.getByTestId("native-required-authorities").innerText()).trim(),
+        "0x" + nativeTestCustody,
+      );
+      assert.match(proposal, new RegExp("CustomContracts · 0x" + seat), "custody is scoped to the module");
+      assert.equal(await page.getByTestId("native-reviewed-intent").count(), 0);
+      // No intent exists yet: the review estimates the earliest confirmation as
+      // the chain time plus the module's delay and labels it as an estimate.
+      const earliest = new Date(fixture.state.time + day).toISOString();
+      assert.equal(
+        (await page.getByTestId("native-estimated-confirmation").innerText()).trim(),
+        earliest,
+      );
+      assert.ok(proposal.includes(`Earliest confirmation (estimate) ${earliest}`), proposal);
+      const proposalText = await page.locator("p").filter({ hasText: "Propose the unfreeze" }).innerText();
+      assert.match(proposalText, /confirmed by custody after the module's delay \(1 day\)/, proposalText);
+      const proposed = await exportReview();
+      assert.equal(proposed.estimatedConfirmAt, fixture.state.time + day);
+      assert.equal(proposed.submission, "native-sdk");
+      assert.equal(proposed.request, null);
+      assert.equal(proposed.plan.kind, "governance");
+      assert.equal(proposed.plan.method, "unfreezeAccount");
+      assert.equal(proposed.plan.targetContract, seat);
+      assert.equal(proposed.plan.script, proposeScript);
+      assert.deepEqual(proposed.recipe, {
+        method: "buildGovernanceModulePlan",
+        input: { accountId, action: "unfreezeAccount" },
+      });
+      assert.deepEqual(proposed.requiredAuthorities, [nativeTestCustody]);
+      assert.deepEqual(proposed.signers, [
+        { account: "0x" + nativeTestCustody, scopes: "CustomContracts", allowedcontracts: ["0x" + seat] },
+      ]);
+
+      // Step 2: the pending intent is still inside the module's delay.
+      const maturity = fixture.state.time + 60000;
+      fixture.state.pendingConfigIntents.push({
+        intentId: 4,
+        kind: "unfreeze",
+        proposedAt: fixture.state.time,
+        matureAt: maturity,
+        expiresAt: maturity + 7 * 86400000,
+        actionCount: 1,
+      });
+      await page.getByRole("button", { name: "Refresh account and chain time", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "Account loaded from the selected node." }).waitFor();
+      await review.click();
+      await page.getByRole("alert").filter({ hasText: /has not matured.*#4/i }).waitFor();
+      assert.equal(requests.length, 0);
+
+      // Step 3: matured, the same action reviews the custody-signed confirmation.
+      fixture.state.time = maturity;
+      await page.getByRole("button", { name: "Refresh account and chain time", exact: true }).click();
+      await page.getByRole("status").filter({ hasText: "Account loaded from the selected node." }).waitFor();
+      await review.click();
+      await page.locator(".review-heading").getByText("confirmConfiguration", { exact: true }).waitFor();
+      assert.equal(
+        (await page.getByTestId("native-reviewed-intent").innerText()).replace(/\s+/g, " ").trim(),
+        "#4 · unfreeze · 1 action",
+      );
+      // The confirmation carries the module's exact maturity, so no estimate.
+      assert.equal(await page.getByTestId("native-estimated-confirmation").count(), 0);
+      const confirmed = await exportReview();
+      assert.equal(confirmed.plan.method, "confirmConfiguration");
+      assert.equal(confirmed.plan.intentId, "4");
+      assert.equal(
+        confirmed.plan.script,
+        c.dynamicCall(seat, "confirmConfiguration", [
+          c.hashValue(accountId),
+          { type: "Integer", value: "4" },
+          { type: "Array", value: [{ type: "Array", value: [{ type: "Integer", value: "11" }] }] },
+        ]),
+      );
+      assert.deepEqual(confirmed.recipe, {
+        method: "buildGovernanceModulePlan",
+        input: { accountId, action: "confirmConfiguration", intentId: "4" },
+      });
+      assert.deepEqual(confirmed.requiredAuthorities, [nativeTestCustody]);
+      assert.deepEqual(confirmed.intentActions, [11]);
       assert.equal(requests.length, 0, "review does not submit a transaction");
       assert.deepEqual(errors, []);
     } finally {
@@ -629,7 +843,6 @@ test(
               nextConsensus: "0x" + "cc".repeat(20),
             },
             gasconsumed: "100000",
-            minimumrequiredfee: "100000",
             stack: [{ type: "Any" }],
           };
         } else if (method === "sendrawtransaction") {

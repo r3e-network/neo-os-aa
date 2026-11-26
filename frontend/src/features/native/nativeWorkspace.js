@@ -1,15 +1,16 @@
 /**
- * Native kernel account workspace (SA module protocol v4).
+ * Native kernel account workspace (SA module protocol v4.1).
  *
- * Everything here mirrors the compiled v4 surface of
+ * Everything here mirrors the compiled v4.1 surface of
  * `contracts/native/SmartAccount/*`, which is the minimal core: it registers
- * an account from custody + salt + recovery timelock, freezes and unfreezes
- * it, administers module instances and executes signed operations. Recovery,
- * message, hook-order and configuration-intent transitions are user-space
- * module concerns; the core keeps their descriptor slots for ABI stability and
- * reports the inactive value, so this workspace reads them as inactive instead
- * of inventing module state. The v3 slots (verifier, hook, recovery address,
- * pending module call) do not exist in v4 and are deliberately absent: a
+ * an account from custody + salt + initial install actions, freezes and
+ * unfreezes it, administers module instances and executes signed operations.
+ * Recovery, message, hook-order and configuration-intent transitions are
+ * user-space module concerns: the recovery timelock is the RecoveryModule's
+ * policy, message verification is the SigningModule's public entry, hook order
+ * belongs to the HookOrchestratorModule and the proposal window belongs to the
+ * GovernanceModule. The core keeps none of those slots, so this workspace
+ * never reads them from the native ABI and never invents their state. A
  * removed concept must fail, never be silently re-mapped onto a different one.
  *
  * The workspace never invents authority. It reads the account from the core,
@@ -59,31 +60,36 @@ const freeze = (value) => {
 // Limits copied from SmartAccountModuleProtocol.cs; the tests pin them back to
 // that source so a kernel change cannot leave the UI promising a longer window
 // than the chain enforces.
+// The recovery timelock is RecoveryModule policy, not a core parameter: the
+// descriptor records the delay the operator will ask the module to store, so
+// it is validated against the module's own domain.
 export const RECOVERY_TIMELOCK_MIN_MS = 604800000; // 7 days
 export const RECOVERY_TIMELOCK_MAX_MS = 7776000000; // 90 days
-// The core installs at most this many actions at registration; a later
+// The core installs at most this many install actions at registration; a later
 // configuration change belongs to the governance module and carries its own
 // limits, so no intent window is promised here.
 export const MAX_ACTIONS_PER_INTENT = 16;
-export const MAX_OPERATIONS_PER_ENVELOPE = 32;
 export const NATIVE_MODULE_TYPES = freeze({ validator: 1, hook: 4, recovery: 5 });
 export const NATIVE_MODULE_LIMITS = freeze({ validator: 32, hook: 8, recovery: 1 });
-export const NATIVE_THRESHOLD_LIMITS = freeze({
-  maxMembers: 10,
-  minValue: 1,
-  maxValue: 10,
-});
+// v4.1 dispatch codes (SmartAccountModuleProtocol.cs). Exactly five survive:
+//   1 install, 2 remove, 3 configure, 5 setBuiltinAuthorization,
+//   7 setRequiredValidator. Codes 3 and 7 are governance-only on chain; the
+//   core itself carries no delay, so this workspace never promises one.
 export const NATIVE_ACTION_CODES = freeze({
   installModule: 1,
   uninstallModule: 2,
   configureModule: 3,
-  setHookOrder: 4,
-  setDefaultPolicy: 5,
-  rebindModuleCode: 6,
-  setThresholdPolicy: 7,
-  setRecoveryPolicy: 8,
-  setMessageSubjects: 9,
+  setBuiltinAuthorization: 5,
+  setRequiredValidator: 7,
 });
+// Retired in v4.1: 4 hook order, 6 rebind code, 8 recovery policy, 9 message
+// subjects, 10 migrate. They are hook/recovery/message/migration module
+// concerns, so no builder emits them and every encoder refuses them.
+export const RETIRED_ACTION_CODES = freeze([4, 6, 8, 9, 10]);
+// Governance action 11 (ModuleProtocol.ActionUnfreeze): the single-action
+// intent that thaws a frozen account. It travels alone through the governance
+// module, so no direct builder emits it against the core.
+export const NATIVE_GOVERNANCE_UNFREEZE_ACTION = 11;
 export const NATIVE_STATUS_NAMES = freeze([
   "Active",
   "Frozen",
@@ -295,8 +301,10 @@ export function buildRecoveryDescriptor(input) {
   const contract = nativeCodec.hex(input.contract, 20);
   if (contract === ZERO_HASH) fail("Descriptor requires the core contract hash.");
   const timelock = recoveryTimelockMs(input.recoveryTimelockMs);
-  // v4 identity is custody + salt alone (§16.1); the proxy address additionally
+  // §16.1 identity is custody + salt alone; the proxy address additionally
   // binds the core and its call flags, so both are recorded and re-derived.
+  // `recoveryTimelockMs` below is the RecoveryModule policy delay this note
+  // carries for the offline recovery seat; it is never a createAccount field.
   const identity = nativeCodec.deriveIdentity({
     custodyAddress: custody,
     salt,
@@ -436,89 +444,53 @@ export function uninstallModuleAction({ moduleId, deInitData = [] }) {
 }
 
 export function configureModuleAction({ moduleId, configData = [] }) {
+  const id = nativeCodec.unsigned(moduleId, 64, "module id");
+  if (id === 0n) fail("Module id must be positive.");
   return freeze(
     A([
       I(NATIVE_ACTION_CODES.configureModule),
-      I(nativeCodec.unsigned(moduleId, 64, "module id")),
+      I(id),
       dataArray(configData, "Configuration data"),
     ]),
   );
 }
 
-export function rebindModuleCodeAction({ moduleId, profileDigest }) {
-  return freeze(
-    A([
-      I(NATIVE_ACTION_CODES.rebindModuleCode),
-      I(nativeCodec.unsigned(moduleId, 64, "module id")),
-      B(digest32(profileDigest, "Module profile digest")),
-    ]),
-  );
+// Codes 4 (hook order), 6 (rebind code), 8 (recovery policy), 9 (message
+// subjects) and 10 (migrate) are retired in v4.1: hook order is the
+// HookOrchestratorModule's state, the recovery policy is the RecoveryModule's,
+// message subjects are the SigningModule's and migration is not a core action.
+// A retired code must be refused here instead of being encoded and rejected on
+// chain, so every builder below is exhaustive over the five live codes.
+function retiredAction(code) {
+  return RETIRED_ACTION_CODES.includes(code);
 }
 
-export function setHookOrderAction({ hookIds }) {
-  if (!Array.isArray(hookIds) || hookIds.length > NATIVE_MODULE_LIMITS.hook)
-    fail(`Hook order accepts at most ${NATIVE_MODULE_LIMITS.hook} ids.`);
-  const ids = hookIds.map((id) => nativeCodec.unsigned(id, 64, "hook id"));
-  if (new Set(ids.map(String)).size !== ids.length)
-    fail("Hook order cannot repeat a module id.");
-  return freeze(A([I(NATIVE_ACTION_CODES.setHookOrder), A(ids.map(I))]));
-}
-
-export function setDefaultPolicyAction({
+// [5, defaultOperationAuthorization, defaultMessageAuthorization]
+export function setBuiltinAuthorizationAction({
   operationAuthorization,
   messageAuthorization,
 }) {
   return freeze(
     A([
-      I(NATIVE_ACTION_CODES.setDefaultPolicy),
+      I(NATIVE_ACTION_CODES.setBuiltinAuthorization),
       { type: "Boolean", value: operationAuthorization === true },
       { type: "Boolean", value: messageAuthorization === true },
     ]),
   );
 }
 
-export function setThresholdPolicyAction({
-  policyId = 0,
-  threshold,
-  memberIds,
-  active = true,
-}) {
-  const id = nativeCodec.unsigned(policyId, 64, "policy id");
-  const value = Number(nativeCodec.unsigned(threshold, 8, "threshold"));
-  if (active !== true || id !== 0n) fail("Changing an active spending policy requires delayed recovery.");
-  if (!Array.isArray(memberIds) || memberIds.length > NATIVE_THRESHOLD_LIMITS.maxMembers)
-    fail(`A threshold policy carries at most ${NATIVE_THRESHOLD_LIMITS.maxMembers} members.`);
-  const members = memberIds.map(v => nativeCodec.unsigned(v, 64, "member module id"));
-  if (members.includes(0n) || new Set(members).size !== members.length)
-    fail("Threshold members must be distinct nonzero module ids.");
-  if (active && (value < 1 || value > members.length))
-    fail("A reachable threshold needs between 1 and its member count.");
+// [7, validatorId, required] — the instance the core refuses to operate without.
+// Governance-only on chain; the delay is the GovernanceModule's, not the core's.
+export function setRequiredValidatorAction({ validatorId, required = true }) {
+  const id = nativeCodec.unsigned(validatorId, 64, "required validator id");
+  if (typeof required !== "boolean") fail("required must be a boolean.");
+  if (required && id === 0n) fail("A required validator needs a nonzero module id.");
+  if (!required && id !== 0n) fail("Clearing the required validator takes validator id 0.");
   return freeze(
     A([
-      I(NATIVE_ACTION_CODES.setThresholdPolicy),
+      I(NATIVE_ACTION_CODES.setRequiredValidator),
       I(id),
-      I(value),
-      A(members.map(I)),
-      { type: "Boolean", value: active === true },
-    ]),
-  );
-}
-
-export function setRecoveryPolicyAction({
-  recoveryAuthority,
-  recoveryTimelockMs: timelock,
-  ownerOnlyRecovery = false,
-}) {
-  if (ownerOnlyRecovery !== false)
-    throw new Error("ownerOnlyRecovery is reserved and must be false");
-  const delay = recoveryTimelockMs(timelock);
-  const authority = nativeAddress(recoveryAuthority);
-  return freeze(
-    A([
-      I(NATIVE_ACTION_CODES.setRecoveryPolicy),
-      nativeCodec.hashValue(authority),
-      I(delay),
-      { type: "Boolean", value: ownerOnlyRecovery === true },
+      { type: "Boolean", value: required },
     ]),
   );
 }
@@ -537,11 +509,12 @@ function shortHash(item) {
   return value.match(/../g).reverse().join("").slice(0, 8) + "…";
 }
 
-/** Human summary of one configuration action, for the pending-intent card. */
+/** Human summary of one configuration action, for a review card. */
 export function describeConfigurationAction(action) {
   const fields = action?.type === "Array" ? action.value : null;
   if (!Array.isArray(fields) || !fields.length) return "Unrecognized action";
   const code = Number(fields[0]?.value);
+  if (retiredAction(code)) return `Retired action ${code}`;
   switch (code) {
     case NATIVE_ACTION_CODES.installModule:
       return `Install ${moduleTypeName(Number(fields[1]?.value))} module ${shortHash(fields[2])}`;
@@ -549,20 +522,12 @@ export function describeConfigurationAction(action) {
       return `Uninstall module ${fields[1]?.value}`;
     case NATIVE_ACTION_CODES.configureModule:
       return `Reconfigure module ${fields[1]?.value}`;
-    case NATIVE_ACTION_CODES.setHookOrder:
-      return `Set hook order [${(fields[1]?.value ?? []).map((id) => id.value).join(" → ")}]`;
-    case NATIVE_ACTION_CODES.setDefaultPolicy:
+    case NATIVE_ACTION_CODES.setBuiltinAuthorization:
       return `Built-in route: operations ${fields[1]?.value === true ? "on" : "off"}, messages ${fields[2]?.value === true ? "on" : "off"}`;
-    case NATIVE_ACTION_CODES.rebindModuleCode:
-      return `Rebind module ${fields[1]?.value} to the profile ${fields[2]?.value?.slice(0, 8) ?? ""}…`;
-    case NATIVE_ACTION_CODES.setThresholdPolicy:
-      return `Threshold policy ${fields[1]?.value}: ${fields[2]?.value}-of-${(fields[3]?.value ?? []).length}${fields[4]?.value === true ? "" : " (inactive)"}`;
-    case NATIVE_ACTION_CODES.setRecoveryPolicy: {
-      const days = Number(fields[2]?.value ?? 0) / 86400000;
-      return `Recovery policy ${shortHash(fields[1])}, ${days}-day timelock`;
-    }
-    case NATIVE_ACTION_CODES.setMessageSubjects:
-      return "Set message subjects";
+    case NATIVE_ACTION_CODES.setRequiredValidator:
+      return fields[2]?.value === true
+        ? `Require validator module ${fields[1]?.value} (governance delay)`
+        : `Clear the required validator (governance delay)`;
     default:
       return `Action ${code}`;
   }
@@ -572,50 +537,79 @@ export function describeConfigurationAction(action) {
 // Account actions (immediate, custody/recovery gated, no intent).
 // ---------------------------------------------------------------------------
 
-// The core owns exactly the two immediate transitions. Recovery begin / execute
-// / cancel are the recovery module's methods, so they are not actions this
-// workspace can plan against the core ABI.
+// The core owns exactly two immediate transitions. Recovery begin / execute /
+// cancel are the recovery module's methods, so they are not actions this
+// workspace can plan against the core ABI; there is no native recovery-policy
+// administration either, because the policy is the RecoveryModule's own state.
 export const NATIVE_ACTIONS = freeze([
   {
     value: "freezeAccount",
     label: "Freeze the account",
+    labelZh: "冻结账户",
     detail:
       "Custody witness. Freezing advances the authority epoch, so every signed operation from before stops being valid.",
+    detailZh: "由托管方见证。冻结会推进权限代际，此前所有已签名操作随即失效。",
   },
   {
     value: "unfreezeAccount",
     label: "Unfreeze the account",
+    labelZh: "解冻账户",
     detail:
-      "Custody witness. Only a frozen account can be unfrozen, and the authority epoch advances again.",
+      "Only a frozen account can be unfrozen. Custody proposes the unfreeze on the installed governance module and confirms it there after the module's delay; the core accepts the thaw from that module alone, a custody-only thaw fails with SA_UNAUTHORIZED, and the authority epoch advances again.",
+    detailZh:
+      "只有已冻结的账户才能解冻。托管方在已安装的治理模块上发起解冻提案，并在模块等待时间之后在该模块确认；核心只接受来自该模块的解冻，仅凭托管方解冻会以 SA_UNAUTHORIZED 失败，且权限代际会再次推进。",
   },
-  {
-    value: "setRecoveryPolicy", label: "Set recovery authority", address: true,
-    detail: "Custody approves the policy. A newly appointed recovery wallet must also sign.",
-  },
-  { value: "beginRecovery", label: "Start recovery", recipient: true, detail: "Custody or recovery signs; a new custody wallet also signs." },
-  { value: "cancelRecovery", label: "Cancel pending recovery", detail: "Custody or the recovery authority signs for the reviewed record." },
-  { value: "executeRecovery", label: "Complete mature recovery", detail: "Anyone can pay to complete the reviewed recovery once mature." },
+  { value: "beginRecovery", label: "Start recovery", labelZh: "开始恢复", recipient: true, detail: "Custody or recovery signs; a new custody wallet also signs.", detailZh: "由托管方或恢复钱包签名；新托管钱包也须签名。" },
+  { value: "cancelRecovery", label: "Cancel pending recovery", labelZh: "取消待生效恢复", detail: "Custody or the recovery authority signs for the reviewed record.", detailZh: "由托管方或恢复权限方为已审核的记录签名。" },
+  { value: "executeRecovery", label: "Complete mature recovery", labelZh: "完成已成熟的恢复", detail: "Anyone can pay to complete the reviewed recovery once mature.", detailZh: "成熟后任何付费者都可付费完成已审核的恢复。" },
 ]);
 
+/** One wording for every module delay: whole days, otherwise hours. */
+export function durationText(value, translate = (en) => en) {
+  const ms = Number(value);
+  if (!Number.isSafeInteger(ms) || ms <= 0) return String(value) + " ms";
+  const days = ms / 86400000;
+  if (Number.isInteger(days))
+    return translate(`${days} day${days === 1 ? "" : "s"}`, `${days} 天`);
+  const hours = ms / 3600000;
+  return translate(`${hours} hour${hours === 1 ? "" : "s"}`, `${hours} 小时`);
+}
+
+/** The reviewed description of one account action. */
+function actionText(action, translate) {
+  const entry = NATIVE_ACTIONS.find((item) => item.value === action);
+  return entry && translate(entry.detail, entry.detailZh);
+}
+
+/** True when the account names a validator the core refuses to operate without. */
+export function hasRequiredValidator(state) {
+  return !!state && state.requiredValidatorId !== undefined &&
+    state.requiredValidatorId !== null && state.requiredValidatorId !== "0";
+}
+
 export function actionBlockReason(state, action, translate = (en) => en) {
-  if (!state) return "Load an account first.";
-  if (!NATIVE_STATUS_NAMES.includes(state.statusName)) return "Unrecognized account status.";
-  if (["freezeAccount", "unfreezeAccount", "setRecoveryPolicy"].includes(action)) {
-    if (state.requiredPolicyId) return translate("Mandatory multisig locks custody administration. Use the preset delayed recovery process.", "已启用强制多签，托管人不能单独管理账户。请走预设延时恢复流程。");
-    if (state.policyCheckFailed) return translate("Could not verify the spending policy. Refresh before changing account settings.", "无法核验支出策略，请刷新后再更改账户设置。");
+  if (!state) return translate("Load an account first.", "请先加载账户。");
+  if (!NATIVE_STATUS_NAMES.includes(state.statusName))
+    return translate("Unrecognized account status.", "无法识别的账户状态。");
+  if (["freezeAccount", "unfreezeAccount"].includes(action)) {
+    if (hasRequiredValidator(state)) {
+      if (state.policyCheckFailed)
+        return translate("Could not verify the required validator module. Refresh before changing account settings.", "无法核验强制验证器模块，请刷新后再更改账户设置。");
+      return translate("A required validator locks custody administration. Clear it through the governance delay first.", "已启用强制验证器，托管人不能单独管理账户。请先走治理延时流程解除。");
+    }
   }
   if (["beginRecovery", "cancelRecovery", "executeRecovery"].includes(action)) {
-    if (state.recoveryAuthority === ZERO_HASH) return "Configure a recovery authority first.";
-    if (!state.recoverySeat?.supported) return "No supported recovery module is installed.";
-    if (action === "beginRecovery" && state.pendingRecovery) return "A recovery is already pending.";
-    if (action !== "beginRecovery" && !state.pendingRecovery) return "No pending recovery.";
+    if (!state.recoverySeat?.supported)
+      return translate("No supported recovery module is installed.", "未安装受支持的恢复模块。");
+    if (action === "beginRecovery" && state.pendingRecovery)
+      return translate("A recovery is already pending.", "已有待生效的恢复。");
+    if (action !== "beginRecovery" && !state.pendingRecovery)
+      return translate("No pending recovery.", "没有待生效的恢复。");
   }
-  if (action === "setRecoveryPolicy" && state.statusName !== "Active")
-    return "Recovery policy can only be changed on an active account.";
   if (action === "freezeAccount" && state.statusName === "Frozen")
-    return "The account is already frozen.";
+    return translate("The account is already frozen.", "账户已冻结。");
   if (action === "unfreezeAccount" && state.statusName !== "Frozen")
-    return "The account is not frozen.";
+    return translate("The account is not frozen.", "账户未冻结。");
   return "";
 }
 
@@ -655,24 +649,41 @@ async function chainTime(client) {
 async function readState(client, accountId, { overview = false } = {}) {
   const account = await client.getAccount(accountId);
   if (!account) fail("This native account is not registered.");
-  let requiredPolicyId = null, policyCheckFailed = false;
-  if (!account.defaultOperationAuthorization && account.recoveryAuthority !== ZERO_HASH) {
-    try { requiredPolicyId = (await client.getThresholdPolicy(accountId))?.policyId ?? null; }
-    catch { policyCheckFailed = true; }
-  }
-  let recoverySeat = null, recoveryCheckFailed = false;
-  if (account.recoveryAuthority !== ZERO_HASH) {
-    try { recoverySeat = await client.getRecoverySeat(accountId); }
-    catch (error) {
+  // §5: a required validator is the one module instance the core refuses to
+  // operate without. Its identity comes from the account record and its state
+  // from the instance itself; v4.1 has no native threshold policy to read.
+  let requiredValidator = null, policyCheckFailed = false;
+  if (hasRequiredValidator(account)) {
+    try {
+      const module = await client.getModule(accountId, account.requiredValidatorId);
+      if (!module || module.moduleType !== NATIVE_MODULE_TYPES.validator)
+        fail("The required validator is not installed on this account.");
+      requiredValidator = module;
+    } catch (error) {
       if (!overview) throw error;
-      recoveryCheckFailed = true;
+      policyCheckFailed = true;
     }
-    if (overview && recoverySeat?.supported &&
-        (await client.getAccount(accountId))?.configurationNonce !== account.configurationNonce)
-      fail("Account configuration changed. Refresh the account.");
   }
+  // The recovery seat is a module instance; when none is installed the core
+  // reports no recovery state, which is the active value, not an error.
+  let recoverySeat = null, recoveryCheckFailed = false;
+  try {
+    recoverySeat = await client.getRecoverySeat(accountId);
+  } catch (error) {
+    if (!overview) throw error;
+    recoveryCheckFailed = true;
+  }
+  if (overview && recoverySeat?.supported &&
+      (await client.getAccount(accountId))?.configurationNonce !== account.configurationNonce)
+    fail("Account configuration changed. Refresh the account.");
   return freeze({ ...account, statusName: NATIVE_STATUS_NAMES[account.status] ?? "Unknown",
-    recoverySeat, recoveryCheckFailed, requiredPolicyId, policyCheckFailed, pendingRecovery: recoverySeat?.pending ?? null });
+    requiredValidator, policyCheckFailed, recoverySeat, recoveryCheckFailed,
+    // The overview is roster-free by construction: the configuration window and
+    // the intent queue belong to the installed governance module, so they are
+    // read by loadModules() when the module roster is enumerated, not here.
+    governanceDelayMs: null,
+    pendingConfiguration: freeze({ intentIds: freeze([]), intents: freeze([]) }),
+    pendingRecovery: recoverySeat?.pending ?? null });
 }
 
 const nativeAssets = Object.freeze({
@@ -722,7 +733,20 @@ async function readModules(client, accountId, config) {
   };
   const [validators, hooks, recovery] = await Promise.all([page("validator"), page("hook"), page("recovery")]);
   if ((await client.getAccount(accountId))?.configurationNonce !== config) changed();
-  return freeze({ validators, hooks, recovery });
+  // The governance window and its pending intents are module state. The roster
+  // above already resolved every validator descriptor, so the governance
+  // instance is read in place instead of enumerating the roster a second time.
+  let governance = null, governanceCheckFailed = false;
+  const seats = validators.filter((module) => module.governance);
+  if (seats.length > 1) fail("An account publishes at most one governance module.");
+  if (seats.length) {
+    try {
+      governance = await client.readGovernanceSeat(seats[0], accountId);
+    } catch {
+      governanceCheckFailed = true;
+    }
+  }
+  return freeze({ validators, hooks, recovery, governance, governanceCheckFailed });
 }
 
 function sdkSigners(client, plan, actor, authorities) {
@@ -783,8 +807,8 @@ export async function rebuildNativeReview(client, exported) {
     plan = client.buildCreateAccountScript(recipe.input);
   else if (recipe?.method === "buildRecoveryModulePlan")
     plan = await client.buildRecoveryModulePlan(recipe.input);
-  else if (recipe?.method === "buildRecoveryPolicyPlan")
-    plan = await client.buildRecoveryPolicyPlan(recipe.input);
+  else if (recipe?.method === "buildGovernanceModulePlan")
+    plan = await client.buildGovernanceModulePlan(recipe.input);
   else if (recipe?.method === "buildAccountActionScript")
     plan = client.buildAccountActionScript(recipe.input);
   else if (recipe?.method === "buildExecutionScript")
@@ -819,9 +843,9 @@ export async function rebuildNativeReview(client, exported) {
 async function expectedAuthorities(client, plan, exported) {
   if (plan.kind === "registration") return [plan.custodyAddress];
   if (plan.kind === "execution") return [];
-  if (plan.kind === "recovery" || plan.method === "setRecoveryPolicy") return [...plan.signers];
+  if (plan.kind === "recovery" || plan.kind === "governance") return [...plan.signers];
   const state = await readState(client, plan.accountId);
-  if (plan.method === "freezeAccount" || plan.method === "unfreezeAccount") {
+  if (plan.method === "freezeAccount") {
     if (exported.authority !== undefined) custodyOnly(state, exported.authority);
     return [state.custodyAddress];
   }
@@ -922,6 +946,8 @@ export function createNativeWorkspace({
     new Client({ rpcClient: createNativeRpc(rpcUrl), networkMagic }),
   wallet,
   transactionTools,
+  // English by default; the workspace UI passes its own bilingual L.
+  translate = (en) => en,
 } = {}) {
   let generation = 0,
     intentVersion = 0,
@@ -1031,6 +1057,72 @@ export function createNativeWorkspace({
     active = review;
     return review;
   }
+  // GovernanceModule.UnfreezeAccount proposes one intent holding the bare
+  // action [11]; ConfirmConfiguration lands it after the module's delay. The
+  // pending intent decides the step, so one action covers both: nothing pending
+  // is a proposal, one pending unfreeze intent is its confirmation.
+  async function thaw({ version, c, intent, state, input, accountId, actor }) {
+    const route = await c.getGovernanceSeat(accountId);
+    if (!route?.supported)
+      fail(translate(
+        "No supported governance module is installed; custody cannot thaw this account alone.",
+        "未安装受支持的治理模块，托管方无法单独解冻该账户。",
+      ));
+    const pending = route.intents.find((entry) => entry.kind === "unfreeze") ?? null;
+    const policy = {
+      accountId,
+      action: pending ? "confirmConfiguration" : "unfreezeAccount",
+      ...(pending ? { intentId: pending.intentId } : {}),
+    };
+    let plan;
+    try {
+      plan = await c.buildGovernanceModulePlan(policy);
+    } catch (error) {
+      if (pending && /has not matured/.test(error?.message ?? ""))
+        fail(translate(
+          `The governance delay has not matured. Intent #${pending.intentId} can be confirmed from ${new Date(Number(pending.matureAt)).toISOString()}.`,
+          `治理等待时间尚未到期。意图 #${pending.intentId} 可在 ${new Date(Number(pending.matureAt)).toISOString()} 之后确认。`,
+        ));
+      throw error;
+    }
+    // Custody signs both steps (GovernanceModule.RequireCustody); another
+    // wallet may pay the fee, but it never stands in for custody.
+    if (input.authority) custodyOnly(state, nativeAddress(input.authority));
+    const delay = plan.governanceDelayMs === null
+      ? translate("the module's delay", "模块等待时间")
+      : durationText(plan.governanceDelayMs, translate);
+    // A proposal holds no intent yet, so its earliest confirmation is only an
+    // estimate: the chain time plus the module's delay. The confirmation step
+    // instead reads the exact maturity the module recorded.
+    const estimatedConfirmAt =
+      !pending && plan.governanceDelayMs !== null
+        ? (await chainTime(c)) + Number(plan.governanceDelayMs)
+        : undefined;
+    return reviewPlan({
+      version,
+      c,
+      intent,
+      plan,
+      actor,
+      authorities: plan.signers,
+      // The confirmation must repeat the proposal byte for byte ([[11]]), so the
+      // exact simulated script is signed; a wallet invoke would rebuild the call.
+      requiresExactScript: true,
+      extra: pending
+        ? { intentId: pending.intentId, intentKind: pending.kind, intentActions: [NATIVE_GOVERNANCE_UNFREEZE_ACTION] }
+        : { estimatedConfirmAt },
+      recipe: { method: "buildGovernanceModulePlan", input: policy },
+      description: pending
+        ? translate(
+            `Confirm unfreeze intent #${pending.intentId} on the governance module. Custody signs; the thaw makes the account active again and advances the authority epoch and the configuration nonce.`,
+            `在治理模块上确认解冻意图 #${pending.intentId}。由托管方签名；解冻后账户恢复为活跃状态，并推进权限代际与配置 nonce。`,
+          )
+        : translate(
+            `Propose the unfreeze on the governance module. Custody signs; the intent is confirmed by custody after the module's delay (${delay}).`,
+            `在治理模块上发起解冻提案。由托管方签名；意图需经过模块等待时间（${delay}）后，由托管方确认。`,
+          ),
+    });
+  }
   return {
     get profile() {
       return profile;
@@ -1137,17 +1229,15 @@ export function createNativeWorkspace({
     },
     async registration(input) {
       const { version, c, intent } = begin();
-      const timelock =
-        input.recoveryTimelockMs !== undefined
-          ? input.recoveryTimelockMs
-          : input.recoveryTimelockDays !== undefined
-            ? Math.round(Number(input.recoveryTimelockDays) * 86400000)
-            : undefined;
-      if (timelock === undefined) fail("Choose a recovery timelock of 7 to 90 days.");
+      // v4.1 CreateAccountCoreAsync is exactly
+      // (accountId, custody, salt, actions): the native recovery timelock
+      // argument is gone, so a caller that still supplies one is told to stop
+      // instead of having it silently dropped.
+      if (input.recoveryTimelockMs !== undefined || input.recoveryTimelockDays !== undefined)
+        fail("The v4.1 core registers custody, salt and install actions only; the recovery timelock is the recovery module's policy.");
       const normalized = {
         custodyAddress: nativeAddress(input.custodyAddress),
         salt: nativeCodec.hex(input.salt),
-        recoveryTimelockMs: recoveryTimelockMs(timelock).toString(),
         actions: input.actions ? [...input.actions] : [],
       };
       const saltBytes = normalized.salt.length / 2;
@@ -1155,6 +1245,11 @@ export function createNativeWorkspace({
         fail("Use a registration salt of 1 to 128 bytes.");
       if (normalized.actions.length > MAX_ACTIONS_PER_INTENT)
         fail(`Registration installs at most ${MAX_ACTIONS_PER_INTENT} actions.`);
+      // Each registration action is an install (1); the core refuses the other
+      // codes (2, 3, 5, 7) at registration and they are applied afterwards.
+      for (const action of normalized.actions)
+        if (action?.value?.[0]?.value !== String(NATIVE_ACTION_CODES.installModule))
+          fail("Registration admits install (1) actions only; administer other changes afterwards.");
       const plan = c.buildCreateAccountScript(normalized);
       if (
         input.accountId &&
@@ -1170,7 +1265,6 @@ export function createNativeWorkspace({
         RPC_HASH(plan.accountId),
         RPC_HASH(normalized.custodyAddress),
         { type: "ByteArray", value: normalized.salt },
-        { type: "Integer", value: normalized.recoveryTimelockMs },
         { type: "Array", value: normalized.actions },
       ];
       return reviewPlan({
@@ -1195,11 +1289,13 @@ export function createNativeWorkspace({
       if (!NATIVE_ACTIONS.some((entry) => entry.value === action))
         fail("Choose a supported account action.");
       const state = await readState(c, accountId);
-      const block = actionBlockReason(state, action);
+      const block = actionBlockReason(state, action, translate);
       if (block) fail(block);
-      // Freeze and unfreeze are custody-only. Recovery begin / execute / cancel
-      // belong to the recovery module and are not core methods, so no core
-      // authority rule is invented for them here.
+      // Freeze is custody-only against the core. A thaw is not a core action at
+      // all: the core accepts it only from the installed governance module, so it
+      // is the module's two-step intent, both steps signed by custody. Recovery
+      // begin / execute / cancel belong to the recovery module and are not core
+      // methods, so no core authority rule is invented for them here.
       const actor = nativeAddress(
         input.feePayer || input.authority || state.custodyAddress,
       );
@@ -1208,27 +1304,19 @@ export function createNativeWorkspace({
           ...(action !== "executeRecovery" ? { authority: nativeAddress(input.authority || actor) } : {}),
           ...(action === "beginRecovery" ? { newCustody: input.newCustody ? nativeAddress(input.newCustody) : ZERO_HASH } : {}) };
         const plan = await c.buildRecoveryModulePlan(policy);
-        const args = [RPC_HASH(accountId), ...(action === "beginRecovery" ? [RPC_HASH(policy.newCustody)]
-          : [{ type: "Integer", value: plan.pending.nonce }, { type: "Integer", value: plan.configurationNonce }])];
+        // v4.1 module entry points take the account id alone; beginRecovery
+        // additionally takes the new custody. The module reads its own record,
+        // so no nonce or configuration nonce is supplied.
+        const args = [RPC_HASH(accountId),
+          ...(action === "beginRecovery" ? [RPC_HASH(policy.newCustody)] : [])];
         return reviewPlan({ version, c, intent, plan, actor, authorities: plan.signers, args,
           extra: { ...(action === "executeRecovery" ? {} : { authority: policy.authority }),
             newCustody: (action === "beginRecovery" ? plan.newCustody : plan.pending?.newCustody) || ZERO_HASH },
-          description: NATIVE_ACTIONS.find(a => a.value === action).detail,
+          description: actionText(action, translate),
           recipe: { method: "buildRecoveryModulePlan", input: policy }, submission: input.submission });
       }
+      if (action === "unfreezeAccount") return thaw({ version, c, intent, state, input, accountId, actor });
       custodyOnly(state, actor);
-      if (action === "setRecoveryPolicy") {
-        const recipient = nativeAddress(input.recoveryAuthority);
-        const delay = recoveryTimelockMs(input.recoveryTimelockMs ?? state.recoveryTimelockMs).toString();
-        const policy = { accountId, recoveryAuthority: recipient, recoveryTimelockMs: delay,
-          ownerOnlyRecovery: state.ownerOnlyRecovery };
-        const plan = await c.buildRecoveryPolicyPlan(policy);
-        return reviewPlan({ version, c, intent, plan, actor,
-          authorities: plan.signers, description: "Set recovery authority and timelock.",
-          args: [RPC_HASH(accountId), RPC_HASH(recipient), { type: "Integer", value: delay },
-            { type: "Boolean", value: policy.ownerOnlyRecovery }],
-          recipe: { method: "buildRecoveryPolicyPlan", input: policy }, submission: input.submission });
-      }
       const args = [RPC_HASH(accountId)];
       const vmArgs = [];
       const plan = c.buildAccountActionScript({
@@ -1254,9 +1342,7 @@ export function createNativeWorkspace({
         },
         submission: input.submission,
         actor,
-        description:
-          NATIVE_ACTIONS.find((entry) => entry.value === action)?.detail ??
-          action,
+        description: actionText(action, translate) ?? action,
       });
     },
     async inspectConfiguration({ accountId }) {
@@ -1284,19 +1370,21 @@ export function createNativeWorkspace({
     async operation(input) {
       const { version, c, intent } = begin();
       const accountId = nativeAddress(input.accountId);
-      const operations = input.operations;
-      if (
-        !Array.isArray(operations) ||
-        !operations.length ||
-        operations.length > MAX_OPERATIONS_PER_ENVELOPE
-      )
+      // v4.1 executes exactly one complete 13-field operation per transaction.
+      // The batch entry is retired, so a list is refused instead of being
+      // reviewed as a plan that no script could carry or split into several
+      // transactions the chain never signed.
+      if (Array.isArray(input.operation) || input.operations !== undefined)
         fail(
-          `An execution envelope carries 1 to ${MAX_OPERATIONS_PER_ENVELOPE} operations.`,
+          "protocol-incompatible: executeUserOps is retired in v4.1. Review one complete 13-field operation per transaction.",
         );
+      const operation = input.operation;
+      if (!operation || typeof operation !== "object")
+        fail("One complete 13-field operation is required.");
       const state = await readState(c, accountId);
       if (state.statusName !== "Active")
         fail("The account is not active. Check whether the account is frozen or in recovery.");
-      const plan = c.buildExecutionScript({ accountId, operations });
+      const plan = c.buildExecutionScript({ accountId, operation });
       return reviewPlan({
         version,
         c,
@@ -1304,11 +1392,11 @@ export function createNativeWorkspace({
         plan,
         authorities: [],
         requiresExactScript: true,
-        recipe: { method: "buildExecutionScript", input: { accountId, operations } },
+        recipe: { method: "buildExecutionScript", input: { accountId, operation } },
         submission: input.submission,
         actor: input.feePayer || state.custodyAddress,
         description:
-          "Signed user operation batch. The proxy witness is the only signer the core accepts for executeUserOp, and the operation signature must come from an installed validator or the built-in route.",
+          "Signed user operation. The proxy witness is the only signer the core accepts for executeUserOp, and the operation signature must come from an installed validator or the built-in route.",
       });
     },
     async submit(review) {

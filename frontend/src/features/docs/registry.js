@@ -29,42 +29,31 @@ const DOC_DEFINITIONS = {
       'zh-CN': () => import('@/assets/docs/workflow.zh.md?raw'),
     },
   },
+  workspace: {
+    title: { en: 'Account Workspace', 'zh-CN': '账户工作台' },
+    loaders: {
+      en: () => import('@/assets/docs/workspace.md?raw'),
+      'zh-CN': () => import('@/assets/docs/workspace.zh.md?raw'),
+    },
+  },
   dataFlow: {
-    title: { en: 'Data Flow & Storage', 'zh-CN': '数据流与存储' },
+    title: { en: 'Storage & Data Flow', 'zh-CN': '存储与数据流' },
     loaders: {
       en: () => import('@/assets/docs/data-flow.md?raw'),
       'zh-CN': () => import('@/assets/docs/data-flow.zh.md?raw'),
-    },
-  },
-  evm: {
-    title: { en: 'Ethereum / EVM Integration', 'zh-CN': '以太坊 / EVM 集成' },
-    loaders: {
-      en: () => import('@/assets/docs/evm-integration.md?raw'),
-    },
-  },
-  mixed: {
-    title: { en: 'Mixed Multi-Sig (N3 + EVM)', 'zh-CN': '混合多签（N3 + EVM）' },
-    loaders: {
-      en: () => import('@/assets/docs/mixed-multisig.md?raw'),
     },
   },
   sdk: {
     title: { en: 'SDK Integration', 'zh-CN': 'SDK 集成' },
     loaders: {
       en: () => import('@/assets/docs/sdk-usage.md?raw'),
+      'zh-CN': () => import('@/assets/docs/sdk-usage.zh.md?raw'),
     },
   },
   moduleGuide: {
     title: { en: 'Validator, Policy & Hook Modules', 'zh-CN': '验证器、策略与钩子模块' },
     loaders: {
       en: () => import('@/assets/docs/module-guide.md?raw'),
-    },
-  },
-  morpheusActions: {
-    title: { en: 'Morpheus Private Actions', 'zh-CN': 'Morpheus 私密操作' },
-    loaders: {
-      en: () => import('@/assets/docs/MORPHEUS_PRIVATE_ACTIONS.md?raw'),
-      'zh-CN': () => import('@/assets/docs/MORPHEUS_PRIVATE_ACTIONS.zh-CN.md?raw'),
     },
   },
 };

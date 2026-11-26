@@ -14,15 +14,15 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getModuleProfile() -> String
 safe getRecoveryAuthority(accountId: Hash160) -> Hash160
 safe getRecoveryService(accountId: Hash160, moduleId: Integer) -> Hash160
 safe getSignerDomains(accountId: Hash160, moduleId: Integer) -> Array
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeAuthorizedCore(coreContract: Hash160) -> Void
 proposeUpdate(nefHash: Hash256, manifestHash: Hash256) -> Void
@@ -44,7 +44,7 @@ safe authorizedCore() -> Hash160
 cancelAdminRotation() -> Void
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAdminRotation(newAdmin: Hash160) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
@@ -52,8 +52,8 @@ safe getDailyLimit(accountId: Hash160, moduleId: Integer, token: Hash160) -> Int
 safe getLimitConfig(accountId: Hash160, moduleId: Integer, token: Hash160) -> Any
 safe getModuleProfile() -> String
 safe isRollingWindow(accountId: Hash160, moduleId: Integer, token: Hash160) -> Boolean
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 postCheck(accountId: Hash160, operation: Array, result: Any, hookData: ByteArray) -> Void
 preCheck(accountId: Hash160, operation: Array) -> ByteArray
 proposeAuthorizedCore(coreContract: Hash160) -> Void
@@ -75,7 +75,7 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getConfig(accountId: Hash160, moduleId: Integer) -> Array
@@ -85,8 +85,8 @@ safe getProvider(accountId: Hash160, moduleId: Integer) -> String
 safe getPublicKey(accountId: Hash160, moduleId: Integer) -> ByteArray
 safe getSignerDomains(accountId: Hash160, moduleId: Integer) -> Array
 safe getSigningDigest(accountId: Hash160, moduleId: Integer, operationDigest: ByteArray, actionNullifier: ByteArray) -> ByteArray
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeAuthorizedCore(coreContract: Hash160) -> Void
 proposeUpdate(nefHash: Hash256, manifestHash: Hash256) -> Void
@@ -97,9 +97,9 @@ safe validateUserOp(accountId: Hash160, operationDigest: ByteArray, operation: A
 
 ## GovernanceModule
 
-Role: validator. Profile SHA-256: `331fc570362ff2924f0de4d0de01a99b60981b1e749515f49634af5ea27be41c`.
+Role: validator. Profile SHA-256: `8c9b9c4f0cb3eb859482d68fe1fdc326db3524b2b951692f1fcd722978e39da0`.
 
-Capabilities: `compositeLayer=0`, `instanceIsolation=false`, `messageCapability=false`, `thresholdMemberEligible=false`.
+Capabilities: `compositeLayer=0`, `governance=true`, `instanceIsolation=false`, `messageCapability=false`, `thresholdMemberEligible=false`.
 
 ```text
 _deploy(data: Any, update: Boolean) -> Void
@@ -118,30 +118,32 @@ onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitDa
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeConfiguration(accountId: Hash160, actions: Array, readSet: Array) -> Integer
 setAuthorizedCore(coreContract: Hash160) -> Void
-storeGovernedPolicy(accountId: Hash160, kind: Integer, policy: ByteArray) -> Void
 unfreezeAccount(accountId: Hash160) -> Integer
 safe validateUserOp(accountId: Hash160, operationDigest: ByteArray, operation: Array) -> Boolean
 ```
 
 ## HookOrchestratorModule
 
-Role: validator. Profile SHA-256: `42c18e884852f9c59fdd2586def2af35eb68aa4ffde36d7ab2f71ad63aece1c2`.
+Role: validator. Profile SHA-256: `1b98261f6ab714cc322d86cf7a5f5c3aae69594aaf1c55506f122f3a06caa441`.
 
-Capabilities: `compositeLayer=0`, `instanceIsolation=false`, `messageCapability=false`, `thresholdMemberEligible=false`.
+Capabilities: `compositeLayer=0`, `hookPlanner=true`, `instanceIsolation=true`, `messageCapability=false`, `thresholdMemberEligible=false`.
 
 ```text
 _deploy(data: Any, update: Boolean) -> Void
 _initialize() -> Void
 safe authorizedCore() -> Hash160
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 safe getCredentialGeneration(accountId: Hash160, moduleId: Integer) -> Integer
 safe getHookOrder(accountId: Hash160) -> Array
+safe getHookSnapshot(accountId: Hash160) -> Array
 safe getModuleProfile() -> String
 onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
 onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
+safe planHooks(accountId: Hash160, operationDigest: ByteArray, operation: Array) -> Array
 revokeCredentials(accountId: Hash160, moduleId: Integer) -> Void
 setAuthorizedCore(coreContract: Hash160) -> Void
-setHookOrder(accountId: Hash160, hookIds: Array) -> Void
+setHookOrder(accountId: Hash160, moduleId: Integer, hookIds: Array, expectedRevision: Integer) -> Void
 safe validateUserOp(accountId: Hash160, operationDigest: ByteArray, operation: Array) -> Boolean
 ```
 
@@ -158,13 +160,13 @@ safe authorizedCore() -> Hash160
 cancelAdminRotation() -> Void
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAdminRotation(newAdmin: Hash160) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getModuleProfile() -> String
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 postCheck(accountId: Hash160, operation: Array, result: Any, hookData: ByteArray) -> Void
 preCheck(accountId: Hash160, operation: Array) -> ByteArray
 proposeAuthorizedCore(coreContract: Hash160) -> Void
@@ -186,15 +188,15 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getMemberDigest(accountId: Hash160, moduleId: Integer, operationDigest: ByteArray) -> ByteArray
 safe getMemberKey(accountId: Hash160, moduleId: Integer) -> ByteArray
 safe getModuleProfile() -> String
 safe getSignerDomains(accountId: Hash160, moduleId: Integer) -> Array
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeAuthorizedCore(coreContract: Hash160) -> Void
 proposeUpdate(nefHash: Hash256, manifestHash: Hash256) -> Void
@@ -217,7 +219,7 @@ cancelAdminRotation() -> Void
 cancelAuthorizedCoreChange() -> Void
 cancelRegistryChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAdminRotation(newAdmin: Hash160) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmRegistry(registryContract: Hash160) -> Void
@@ -226,8 +228,8 @@ safe getModuleProfile() -> String
 safe getRegistry() -> Hash160
 safe getRequiredClaimType(accountId: Hash160, moduleId: Integer, targetContract: Hash160) -> String
 safe getRequiredProvider(accountId: Hash160, moduleId: Integer, targetContract: Hash160) -> String
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 postCheck(accountId: Hash160, operation: Array, result: Any, hookData: ByteArray) -> Void
 preCheck(accountId: Hash160, operation: Array) -> ByteArray
 proposeAuthorizedCore(coreContract: Hash160) -> Void
@@ -251,15 +253,15 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getConfig(accountId: Hash160, moduleId: Integer) -> Array
 safe getModuleProfile() -> String
 safe getSignerDomains(accountId: Hash160, moduleId: Integer) -> Array
 safe getThreshold(accountId: Hash160, moduleId: Integer) -> Integer
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeAuthorizedCore(coreContract: Hash160) -> Void
 proposeUpdate(nefHash: Hash256, manifestHash: Hash256) -> Void
@@ -280,14 +282,14 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getModuleProfile() -> String
 safe getPublicKey(accountId: Hash160, moduleId: Integer) -> ByteArray
 safe getSignerDomains(accountId: Hash160, moduleId: Integer) -> Array
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeAuthorizedCore(coreContract: Hash160) -> Void
 proposeUpdate(nefHash: Hash256, manifestHash: Hash256) -> Void
@@ -298,7 +300,7 @@ safe validateUserOp(accountId: Hash160, operationDigest: ByteArray, operation: A
 
 ## RecoveryModule
 
-Role: recovery. Profile SHA-256: `9e3aa360fd7b9bc1d04d368140639e44985a07045f338a3036df3e0859e536e6`.
+Role: recovery. Profile SHA-256: `64e4a614163968e6306083058044c6fad3c1c0c6a6e938737485f3325b9f13e3`.
 
 Capabilities: `compositeLayer=0`, `instanceIsolation=false`, `messageCapability=false`, `thresholdMemberEligible=false`.
 
@@ -308,9 +310,8 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 beginRecovery(accountId: Hash160, newCustody: Hash160) -> Integer
 cancelRecovery(accountId: Hash160) -> Void
-cancelReviewedRecovery(accountId: Hash160, nonce: Integer, configurationNonce: Integer) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 executeRecovery(accountId: Hash160) -> Void
-executeReviewedRecovery(accountId: Hash160, nonce: Integer, configurationNonce: Integer) -> Void
 safe getExecutedRecoveryNonce(accountId: Hash160) -> Integer
 safe getModuleProfile() -> String
 safe getRecoveryPolicySnapshot(accountId: Hash160) -> Array
@@ -353,20 +354,23 @@ safe validateUserOp(accountId: Hash160, operationDigest: ByteArray, operation: A
 
 ## SigningModule
 
-Role: validator. Profile SHA-256: `9249ca5e3f9e6c5ec39aa24b8aa6957ae7e9eacb90148909a770477d4253781a`.
+Role: validator. Profile SHA-256: `d4fd9c20c8f9d5dccb4735c19ab0078b91631056887451b35348141ee7247126`.
 
-Capabilities: `compositeLayer=0`, `instanceIsolation=false`, `messageCapability=false`, `thresholdMemberEligible=false`.
+Capabilities: `compositeLayer=0`, `instanceIsolation=true`, `messageCapability=true`, `thresholdMemberEligible=false`.
 
 ```text
 _deploy(data: Any, update: Boolean) -> Void
 _initialize() -> Void
 safe authorizedCore() -> Hash160
-safe getMessageSubjects(accountId: Hash160) -> Array
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
+safe getMessagePolicy(accountId: Hash160, moduleId: Integer) -> Array
 safe getModuleProfile() -> String
+safe isValidSignature(accountId: Hash160, originalSender: Hash160, validatorId: Integer, generation: Integer, hash: ByteArray, pairs: Array) -> Boolean
 onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
 onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 setAuthorizedCore(coreContract: Hash160) -> Void
+safe validateMessageSignature(accountId: Hash160, originalSender: Hash160, validatorId: Integer, generation: Integer, hash: ByteArray, pairs: Array) -> ByteArray
 safe validateUserOp(accountId: Hash160, operationDigest: ByteArray, operation: Array) -> Boolean
 ```
 
@@ -411,15 +415,15 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getKeyId(accountId: Hash160, moduleId: Integer) -> ByteArray
 safe getModuleProfile() -> String
 safe getPublicKey(accountId: Hash160, moduleId: Integer) -> ByteArray
 safe getSignerDomains(accountId: Hash160, moduleId: Integer) -> Array
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeAuthorizedCore(coreContract: Hash160) -> Void
 proposeUpdate(nefHash: Hash256, manifestHash: Hash256) -> Void
@@ -430,16 +434,18 @@ safe validateUserOp(accountId: Hash160, operationDigest: ByteArray, operation: A
 
 ## ThresholdPolicyModule
 
-Role: validator. Profile SHA-256: `b84a2a4b342ca09ba6b460a207b8ada6bcafea06f0240bc952e873e7b0833370`.
+Role: validator. Profile SHA-256: `c74fc360ad8b251d44663177b1c345257222f98f97f2d4dea78087980cfc5cbb`.
 
-Capabilities: `compositeLayer=0`, `instanceIsolation=false`, `messageCapability=false`, `thresholdMemberEligible=false`.
+Capabilities: `compositeLayer=1`, `instanceIsolation=true`, `messageCapability=false`, `thresholdMemberEligible=false`.
 
 ```text
 _deploy(data: Any, update: Boolean) -> Void
 _initialize() -> Void
 safe authorizedCore() -> Hash160
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 safe getModuleProfile() -> String
-safe getThresholdPolicy(accountId: Hash160, policyId: Integer) -> Array
+safe getPolicySnapshot(accountId: Hash160) -> Array
+safe getThresholdPolicy(accountId: Hash160, moduleId: Integer) -> Array
 onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
 onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
@@ -460,14 +466,14 @@ safe authorizedCore() -> Hash160
 cancelAdminRotation() -> Void
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAdminRotation(newAdmin: Hash160) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getModuleProfile() -> String
 safe isRestricted(accountId: Hash160, moduleId: Integer, token: Hash160) -> Boolean
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 postCheck(accountId: Hash160, operation: Array, result: Any, hookData: ByteArray) -> Void
 preCheck(accountId: Hash160, operation: Array) -> ByteArray
 proposeAuthorizedCore(coreContract: Hash160) -> Void
@@ -489,7 +495,7 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getModuleProfile() -> String
@@ -497,8 +503,8 @@ safe getPublicKey(accountId: Hash160, moduleId: Integer) -> ByteArray
 safe getSignerDomains(accountId: Hash160, moduleId: Integer) -> Array
 safe getSigningPayload(accountId: Hash160, moduleId: Integer, operationDigest: ByteArray, operation: Array) -> ByteArray
 safe isValidSignature(accountId: Hash160, originalSender: Hash160, validatorId: Integer, generation: Integer, hash: ByteArray, signatures: Array) -> Boolean
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeAuthorizedCore(coreContract: Hash160) -> Void
 proposeUpdate(nefHash: Hash256, manifestHash: Hash256) -> Void
@@ -520,14 +526,14 @@ safe authorizedCore() -> Hash160
 cancelAdminRotation() -> Void
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAdminRotation(newAdmin: Hash160) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getModuleProfile() -> String
 safe isWhitelisted(accountId: Hash160, moduleId: Integer, targetContract: Hash160) -> Boolean
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 postCheck(accountId: Hash160, operation: Array, result: Any, hookData: ByteArray) -> Void
 preCheck(accountId: Hash160, operation: Array) -> ByteArray
 proposeAuthorizedCore(coreContract: Hash160) -> Void
@@ -549,13 +555,13 @@ _initialize() -> Void
 safe authorizedCore() -> Hash160
 cancelAuthorizedCoreChange() -> Void
 cancelUpdate() -> Void
-configure(accountId: Hash160, moduleId: Integer, generation: Integer, configData: Array) -> Void
+configure(accountId: Hash160, moduleId: Integer, moduleType: Integer, configData: Array) -> Void
 confirmAuthorizedCore(coreContract: Hash160) -> Void
 confirmUpdate(nef: ByteArray, manifest: String) -> Void
 safe getModuleProfile() -> String
 safe getSignerDomains(accountId: Hash160, moduleId: Integer) -> Array
-onInstall(accountId: Hash160, moduleId: Integer, generation: Integer, initData: Array) -> Void
-onUninstall(accountId: Hash160, moduleId: Integer, generation: Integer, deInitData: Array) -> Void
+onInstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, initData: Array) -> Void
+onUninstall(accountId: Hash160, moduleId: Integer, moduleType: Integer, deInitData: Array) -> Void
 onUserOpComplete(accountId: Hash160, operation: Array, result: Any) -> Void
 proposeAuthorizedCore(coreContract: Hash160) -> Void
 proposeUpdate(nefHash: Hash256, manifestHash: Hash256) -> Void

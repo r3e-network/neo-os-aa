@@ -19,11 +19,21 @@ import tempfile
 # silently skip it, so the roster is checked in both directions before anything is built.
 
 
+def launcher(path):
+    # A caller may name the compiler the way the shell spells it (`nccs`, without
+    # an extension). On Windows only `nccs.exe` exists on disk, so resolve that
+    # name to the file: the receipt must hash the launcher bytes that run.
+    if os.name == 'nt' and not path.suffix and not path.exists() and path.with_name(path.name + '.exe').is_file():
+        return path.with_name(path.name + '.exe')
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--compiler', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     options = parser.parse_args()
+    options.compiler = launcher(options.compiler)
     root = Path(__file__).resolve().parent.parent
     digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
     report = {'status': 'RUNNING', 'publicNetworksTouched': False, 'sourceSha256': {}, 'testSourceSha256': {},
@@ -36,7 +46,7 @@ def main():
             for name in ('Directory.Build.props', 'nuget.config'):
                 shutil.copyfile(root / name, scratch / name)
                 report['sourceSha256'][name] = digest(root / name)
-            profiles = json.loads((root / 'contracts/plugins/native-profile/profiles.json').read_text())
+            profiles = json.loads((root / 'contracts/plugins/native-profile/profiles.json').read_text(encoding='utf-8'))
             probe_source = (root / 'tests/NativeEpochProbe/Program.cs').read_text(encoding='utf-8')
             uncovered = sorted(name for name in profiles if '"%s"' % name not in probe_source)
             if uncovered:
@@ -101,7 +111,7 @@ def main():
     except Exception as error:
         report.update(status='FAIL', error=str(error))
     finally:
-        options.output.write_text(json.dumps(report, indent=2) + '\n')
+        options.output.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps({key: report[key] for key in ('status', 'probe', 'error') if key in report}, indent=2))
     return 0 if report['status'] == 'PASS' else 1
 

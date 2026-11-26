@@ -17,7 +17,7 @@ When this repo references Morpheus-integrated addresses, treat the following as 
 | SA Web3AuthVerifier | `0xf5c452cd4ba29dcdc47026383568c0d8b38d9272` | `0x1111f5b6b046a964c75d208998c13945ce172e85` |
 | SocialRecoveryVerifier v2 | `0x198b3a9cec9bccc2110d19bd929b10374a9d034d` | unpublished in the shared registry |
 
-The Morpheus Oracle (MiniApp-OS kernel v2) has the same contract hash on mainnet and testnet. The testnet hash `0x4b882e94ed766807c4fd728768f972e13008ad52` still seen in older records is the retired v1 oracle — do not integrate against it.
+The Morpheus Oracle (MiniApp-OS kernel v2) has the same contract hash on mainnet and testnet.
 
 Domain rules:
 
@@ -25,8 +25,7 @@ Domain rules:
 - mainnet SA additional alias: `sa.morpheus.neo`
 - mainnet NeoDID domain: `neodid.morpheus.neo`
 - testnet currently has no shared SA / NeoDID NNS aliases
-- the `*.miniapp.neo` spellings are the retired migration names: on 2026-11-16 the canonical registry restored the `smartwallet.neo` / `*.morpheus.neo` set above
-- `oracle.morpheus.neo` pointed to the superseded oracle `0x5b492098fc094c760402e01f7e0b631b939d2bea` before the 2026-11-16 rebinding; the canonical registry now publishes it for the current oracle
+- mainnet oracle domain: `oracle.morpheus.neo`
 
 Current published Morpheus CVM attestation anchors:
 
@@ -43,5 +42,5 @@ Do not conflate the SA recovery service with the independent NeoDID registry:
 
 Registry identity notes:
 
-- The canonical mainnet SA anchor now points to the clean deploy `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
-- The canonical shared testnet SA anchor now points to the clean deployment `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.
+- The canonical mainnet SA anchor is `0x0268a387913b250166ddec032b03332690a1ef78` and resolves from `smartwallet.neo` plus `sa.morpheus.neo`.
+- The canonical shared testnet SA anchor is `0xdbf38e7b2117186bf7a5e17ead702322c0c5b6f2`, with shared `Web3AuthVerifier` `0x1111f5b6b046a964c75d208998c13945ce172e85`.

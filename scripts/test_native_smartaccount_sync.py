@@ -104,7 +104,7 @@ class NativeSmartAccountSyncTests(unittest.TestCase):
     def test_sync_writes_nothing_when_a_later_true_source_is_invalid(self):
         with tempfile.TemporaryDirectory() as tmp:
             sa_root, core_root = build_stale_core(Path(tmp))
-            # Eight valid files precede the broken one in SYNCED_FILES order.
+            # Six valid files precede the broken one in SYNCED_FILES order.
             broken = sync_mod.SYNCED_FILES[-2]
             source = sa_root / SA_DIR / broken
             source.write_text(source.read_text(encoding="utf-8").replace("TRUE SOURCE", "EDITABLE"),

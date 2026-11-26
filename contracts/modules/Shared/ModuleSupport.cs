@@ -21,55 +21,45 @@ namespace SmartAccount.Modules
         // Phase codes the core passes to getAuthorizedModuleId (spec §9).
         internal const int PhaseValidation = 1;
         internal const int PhaseConfiguration = 6;
+        internal const int PhaseMemberValidation = 8;
+        internal const int PhaseHookPlanning = 9;
 
         internal const int MaxValidatorInstances = 32;
 
-        // Registration / configuration action codes (spec §10/§11, Table 16).
+        // Generic registration / configuration action codes. Policy-specific
+        // actions are intentionally absent: modules interpret their own data.
         internal const int ActionInstallModule = 1;
         internal const int ActionUninstallModule = 2;
         internal const int ActionConfigureModule = 3;
-        internal const int ActionSetHookOrder = 4;
         internal const int ActionSetBuiltinAuthorization = 5;
-        internal const int ActionRebindModule = 6;
-        internal const int ActionSetThresholdPolicy = 7;
-        internal const int ActionSetMessageSubjects = 9;
+        internal const int ActionSetRequiredValidator = 7;
         internal const int ActionUnfreeze = 11;
-
-        // Governance action 8: the restricted recovery-policy write. Its
-        // timelock domain is the §12.5 / R-12-03 window (7–90 days); the core
-        // re-validates it inside setRecoveryPolicy, so a proposal that passes
-        // here can never smuggle an out-of-domain timelock to the core.
-        internal const int ActionSetRecoveryPolicy = 8;
-        internal const long RecoveryTimelockMinMs = 604_800_000L;
-        internal const long RecoveryTimelockMaxMs = 7_776_000_000L;
 
         // Account status codes (spec §7.2).
         internal const int StatusActive = 0;
         internal const int StatusFrozen = 1;
 
-        // Module error symbols (spec Appendix C, Table 45): the spellings are
-        // normative; an assertion may append a detail suffix after a single
-        // space, but the prefix must match the table byte for byte (C-25).
+        // Module error symbols (spec §17): the spellings are normative; an
+        // assertion may append a detail suffix after a single space, but the
+        // prefix must match the table byte for byte (C-25).
         internal const string ErrIntentImmature = "SA_INTENT_IMMATURE";
         internal const string ErrIntentExpired = "SA_INTENT_EXPIRED";
         internal const string ErrIntentConflict = "SA_INTENT_CONFLICT";
         internal const string ErrIntentNotFound = "SA_INTENT_NOT_FOUND";
         internal const string ErrIntentLimit = "SA_INTENT_LIMIT";
         internal const string ErrModuleLimitActions = "SA_MODULE_LIMIT_ACTIONS";
-        internal const string ErrModuleLimitIntents = "SA_MODULE_LIMIT_INTENTS";
         internal const string ErrRecoveryPending = "SA_RECOVERY_PENDING";
         internal const string ErrRecoveryLocked = "SA_RECOVERY_LOCKED";
-        internal const string ErrMessageInvalid = "SA_MESSAGE_INVALID";
-        internal const string ErrModuleMessageCapabilityAbsent = "SA_MODULE_MESSAGE_CAPABILITY_ABSENT";
-        internal const string ErrHookRejected = "SA_HOOK_REJECTED";
         internal const string ErrHookDataTooLarge = "SA_HOOK_DATA_TOO_LARGE";
         internal const string ErrProofInvalid = "SA_PROOF_INVALID";
         internal const string ErrModuleLimitMembers = "SA_MODULE_LIMIT_MEMBERS";
+        internal const string ErrConfigurationNonceStale = "SA_CONFIGURATION_NONCE_STALE";
 
-        // Core error symbols (Appendix C, Table 44) reused for module-side
-        // cases Table 45 does not cover — nearest existing symbol per the
-        // C-25 fallback rule; every reuse is listed in the task report.
+        // Core error symbols (spec §17) reused for module-side cases the
+        // module rows do not cover — nearest existing symbol per the C-25
+        // fallback rule; every reuse is listed in the task report.
         internal const string ErrOperationMalformed = "SA_OPERATION_MALFORMED";
+        internal const string ErrAccountNotFound = "SA_ACCOUNT_NOT_FOUND";
         internal const string ErrAccountFrozen = "SA_ACCOUNT_FROZEN";
         internal const string ErrAccountStatus = "SA_ACCOUNT_STATUS";
         internal const string ErrEpochStale = "SA_EPOCH_STALE";
@@ -81,22 +71,28 @@ namespace SmartAccount.Modules
     }
 
     /// <summary>
-    /// Shared plumbing for the standard user-space modules (§11-§15).
+    /// Shared plumbing for the standard user-space modules (spec §9/§10).
     ///
     /// The minimal native core publishes registration, freeze/unfreeze,
-    /// execution and module administration. Everything the standard modules do
-    /// on top of that is an ordinary contract call: they read the account
-    /// descriptor from the core, apply their own storage, and drive the two
-    /// module-administration entrypoints when a policy change is due.
+    /// execution and module administration. A module reaches the core through
+    /// the descriptor reads below and through the landing entries its role
+    /// permits: <c>applyConfigurationActions</c> (a mature governance intent),
+    /// <c>unfreezeAccount</c>, <c>revokeModuleCredentials</c> and
+    /// <c>resetAccount</c> (the mature recovery seat). There is deliberately no
+    /// wrapper for <c>installModule</c>, <c>removeModule</c>,
+    /// <c>configureModule</c> or <c>setBuiltinAuthorization</c>: those topology
+    /// changes exist in a module only as action codes inside a reviewed intent
+    /// batch, so no module code path can land them outside the governance delay.
     ///
     /// Authority is never a caller-declared value. A module asks the core for
     /// the account state and checks a witness:
     ///
-    ///   * <see cref="RequireAccountAdministration"/> mirrors the core's own
-    ///     rule for installModule/removeModule — the custody witness, or the
-    ///     witness of an installed validator contract;
-    ///   * <see cref="RequireCustody"/> is the narrower "the custodian asked for
-    ///     this" gate a recovery module needs to start a recovery;
+    ///   * <see cref="RequireCustody"/> is the only administration gate on the
+    ///     module side ("the custodian asked for this"): it reads the custody
+    ///     from the core and checks that one witness. The module layer keeps no
+    ///     copy of the native landing rule — under v4.1 the core answers a
+    ///     configuration landing to the bound governance caller alone, and a
+    ///     validator witness is not an administration principal either side;
     ///   * <see cref="RequireCore"/> is the "the core is running this operation"
     ///     gate for callbacks the core dispatches.
     /// </summary>
@@ -104,34 +100,45 @@ namespace SmartAccount.Modules
     {
         private static readonly byte[] Prefix_Admin = new byte[] { 0xF0 };
         private static readonly byte[] Prefix_Core = new byte[] { 0xF1 };
+        // One pointer per account names the module instance that owns the
+        // account's private namespace. A reset allocates a new module id, so
+        // the old namespace becomes unreachable without native traversal.
+        private static readonly byte[] Prefix_Instance = new byte[] { 0x80 };
 
         private const string CoreGetAccount = "getAccount";
-        private const string CoreGetAccountAddress = "getAccountAddress";
         private const string CoreGetModules = "getModules";
         private const string CoreGetModule = "getModule";
         private const string CoreGetAuthorizedModuleId = "getAuthorizedModuleId";
-        private const string CoreInstallModule = "installModule";
-        private const string CoreRemoveModule = "removeModule";
         private const string CoreUnfreezeAccount = "unfreezeAccount";
-        private const string CoreSetRecoveryPolicy = "setRecoveryPolicy";
         private const string CoreRevokeModuleCredentials = "revokeModuleCredentials";
         private const string CoreResetAccount = "resetAccount";
-        private const string CoreSetBuiltinAuthorization = "setBuiltinAuthorization";
+        private const string CoreApplyConfigurationActions = "applyConfigurationActions";
 
         // getAccount(accountId) field indices (spec §7.2).
         private const int FieldExists = 0;
         internal const int FieldStatus = 1;
         private const int FieldCustody = 2;
-        private const int FieldRecoveryAuthority = 3;
-        internal const int FieldAuthorityEpoch = 4;
-        internal const int FieldConfigurationNonce = 5;
-        private const int FieldRecoveryTimelockMs = 6;
+        internal const int FieldAuthorityEpoch = 3;
+        internal const int FieldConfigurationNonce = 4;
+        internal const int FieldDefaultOperationAuthorization = 5;
+        internal const int FieldDefaultMessageAuthorization = 6;
+        private const int FieldControlRevision = 8;
 
-        // getModules page / getModule descriptor indices (spec §3.3).
+        // getModules page / getModule descriptor indices (spec §9).
         private const int FieldModuleIds = 0;
         internal const int FieldModuleType = 1;
         internal const int FieldModuleContractHash = 2;
+        internal const int FieldModuleContractId = 3;
+        internal const int FieldModuleUpdateCounter = 4;
+        internal const int FieldModuleProfileHash = 6;
+        internal const int FieldModuleRevision = 7;
+        internal const int FieldModuleCredentialGeneration = 8;
+        internal const int FieldModuleInstanceIsolation = 9;
         internal const int FieldModuleMessageCapability = 10;
+        internal const int FieldModuleThresholdMemberEligible = 11;
+        internal const int FieldModuleCompositeLayer = 12;
+        internal const int FieldModuleGovernance = 13;
+        internal const int FieldModuleHookPlanner = 14;
 
         // ---- deployment, identity and admin ----
 
@@ -200,8 +207,8 @@ namespace SmartAccount.Modules
             ExecutionEngine.Assert(accountId != UInt160.Zero && accountId.IsValid, ErrOperationMalformed);
             object[] record = (object[])Contract.Call(RequireCoreConfigured(), CoreGetAccount,
                 CallFlags.ReadOnly, new object[] { accountId });
-            ExecutionEngine.Assert(record.Length > FieldRecoveryTimelockMs, "SA_ACCOUNT_NOT_FOUND");
-            ExecutionEngine.Assert((bool)record[FieldExists], "SA_ACCOUNT_NOT_FOUND");
+            ExecutionEngine.Assert(record.Length > FieldControlRevision, ErrAccountNotFound);
+            ExecutionEngine.Assert((bool)record[FieldExists], ErrAccountNotFound);
             return record;
         }
 
@@ -211,109 +218,177 @@ namespace SmartAccount.Modules
         internal static UInt160 Custody(UInt160 accountId) =>
             (UInt160)AccountRecord(accountId)[FieldCustody];
 
-        internal static UInt160 RecoveryAuthority(UInt160 accountId) =>
-            (UInt160)AccountRecord(accountId)[FieldRecoveryAuthority];
-
-        /// <summary>
-        /// The delay the account itself recorded at registration. A module never
-        /// invents a maturity window: it uses the one the account committed to.
-        /// </summary>
-        internal static BigInteger RecoveryTimelockMs(UInt160 accountId) =>
-            (BigInteger)AccountRecord(accountId)[FieldRecoveryTimelockMs];
-
-        /// <summary>The account's current authority epoch (getAccount field 4, spec §7.2).</summary>
+        /// <summary>The account's current authority epoch (getAccount field 3, spec §7.2).</summary>
         internal static BigInteger AccountAuthorityEpoch(UInt160 accountId) =>
             (BigInteger)AccountRecord(accountId)[FieldAuthorityEpoch];
 
-        /// <summary>The account's current configuration nonce (getAccount field 5, spec §7.2).</summary>
+        /// <summary>The account's current configuration nonce (getAccount field 4, spec §7.2).</summary>
         internal static BigInteger AccountConfigurationNonce(UInt160 accountId) =>
             (BigInteger)AccountRecord(accountId)[FieldConfigurationNonce];
 
-        /// <summary>The script hash that holds the account's assets on this core.</summary>
-        internal static UInt160 AssetAddress(UInt160 accountId) =>
-            (UInt160)Contract.Call(RequireCoreConfigured(), CoreGetAccountAddress, CallFlags.ReadOnly,
-                new object[] { accountId });
-
         internal static void RequireActiveAccount(UInt160 accountId)
         {
-            ExecutionEngine.Assert(AccountStatus(accountId) == ModuleProtocol.StatusActive, "SA_ACCOUNT_STATUS");
+            ExecutionEngine.Assert(AccountStatus(accountId) == ModuleProtocol.StatusActive, ErrAccountStatus);
         }
 
         /// <summary>
-        /// The thaw path's status gate (audit H-2, spec §11/§12): a frozen account
+        /// The thaw path's status gate (audit H-2, spec §10): a frozen account
         /// must still be able to propose and confirm the unfreeze intent that is
         /// its only way out, so `Active` and `Frozen` both pass. `MigrationRequired`
         /// and any other status is refused — an unfreeze must not give a migrating
-        /// account execution capability (R-11-14).
+        /// account execution capability (§10).
         /// </summary>
         internal static void RequireActiveOrFrozenAccount(UInt160 accountId)
         {
             BigInteger status = AccountStatus(accountId);
             ExecutionEngine.Assert(
                 status == ModuleProtocol.StatusActive || status == ModuleProtocol.StatusFrozen,
-                "SA_ACCOUNT_STATUS");
+                ErrAccountStatus);
         }
 
         // ---- authority ----
 
         /// <summary>
-        /// The core's own module-administration rule: the custody witness, or
-        /// the witness of one installed validator contract. The scan is bounded
-        /// by the validator instance limit, so it is never unbounded work.
+        /// The descriptor's <c>contractId</c>/<c>updateCounter</c> are the values
+        /// bound at install (spec §7.3). A contract that was updated since then
+        /// is a different code identity until the account rebinds it.
         /// </summary>
-        internal static void RequireAccountAdministration(UInt160 accountId)
+        internal static void RequireLiveCodeBinding(UInt160 contractHash, object[] descriptor)
         {
-            UInt160 custody = Custody(accountId);
-            if (custody != UInt160.Zero && custody.IsValid && Runtime.CheckWitness(custody)) return;
-            foreach (UInt160 contractHash in InstalledValidators(accountId))
-                if (contractHash != UInt160.Zero && contractHash.IsValid && Runtime.CheckWitness(contractHash)) return;
-            ExecutionEngine.Assert(false, "SA_UNAUTHORIZED");
+            Contract? deployed = ContractManagement.GetContract(contractHash);
+            ExecutionEngine.Assert(deployed != null, ErrUnauthorized);
+            ExecutionEngine.Assert(
+                (BigInteger)deployed!.Id == (BigInteger)descriptor[FieldModuleContractId]
+                && (BigInteger)deployed.UpdateCounter == (BigInteger)descriptor[FieldModuleUpdateCounter],
+                ErrModuleCodeBindingMismatch);
         }
 
         internal static void RequireCustody(UInt160 accountId)
         {
             UInt160 custody = Custody(accountId);
-            ExecutionEngine.Assert(custody != UInt160.Zero && custody.IsValid, "SA_UNAUTHORIZED");
-            ExecutionEngine.Assert(Runtime.CheckWitness(custody), "SA_UNAUTHORIZED");
+            ExecutionEngine.Assert(custody != UInt160.Zero && custody.IsValid, ErrUnauthorized);
+            ExecutionEngine.Assert(Runtime.CheckWitness(custody), ErrUnauthorized);
         }
 
-        /// <summary>Custody witness, or the recovery authority the account recorded.</summary>
-        internal static void RequireCustodyOrRecovery(UInt160 accountId)
+        /// <summary>
+        /// Non-throwing code-binding check for the read-only message path: a
+        /// contract that was updated or destroyed after install is not the code
+        /// identity the account bound.
+        /// </summary>
+        internal static bool HasLiveCodeBinding(UInt160 contractHash, object[] descriptor)
         {
-            UInt160 custody = Custody(accountId);
-            if (custody != UInt160.Zero && custody.IsValid && Runtime.CheckWitness(custody)) return;
-            UInt160 recovery = RecoveryAuthority(accountId);
-            ExecutionEngine.Assert(recovery != UInt160.Zero && recovery.IsValid && Runtime.CheckWitness(recovery),
-                "SA_UNAUTHORIZED");
+            if (descriptor.Length <= FieldModuleUpdateCounter) return false;
+            Contract? deployed = ContractManagement.GetContract(contractHash);
+            return deployed != null
+                && (BigInteger)deployed!.Id == (BigInteger)descriptor[FieldModuleContractId]
+                && (BigInteger)deployed.UpdateCounter == (BigInteger)descriptor[FieldModuleUpdateCounter];
         }
 
-        /// <summary>Every installed validator contract hash of one account.</summary>
-        internal static UInt160[] InstalledValidators(UInt160 accountId)
+        /// <summary>
+        /// Non-throwing account read for public, fail-closed entry points (the
+        /// message query and status views). Returns null when the core is not
+        /// pinned or the account does not exist.
+        /// </summary>
+        internal static object[]? TryAccountRecord(UInt160 accountId)
         {
-            object[] page = (object[])Contract.Call(RequireCoreConfigured(), CoreGetModules, CallFlags.ReadOnly,
-                new object[] { accountId, "validator", BigInteger.Zero, ModuleProtocol.MaxValidatorInstances });
-            object[] ids = (object[])page[FieldModuleIds];
-            UInt160[] hashes = new UInt160[ids.Length];
-            for (int i = 0; i < ids.Length; i++)
+            UInt160 core = Core();
+            if (core == UInt160.Zero || !core.IsValid || accountId == UInt160.Zero || !accountId.IsValid)
+                return null;
+            object[] record = (object[])Contract.Call(core, CoreGetAccount, CallFlags.ReadOnly,
+                new object[] { accountId });
+            if (record.Length <= FieldControlRevision || !(bool)record[FieldExists]) return null;
+            return record;
+        }
+
+        /// <summary>
+        /// Non-throwing descriptor read. A short reply means the id is not an
+        /// installed instance on that account.
+        /// </summary>
+        internal static object[]? TryModuleDescriptor(UInt160 accountId, BigInteger moduleId)
+        {
+            UInt160 core = Core();
+            if (core == UInt160.Zero || !core.IsValid || moduleId < 1) return null;
+            object[] module = (object[])Contract.Call(core, CoreGetModule, CallFlags.ReadOnly,
+                new object[] { accountId, moduleId });
+            return module.Length > FieldModuleHookPlanner ? module : null;
+        }
+
+        /// <summary>
+        /// Binds an account to the module instance that owns its private state.
+        /// A second, live instance may not adopt an existing namespace. A native
+        /// reset retires every instance id without running the old lifecycle
+        /// callbacks, so a pointer that names a no-longer-installed id may be
+        /// adopted by the fresh instance the restricted landing installs.
+        /// </summary>
+        internal static void BindInstance(UInt160 accountId, BigInteger moduleId)
+        {
+            ExecutionEngine.Assert(accountId != UInt160.Zero && accountId.IsValid, ErrOperationMalformed);
+            ExecutionEngine.Assert(moduleId >= 1, ErrOperationMalformed);
+            ByteString? existing = Storage.Get(Storage.CurrentContext, Key(Prefix_Instance, accountId));
+            if (existing != null && (BigInteger)existing! != moduleId)
             {
-                object[] module = (object[])Contract.Call(RequireCoreConfigured(), CoreGetModule, CallFlags.ReadOnly,
-                    new object[] { accountId, (BigInteger)ids[i] });
-                hashes[i] = module.Length > FieldModuleContractHash
-                    ? (UInt160)module[FieldModuleContractHash]
-                    : UInt160.Zero;
+                object[]? previous = TryModuleDescriptor(accountId, (BigInteger)existing!);
+                ExecutionEngine.Assert(previous == null, ErrPhaseViolation + " instance already bound");
             }
-            return hashes;
+            Storage.Put(Storage.CurrentContext, Key(Prefix_Instance, accountId), moduleId);
+        }
+
+        /// <summary>The instance id bound to the account, or zero.</summary>
+        internal static BigInteger Instance(UInt160 accountId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, Key(Prefix_Instance, accountId));
+            return data == null ? BigInteger.Zero : (BigInteger)data!;
+        }
+
+        internal static BigInteger RequireInstanceBinding(UInt160 accountId)
+        {
+            BigInteger moduleId = Instance(accountId);
+            ExecutionEngine.Assert(moduleId >= 1, ErrModuleNotInstalled);
+            return moduleId;
+        }
+
+        /// <summary>Clears the pointer only when it still names the leaving instance.</summary>
+        internal static void ReleaseInstance(UInt160 accountId, BigInteger moduleId)
+        {
+            if (Instance(accountId) == moduleId)
+                Storage.Delete(Storage.CurrentContext, Key(Prefix_Instance, accountId));
+        }
+
+        /// <summary>Deletes every key of one instance namespace: <c>prefix ‖ accountId ‖ moduleId</c>.</summary>
+        internal static void DeleteInstancePrefix(byte[] prefix, UInt160 accountId, BigInteger moduleId)
+        {
+            Storage.Delete(Storage.CurrentContext, Key(prefix, accountId, moduleId));
+            Iterator iterator = Storage.Find(Storage.CurrentContext, Key(prefix, accountId, moduleId),
+                FindOptions.KeysOnly);
+            while (iterator.Next())
+                Storage.Delete(Storage.CurrentContext, (ByteString)iterator.Value);
+        }
+
+        /// <summary>The pinned core as raw 20 bytes, for digest domains.</summary>
+        internal static byte[] CoreHash()
+        {
+            UInt160 core = RequireCoreConfigured();
+            return (byte[])core;
         }
 
         /// <summary>
         /// The instance the core is currently running, for a callback that does
         /// not receive the module id (spec §9, validateUserOp).
         /// </summary>
-        internal static BigInteger RequireValidationInstance(UInt160 accountId)
+        internal static BigInteger RequireValidationInstance(UInt160 accountId) =>
+            RequireInstance(accountId, ModuleProtocol.PhaseValidation);
+
+        internal static BigInteger RequireConfigurationInstance(UInt160 accountId) =>
+            RequireInstance(accountId, ModuleProtocol.PhaseConfiguration);
+
+        internal static BigInteger RequirePlanningInstance(UInt160 accountId) =>
+            RequireInstance(accountId, ModuleProtocol.PhaseHookPlanning);
+
+        private static BigInteger RequireInstance(UInt160 accountId, int phase)
         {
             RequireCore();
             BigInteger moduleId = (BigInteger)Contract.Call(RequireCoreConfigured(), CoreGetAuthorizedModuleId,
-                CallFlags.ReadOnly, new object[] { accountId, ModuleProtocol.PhaseValidation });
+                CallFlags.ReadOnly, new object[] { accountId, phase });
             ExecutionEngine.Assert(moduleId > 0, ErrUnauthorized);
             return moduleId;
         }
@@ -321,19 +396,25 @@ namespace SmartAccount.Modules
         /// <summary>Every installed instance id of one module kind ("validator", "hook", "recovery").</summary>
         internal static BigInteger[] InstalledModuleIds(UInt160 accountId, string moduleType, int limit)
         {
-            object[] page = (object[])Contract.Call(RequireCoreConfigured(), CoreGetModules, CallFlags.ReadOnly,
-                new object[] { accountId, moduleType, BigInteger.Zero, limit });
+            object[] page = InstalledModulePage(accountId, moduleType, BigInteger.Zero, limit);
             object[] ids = (object[])page[FieldModuleIds];
             BigInteger[] result = new BigInteger[ids.Length];
             for (int i = 0; i < ids.Length; i++) result[i] = (BigInteger)ids[i];
             return result;
         }
 
+        /// <summary>One <c>getModules</c> page: <c>[ids, nextCursor, configurationNonce]</c>. The core limits
+        /// a page to 1..32 entries, so a composition larger than one page is read by advancing the cursor.</summary>
+        internal static object[] InstalledModulePage(UInt160 accountId, string moduleType, BigInteger cursor, int limit) =>
+            (object[])Contract.Call(RequireCoreConfigured(), CoreGetModules, CallFlags.ReadOnly,
+                new object[] { accountId, moduleType, cursor, limit });
+
         /// <summary>
         /// The full <c>getModule</c> descriptor of one installed instance:
         /// [moduleId, moduleType, contractHash, contractId, updateCounter,
         /// nefSha256, profileSha256, moduleRevision, credentialGeneration,
-        /// instanceIsolation, messageCapability, thresholdMemberEligible].
+        /// instanceIsolation, messageCapability, thresholdMemberEligible,
+        /// compositeLayer, governance, hookPlanner].
         /// A short answer means the id is not installed on that account.
         /// </summary>
         internal static object[] ModuleDescriptor(UInt160 accountId, BigInteger moduleId)
@@ -341,51 +422,11 @@ namespace SmartAccount.Modules
             ExecutionEngine.Assert(moduleId >= 1, ErrOperationMalformed);
             object[] module = (object[])Contract.Call(RequireCoreConfigured(), CoreGetModule, CallFlags.ReadOnly,
                 new object[] { accountId, moduleId });
-            ExecutionEngine.Assert(module.Length > FieldModuleMessageCapability, ErrModuleNotInstalled);
+            ExecutionEngine.Assert(module.Length > FieldModuleHookPlanner, ErrModuleNotInstalled);
             return module;
         }
 
         // ---- core transitions ----
-
-        /// <summary>
-        /// <c>installModule(accountId, moduleType, contractHash, declaredDigest, initData)</c>:
-        /// the core allocates the module id, so the module never guesses one.
-        ///
-        /// <paramref name="declaredDigest"/> is the 32-byte profile digest a
-        /// governance proposal pinned when it reviewed the action (audit M-2). The
-        /// core's public <c>installModule</c> ABI declares no digest — only the
-        /// atomic registration actions of <c>createAccount</c> carry one and have
-        /// the shared core compare it — so this module enforces the same
-        /// comparison itself before handing the install to the core: the live
-        /// <c>getModuleProfile()</c> reply of the contract being installed is
-        /// hashed and must equal the declared digest, otherwise the reviewed
-        /// profile and the installed profile differ and the install is refused.
-        /// Pass null for an unreviewed install (parity with the core's public
-        /// entry, which declares no digest).
-        /// </summary>
-        internal static BigInteger InstallModule(UInt160 accountId, int moduleType, UInt160 contractHash,
-            ByteString? declaredDigest, object[] initData)
-        {
-            if (declaredDigest != null)
-            {
-                ExecutionEngine.Assert(declaredDigest.Length == 32, ErrOperationMalformed);
-                ByteString profile = (ByteString)Contract.Call(contractHash, "getModuleProfile",
-                    CallFlags.ReadOnly, new object[0]);
-                ExecutionEngine.Assert(profile != null && profile.Length > 0, ErrModuleCodeBindingMismatch);
-                ExecutionEngine.Assert(
-                    StdLib.MemoryCompare(CryptoLib.Sha256(profile!), declaredDigest) == 0,
-                    ErrModuleCodeBindingMismatch);
-            }
-            return (BigInteger)Contract.Call(RequireCoreConfigured(), CoreInstallModule, CallFlags.All,
-                new object[] { accountId, moduleType, contractHash, initData });
-        }
-
-        /// <summary><c>removeModule(accountId, moduleId, deInitData)</c>.</summary>
-        internal static void RemoveModule(UInt160 accountId, BigInteger moduleId, object[] deInitData)
-        {
-            Contract.Call(RequireCoreConfigured(), CoreRemoveModule, CallFlags.All,
-                new object[] { accountId, moduleId, deInitData });
-        }
 
         /// <summary><c>unfreezeAccount(accountId)</c>: leaving Frozen is immediate once it is confirmed.</summary>
         internal static void UnfreezeAccount(UInt160 accountId)
@@ -394,38 +435,7 @@ namespace SmartAccount.Modules
                 new object[] { accountId });
         }
 
-        // ---- restricted core landing entries (spec §7.1/§11.5/§12.5, audit H-3/H-4) ----
-
-        /// <summary><c>setRecoveryPolicy(accountId, recoveryAuthority, recoveryTimelockMs,
-        /// ownerOnlyRecovery)</c>: the landing write of governance action 8.
-        /// The core re-checks the authority domain (custody witness or an
-        /// installed validator contract — a governance module calling this is
-        /// the latter), the timelock window and the account state, so the four
-        /// values are handed through as the confirmed intent named them.
-        /// </summary>
-        internal static void SetRecoveryPolicy(UInt160 accountId, UInt160 recoveryAuthority,
-            BigInteger recoveryTimelockMs, bool ownerOnlyRecovery)
-        {
-            Contract.Call(RequireCoreConfigured(), CoreSetRecoveryPolicy, CallFlags.All,
-                new object[] { accountId, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery });
-        }
-
-        /// <summary>
-        /// <c>setBuiltinAuthorization(accountId, defaultOperationAuthorization,
-        /// defaultMessageAuthorization)</c>: the landing write of governance
-        /// action 5 (spec §7.1/§11.5, R-07-14). The core re-checks the
-        /// caller's authority (R-07-11 family — a governance module calling
-        /// this is the installed-validator arm), the account state and the
-        /// last-route guard (<c>SA_BUILTIN_ROUTE_REQUIRED</c>), so the two
-        /// switch values are handed through as the confirmed intent named
-        /// them. Aligned with <see cref="SetRecoveryPolicy"/>'s style.
-        /// </summary>
-        internal static void SetBuiltinAuthorization(UInt160 accountId, bool defaultOperationAuthorization,
-            bool defaultMessageAuthorization)
-        {
-            Contract.Call(RequireCoreConfigured(), CoreSetBuiltinAuthorization, CallFlags.All,
-                new object[] { accountId, defaultOperationAuthorization, defaultMessageAuthorization });
-        }
+        // ---- restricted core landing entries (spec §9/§10) ----
 
         /// <summary>
         /// <c>revokeModuleCredentials(accountId, moduleId)</c>: the landing write
@@ -443,7 +453,7 @@ namespace SmartAccount.Modules
         }
 
         /// <summary>
-        /// <c>resetAccount(accountId, newCustody)</c>: the §12.5 core-side reset,
+        /// <c>resetAccount(accountId, newCustody)</c>: the §10 core-side reset,
         /// the only transition that re-lands an account at its registration
         /// defaults. The core accepts exactly one caller — the account's
         /// installed recovery seat (module type 5) — so this helper exists for
@@ -456,6 +466,18 @@ namespace SmartAccount.Modules
                 new object[] { accountId, newCustody });
         }
 
+        /// <summary>
+        /// <c>applyConfigurationActions(accountId, actions)</c>: from the reset seat, inside the
+        /// same transaction as the reset, the core accepts one install-only composition on
+        /// the epoch the reset just opened. Any other caller reaches the normal governance
+        /// landing and fails closed.
+        /// </summary>
+        internal static void ApplyConfigurationActions(UInt160 accountId, object[] actions)
+        {
+            Contract.Call(RequireCoreConfigured(), CoreApplyConfigurationActions, CallFlags.All,
+                new object[] { accountId, actions });
+        }
+
         // ---- storage keys ----
 
         /// <summary><c>prefix ‖ accountId (20 raw bytes)</c>.</summary>
@@ -465,6 +487,10 @@ namespace SmartAccount.Modules
         /// <summary><c>prefix ‖ accountId ‖ id (8 bytes, big-endian)</c>.</summary>
         internal static byte[] Key(byte[] prefix, UInt160 accountId, BigInteger id) =>
             Helper.Concat(Helper.Concat(prefix, (byte[])accountId), U64BE(id));
+
+        /// <summary><c>prefix ‖ accountId ‖ moduleId ‖ id</c>, for instance-scoped rows with a second key.</summary>
+        internal static byte[] Key(byte[] prefix, UInt160 accountId, BigInteger moduleId, BigInteger id) =>
+            Helper.Concat(Helper.Concat(Helper.Concat(prefix, (byte[])accountId), U64BE(moduleId)), U64BE(id));
 
         internal static byte[] U64BE(BigInteger value)
         {
@@ -478,12 +504,16 @@ namespace SmartAccount.Modules
             return encoded;
         }
 
-        /// <summary>Deletes every key under one prefix.</summary>
-        internal static void DeletePrefix(byte[] prefix)
+        internal static byte[] U32LE(BigInteger value)
         {
-            Iterator iterator = Storage.Find(Storage.CurrentContext, prefix, FindOptions.KeysOnly);
-            while (iterator.Next())
-                Storage.Delete(Storage.CurrentContext, (ByteString)iterator.Value);
+            ExecutionEngine.Assert(value >= 0 && value < (BigInteger.One << 32), ErrOperationMalformed);
+            byte[] encoded = new byte[4];
+            for (int i = 0; i < 4; i++)
+            {
+                encoded[i] = (byte)(value & 255);
+                value >>= 8;
+            }
+            return encoded;
         }
 
         /// <summary>Strict copy of a value array so a caller mutating its input cannot rewrite stored state.</summary>

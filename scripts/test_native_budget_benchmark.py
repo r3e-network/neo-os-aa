@@ -19,6 +19,17 @@ def fixture():
     probe = json.loads((root / "docs/reports/sa-native-ci-probe-consistency-20261009.json").read_text())
     receipt = {key: copy.deepcopy(probe[key]) for key in
                ("status", "publicNetworksTouched", "pricing", "artifactHashes", "runtimeAssemblyHashes", "probeSourceHashes")}
+    del receipt["pricing"]["rootCallbackLimitDatoshi"]
+    # Execution rows keep the historical measurements. Verification and callback rows are projected to the
+    # shape of the current probe: admissibility-only verification, no per-callback limit, no minimum fee.
+    for case in probe["cases"]:
+        if "result" not in case:
+            continue  # the two signer-alias controls carry no trigger rows
+        del case["result"]["minimum"]
+        case["verification"] = {**case["verification"], "state": "HALT", "authorized": True, "exception": None,
+                                "resultCount": 1, "resultType": "Boolean", "booleanResult": True}
+        for phase in case["phases"]:
+            del phase["limitDatoshi"], phase["remainingDatoshi"]
     receipt.update(schema="smartaccount-native-multisig-benchmark/v1", mode="fixed-snapshot-discard",
                    warmupCount=2, samplesPerCase=4, immutableOperationPerCase=True,
                    diagnosticsDuringTiming=False, timingBoundary="ApplicationEngine.Execute",
@@ -38,7 +49,6 @@ def fixture():
         logical = {key: start[key] + delta[key] for key in start}
         samples = [{"elapsedTicks": ticks, "state": state,
                     "feeConsumedDatoshi": source["result"]["gas"],
-                    "minimumRequiredFeeDatoshi": source["result"]["minimum"],
                     "logicalStorage": copy.deepcopy(logical), "storageDelta": copy.deepcopy(delta),
                     "committedStorageUnchanged": True} for ticks in (40, 10, 30, 20)]
         selected, sessions = 0, []
@@ -76,7 +86,7 @@ class NativeBudgetBenchmarkTests(unittest.TestCase):
                 benchmark.validate_receipt(receipt)
         for field, value in (("elapsedTicks", -1), ("elapsedTicks", 1.5), ("elapsedTicks", True),
                              ("elapsedTicks", 2 ** 63), ("feeConsumedDatoshi", -1),
-                             ("minimumRequiredFeeDatoshi", 1), ("state", "FAULT"),
+                             ("state", "FAULT"),
                              ("committedStorageUnchanged", 1)):
             receipt = fixture()
             receipt["cases"][0]["samples"][0][field] = value
@@ -136,7 +146,7 @@ class NativeBudgetBenchmarkTests(unittest.TestCase):
             benchmark.validate_receipt(receipt)
 
     def test_rejects_unrelated_fault_and_invalid_phase_gas(self):
-        mutations = [(0, "phaseGas", lambda value: value[0].update(remainingDatoshi="0")),
+        mutations = [(0, "phaseGas", lambda value: value[0].update(consumedDatoshi="-1")),
                      (0, "phaseGas", lambda value: value[0].update(consumedDatoshi=1)),
                      (0, "phaseGas", lambda value: value.pop()),
                      (0, "verification", lambda value: value.update(booleanResult=False)),
@@ -216,7 +226,6 @@ class NativeBudgetBenchmarkTests(unittest.TestCase):
                      case["scenario"]["Roster"] == "SSN" and case["scenario"]["Slots"] == "110"
                      and case["scenario"]["Maximum"])["phaseGas"][1]
         phase["consumedDatoshi"] = str(int(phase["consumedDatoshi"]) - 1)
-        phase["remainingDatoshi"] = str(int(phase["remainingDatoshi"]) + 1)
         candidate["semanticControls"][10]["phases"][1] = copy.deepcopy(phase)
         report = benchmark.compare_receipts(baseline, candidate, require_improvement=True)
         self.assertTrue(report["improvementRequired"])

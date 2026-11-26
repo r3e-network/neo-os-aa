@@ -50,7 +50,6 @@
     ],
     "simulation": {
       "state": "HALT",
-      "minimumRequiredFee": "100000",
       "gasConsumed": "10",
       "stack": [
         {

@@ -227,11 +227,7 @@ const FRAMEWORK_RECEIVERS = new Set(['Runtime', 'Contract', 'ContractManagement'
 // track), named by the module packager's permission check: it is the one name the native modules are
 // required to be able to call on that core, so it is neither a member nor a dead reference of this
 // repository's deployed manifests.
-// CallWithGasLimit is `System.Contract.CallWithGasLimit`, the bounded-call interop the private
-// platform runtime adds under HF_SmartAccountV1. The platform documents name it at length to record
-// what that runtime carries; it is a pinned-runtime interop, never an entrypoint of this
-// repository's own contracts, so it is neither a member nor a dead reference either.
-const NON_CALLABLES = new Set(['create_sa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash', 'getAuthorityEpoch', 'CallWithGasLimit']);
+const NON_CALLABLES = new Set(['create_sa_draft', 'claimCommitment', 'callData', 'signMessage', 'getPending', 'callHash', 'getAuthorityEpoch']);
 
 const ENTRYPOINT = /^(?:execute|register|preview|initiate|finalize|settle|update|cancel|confirm|propose|compute|get|set|is|has|can|withdraw|revoke|rotate|claim|deposit|call|lock|unlock|create|build|derive|validate|query|prepare|sign|broadcast|discover)[A-Z][A-Za-z0-9]*$/;
 // A line that marks a name as gone. The repository's translation copies state removal in Chinese,
@@ -412,81 +408,12 @@ for (const file of tracked) {
   }
 }
 
-// The deployed NEF: the gas-bounded syscall VULN-001 is about. The token is read from the
-// pinned artifact, never from a document.
-const GAS_BOUNDED_SYSCALL = 'System.Contract.CallWithGasLimit';
-const NEF_SYSCALL_OPCODE = 0x41;
-const OPERAND_SIZE = {
-  0x00: 1, 0x01: 2, 0x02: 4, 0x03: 8, 0x04: 16, 0x05: 32, 0x0a: 4,
-  0x22: 1, 0x23: 4, 0x24: 1, 0x25: 4, 0x26: 1, 0x27: 4, 0x28: 1, 0x29: 4,
-  0x2a: 1, 0x2b: 4, 0x2c: 1, 0x2d: 4, 0x2e: 1, 0x2f: 4, 0x30: 1, 0x31: 4,
-  0x32: 1, 0x33: 4, 0x34: 1, 0x35: 4, 0x37: 2, 0x3b: 2, 0x3c: 8, 0x3e: 4,
-  0x41: 4, 0x56: 1, 0x57: 2, 0x5f: 1, 0x67: 1, 0x6f: 1, 0x77: 1, 0x7f: 1,
-  0x87: 1, 0xc4: 1, 0xd9: 1, 0xdb: 1,
-};
-const PUSHDATA_PREFIX = { 0x0c: 1, 0x0d: 2, 0x0e: 4 };
-const GAS_BOUNDED_INTEROP = 1371299780;
-
-function readVarint(bytes, offset) {
-  const first = bytes[offset];
-  if (first < 0xfd) return [first, offset + 1];
-  const width = { 0xfd: 2, 0xfe: 4, 0xff: 8 }[first];
-  return [Number(bytes.readUIntLE(offset + 1, width)), offset + 1 + width];
-}
-
-function readVarstring(bytes, offset) {
-  const [length, next] = readVarint(bytes, offset);
-  return [bytes.subarray(next, next + length), next + length];
-}
-
-// Walk the NEF header the way NefFile does and return the contract script.
-function nefScript(file) {
-  const bytes = fs.readFileSync(path.join(repoRoot, file));
-  assert.equal(bytes.subarray(0, 4).toString('ascii'), 'NEF3', `${file} is not a NEF3 artifact`);
-  let offset = 4 + 64; // magic + compiler
-  [, offset] = readVarstring(bytes, offset); // source
-  assert.equal(bytes[offset], 0, `${file}: reserved byte after the source is not zero`);
-  offset += 1;
-  const [tokenCount, afterCount] = readVarint(bytes, offset);
-  offset = afterCount;
-  for (let i = 0; i < tokenCount; i += 1) {
-    offset += 20; // token hash
-    [, offset] = readVarstring(bytes, offset); // method
-    offset += 4; // parameters + return value + call flags
-  }
-  assert.equal(bytes[offset], 0, `${file}: reserved bytes before the script are not zero`);
-  assert.equal(bytes[offset + 1], 0, `${file}: reserved bytes before the script are not zero`);
-  offset += 2;
-  const [scriptLength, afterLength] = readVarint(bytes, offset);
-  return bytes.subarray(afterLength, afterLength + scriptLength);
-}
-
-function gasBoundedCallSites(file) {
-  const script = nefScript(file);
-  const sites = [];
-  let i = 0;
-  while (i < script.length) {
-    const opcode = script[i];
-    if (opcode === NEF_SYSCALL_OPCODE) {
-      const token = script.readUInt32LE(i + 1);
-      if (token === GAS_BOUNDED_INTEROP) sites.push(i);
-      i += 1 + OPERAND_SIZE[0x41];
-      continue;
-    }
-    if (PUSHDATA_PREFIX[opcode] !== undefined) {
-      const lengthSize = PUSHDATA_PREFIX[opcode];
-      const length = lengthSize === 1 ? script[i + 1] : lengthSize === 2 ? script.readUInt16LE(i + 1) : script.readUInt32LE(i + 1);
-      i += 1 + lengthSize + length;
-      continue;
-    }
-    const size = OPERAND_SIZE[opcode];
-    i += size === undefined ? 1 : 1 + size;
-  }
-  return sites;
-}
-
-const deployedCorePath = JSON.parse(read('tests/localchain/expected-source.json')).deployedCore.path;
-const gasBoundedSites = gasBoundedCallSites(deployedCorePath);
+// VULN-001 (verifier gas DoS) closes only behind a per-callback gas bound. The platform no
+// longer carries any such capability: a transaction's declared system fee is the only gas limit,
+// so no build of this repository can bound one callback on its own. The VULN-001 guards below used
+// to derive that state from a bounded-call site in the deployed NEF; it is now a property of the
+// platform, read from nothing and therefore constant.
+const VULN_001_OPEN_REASON = 'no build bounds a callback\'s gas: the declared system fee is the only gas limit';
 const canonicalHashes = new Set();
 (function collect(value) {
   if (typeof value === 'string') canonicalHashes.add(value.toLowerCase());
@@ -679,17 +606,120 @@ const HISTORICAL_SNIPPET_SCOPE = /retained as historical security context|as a d
 // The two halves are why the rule keys on the artifact rather than on letter case: refusing every
 // PascalCase name would kill the second class, and accepting every case variant would keep the
 // first invisible.
-const namedModuleInterfaces = JSON.parse(read('docs/proposals/smartaccount-named-module-interfaces.json'));
-function isModuleDirectoryMethod(name, file) {
-  if (file !== 'contracts/modules/README.md') return false;
-  const row = read(file).split('\n').find(line => line.startsWith('| [') && line.includes('`' + name + '`') &&
-    Object.hasOwn(namedModuleInterfaces[line.match(/^\| \[(\w+)\]/)?.[1]]?.methods ?? {}, name));
-  return row !== undefined;
+// STANDARD MODULE ABI (Task 51 R2). The five standard modules under contracts/modules/<Module>/ are
+// not carried by this tree's pinned custom manifests, so `deployedAbi` above knows none of their
+// names and every module README was charged with dead references for its own surface. Their
+// REGISTERED names come from the ABI reference docs/proposals/smartaccount-module-abis.md, which is
+// regenerated from the compiled manifests and not written by hand (contracts/modules/README.md,
+// "ABI appendix"). The reference is the source; no module name is read out of a build artifact.
+//
+// The reference is cross-checked here rather than trusted, so nothing is registered on the strength
+// of a document alone:
+//   * docs/proposals/smartaccount-named-module-interfaces.json lists only the EXTRA methods a
+//     profile requires beyond the common lifecycle. It is a subset of the reference and cannot be
+//     the source on its own: `validateMessageSignature`, `authorizedCore`, `setAuthorizedCore` and
+//     every lifecycle callback are absent from it. The test below holds the subset relation.
+//   * every name the reference carries for a standard module must resolve to a member of that
+//     module's C# source (contracts/modules/<Module>/*.cs plus the Shared/ sources compiled into
+//     every module) under the compiler's exported-spelling rule, or to a pinned manifest (the
+//     compiler-emitted `_initialize`, which no source declares). A name that resolves to neither is
+//     dropped from the oracle and fails the test below; it is never registered as live.
+const MODULE_ABI_REFERENCE = 'docs/proposals/smartaccount-module-abis.md';
+const moduleAbi = new Map(); // standard module -> Set of its ABI names, in manifest spelling
+{
+  let section = null;
+  for (const line of read(MODULE_ABI_REFERENCE).split('\n')) {
+    const heading = line.match(/^## (\w+)\s*$/);
+    if (heading) {
+      // A profile without a source directory under contracts/modules is a plugin: its names are
+      // live through contracts/build or not at all, exactly as before this block existed.
+      section = exists(`contracts/modules/${heading[1]}`) ? heading[1] : null;
+      if (section) moduleAbi.set(section, new Set());
+      continue;
+    }
+    if (section && !/^```/.test(line)) {
+      const signature = line.match(/^(?:safe\s+)?([A-Za-z_]\w*)\s*\(/);
+      if (signature) moduleAbi.get(section).add(signature[1]);
+    }
+  }
 }
+// C# members (methods, properties and fields) of each standard module, by source spelling.
+const MODULE_MEMBER = /^\s*(?:\[[^\]]*\]\s*)*(?:public|private|protected|internal)\s+(?:static\s+)?(?:async\s+)?(?:override\s+|virtual\s+|abstract\s+|readonly\s+|new\s+)*[\w<>[\],.?\s]+?\s+([A-Za-z_]\w*)\s*(?:\(|=>|\{|;)/gm;
+const moduleSourceMembers = new Map([...moduleAbi.keys()].map((module) => [module, new Set()]));
+const sharedModuleMembers = new Set();
+for (const file of tracked) {
+  if (!file.endsWith('.cs')) continue;
+  const own = file.match(/^contracts\/modules\/(\w+)\/[^/]+\.cs$/);
+  const into = own && moduleSourceMembers.has(own[1]) ? moduleSourceMembers.get(own[1])
+    : file.startsWith('contracts/modules/Shared/') ? sharedModuleMembers : null;
+  if (into) for (const match of read(file).matchAll(MODULE_MEMBER)) into.add(match[1]);
+}
+// Read-only cross-check of the reference against the module sources.
+const moduleAbiUnresolved = [];
+for (const [module, names] of moduleAbi) {
+  for (const name of [...names]) {
+    if (deployedAbi.has(name)
+      || [...moduleSourceMembers.get(module), ...sharedModuleMembers].some((member) => deployedSpellingOfSource(member) === name)) continue;
+    moduleAbiUnresolved.push(`${module}.${name}`);
+    names.delete(name);
+  }
+}
+const moduleAbiNames = new Set([...moduleAbi.values()].flatMap((names) => [...names]));
+const moduleReadme = (file) => file.match(/^contracts\/modules\/(\w+)\/README\.md$/)?.[1] ?? null;
+// A backticked span that carries the name as a bare reference or as a call:
+// `getHookOrder`, `getMessagePolicy(accountId, moduleId)`.
+const namesSpan = (name) => new RegExp('`[^`]*\\b' + name + '(?=`|\\()');
+function isModuleDirectoryMethod(name, file) {
+  const module = moduleReadme(file);
+  // A module's own README may name the methods registered for that module, in manifest spelling.
+  if (module !== null) return moduleAbi.get(module)?.has(name) ?? false;
+  // The directory README attributes a name to the module whose table row carries it.
+  if (file !== 'contracts/modules/README.md' || !moduleAbiNames.has(name)) return false;
+  return read(file).split('\n').some((line) => {
+    const owner = line.match(/^\| \[(\w+)\]/)?.[1];
+    return owner !== undefined && moduleAbi.get(owner)?.has(name) === true && namesSpan(name).test(line);
+  });
+}
+// A README surface table writes the ABI name and the C# member implementing it side by side:
+// `| `authorizedCore()` | `AuthorizedCore` | `Hash160` | read-only |`. The second column is a
+// declared mapping, not a mis-spelled call. It is exempt only when the first spelling is the
+// module's registered name, that name is what the source spelling compiles to, and the member is
+// the module's own source; a PascalCase write anywhere else stays in the spelling bucket.
+function isModuleAbiMappingRow(name, line, file) {
+  const module = moduleReadme(file);
+  if (module === null || !line.startsWith('|')) return false;
+  const deployed = deployedSpellingOfSource(name);
+  return deployedSpelling(name) === deployed && moduleAbi.get(module)?.has(deployed) === true
+    && (moduleSourceMembers.get(module).has(name) || sharedModuleMembers.has(name))
+    && new RegExp('`' + name + '`').test(line) && namesSpan(deployed).test(line);
+}
+// RECORD FIELDS. `updateCounter` is a field of the module-instance record the native core keeps
+// (contracts/native/SmartAccount/SmartAccountRecords.cs, class ModuleInstance: `internal ulong
+// UpdateCounter;`), not a callable: ModuleSupport.cs compares it with the descriptor
+// (`deployed.UpdateCounter == descriptor[FieldModuleUpdateCounter]`) and lists it among the code
+// binding columns. The shape rule reads it (update + Counter) because a field and a getter share the
+// camelCase form, so a document that NAMES the field was charged with a dead entrypoint. A field
+// may be named, never called: the ratchet exempts the uncalled form only, and the set is derived
+// from the record declarations.
+const RECORDS_SOURCE = 'contracts/native/SmartAccount/SmartAccountRecords.cs';
+const recordFieldNames = new Set();
+{
+  const source = read(RECORDS_SOURCE);
+  const declaredAsCallables = new Set([...source.matchAll(/([A-Za-z_]\w*)\s*\(/g)].map((match) => match[1]));
+  for (const match of source.matchAll(/^\s*(?:\[[^\]]*\]\s*)*(?:public|internal|private|protected)\s+(?!const\b)(?:static\s+)?(?:readonly\s+)?[\w.<>[\],?]+\s+([A-Z]\w*)\s*;/gm)) {
+    const field = deployedSpellingOfSource(match[1]);
+    if (!declaredAsCallables.has(match[1]) && !deployedAbi.has(field) && !moduleAbiNames.has(field)) recordFieldNames.add(field);
+  }
+}
+const isRecordField = (name) => recordFieldNames.has(name);
 function isLiveName(name, file) {
   if (isModuleDirectoryMethod(name, file)) return true;
   if (deployedAbi.has(name)) return true;
   if (deployedSpelling(name) !== undefined) return false;
+  // A standard module's registered method is live in its manifest spelling, in any document -
+  // except a module README, where the per-module rule above has already decided: a module's README
+  // may not claim a method registered for another module.
+  if (moduleReadme(file) === null && moduleAbiNames.has(name)) return true;
   if (sourceDefinitions.has(name) || definedNames.has(name) || sdkMethods.has(name)) return true;
   if (actionNames.has(name)) return true;
   if (NATIVE_PROFILE_DOCS.includes(docClass(file)) && nativeAbiNames.has(name)) return true;
@@ -999,9 +1029,7 @@ function failures() {
         if (!exists(match[1])) problems.push(`${where}: cited receipt ${match[1]} does not exist`);
       }
       if (/VULN-001/.test(line) && /fix|clos|resolv|mitigat|eliminat/i.test(line) && !/private|only|not\b|pending|open|historical/i.test(line)) {
-        if (gasBoundedSites.length === 0) {
-          problems.push(`${where}: ${file} claims VULN-001 closed, but ${deployedCorePath} carries no ${GAS_BOUNDED_SYSCALL} call site`);
-        }
+        problems.push(`${where}: ${file} claims VULN-001 closed, but ${VULN_001_OPEN_REASON}`);
       }
     });
     if (nameRules) {
@@ -1368,9 +1396,21 @@ function digestReportInventoryAllowances() {
     // smartaccount-named-module-interfaces.json); no key was added or removed, so the
     // count stays 341 and the full-text hash moved.
     // Core and module proposal inputs are bound alongside the reviewed model sources.
+    // Re-pinned for the v4.1 release re-lock: the same 361 digest lines were re-read
+    // through formal/verify.py's own functions (81 sources, 309 native-core files) after
+    // the nonce, gas, reset-initialization and module-artifact changes; no key was added
+    // or removed, so the line count stays and only the full-text hash moved.
+    // Re-pinned 2026-11-26 for the v4.1 profile-digest correction: the lock was
+    // regenerated through formal/verify.py's own functions (81 -> 80 sources, 309 -> 308
+    // native-core files, the retired SmartAccountEnvelope.cs left both rosters), so the
+    // count is 359 and the full-text hash moved.
+    // Re-pinned 2026-11-26 for the profile-parameter correction (accountDescriptorFields
+    // 15 -> 9, batchMax 32 -> 64): five digest lines moved (the core contract, its
+    // native-core copy, SA-MODULE-PROTOCOL, the IDL-facing module-profiles draft and
+    // the parameter file itself); no key was added or removed, so the count stays 359.
     entry('sa-formal-source-lock-content-digests',
-      'formal/source-lock.json', 361,
-      '556c9d0efd6fcf78b525b55f7276c6d56d13685bc9e5063d2088731b90fe216f'),
+      'formal/source-lock.json', 359,
+      'fd904998a928902cbb0d7374a7b37069e494be7ff057a17dd229abb764dee77d'),
     entry('sa-artifact-reproducibility-20261025-content-digests',
       'docs/reports/sa-artifact-reproducibility-20261025.json', 281,
       '42b29b2c68c76ccf4e1fdfbc17c8c24cf4f23568de1ef24b1d6ab5edaa3953ac'),
@@ -2023,16 +2063,14 @@ test('CU-163: source-bridge scope is explicit and admits only current source or 
   }
 });
 
-// The ledger, not a document's prose, is the current VULN-001 state. While the deployed artifact
-// carries no bounded call site the ledger must say the public state is open; if the artifact ever
-// gains the bounded call, this fails until the ledger is updated too.
-test('CU-163: the VULN-001 ledger agrees with the deployed artifact', () => {
+// The ledger, not a document's prose, is the current VULN-001 state. No build bounds a
+// callback's gas, so the ledger must say the public state is open. Closing it requires a
+// platform capability that does not exist; a ledger edit alone can never satisfy this guard.
+test('CU-163: the VULN-001 ledger stays open while no build bounds a callback\'s gas', () => {
   const row = read('docs/SECURITY.md').split('\n').find((line) => /\*\*VULN-001\*\*/.test(line));
   assert.ok(row, 'docs/SECURITY.md has no VULN-001 row');
-  if (gasBoundedSites.length === 0) {
-    assert.match(row, /open|not\b|pending/i,
-      `the deployed core has no ${GAS_BOUNDED_SYSCALL} call site, so the ledger must not close VULN-001 for the public build`);
-  }
+  assert.match(row, /open|not\b|pending/i,
+    `${VULN_001_OPEN_REASON}, so the ledger must not close VULN-001 for the public build`);
 });
 
 // VULN-002 has local source, scoped formal and private-chain evidence, but no public deployment.
@@ -2172,11 +2210,10 @@ test('CU-163: only the ledger numbers issues VULN-00N', () => {
   assert.deepEqual(collisions, [], `a document reuses a ledger identifier as a heading:\n${collisions.join('\n')}`);
 });
 
-// The closure claim is checked against the artifact for every document, not only the guarded ones:
-// while the deployed core carries no bounded call site, no document may say the public build is
-// fixed. A document may say the private artifact is closed when it says so in those words.
-test('CU-163: no document closes VULN-001 for the public build while the deployed core has no bounded call', () => {
-  if (gasBoundedSites.length > 0) return;
+// The closure claim is checked for every document, not only the guarded ones: no build bounds a
+// callback's gas, so no document may say the public build is fixed. A document may describe a
+// private artifact as closed only when it says so in those words.
+test('CU-163: no document closes VULN-001 for the public build while no build bounds a callback\'s gas', () => {
   const markdown = tracked.filter((file) => file.endsWith('.md')
     && !isResearchDocument(file) && !file.startsWith('docs/reports/') && !file.startsWith('docs/plans/'));
   const claims = [];
@@ -2190,7 +2227,7 @@ test('CU-163: no document closes VULN-001 for the public build while the deploye
       claims.push(`${file}: ${flat.slice(0, 140)}`);
     }
   }
-  assert.deepEqual(claims, [], `a document claims VULN-001 closed for the public build while ${deployedCorePath} carries no ${GAS_BOUNDED_SYSCALL} call site:\n${claims.join('\n')}`);
+  assert.deepEqual(claims, [], `a document claims VULN-001 closed for the public build while ${VULN_001_OPEN_REASON}:\n${claims.join('\n')}`);
 });
 
 // What the ratchet reads, as data, so a planted drift can call it and see exactly what the guard
@@ -2217,9 +2254,15 @@ function ratchetDebt({ mirrors = false, only = null } = {}) {
       // word the ABI happens to use - `Transfer amount exceeds subscription` - as a dead entrypoint,
       // inventing debt for an English word (DS-CU-212, DEC-DS-6 rule 5).
       .filter(({ name }) => shapedLikeEntrypoint(name))
+      // A record field that a document names - `updateCounter` - is not a callable; see RECORD
+      // FIELDS above. Only the uncalled form is exempt, so `updateCounter()` stays a dead call.
+      .filter(({ name, called }) => called || !isRecordField(name))
       .filter(({ name }) => !isLiveName(name, file))
       .map(({ name }) => `entrypoint:${name}`)),
-    spelling: (line) => callableNames(line)
+    spelling: (line, file) => callableNames(line)
+      // A surface-table row that pairs the ABI name with the C# member implementing it is a
+      // declared mapping, not a mis-spelling (see isModuleAbiMappingRow).
+      .filter(({ name }) => !isModuleAbiMappingRow(name, line, file))
       .filter(({ name }) => !deployedAbi.has(name) && deployedSpelling(name) !== undefined)
       .map(({ name }) => `spelling:${name}->${deployedSpelling(name)}`),
     sdk: (line) => [...line.matchAll(/\b(?:saClient|client|sdk)\.([A-Za-z_]\w*)\s*\(/g)].flatMap((match) => legacySdkMethods.has(match[1]) ? [`legacy:${match[1]}`] : sdkMethods.has(match[1]) ? [] : [`sdk:${match[1]}`]),
@@ -2274,6 +2317,95 @@ test('CU-163: a Chinese counterpart records exactly the debt of the document it 
     assert.deepEqual(found[file] ?? [], recorded[source] ?? [],
       `${file}: the translation records different dead references than ${source}`);
   }
+});
+
+// The module README oracle above is a widening of the liveness rule, so it is held to the same
+// standard as every other one (DS-CU-212 section 4): its source is checked against the repository,
+// each exemption is killed by a planted drift, and a planted registered name is the control that
+// proves the plant form itself is not what the guard reports.
+test('module READMEs: a standard-module method is live from the ABI reference, and an invented name is still reported', () => {
+  // 1. The source is the reference, cross-checked: the named-interface catalogue is a subset of
+  //    it, and every registered name resolves to the module's source or to a pinned manifest.
+  const namedModuleInterfaces = JSON.parse(read('docs/proposals/smartaccount-named-module-interfaces.json'));
+  const notInReference = [];
+  for (const [module, entry] of Object.entries(namedModuleInterfaces)) {
+    if (!moduleAbi.has(module)) continue;
+    for (const name of Object.keys(entry.methods ?? {})) if (!moduleAbi.get(module).has(name)) notInReference.push(`${module}.${name}`);
+  }
+  assert.deepEqual(notInReference, [], 'the named-interface catalogue carries a name the ABI reference does not');
+  assert.deepEqual(moduleAbiUnresolved, [],
+    `the ABI reference carries a name no module source or pinned manifest defines; it was NOT registered as live:\n${moduleAbiUnresolved.join('\n')}`);
+  assert.deepEqual([...moduleAbi.keys()].sort(), ['GovernanceModule', 'HookOrchestratorModule', 'RecoveryModule', 'SigningModule', 'ThresholdPolicyModule'],
+    'the set of standard modules changed');
+  for (const name of ['getLastCompletion', 'getMessagePolicy', 'validateMessageSignature', 'getThresholdPolicy', 'getExecutedRecoveryNonce', 'authorizedCore']) {
+    assert.ok(moduleAbiNames.has(name), `${name} is a registered standard-module method the oracle does not carry`);
+  }
+  for (const name of ['getDailyLimit', 'getMemberKey', 'preCheck']) {
+    assert.ok(!moduleAbiNames.has(name), `${name} belongs to a plugin profile and leaked into the standard-module oracle`);
+  }
+
+  // 2. The oracle answers by artifact, not by shape.
+  const governance = 'contracts/modules/GovernanceModule/README.md';
+  const signing = 'contracts/modules/SigningModule/README.md';
+  const directory = 'contracts/modules/README.md';
+  assert.equal(isLiveName('getLastCompletion', governance), true, 'a registered method of the module its README describes is still dead');
+  assert.equal(isLiveName('getInventedRead', governance), false, 'an unregistered name is live in a module README');
+  assert.equal(isModuleDirectoryMethod('getMessagePolicy', signing), true, 'the Signing README cannot name its own roster read');
+  assert.equal(isModuleDirectoryMethod('getMessagePolicy', governance), false,
+    'a module README is allowed the methods of ANOTHER module under its own row');
+  assert.equal(isModuleDirectoryMethod('getMessagePolicy', directory), true,
+    'the directory README form `getMessagePolicy(accountId, moduleId)` is not recognised');
+  assert.equal(isModuleDirectoryMethod('getInventedRead', directory), false);
+  assert.equal(isLiveName('AuthorizedCore', governance), false,
+    'the C# spelling of a registered member became live in its own right');
+  assert.equal(isRecordField('updateCounter'), true, 'the module record field is not derived from SmartAccountRecords.cs');
+  assert.equal(isRecordField('getLastCompletion'), false, 'a registered method is treated as a record field');
+
+  // 3. Planted drift in a module README. Each plant is written to the document and restored byte for
+  //    byte in `finally`; the reported set is asserted, never an exit code.
+  const plant = (file, line, check) => {
+    const target = path.join(repoRoot, file);
+    const original = fs.readFileSync(target, 'utf8');
+    fs.writeFileSync(target, `${original}${original.endsWith('\n') ? '' : '\n'}${line}\n`);
+    try {
+      check(ratchetDebt({ only: [file] })[file] ?? []);
+    } finally {
+      fs.writeFileSync(target, original);
+    }
+  };
+  // 3a. An invented backticked method in a surface-table row is a dead entrypoint.
+  plant(governance, '| `getInventedRead(accountId)` | `UInt256` | read-only |', (reported) => {
+    assert.deepEqual(reported.filter((entry) => entry.startsWith('entrypoint:')), ['entrypoint:getInventedRead'],
+      'an invented method in a module README is not reported');
+  });
+  // 3b. CONTROL: the same row carrying a registered name reports nothing, so the plant form is not
+  //     what 3a reported.
+  plant(governance, '| `getLastCompletion(accountId)` | `UInt256` | read-only |', (reported) => {
+    assert.deepEqual(reported, [], `a registered method in the same row form was reported: ${reported}`);
+  });
+  // 3c. The exemption is per module: RecoveryModule does not carry the hook planner's snapshot read.
+  plant('contracts/modules/RecoveryModule/README.md', '| `getHookSnapshot(accountId)` | `Array` | read-only |', (reported) => {
+    assert.ok(reported.includes('entrypoint:getHookSnapshot'),
+      'a README claimed a method registered for another module and the ratchet accepted it');
+  });
+  // 3d. Only a mapping ROW exempts the C# spelling; the same name in prose is still debt.
+  plant(governance, 'The core address comes from `AuthorizedCore` on every call.', (reported) => {
+    assert.deepEqual(reported.filter((entry) => entry.startsWith('spelling:')), ['spelling:AuthorizedCore->authorizedCore'],
+      'the C# spelling outside a mapping row is no longer reported');
+  });
+  // 3e. A mapping row is exempt only when the C# name compiles to a name the module registered.
+  plant(governance, '| `clearAccount(accountId)` | `ClearAccount` | `Void` | core only |', (reported) => {
+    assert.deepEqual(reported.filter((entry) => entry.startsWith('spelling:')), ['spelling:ClearAccount->clearAccount'],
+      'a mapping row to a name the module does not register was exempted');
+  });
+  // 3f. A field may be named, never called: the directory README names `updateCounter` and reports
+  //     nothing for it; the same name as a call is a dead entrypoint.
+  assert.ok(!(ratchetDebt({ only: [directory] })[directory] ?? []).includes('entrypoint:updateCounter'));
+  plant(governance, 'The binding is refreshed by `updateCounter()`.', (reported) => {
+    assert.ok(reported.includes('entrypoint:updateCounter'), 'a call to the record field was exempted as a field reference');
+  });
+  // 4. The widened oracle does not move the recorded ledger (CU-163, CU-212 part 4).
+  assert.equal(Object.values(ratchetDebt()).flat().length, 5);
 });
 
 // Fenced blocks whose names the scan judges to be mentions rather than claims. Each entry is a name
@@ -3309,4 +3441,80 @@ test('SA integrated closure remains scoped, fail-closed, and bound to current ev
   const gateDoc = read('docs/engineering/VERIFICATION-AND-GATES.md');
   assert.match(gateDoc, /sa-closure-gate-20261117\.json/);
   assert.doesNotMatch(gateDoc, /[A-Za-z]:\\Users\\/);
+});
+
+// Bilingual parity. A `.zh-CN.md` file with an English source is the same book in another
+// language, so its H2/H3 heading sequence - level for level, outside code fences - has to match
+// the English book's. A translation that silently drops a chapter fails here, and so does an
+// English book that grows a chapter nobody declared. The declared English-only chapters live in
+// HEADING_PARITY_EXCEPTIONS and are restated in the "Language policy" section of docs/INDEX.md
+// and the 语言策略 section of docs/INDEX.zh-CN.md.
+const HEADING_PARITY_EXCEPTIONS = new Map([
+  // docs/INDEX.md "Language policy": chapters 1-18 are parallel, and the module developer
+  // appendix followed by the frontend module chooser guide exist in English only.
+  ['docs/SA-MODULE-PROTOCOL.md', ['Appendix: Module developer guide', 'Frontend module chooser guide']],
+]);
+
+// ATX headings of level 2-3 outside fenced code blocks (a `# comment` inside a bash fence is
+// not a chapter). H1 is the book title and is deliberately not compared.
+function headingSequence(text) {
+  const headings = [];
+  let fence = null;
+  for (const line of text.split('\n')) {
+    const marker = /^(\s{0,3})(`{3,}|~{3,})/.exec(line);
+    if (marker) {
+      if (!fence) fence = marker[2][0];
+      else if (marker[2][0] === fence) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const heading = /^(#{2,3})\s+(.*?)\s*#*\s*$/.exec(line);
+    if (heading) headings.push({ level: heading[1].length, text: heading[2] });
+  }
+  return headings;
+}
+
+// Remove the declared English-only chapters: an excepted H2 and every H3 under it, up to the
+// next H2. An exception must name a chapter that exists, so a renamed chapter cannot leave a
+// stale allowance behind.
+function withoutEnglishOnlyChapters(headings, englishOnly, file) {
+  const kept = [];
+  let skipping = false;
+  for (const heading of headings) {
+    if (heading.level === 2) {
+      skipping = englishOnly.includes(heading.text);
+      if (skipping) continue;
+    }
+    if (!skipping) kept.push(heading);
+  }
+  for (const title of englishOnly) {
+    assert.ok(headings.some((heading) => heading.level === 2 && heading.text === title),
+      `${file}: the declared English-only chapter "${title}" no longer exists; update HEADING_PARITY_EXCEPTIONS and docs/INDEX.md`);
+  }
+  return kept;
+}
+
+test('bilingual books: every Chinese counterpart carries the H2/H3 chapters of its English book', () => {
+  const pairs = tracked.filter((file) => file.startsWith('docs/') && file.endsWith('.zh-CN.md')
+    && exists(file.replace(/\.zh-CN\.md$/, '.md')))
+    .map((file) => [file.replace(/\.zh-CN\.md$/, '.md'), file]);
+  pairs.push(['README.md', 'README.zh-CN.md']);
+  // The guard is only meaningful if it reads the books INDEX.md declares as the 12 bilingual pairs.
+  assert.equal(pairs.length, 12, `the bilingual pair count changed: ${pairs.map(([en]) => en).join(', ')}`);
+  for (const [english, chinese] of pairs) {
+    const expected = withoutEnglishOnlyChapters(
+      headingSequence(read(english)), HEADING_PARITY_EXCEPTIONS.get(english) ?? [], english);
+    const found = headingSequence(read(chinese));
+    const levels = (headings) => headings.map((heading) => `${'#'.repeat(heading.level)} ${heading.text}`);
+    assert.equal(found.length, expected.length,
+      `${chinese}: ${found.length} H2/H3 headings against ${expected.length} in ${english}. English-only chapters:\n${levels(expected).join('\n')}`);
+    expected.forEach((heading, index) => assert.equal(found[index].level, heading.level,
+      `${chinese}: heading ${index + 1} is H${found[index].level} ("${found[index].text}") where ${english} has H${heading.level} ("${heading.text}")`));
+  }
+  // The declared exceptions are exactly the English-only chapters docs/INDEX.md announces.
+  const index = read('docs/INDEX.md');
+  for (const [english, titles] of HEADING_PARITY_EXCEPTIONS) {
+    for (const title of titles) assert.ok(index.includes(`"${title}"`),
+      `docs/INDEX.md no longer declares "${title}" (${english}) as English-only`);
+  }
 });

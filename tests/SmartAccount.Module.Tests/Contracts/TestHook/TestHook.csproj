@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RunNccsAfterBuild>false</RunNccsAfterBuild>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Neo.SmartContract.Framework" Version="$(NeoSmartContractFrameworkVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="TestHook.cs" />
+    <!-- The production P-256 helper, compiled into this probe so a fixed
+         vector can be driven against the same code the modules ship. -->
+    <Compile Include="../../../../contracts/modules/Shared/P256.cs" />
+  </ItemGroup>
+  <Target Name="CompileSmartContract" AfterTargets="Build" Condition="'$(RunNccsAfterBuild)' == 'true'">
+    <Message Text="Compiling Neo smart contract: TestHook.cs" Importance="high" />
+    <Exec Command="nccs ./TestHook.csproj -o ../../artifacts/mock" WorkingDirectory="$(ProjectDir)" />
+  </Target>
+</Project>

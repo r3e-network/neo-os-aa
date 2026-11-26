@@ -6,10 +6,8 @@ import { createHash } from 'node:crypto';
 import { EC } from '../src/config/errorCodes.js';
 import {
   decodeAccountDescriptor,
-  decodeHookOrder,
   decodeModuleDescriptor,
   decodeModulePage,
-  decodePendingConfiguration,
 } from '../src/services/smartAccountProtocol.js';
 import { buildSaActionId, requireSaSigningText, toNeoInternalHex } from '../src/services/saTicketService.js';
 
@@ -61,10 +59,8 @@ function createService({ invokeReadFunction = async () => { throw new Error('une
     connectedDidProfile: { value: { provider: 'web3auth', idToken: 'id-token' } },
     decodeStackHash160,
     decodeAccountDescriptor,
-    decodeHookOrder,
     decodeModuleDescriptor,
     decodeModulePage,
-    decodePendingConfiguration,
     createAccountIdentityReader: () => async () => { throw new Error('not used'); },
     buildSaActionId,
     requireSaSigningText,
@@ -233,9 +229,12 @@ const array = (items = []) => ({ state: 'HALT', stack: [arrayItem(items)] });
 const validatorModule = '7b7c7d7e7f808182838485868788898a8b8c8d8e';
 
 function accountControl() {
+  // v4.1 getAccount: [exists, status, custody, authorityEpoch,
+  // configurationNonce, defaultOperationAuthorization, defaultMessageAuthorization,
+  // requiredValidatorId, controlRevision].
   return array([
-    boolItem(true), intItem('1'), hashItem(account), hashItem(verifier), intItem('1'), intItem('3'), intItem('86400000'),
-    boolItem(true), boolItem(true), boolItem(false), intItem('0'), intItem('4'), boolItem(false), intItem('0'), boolItem(false),
+    boolItem(true), intItem('0'), hashItem(account), intItem('1'), intItem('3'),
+    boolItem(true), boolItem(true), intItem('0'), intItem('4'),
   ]);
 }
 
@@ -244,10 +243,13 @@ function modulePage(ids) {
 }
 
 function moduleDescriptor(id) {
+  // v4.1 getModule: 15 fields, the last three naming the composite-layer,
+  // governance and hook-planner flags.
   return array([
     intItem(id), intItem('1'), hashItem(validatorModule), intItem('5'), intItem('0'),
     bytesItem(Buffer.alloc(32, 0xaa)), bytesItem(Buffer.alloc(32, 0xbb)),
     intItem('1'), intItem('1'), boolItem(false), boolItem(true), boolItem(true),
+    boolItem(false), boolItem(false), boolItem(false),
   ]);
 }
 
@@ -261,8 +263,6 @@ function stateRpc(calls, { network, accountIdText, faults = [] }) {
       return modulePage(args[3]?.[1]?.value === 'validator' ? [1] : []);
     }
     if (operation === 'getModule') return moduleDescriptor(1);
-    if (operation === 'getHookOrder') return array([arrayItem([]), intItem('0')]);
-    if (operation === 'getPendingConfigurationIntentIds') return array([]);
     if (operation === 'getRecoveryService') return hash160(verifier);
     if (operation === 'getNetwork') return byteString(network);
     if (operation === 'getAccountIdText') return byteString(accountIdText);

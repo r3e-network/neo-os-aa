@@ -1,4 +1,4 @@
-# SA local-chain acceptance: deployed artifacts and current source
+# SA local-chain acceptance: deployed artifacts
 
 From the repository root, install .NET 10 and the published Neo.Express package
 3.10.1 (`dotnet tool install -g Neo.Express --version 3.10.1`, runtime reports
@@ -10,22 +10,22 @@ npm ci --prefix sdk/js --ignore-scripts --no-audit --no-fund
 python3 scripts/localchain/sa_rpc_scenarios.py --variant deployed
 ```
 
-`python3 tests/localchain/run.py` is the equivalent runner; `--variant source`
-runs the current-source suite instead. Set `NEOXP` to the executable if it is
-neither on PATH nor in `~/.dotnet/tools`. On Homebrew the existing helper derives
+`python3 tests/localchain/run.py` is the equivalent runner. Set `NEOXP` to the
+executable if it is neither on PATH nor in `~/.dotnet/tools`. On Homebrew the
+existing helper derives
 `DOTNET_ROOT` from `dotnet --list-runtimes` when unset. The signing helper shells
 out to `openssl` and needs OpenSSL 3: the macOS system LibreSSL cannot read a DER
 key with `dgst -keyform DER`, so put a real OpenSSL first on PATH on macOS.
 
-> **Protocol v4 status.** The `deployed` variant is unchanged evidence: it runs the
-> frozen 2026-10-05 artifacts under `contracts/build/` against its deployed
-> expectations. The `source` variant drives the protocol v4 ABI: the roster in
-> `scripts/localchain/source_build.py` is the nine-artifact public module set
-> (`SmartAccount`, the two helpers, three validators and three hooks) and the four
-> source scenarios exercise `createAccount`, the configuration intents, the core
-> hook order and owner-only recovery. A build whose core does not expose the v4
-> entrypoints fails closed at the roster before a node starts, so a v3-shaped build
-> cannot be accepted by v4 expectations.
+> **Scope.** The suite has one variant, `deployed`. It runs the frozen 2026-10-05
+> artifacts under `contracts/build/` against its deployed expectations. Those
+> artifacts are a custom v4 wallet kernel (`registerAccount`, `executeUserOps`, the
+> sponsored entries), not the native SmartAccount v4.1 core, and this suite is not
+> evidence about that core. The former `source` variant compiled the current checkout
+> and deployed that kernel's protocol-v4 build; with the kernel's sources gone it
+> could not run and was retired. An on-chain (neoexpress) suite for the v4.1 core has
+> not been rebuilt: it is to be rewritten on the v4.1 single-operation surface once a
+> usable chain runtime is available.
 
 The suite creates a private published-neoxp chain with random loopback RPC/P2P
 ports above 20000 and disposable keys. Its data lives in `/private/tmp` on macOS
@@ -34,7 +34,7 @@ setup failure or interruption. It does not accept an existing chain or RPC URL.
 The relay subprocess receives only basic process variables and its freshly
 created relay key; no configured remote relay, paymaster or Redis is used.
 
-Expect approximately six minutes, 161 successful checks, 101 RPC-driver executed
+Expect approximately six minutes, 160 successful checks, 101 RPC-driver executed
 transactions, 30 simulated faults and 6 node refusals. Of the faults, one is a
 broadcast transaction that faults on chain (the paymaster's per-operation bound,
 asserted by its text and by the untouched deposit and nonce); the rest are
@@ -127,77 +127,18 @@ unexpected outcomes and a changed artifact digest, and mutate the timelock walk
 (missing, empty, reordered, renamed, missing reading, one side unobserved, and
 both sides moved off the deadline) to show the boundary evidence is load-bearing.
 
-## Current-source variant
+## Retired: the current-source variant
 
-```sh
-python3 scripts/localchain/source_build.py --out /private/tmp/sa-source
-python3 tests/localchain/run.py --variant source --source-dir /private/tmp/sa-source
-```
+The former `source` variant (`--variant source`, `source_build.py` as a builder,
+`source_proxy_relay_probe.mjs`, `expected-source.json` and `test_source_gate.py`)
+compiled the current checkout and deployed the custom protocol-v4 kernel. No default
+project builds that kernel any more and `SAPaymaster` has no source, so the variant
+could not run; it was retired with the kernel. `scripts/localchain/source_build.py`
+keeps only the NEF reader that `scripts/check_module_neps.py` imports.
 
-The source variant compiles the current checkout with the pinned published
-compiler (`nccs`, Neo.Compiler.CSharp 3.9.1) and deploys those bytes instead of
-`contracts/build`. Without `--source-dir` the suite builds inside its own
-temporary run directory; the compiler writes only gitignored `obj/` state into
-the checkout. `source_build.py` fails closed on a missing compiler, a failed
-restore or compile, or a missing artifact.
-
-The source variant drives the protocol v4 module roster that the release recipe
-writes to `contracts/bin/public`: nine artifacts — the `SmartAccount` core, the
-`MockTransferTarget` and `SAPaymaster` helpers, the three validators under
-`validators/` (`NeoWitnessValidator`, `SessionKeyValidator`, `MultiSigValidator`)
-and the three hooks under `hooks/` (`WhitelistHook`, `DailyLimitHook`,
-`TokenRestrictedHook`). `source_build.py` fails closed on a missing artifact or on
-a core whose manifest does not expose the v4 entrypoints (`createAccount`,
-`proposeConfiguration`, `confirmConfiguration`, `executeUserOp`,
-`executeSponsoredUserOp`, `getOperationDigest`) — a v3 build is refused before the
-node starts.
-
-The build profile is still read from the compiled core, never claimed on the
-command line: `source_build.py` parses the NEF and decodes its SYSCALL
-instructions. The v4 core carries no gas-bounded verifier callback at all —
-validators and hooks are plain contracts invoked through the module ABI — so
-`expected-source.json` declares the `platform-syscall-absent` profile and the gate
-rejects a receipt whose call sites or outcome counts disagree with the artifact.
-
-The four source scenarios cover the v4 semantics end to end on a published node:
-
-- `SRC-01/02`: `createAccount` derives the account from custody plus salt and
-  installs `NeoWitnessValidator` atomically; a custody-witness operation executes
-  and advances the module's own nonce channel, while replay and stranger and
-  duplicate registration are refused without consuming a nonce.
-- `SRC-03`: a 24 h `proposeConfiguration`/`confirmConfiguration` intent installs
-  `SessionKeyValidator`; the grant digest plus the session P-256 signature HALT,
-  and a foreign key or an out-of-grant target is refused with the nonce unchanged.
-- `SRC-04`: the intent path installs `WhitelistHook` into the core-owned hook
-  order; the allowlisted target executes, another target is refused with
-  `Target contract not in whitelist`, and a reconfigured hook allows it.
-- `SRC-10`: the owner-only recovery policy makes module changes permanent; after
-  `beginRecovery` and the 7-day timelock, `executeRecovery` sweeps every module
-  instance, rotates the custody, re-enables the built-in route and keeps the
-  owner-only latch. The rotated custody then executes through the built-in
-  signature envelope, while the previous custody and any reinstall are refused.
-
-The source receipt retains `sourceArtifactRuntime`: the nine artifacts' declared
-relative paths, their NEF and manifest file digests, the parsed manifests and the
-complete RPC script/checksum/manifest readback for each. The gate recomputes
-script and canonical manifest digests from the retained RPC content, checks exact
-identities and inventory, and rejects missing, duplicate, malformed or mismatched
-evidence. Artifact bytes and the runner/oracle hashes must remain unchanged
-throughout the run; the outer rebuild certificate join binds these digests to the
-current contract inputs separately. This readback covers the nine artifacts this
-suite deploys; it does not claim runtime coverage of the whole release catalog or
-public deployment. Expect approximately one minute and 28 successful checks:
-36 executed transactions, 11 simulated faults and no node refusals.
-
-```sh
-python3 tests/localchain/test_source_gate.py
-```
-
-This gate needs no chain and no compiler: it assembles NEFs byte by byte, parses
-the committed deployed core as the negative sample, and mutates the v4 oracle
-(profile swap, call-site drift, false or renamed check, missing or duplicated
-scenario, missing roster artifact, nested versus flat artifact path, outcome
-drift, deployed digest reuse).
+The native SmartAccount v4.1 core, which this suite does not deploy, has
+no per-callback gas budget (`docs/SA-MODULE-PROTOCOL.md` §11.1); its witness
+(`verify`) is admissibility-only and its transaction carries one operation.
 
 ## Provenance and scope
 
@@ -206,10 +147,7 @@ Ported from the 2026-10-05 SA assessment (`rpcx.py`, `sa_rpc_scenarios.py`,
 pinned by SHA-256 in the deployed expectations; the core script was observed
 identical to MainNet in that assessment. This suite performs no public-chain
 readback and local contract addresses differ because every run generates a new
-deployer. The source variant deliberately does not re-run the deployed scenario
-list: the current source is the v4 core and module set, not the frozen artifact, so
-it asserts the v4 account, module and recovery paths that its profile decides and
-its own oracle declares.
+deployer. The suite has no current-source variant (see above).
 
 The current relay includes CU-06's false-transfer refusal. Five historical
 SA-09 checks now require preflight/broadcast refusal, the preserved false stack
@@ -219,7 +157,7 @@ Session keys, proxy witnesses, hooks, recovery and paymaster scenarios retain
 the assessor's assertions. These are regression expectations, not a claim that
 the deployed contract has self-service proxy setup or a complete WebAuthn flow.
 
-Hosted CI used to install dependencies and run both suites through a dedicated workflow,
+Hosted CI used to install dependencies and run the suite through a dedicated workflow,
 the negative control. Hosted CI is billing-blocked; local exact-commit workflow
 replay is the acceptance evidence. Hosted Linux execution and the
 checkout/setup/upload actions are not verified by local replay. The jobs use no

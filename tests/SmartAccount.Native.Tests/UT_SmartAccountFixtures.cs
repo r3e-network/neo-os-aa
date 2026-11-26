@@ -94,7 +94,7 @@ namespace Neo.UnitTests.SmartContract.Native
             ]);
 
             Assert.AreEqual(Hex(expected, "canonicalUnsignedOperationHex"),
-                Convert.ToHexStringLower(SmartAccountProtocol.SerializeCanonicalOperation(op)),
+                Convert.ToHexStringLower(SmartAccountTestSupport.Canonical(op)),
                 "native canonical operation bytes drifted from the shared vector");
             // The same claim through the plain serialiser, on the blanked form:
             // §4.2 removes the signature before anything is hashed or signed.
@@ -103,9 +103,12 @@ namespace Neo.UnitTests.SmartContract.Native
                 Convert.ToHexStringLower(BinarySerializer.Serialize(blanked, ExecutionEngineLimits.Default)));
 
             byte[] digest = SmartAccountProtocol.ComputeOperationDigest(
-                (uint)Integer(native, "network"), core, account, op,
-                Integer(operation, "validatorId"), Integer(operation, "credentialGeneration"),
-                Integer(operation, "authorityEpoch"), Integer(operation, "configurationNonce"));
+                (uint)Integer(native, "network"), core, account,
+                new SmartAccountProtocol.OperationFields(
+                    Integer(operation, "validatorId"), Integer(operation, "credentialGeneration"),
+                    Integer(operation, "authorityEpoch"), Integer(operation, "configurationNonce"),
+                    Integer(operation, "nonce")),
+                SmartAccountTestSupport.Canonical(op));
             Assert.AreEqual(Hex(native, "digestHex"), Convert.ToHexStringLower(digest),
                 "native §4.3 digest drifted from the shared vector");
         }
@@ -128,12 +131,14 @@ namespace Neo.UnitTests.SmartContract.Native
 
             byte[] channel = SmartAccountProtocol.DeriveChannel(digest);
             Assert.AreEqual(Hex(expected, "channelBytesHex"), Convert.ToHexStringLower(channel));
-            Assert.AreEqual(Hex(expected, "nonceCursorKeyBytes"),
-                Convert.ToHexStringLower(SmartAccountProtocol.GetNonceCursorKey(account, channel)));
-            Assert.AreEqual(Hex(expected, "nonceNamespaceKeyBytes"),
-                Convert.ToHexStringLower(SmartAccountProtocol.GetNonceNamespaceKey(account, channel)));
+            // The keys are the platform KeyBuilder layout the kernel builds; the pinned bytes prove it.
+            Assert.AreEqual(Hex(expected, "nonceCursorKeyBytes"), Convert.ToHexStringLower(
+                ((StorageKey)NativeContract.SmartAccount.Key(SmartAccountModuleProtocol.PrefixNonceCursor).Add(account).Add(channel)).Key.ToArray()));
+            Assert.AreEqual(Hex(expected, "nonceNamespaceKeyBytes"), Convert.ToHexStringLower(
+                ((StorageKey)NativeContract.SmartAccount.Key(SmartAccountModuleProtocol.PrefixNonceNamespace).Add(account).Add(channel)).Key.ToArray()));
+            // §4.1: the packed nonce is channel ‖ sequence, both unsigned big-endian.
             Assert.AreEqual(expected.GetProperty("packedNonce").GetString(),
-                SmartAccountProtocol.EncodeNonce(channel, 0).ToString());
+                (new BigInteger(channel, isUnsigned: true, isBigEndian: true) << 64).ToString());
         }
 
         [TestMethod]
@@ -150,15 +155,16 @@ namespace Neo.UnitTests.SmartContract.Native
             byte[] channel = Convert.FromHexString(Hex(input, "channelBytesHex"));
             BigInteger moduleId = Integer(input, "moduleId");
 
+            SmartAccount core = NativeContract.SmartAccount;
             var builders = new Dictionary<string, Func<byte[]>>
             {
-                ["0x50"] = () => SmartAccountProtocol.GetProtocolKey(),
-                ["0x51"] = () => SmartAccountProtocol.GetAccountControlKey(account),
-                ["0x52"] = () => SmartAccountProtocol.GetModuleInstanceKey(account, moduleId),
-                ["0x53"] = () => SmartAccountProtocol.GetModuleIndexKey(
-                    account, SmartAccountModuleProtocol.ModuleTypeCodeValidator, moduleId),
-                ["0x56"] = () => SmartAccountProtocol.GetNonceCursorKey(account, channel),
-                ["0x5C"] = () => SmartAccountProtocol.GetNonceNamespaceKey(account, channel),
+                ["0x50"] = () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixProtocolInfo)).Key.ToArray(),
+                ["0x51"] = () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixAccountControl).Add(account)).Key.ToArray(),
+                ["0x52"] = () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixModuleInstance).Add(account).AddBigEndian(SmartAccountProtocol.UInt64(moduleId))).Key.ToArray(),
+                ["0x53"] = () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixModuleIndex).Add(account)
+                    .Add(SmartAccountModuleProtocol.ModuleTypeCodeValidator).AddBigEndian(SmartAccountProtocol.UInt64(moduleId))).Key.ToArray(),
+                ["0x56"] = () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixNonceCursor).Add(account).Add(channel)).Key.ToArray(),
+                ["0x5C"] = () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixNonceNamespace).Add(account).Add(channel)).Key.ToArray(),
             };
 
             // The shared table also pins the prefixes of the features the

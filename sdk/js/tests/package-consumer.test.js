@@ -76,9 +76,9 @@ test('the real npm tarball is a self-contained, reproducible production package'
         nonceSubkey: '00'.repeat(32), deadline: '2000000000000', validatorId: '0',
         credentialGeneration: '1', authorityEpoch: '0', configurationNonce: '0', signature: 'ab'.repeat(64),
       };
-      const plan = client.buildExecutionScript({ accountId: identity.accountId, operations: [operation] });
+      const plan = client.buildExecutionScript({ accountId: identity.accountId, operation });
       assert.equal(plan.method, 'executeUserOp');
-      assert.equal(plan.batch, false);
+      assert.equal(plan.operation.targetContract, '44'.repeat(20));
       // The 13-field operation is the operand the transfer rules read back.
       assert.deepEqual(sdk.findFailedTransferInInvocation({
         invocation: { operation: 'executeUserOp', args: [{ type: 'ByteString', value: 'aa'.repeat(20) }, sdk.codec.operationValue(operation)] },

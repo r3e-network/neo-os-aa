@@ -1,12 +1,19 @@
 /**
- * SA module protocol v4 native-kernel client (docs/SA-MODULE-PROTOCOL.md §9).
+ * SmartAccount v4.1 native-kernel client (docs/SA-SPEC.zh-CN.md §9).
  *
- * The ABI table below is the compiled v4 surface of
- * `contracts/native/SmartAccount/*` — the same names, parameters and return
- * types the native core exposes. Old `registerAccount` / `callVerifier` /
- * `callHook` / `*Child` / `proposeVerifier` surfaces are gone in v4 and are
- * deliberately absent here: a removed method must fail at discovery, never be
- * silently re-mapped.
+ * The ABI table below is the compiled v4.1 surface of
+ * `contracts/native/SmartAccount/*` — the same 26 methods, parameter names,
+ * return types and CallFlags the native core exposes, and it is checked against
+ * the frozen IDL (`docs/proposals/smartaccount-v4.1.idl.json`) by
+ * `scripts/check_smartaccount_v41_idl.py`.
+ *
+ * Removed v4.0 surfaces (`isValidSignature`, `setRecoveryPolicy`,
+ * `getMessageSubjects`, `getThresholdPolicy`, the native recovery timelock
+ * argument, the retired configuration action codes 4/6/8/9/10 and the
+ * `executeUserOps` batch entry) are deliberately absent: discovering an ABI
+ * that still exposes them must fail with an explicit
+ * protocol-version-incompatible error, never be silently re-mapped onto a
+ * different method or argument list.
  *
  * Every read validates the exact stack shape; every action builds one script
  * and hands it to the injected RPC transport. No ambient state, no coercion.
@@ -25,6 +32,12 @@ export {
 } from "./nativeSmartAccount.mjs";
 
 const ZERO = "00".repeat(20);
+// ModuleProtocol.ActionUnfreeze: the single-action governance intent that thaws
+// a frozen account. It must travel alone and the confirmation must repeat the
+// exact bytes, so the confirm argument is rebuilt here, never taken as input.
+const GOVERNANCE_UNFREEZE_ACTION = 11;
+// GovernanceModule.UnfreezeAccount proposes the intent; ConfirmConfiguration lands it.
+const GOVERNANCE_ACTIONS = ["unfreezeAccount", "confirmConfiguration"];
 const error = (message) => {
   throw new Error(`Native SmartAccount: ${message}`);
 };
@@ -58,42 +71,46 @@ export function parseNativeRpcFee(value, label) {
     error(`${label} fee must be a canonical nonnegative Int64 decimal string`);
   return BigInt(value);
 }
-export function parseNativeRpcFees(result, requireMinimum = false) {
+// Plain Neo: a transaction's declared system fee is its only gas limit and the
+// node burns the whole declared amount, so the only value a simulation quotes
+// is the gas its script consumed. There is no per-call budget and therefore no
+// budget-derived minimum fee to add to it.
+export function parseNativeRpcFees(result) {
   const gas = parseNativeRpcFee(result?.gasconsumed, "gasconsumed");
-  const minimum =
-    result?.minimumrequiredfee === undefined
-      ? null
-      : parseNativeRpcFee(result.minimumrequiredfee, "minimumrequiredfee");
-  if (requireMinimum && minimum === null)
-    error("minimumrequiredfee fee is required");
-  if (minimum !== null && minimum < gas)
-    error("minimumrequiredfee fee is below gasconsumed");
-  return {
-    gasConsumed: gas.toString(),
-    minimumRequiredFee: minimum?.toString() ?? null,
-  };
+  return { gasConsumed: gas.toString() };
 }
 
-// SHA-256 of the domain-prefixed, canonical v4 parameters (including the batch action set).
-export const NATIVE_PROFILE_PARAMETER_DIGEST = "0cab62cf2a69b5682bf0d976406ddce15d7afbd67db4c1bc4e4950cf180a6dd0";
+// SHA-256 of the domain-prefixed, canonical v4.1 parameters (including the
+// configuration action set). `docs/proposals/validate-native-smartaccount-profile.py`
+// recomputes this value from `smartaccount-native-profile-parameters.json` and
+// fails if the core, this client or its frontend mirror disagree.
+export const NATIVE_PROFILE_PARAMETER_DIGEST = "f9692d8cf7d74333b37142525de479f5742b1442aaf8baff64d883c4d16002f1";
 
-// Exact NEF built from the standard recovery seat with the repository compiler.
-export const NATIVE_STANDARD_RECOVERY_NEF_SHA256 = "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e";
+// The standard recovery seat is a module: the NEF hash pins the reviewed build
+// and the manifest hash pins the published ABI. A seat that answers a
+// different pair is not the reviewed seat, so it is reported unsupported
+// instead of being driven through an unknown interface.
+export const NATIVE_STANDARD_RECOVERY_NEF_SHA256 = "70e94cd8d1aa55411ed7612ba3d50ec7262714c5f133aa5dbb8cc9782a285870";
+export const NATIVE_STANDARD_RECOVERY_MANIFEST_SHA256 = "d3fa41dacde80d555637815fcb902ccd70a8292342ccfa81be048eed19f1f9f5";
+// SHA-256 of the seat's getModuleProfile() text, as the core publishes it in
+// the module descriptor (field 6).
+export const NATIVE_STANDARD_RECOVERY_PROFILE_SHA256 = "64e4a614163968e6306083058044c6fad3c1c0c6a6e938737485f3325b9f13e3";
 
+// Exactly the frozen v4.1 native surface: 26 methods including
+// getAccountAddress, which lives in NATIVE_ACCOUNT_ADDRESS_ABI below.
 export const NATIVE_REQUIRED_ABI = {
   verify: requiredMethod(account, "Boolean", true),
   getAccountImplementationId: requiredMethod([], "String", true),
-  getMessageSubjects: requiredMethod(account, "Array", true),
-  getThresholdPolicy: requiredMethod([...account, ["policyId", "Integer"]], "Array", true),
-  isValidSignature: requiredMethod([...account, ["hash", "ByteArray"], ["signatureEnvelope", "Array"]], "ByteArray", true),
   getProtocolInfo: requiredMethod([], "Array", true),
   getAccount: requiredMethod(account, "Array", true),
+  // Registration takes (accountId, custody, salt, actions): the recovery
+  // timelock moved into the recovery module's own policy, so the native
+  // entry no longer carries it.
   createAccount: requiredMethod(
     [
       ["accountId", "Hash160"],
       ["custody", "Hash160"],
       ["salt", "ByteArray"],
-      ["recoveryTimelockMs", "Integer"],
       ["actions", "Array"],
     ],
     "Void",
@@ -104,19 +121,27 @@ export const NATIVE_REQUIRED_ABI = {
       ["accountIds", "Array"],
       ["custody", "Hash160"],
       ["salts", "Array"],
-      ["recoveryTimelockMs", "Integer"],
     ],
     "Void",
     false,
   ),
   applyConfigurationActions: requiredMethod([...account, ["actions", "Array"]], "Void", false),
+  configureModule: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["moduleId", "Integer"],
+      ["data", "Array"],
+    ],
+    "Void",
+    false,
+  ),
   freezeAccount: accountAction,
   // The core holds no thaw timelock: leaving Frozen is immediate, and any
   // delay a deployment wants is the policy of a user-space governance module.
   unfreezeAccount: accountAction,
-  // The two module-administration entry points of the minimal core. Both are
-  // custody-or-installed-validator authorized and both answer from the core
-  // registry, so nothing above them pins a module profile digest.
+  // Both module-administration entry points are custody-or-installed-validator
+  // authorized and answer from the core registry, so nothing above them pins a
+  // module profile digest.
   installModule: requiredMethod(
     [
       ["accountId", "Hash160"],
@@ -136,26 +161,9 @@ export const NATIVE_REQUIRED_ABI = {
     "Void",
     false,
   ),
-  // The four restricted landing entries (spec §7.1/§7.5/§12.5): three
-  // configuration writes of the administration family — the recovery policy,
-  // the built-in authorization switches and the credential-generation bump —
-  // plus the recovery seat's exclusive reset. They carry no module data —
-  // they land decisions the caller (the custody, an installed validator, or
-  // the account's recovery seat) already made, and the core re-verifies the
-  // authority and the domains itself.
-  setRecoveryPolicy: requiredMethod(
-    [
-      ["accountId", "Hash160"],
-      ["recoveryAuthority", "Hash160"],
-      ["recoveryTimelockMs", "Integer"],
-      ["ownerOnlyRecovery", "Boolean"],
-    ],
-    "Void",
-    false,
-  ),
-  // The two built-in switches change only through this write (or the
-  // recovery reset); the core's last-route guard refuses to close the
-  // operation switch while no validator instance is installed.
+  // The two built-in switches change only through this write (or the recovery
+  // reset); the core's last-route guard refuses to close the operation switch
+  // while no validator instance is installed.
   setBuiltinAuthorization: requiredMethod(
     [
       ["accountId", "Hash160"],
@@ -173,6 +181,9 @@ export const NATIVE_REQUIRED_ABI = {
     "Void",
     false,
   ),
+  // The recovery seat's exclusive landing: the core re-checks that the caller
+  // is the installed, code-bound seat and removes every module instance in the
+  // same frame.
   resetAccount: requiredMethod(
     [
       ["accountId", "Hash160"],
@@ -214,20 +225,24 @@ export const NATIVE_REQUIRED_ABI = {
     "Array",
     true,
   ),
+  // Threshold members are module instances now, so the core exposes a
+  // member-level check instead of a native threshold policy read.
+  validateMember: requiredMethod(
+    [
+      ["accountId", "Hash160"],
+      ["memberId", "Integer"],
+      ["operationDigest", "ByteArray"],
+      ["operation", "Array"],
+    ],
+    "Boolean",
+    true,
+  ),
   executeUserOp: requiredMethod(
     [
       ["accountId", "Hash160"],
       ["operation", "Array"],
     ],
     "Any",
-    false,
-  ),
-  executeUserOps: requiredMethod(
-    [
-      ["accountId", "Hash160"],
-      ["operations", "Array"],
-    ],
-    "Array",
     false,
   ),
   getModules: requiredMethod(
@@ -280,30 +295,28 @@ freeze(NATIVE_ACCOUNT_ADDRESS_ABI);
 // Presence-only event gate: the client never decodes these payloads, so the
 // parameter names are not pinned (renaming a parameter is not an ABI break for
 // a byte-positional event), while a missing lifecycle event still fails.
-// The core emits registration, freeze/unfreeze,
-// operation execution, the module instance lifecycle, nonce channels and the
-// four landing-path transitions (credential revocation, the recovery-policy
-// write, the built-in authorization switches, the recovery reset).
-// Intent, message and hook-order transitions are user-space module concerns
-// and are deliberately absent.
+// The core emits registration, freeze/unfreeze, operation execution, the module
+// instance lifecycle, nonce channels and the three remaining landing-path
+// transitions (credential revocation, the built-in authorization switches, the
+// recovery reset) plus the required-validator selection. Intent, message,
+// hook-order and recovery-policy transitions are user-space module concerns and
+// are deliberately absent.
 export const NATIVE_REQUIRED_EVENTS = Object.freeze([
   "AccountRegistered",
-  "AccountFrozen",
-  "AccountUnfrozen",
-  "UserOpExecuted",
   "ModuleInstalled",
   "ModuleRemoved",
+  "UserOpExecuted",
   "ModuleInstanceInstalled",
   "ModuleInstanceRemoved",
-  "ModuleInstanceConfigured",
-  "ModuleCredentialsRevoked",
-  "RecoveryPolicySet",
-  "BuiltinAuthorizationSet",
-  "MessageSubjectUpdated",
-  "ThresholdPolicySet",
-  "AccountReset",
   "NonceChannelOpened",
   "NonceChannelExhausted",
+  "AccountFrozen",
+  "AccountUnfrozen",
+  "ModuleCredentialsRevoked",
+  "AccountReset",
+  "BuiltinAuthorizationSet",
+  "ModuleInstanceConfigured",
+  "RequiredValidatorSet",
 ]);
 
 // The native core declares a serialized operation as `Array`, which is exactly
@@ -337,8 +350,9 @@ function descriptors(value, label) {
   return value;
 }
 
-// Core returns one snapshotted Any for executeUserOp, or one exact Array of
-// those results for executeUserOps. RPC truncation is not execution evidence.
+// executeUserOp returns one snapshotted Any: there is no batch result array in
+// v4.1, so the single result is the whole verdict. RPC truncation is not
+// execution evidence.
 export function validateNativeInvocationResult(plan, stack) {
   if (!Array.isArray(stack)) error("malformed RPC result stack");
   if (plan.kind === "execution" && stack.length !== 1)
@@ -411,24 +425,21 @@ export function validateNativeInvocationResult(plan, stack) {
     } else if (plan.kind === "recovery" && plan.method === "beginRecovery") {
       if (item.type !== "Integer" || BigInt(item.value) < 1n)
         error("beginRecovery must return a positive nonce");
+    } else if (plan.kind === "governance" && plan.method === "unfreezeAccount") {
+      if (item.type !== "Integer" || BigInt(item.value) < 1n)
+        error("the governance unfreeze proposal must return a positive intent id");
     } else if (item.type !== "Any") {
       error("void account method must return the VM null item");
     }
     return [];
   }
-  const operations = plan.operations;
-  const results = plan.batch ? stack[0].value : stack;
-  if (
-    plan.batch &&
-    (stack[0].type !== "Array" || results.length !== operations.length)
-  )
-    error("batch result must be an exact Array matching the operation count");
-  return operations.flatMap((operation, index) =>
-    operation.method === "transfer" &&
-    !(results[index]?.type === "Boolean" && results[index].value === true)
-      ? [index]
-      : [],
-  );
+  const operation = plan.operation;
+  if (!operation || typeof operation !== "object" || typeof operation.method !== "string")
+    error("execution plan must carry exactly one operation");
+  return operation.method === "transfer" &&
+    !(stack[0].type === "Boolean" && stack[0].value === true)
+    ? [0]
+    : [];
 }
 
 export function validateNativeApplicationExecution(plan, execution) {
@@ -463,54 +474,125 @@ export function createNativeClientClass(codec, {
       callFlags: coreFlags,
     });
   const H = codec.hashValue;
-  function recoveryPolicyFields({ recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery = false }) {
-    const recipient = codec.hex(recoveryAuthority, 20);
-    const delay = codec.unsigned(recoveryTimelockMs, 64, "recovery timelock");
-    if (delay < 604800000n || delay > 7776000000n || ownerOnlyRecovery !== false)
-      error("invalid recovery policy: ownerOnlyRecovery is reserved and must be false");
-    return { recipient, fields: [H(recipient), I(delay), { type: "Boolean", value: ownerOnlyRecovery }] };
+  /// RecoveryModule timelock domain (RecoveryModule.cs / the standard seat's
+  /// policy), used only to validate a policy an operator asks the module to
+  /// store. The native core no longer persists a timelock.
+  const RECOVERY_TIMELOCK_MIN_MS = 604800000n;
+  const RECOVERY_TIMELOCK_MAX_MS = 7776000000n;
+  const recoveryTimelock = (value) => {
+    const delay = codec.unsigned(value, 64, "recovery timelock");
+    if (delay < RECOVERY_TIMELOCK_MIN_MS || delay > RECOVERY_TIMELOCK_MAX_MS)
+      error("recovery timelock must be 7 to 90 days in milliseconds");
+    return delay;
+  };
+  // §8: message verification is a module entry, not a native one. The name is
+  // held here so the native ABI guard does not mistake it for a core method.
+  const MESSAGE_VERIFY_METHOD = "isValidSignature";
+  const MODULE_TYPES = Object.freeze({ validator: 1, hook: 4, recovery: 5 });
+  const moduleTypeCode = (value) => {
+    if (typeof value === "string") {
+      if (!Object.hasOwn(MODULE_TYPES, value)) error("unsupported module type");
+      return MODULE_TYPES[value];
+    }
+    const code = Number(codec.unsigned(value, 8, "module type"));
+    if (![1, 4, 5].includes(code)) error("unsupported module type");
+    return code;
+  };
+  // The module operands of ApplyModuleActionAsync, shared by the configuration
+  // batch and by the registration actions so both paths emit the same Arrays:
+  //   install   [1, moduleType, contractHash, profileDigest, initData[]]
+  //   uninstall [2, moduleId, deInitData[]]
+  //   configure [3, moduleId, data[]]
+  //   authorize [5, defaultOperationAuthorization, defaultMessageAuthorization]
+  //   required  [7, validatorId, required]
+  // Codes 4, 6, 8, 9 and 10 are retired in v4.1 and are rejected here.
+  const moduleData = (values = []) => {
+    if (!Array.isArray(values) || values.length > 64) error("invalid module data");
+    return A(values.map((value) => codec.canonicalValue(value)));
+  };
+  const installOperand = (moduleType, moduleContractHash, profileDigest, initData) => {
+    const type = moduleTypeCode(moduleType);
+    const contract = codec.hex(moduleContractHash, 20);
+    if (contract === ZERO) error("invalid module address");
+    return A([I(1), I(type), H(contract),
+      codec.byteStringValue(codec.hex(profileDigest, 32)), moduleData(initData)]);
+  };
+  const uninstallOperand = (moduleId, deInitData) => {
+    const id = codec.unsigned(moduleId, 64, "module ID");
+    if (id === 0n) error("invalid module ID");
+    return A([I(2), I(id), moduleData(deInitData)]);
+  };
+  const configureOperand = (moduleId, data) => {
+    const id = codec.unsigned(moduleId, 64, "module ID");
+    if (id === 0n) error("invalid module ID");
+    return A([I(3), I(id), moduleData(data)]);
+  };
+  const bool = (value, label) => {
+    if (typeof value !== "boolean") error(`${label} must be boolean`);
+    return { type: "Boolean", value };
+  };
+  /// §10 registration actions: v4.1 CreateAccountCoreAsync admits install (1)
+  /// only, each a typed VM Array, and the kernel checks every entry before
+  /// writing anything. The fields are re-encoded through the configuration
+  /// encoders, so a malformed action fails here instead of as
+  /// SA_OPERATION_MALFORMED on chain.
+  function registrationActions(actions) {
+    if (!Array.isArray(actions) || actions.length > 16)
+      error("registration accepts at most 16 actions");
+    const field = (action, index, type, label) => {
+      if (action[index]?.type !== type)
+        error(`registration action field ${index} (${label}) must be a typed VM ${type}`);
+      return action[index].value;
+    };
+    const unsignedField = (action, index, label) =>
+      codec.unsigned(field(action, index, "Integer", label), 64, label);
+    return actions.map((action) => {
+      if (action?.type !== "Array" || !Array.isArray(action.value))
+        error("registration actions must be typed VM Arrays");
+      const fields = action.value;
+      switch (unsignedField(fields, 0, "action code")) {
+        case 1n:
+          if (fields.length !== 5)
+            error("install action must hold [1, moduleType, contractHash, profileDigest, initData]");
+          return installOperand(
+            Number(unsignedField(fields, 1, "module type")),
+            field(fields, 2, "ByteString", "module address"),
+            field(fields, 3, "ByteString", "profile digest"),
+            field(fields, 4, "Array", "init data"));
+        default:
+          return error(
+            "v4.1 registration only admits install (1) actions; uninstall, configure, authorize and required-validator actions are administered afterwards",
+          );
+      }
+    });
   }
   function configurationBatch(coreHash, { accountId, actions }) {
     const id = codec.hex(accountId, 20);
     if (!Array.isArray(actions) || actions.length < 1 || actions.length > 16)
       error("configuration batch must contain 1 to 16 actions");
-    const bool = (value) => {
-      if (typeof value !== "boolean") error("configuration switch must be boolean");
-      return { type: "Boolean", value };
-    };
-    const data = (values = []) => {
-      if (!Array.isArray(values) || values.length > 64) error("invalid module data");
-      return A(values.map((value) => codec.canonicalValue(value)));
-    };
-    // Copy the reviewed operands before the RPC yields. Never read a caller's mutable action
-    // twice to build the script and determine which addresses must consent.
-    const recipients = [];
     const operands = Array.from(actions, (step) => {
       switch (step?.method) {
-        case "installModule": {
-          if (![1, 4, 5].includes(step.moduleType)) error("unsupported module type");
-          const contract = codec.hex(step.moduleContractHash, 20);
-          if (contract === ZERO) error("invalid module address");
-          return A([I(1), I(step.moduleType), H(contract),
-            codec.byteStringValue(codec.hex(step.profileDigest, 32)), data(step.initData)]);
-        }
-        case "removeModule": {
-          const moduleId = codec.unsigned(step.moduleId, 64, "module ID");
-          if (moduleId === 0n) error("invalid module ID");
-          return A([I(2), I(moduleId), data(step.deInitData)]);
-        }
+        case "installModule":
+          return installOperand(step.moduleType, step.moduleContractHash, step.profileDigest, step.initData);
+        case "removeModule":
+          return uninstallOperand(step.moduleId, step.deInitData);
+        case "configureModule":
+          return configureOperand(step.moduleId, step.data);
         case "setBuiltinAuthorization":
-          return A([I(5), bool(step.defaultOperationAuthorization), bool(step.defaultMessageAuthorization)]);
-        case "setRecoveryPolicy": {
-          const { recipient, fields } = recoveryPolicyFields(step);
-          recipients.push(recipient);
-          return A([I(8), ...fields]);
+          return A([I(5), bool(step.defaultOperationAuthorization, "operation authorization"),
+            bool(step.defaultMessageAuthorization, "message authorization")]);
+        case "setRequiredValidator": {
+          const validatorId = codec.unsigned(step.validatorId ?? 0, 64, "required validator id");
+          return A([I(7), I(validatorId), bool(step.required !== false, "required flag")]);
         }
-        default: return error("unsupported configuration batch action");
+        default:
+          return error(
+            "unsupported configuration action: v4.1 acts with install, remove, configure, setBuiltinAuthorization and setRequiredValidator (1, 2, 3, 5, 7) only",
+          );
       }
     });
     const script = codec.dynamicCall(coreHash, "applyConfigurationActions", [H(id), A(operands)]);
-    return { id, script, recipients };
+    return { id, script };
   }
 
   const base64ToBytes = (text) =>
@@ -576,35 +658,40 @@ export function createNativeClientClass(codec, {
     return codec.unsigned(v, bits, label).toString();
   };
   // The native kernel serializes a moduleId as its 8-byte big-endian word in
-  // some descriptors and as an Integer in others; both are the same id.
+  // GetModule and as an Integer elsewhere; both are the same id.
   const moduleId = (v, label) => {
     if (typeof v === "bigint") return codec.unsigned(v, 64, label).toString();
     const raw = bytes(v, 8, label);
     return BigInt("0x" + toHex(raw)).toString();
   };
+  /// GetAccount (SmartAccount.cs §9) answers exactly nine fields:
+  /// [exists, status, custody, authorityEpoch, configurationNonce,
+  ///  defaultOperationAuthorization, defaultMessageAuthorization,
+  ///  requiredValidatorId, controlRevision].
   const accountDescriptor = (item, accountId, coreHash, coreFlags) => {
     if (item === null) return null;
-    const a = array(item, 15, "account");
+    const a = array(item, 9, "account");
     const exists = a[0];
     if (typeof exists !== "boolean") error("malformed account existence flag");
     if (!exists) {
-      if (a[2].length !== 20 || a[3].length !== 20) error("malformed account");
+      if (a[2].length !== 20) error("malformed account");
       return null;
     }
     const custody = hash(a[2]);
-    const recovery = hash(a[3]);
     const address = proxyOf(codec.hex(accountId, 20), coreHash, coreFlags);
     if (custody === ZERO || custody === coreHash || custody === address)
       error("invalid custody identity");
-    if (recovery !== ZERO && [custody, address, coreHash].includes(recovery))
-      error("invalid recovery identity");
     const status = Number(uint(a[1], 8, "account status"));
     if (![0, 1].includes(status)) error("unknown account status");
-    const authorityEpoch = uint(a[4], 64, "authority epoch");
-    const configurationNonce = uint(a[5], 64, "configuration nonce");
+    const authorityEpoch = uint(a[3], 64, "authority epoch");
+    const configurationNonce = uint(a[4], 64, "configuration nonce");
     // Registration starts at epoch 1 and configuration nonce 0.
     if (authorityEpoch === "0" || BigInt(authorityEpoch) > BigInt(configurationNonce) + 1n)
       error("invalid authority epoch for configuration nonce");
+    const bool = (value, label) => {
+      if (typeof value !== "boolean") error(`malformed ${label} flag`);
+      return value;
+    };
     return freeze({
       accountId: codec.hex(accountId, 20),
       accountAddress: address,
@@ -612,27 +699,28 @@ export function createNativeClientClass(codec, {
       status,
       statusName: ["Active", "Frozen"][status],
       custodyAddress: custody,
-      recoveryAuthority: recovery,
       authorityEpoch,
       configurationNonce,
-      recoveryTimelockMs: uint(a[6], 64, "recovery timelock"),
-      defaultOperationAuthorization: a[7],
-      defaultMessageAuthorization: a[8],
-      ownerOnlyRecovery: a[9],
-      hookOrderRevision: uint(a[10], 64, "hook order revision"),
-      controlRevision: uint(a[11], 64, "control revision"),
-      recoveryPending: a[12],
-      recoveryMatureAt: uint(a[13], 64, "recovery maturity"),
-      marketEscrowActive: a[14],
+      defaultOperationAuthorization: bool(a[5], "operation authorization"),
+      defaultMessageAuthorization: bool(a[6], "message authorization"),
+      requiredValidatorId: uint(a[7], 64, "required validator id"),
+      controlRevision: uint(a[8], 64, "control revision"),
     });
   };
+  /// GetModule (SmartAccount.Modules.cs) answers exactly fifteen fields; the
+  /// last three are the v4.1 composite-layer / governance / hook-planner flags
+  /// that let a client classify an instance without trusting a profile string.
   const moduleDescriptor = (item, coreHash) => {
     const a = array(item, undefined, "module");
     if (a.length === 0) return null;
-    if (a.length !== 12) error("malformed module descriptor");
+    if (a.length !== 15) error("malformed module descriptor");
     const contractHash = hash(a[2]);
     if (contractHash === ZERO || contractHash === coreHash)
       error("invalid module contract");
+    const flag = (value, label) => {
+      if (typeof value !== "boolean") error(`malformed module ${label} flag`);
+      return value;
+    };
     return freeze({
       moduleId: moduleId(a[0], "module id"),
       moduleType: Number(a[1]),
@@ -643,9 +731,12 @@ export function createNativeClientClass(codec, {
       profileSha256: digest(a[6]),
       moduleRevision: uint(a[7], 64, "module revision"),
       credentialGeneration: uint(a[8], 64, "credential generation"),
-      instanceIsolation: a[9],
-      messageCapability: a[10],
-      thresholdMemberEligible: a[11],
+      instanceIsolation: flag(a[9], "instance isolation"),
+      messageCapability: flag(a[10], "message capability"),
+      thresholdMemberEligible: flag(a[11], "threshold member eligible"),
+      compositeLayer: flag(a[12], "composite layer"),
+      governance: flag(a[13], "governance"),
+      hookPlanner: flag(a[14], "hook planner"),
     });
   };
 
@@ -737,10 +828,18 @@ export function createNativeClientClass(codec, {
         state?.manifest?.name !== "SmartAccount"
       )
         error("SmartAccount contract is not available");
+      // The profile is the protocol identity: a different ABI version or a
+      // different parameter digest is a different protocol, reported as such
+      // rather than degraded onto a best-effort subset of the surface.
       const declaredProfile = state.manifest.extra?.smartAccount;
       if (declaredProfile?.abiVersion !== PROTOCOL_VERSION ||
           declaredProfile.profileParameterDigest !== NATIVE_PROFILE_PARAMETER_DIGEST)
-        error("native profile parameters do not match the current protocol");
+        error(
+          "native contract protocol version is incompatible with this client: the chain exposes SmartAccount ABI version " +
+            `${declaredProfile?.abiVersion ?? "unknown"} with profile ${
+              declaredProfile?.profileParameterDigest ?? "unknown"
+            }, this client speaks version ${PROTOCOL_VERSION} with profile ${NATIVE_PROFILE_PARAMETER_DIGEST}`,
+        );
       const methods = descriptors(state.manifest.abi?.methods, "methods");
       const events = descriptors(state.manifest.abi?.events, "events");
       // A native contract registers with a negative id; the address query is
@@ -760,20 +859,30 @@ export function createNativeClientClass(codec, {
                 parameters(types.map((type, index) => [names[index], type])),
               ),
           );
-        if (matches.length !== 1) error(`native ABI mismatch: ${name}`);
+        if (matches.length !== 1)
+          error(
+            `native contract ABI is incompatible with the v4.1 surface: method ${name} is missing or has a different signature`,
+          );
       }
-      if (methods.length !== Object.keys(requiredAbi).length) error("unexpected native ABI method");
+      if (methods.length !== Object.keys(requiredAbi).length)
+        error(
+          `native contract ABI is incompatible with the v4.1 surface: expected ${Object.keys(requiredAbi).length} methods, found ${methods.length}`,
+        );
       const eventNames = new Set(events.map((event) => event.name));
       for (const name of NATIVE_REQUIRED_EVENTS)
-        if (!eventNames.has(name)) error(`native ABI event mismatch: ${name}`);
-      if (events.length !== NATIVE_REQUIRED_EVENTS.length) error("unexpected native ABI event");
+        if (!eventNames.has(name))
+          error(`native contract ABI is incompatible with the v4.1 surface: event ${name} is missing`);
+      if (events.length !== NATIVE_REQUIRED_EVENTS.length)
+        error(
+          `native contract ABI is incompatible with the v4.1 surface: expected ${NATIVE_REQUIRED_EVENTS.length} events, found ${events.length}`,
+        );
       const [protocolVersion] = array(
         await this._read("getProtocolInfo"),
         1,
         "protocol info",
       );
       if (uint(protocolVersion, 64, "protocol version") !== String(PROTOCOL_VERSION))
-        error("native contract is not running the current SmartAccount protocol");
+        error("native contract protocol version is incompatible with this client");
       // The RPC returns a string as UTF8 bytes; `decode` keeps them as bytes so
       // a hash and a text are never confused. Decode here, once.
       const reported = new TextDecoder().decode(
@@ -788,6 +897,7 @@ export function createNativeClientClass(codec, {
         contract: this.contractHash,
         networkMagic: this.networkMagic,
         protocolVersion: PROTOCOL_VERSION,
+        profileParameterDigest: NATIVE_PROFILE_PARAMETER_DIGEST,
         implementationId,
       });
       return this.profile;
@@ -838,11 +948,13 @@ export function createNativeClientClass(codec, {
       const info = array(await this._read("getProtocolInfo"), 1, "protocol info");
       return freeze({
         protocolVersion: uint(info[0], 64, "protocol version"),
+        profileParameterDigest: NATIVE_PROFILE_PARAMETER_DIGEST,
       });
     }
 
     async getModules(accountId, moduleType, { cursor = 0, limit = 32 } = {}) {
       await this._ready();
+      moduleTypeCode(moduleType);
       const page = array(
         await this._read("getModules", [
           H(accountId),
@@ -874,42 +986,6 @@ export function createNativeClientClass(codec, {
       );
     }
 
-    async getThresholdPolicy(accountId, policyId = 0) {
-      await this._ready();
-      const row = array(await this._read("getThresholdPolicy", [
-        H(accountId), I(codec.unsigned(policyId, 64, "policy id")),
-      ]), undefined, "threshold policy");
-      if (!row.length) return null;
-      const lookup = codec.unsigned(policyId, 64, "policy id");
-      if (row.length !== (lookup === 0n ? 5 : 4) || typeof row[2] !== "boolean") error("malformed threshold policy");
-      const required = lookup === 0n ? uint(row[4], 64, "required policy id") : lookup.toString();
-      if (required === "0" || (lookup === 0n && !row[2])) error("malformed threshold policy");
-      const members = array(row[1], undefined, "policy members").map(v => uint(v, 64, "member id"));
-      const threshold = Number(uint(row[0], 8, "threshold"));
-      const generation = uint(row[3], 64, "policy generation");
-      if (generation === "0" || members.includes("0") || new Set(members).size !== members.length ||
-          (row[2] ? threshold < 1 || threshold > members.length || members.length > 10 : threshold !== 0 || members.length !== 0))
-        error("malformed threshold policy");
-      return freeze({ policyId: required, threshold, memberIds: members, active: row[2], credentialGeneration: generation });
-    }
-
-    async getMessageSubjects(accountId) {
-      await this._ready();
-      const row = array(await this._read("getMessageSubjects", [H(accountId)]), undefined, "message subjects");
-      if (!row.length) return null;
-      if (row.length !== 3) error("malformed message subjects");
-      const subjects = array(row[0], undefined, "subjects").map(v => {
-        const raw = bytes(v, undefined, "script identity");
-        if (raw.length !== 20 && raw.length !== 32) error("invalid script identity width");
-        return toHex(raw);
-      });
-      const threshold = Number(uint(row[1], 8, "threshold"));
-      const subjectRevision = uint(row[2], 64, "subject revision");
-      if (subjectRevision === "0" || threshold < 1 || threshold > subjects.length || subjects.length > 16 ||
-          new Set(subjects).size !== subjects.length) error("malformed message subjects");
-      return freeze({ subjects, threshold, subjectRevision });
-    }
-
     async isModuleInstalled(
       accountId,
       moduleType,
@@ -938,8 +1014,9 @@ export function createNativeClientClass(codec, {
       );
     }
 
-    /** Native v4 uses generation 1 for custody and the installed instance's
-     * current generation for validator routes (ResolveCredentialGeneration). */
+    /** v4.1 uses generation 1 for custody and the installed instance's
+     * current generation for every module route (validator and threshold
+     * member alike); there is no native threshold record to consult. */
     async resolveCredentialGeneration(accountId, validatorId = 0) {
       await this._ready();
       const id = codec.unsigned(validatorId, 64, "validator id");
@@ -948,11 +1025,7 @@ export function createNativeClientClass(codec, {
         return "1";
       }
       const module = await this.getModule(accountId, id);
-      if (module?.moduleType === 1) return module.credentialGeneration;
-      if (!module) {
-        const policy = await this.getThresholdPolicy(accountId, id);
-        if (policy?.active) return policy.credentialGeneration;
-      }
+      if (module) return module.credentialGeneration;
       error("validator is not installed: " + id);
     }
 
@@ -972,10 +1045,11 @@ export function createNativeClientClass(codec, {
       if (typeof packed !== "bigint" || packed < 0n || packed >= 1n << 255n)
         error("malformed packed nonce");
       // The kernel resolves the routing generation internally (§6: built-in →
-      // generation 1, installed validator → its CredentialGeneration), so it is the authority for the channel and this
-      // client never supplies a default. A caller that passes a generation gets
-      // a cross-check: a mismatch means the caller's view is stale, which the
-      // operation would hit as ErrorCredentialStale, so it is refused here.
+      // generation 1, installed module → its CredentialGeneration), so it is the
+      // authority for the channel and this client never supplies a default. A
+      // caller that passes a generation gets a cross-check: a mismatch means
+      // the caller's view is stale, which the operation would hit as
+      // ErrorCredentialStale, so it is refused here.
       const channel = (packed >> 64n).toString();
       if (derived !== undefined) {
         if (packed >> 64n !== BigInt(derived))
@@ -1036,9 +1110,30 @@ export function createNativeClientClass(codec, {
       });
     }
 
+    /// §5 member validation: the core answers whether the module instance is
+    /// an eligible active member for this exact operation digest. A threshold
+    /// quorum is a user-space module policy; the core only answers per member.
+    async validateMember(accountId, memberId, operationDigest, operation) {
+      await this._ready();
+      const reply = await this._read("validateMember", [
+        H(accountId),
+        I(codec.unsigned(memberId, 64, "member module id")),
+        { type: "ByteString", value: codec.hex(operationDigest, 32) },
+        codec.operationValue(operation),
+      ]);
+      if (typeof reply !== "boolean") error("malformed member validation result");
+      return reply;
+    }
+
     /// §10 registration: the account id is derived from custody+salt, so the
     /// caller cannot register an id it did not commit to.
-    buildCreateAccountScript({ custodyAddress, salt, recoveryTimelockMs = 0, actions = [] }) {
+    ///
+    /// `actions`: at most 16 typed VM Arrays, install (1) only
+    /// (`registrationActions`); the kernel checks every entry's shape before it
+    /// writes anything, and this builder refuses the same inputs up front.
+    /// The v4.1 signature is exactly (accountId, custody, salt, actions): the
+    /// native recovery timelock argument is gone.
+    buildCreateAccountScript({ custodyAddress, salt, actions = [] }) {
       const identity = this.deriveIdentity({ custodyAddress, salt });
       return freeze({
         kind: "registration",
@@ -1052,35 +1147,72 @@ export function createNativeClientClass(codec, {
           H(identity.accountId),
           H(custodyAddress),
           { type: "ByteString", value: codec.hex(salt) },
-          I(codec.unsigned(recoveryTimelockMs, 64, "recovery timelock")),
-          codec.canonicalValue({ type: "Array", value: actions }),
+          A(registrationActions(actions)),
         ]),
       });
     }
 
-    buildExecutionScript({ accountId, operations }) {
-      if (!Array.isArray(operations) || !operations.length)
-        error("execution requires at least one operation");
+    /// Batch registration (CreateAccounts): 1..64 ids, one custody and the
+    /// matching salts; the kernel recomputes every identity and refuses a
+    /// mismatch, so this builder derives them locally first.
+    buildCreateAccountsScript({ custodyAddress, salts }) {
+      if (!Array.isArray(salts) || salts.length < 1 || salts.length > 64)
+        error("batch registration accepts 1 to 64 salts");
+      const saltHex = salts.map((salt) => codec.hex(salt));
+      const identities = saltHex.map((salt) => this.deriveIdentity({ custodyAddress, salt }));
+      const script = codec.dynamicCall(this.contractHash, "createAccounts", [
+        A(identities.map((entry) => H(entry.accountId))),
+        H(custodyAddress),
+        A(saltHex.map((salt) => ({ type: "ByteString", value: salt }))),
+      ]);
+      return freeze({
+        kind: "registration",
+        method: "createAccounts",
+        accountId: identities[0].accountId,
+        accountAddress: identities[0].accountAddress,
+        custodyAddress: codec.hex(custodyAddress, 20),
+        accountIds: identities.map((entry) => entry.accountId),
+        accountAddresses: identities.map((entry) => entry.accountAddress),
+        signers: [identities[0].accountAddress],
+        script,
+      });
+    }
+
+    /// One transaction executes exactly one complete 13-field operation. The
+    /// retired batch entry has no replacement: an Array (even of length one) is
+    /// refused as protocol-incompatible instead of being split into several
+    /// transactions, and the operation is passed through whole so its digest,
+    /// including hookProofs, is the one the core recomputes.
+    buildExecutionScript({ accountId, operation, operations }) {
+      if (Array.isArray(operation) || operations !== undefined)
+        error(
+          "protocol-incompatible: executeUserOps is retired in v4.1; buildExecutionScript takes one complete 13-field operation",
+        );
+      if (!operation || typeof operation !== "object")
+        error("execution requires one complete 13-field operation");
       const identity = codec.hex(accountId, 20);
       const address = this.proxyAddress(identity);
-      const script = codec.buildExecutionScript(identity, operations, {
+      const script = codec.buildExecutionScript(identity, operation, {
         networkMagic: this.networkMagic,
         coreContractHash: this.contractHash,
         accountId: identity,
       });
       return freeze({
         kind: "execution",
-        method: operations.length === 1 ? "executeUserOp" : "executeUserOps",
+        method: "executeUserOp",
         accountId: identity,
         accountAddress: address,
         proxyCallFlags: this.callFlags,
-        batch: operations.length !== 1,
-        operations,
+        operation,
         signers: [address],
         script,
       });
     }
 
+    /// The recovery seat is a user-space module: no native recovery method is
+    /// called. The reviewed standard seat is identified by its module profile
+    /// digest, its NEF hash and the live contract identity, and its policy and
+    /// request record are read from the module itself.
     async getRecoverySeat(accountId) {
       const id = codec.hex(accountId, 20);
       const page = await this.getModules(id, "recovery");
@@ -1089,115 +1221,268 @@ export function createNativeClientClass(codec, {
       const seat = await this.getModule(id, page.moduleIds[0]);
       if (!seat || seat.moduleType !== 5 || seat.moduleId !== page.moduleIds[0]) error("invalid recovery seat");
       // A third-party seat can have different operations and a different record layout.
-      if (seat.profileSha256 !== "9e3aa360fd7b9bc1d04d368140639e44985a07045f338a3036df3e0859e536e6") return freeze({ seat, supported: false });
+      if (seat.profileSha256 !== NATIVE_STANDARD_RECOVERY_PROFILE_SHA256) return freeze({ seat, supported: false });
       if (seat.nefSha256 !== NATIVE_STANDARD_RECOVERY_NEF_SHA256) return freeze({ seat, supported: false });
       const live = await this._send("getcontractstate", ["0x" + seat.contractHash]);
       if (codec.hex(live?.hash, 20) !== seat.contractHash || String(live.id) !== seat.contractId ||
           String(live.updatecounter) !== seat.updateCounter) return freeze({ seat, supported: false });
       const core = hash(await this._readModule(seat.contractHash, "authorizedCore", []));
       if (core !== this.contractHash) return freeze({ seat, supported: false });
-      const result = array(await this._readModule(seat.contractHash, "getRecoveryStatus", [H(id)]), undefined, "recovery record");
-      if (!result.length) return freeze({ seat, supported: true, pending: null });
-      if (result.length !== 7) error("invalid recovery record");
-      const status = uint(result[4], 8, "recovery status");
-      if (!["1","2"].includes(status)) error("unknown recovery status");
-      const pending = status === "1" ? {
-        nonce: uint(result[0], 64, "recovery nonce"), custody: hash(result[1]),
-        initiatedAt: uint(result[2], 64, "recovery start"), matureAt: uint(result[3], 64, "recovery maturity"),
-        newCustody: hash(result[5]), authorityEpochAtInit: uint(result[6], 64, "recovery epoch")
-      } : null;
-      return freeze({ seat, supported: true, pending });
+      const policy = array(
+        await this._readModule(seat.contractHash, "getRecoveryPolicySnapshot", [H(id)]),
+        undefined,
+        "recovery policy",
+      );
+      const snapshot = policy.length === 0 ? null : freeze({
+        guardians: array(policy[0], undefined, "recovery guardians").map((guardian) => hash(guardian)),
+        threshold: Number(uint(policy[1], 8, "recovery threshold")),
+        timelockMs: uint(policy[2], 64, "recovery timelock"),
+        authority: hash(policy[3]),
+        revision: uint(policy[4], 64, "recovery policy revision"),
+        digest: digest(policy[5]),
+      });
+      if (snapshot && (snapshot.threshold < 1 || snapshot.threshold > snapshot.guardians.length))
+        error("invalid recovery policy threshold");
+      const result = array(
+        await this._readModule(seat.contractHash, "getRecoveryStatus", [H(id)]),
+        undefined,
+        "recovery record",
+      );
+      let pending = null;
+      if (result.length) {
+        if (result.length !== 12) error("invalid recovery record");
+        const status = uint(result[4], 8, "recovery status");
+        if (!["0", "1", "2"].includes(status)) error("unknown recovery status");
+        if (status === "1") pending = freeze({
+          nonce: uint(result[0], 64, "recovery nonce"),
+          initiator: hash(result[1]),
+          startedAt: uint(result[2], 64, "recovery start"),
+          executableAt: uint(result[3], 64, "recovery maturity"),
+          status: 1,
+          newCustody: hash(result[5]),
+          authorityEpochAtInit: uint(result[6], 64, "recovery epoch"),
+          configurationNonceAtInit: uint(result[7], 64, "recovery configuration nonce"),
+          policyDigest: digest(result[8]),
+          policyRevision: uint(result[9], 64, "recovery policy revision"),
+        });
+      }
+      return freeze({ seat, supported: true, policy: snapshot, pending });
+    }
+
+    /// Governance is a *validator* instance that publishes the governance flag
+    /// (moduleType 1, governance capability true). The configuration window and
+    /// the pending intent set are the module's state: v4.1 has no native delay
+    /// and no native intent queue, so nothing here reads the core for them.
+    async getGovernanceSeat(accountId) {
+      const id = codec.hex(accountId, 20);
+      const page = await this.getModules(id, "validator");
+      if (page.nextCursor !== "0") error("validator roster is paginated; refresh the module page first");
+      const seats = [];
+      for (const moduleId_ of page.moduleIds) {
+        const module = await this.getModule(id, moduleId_);
+        if (module?.governance) seats.push(module);
+      }
+      if (seats.length > 1) error("an account publishes at most one governance module");
+      if (!seats.length)
+        return freeze({ seat: null, supported: false, governanceDelayMs: null, intentIds: [], intents: [] });
+      return this.readGovernanceSeat(seats[0], id);
+    }
+
+    /// The governance reads for an already-resolved descriptor. The roster is
+    /// enumerated once by the caller, so a module tab does not re-read every
+    /// validator descriptor to find the governance instance.
+    async readGovernanceSeat(seat, accountId) {
+      const id = codec.hex(accountId, 20);
+      if (!seat?.governance)
+        return freeze({ seat: seat ?? null, supported: false, governanceDelayMs: null, intentIds: [], intents: [] });
+      // A governance instance answers for this core only; an unbound or
+      // re-pointed instance is reported unsupported, never trusted.
+      const core = hash(await this._readModule(seat.contractHash, "authorizedCore", []));
+      if (core !== this.contractHash)
+        return freeze({ seat, supported: false, governanceDelayMs: null, intentIds: [], intents: [] });
+      const governanceDelayMs = uint(
+        await this._readModule(seat.contractHash, "configurationMaturity", []), 64, "governance delay");
+      const intentIds = array(
+        await this._readModule(seat.contractHash, "getPendingConfigurationIntentIds", [H(id)]),
+        undefined,
+        "governance intent ids",
+      ).map((item) => uint(item, 64, "governance intent id"));
+      const intents = [];
+      for (const intentId of intentIds) {
+        const view = array(
+          await this._readModule(seat.contractHash, "getPendingConfiguration", [H(id), I(intentId)]),
+          undefined,
+          "governance intent",
+        );
+        if (!view.length) continue;
+        // getPendingConfiguration -> [id, kind, proposedAt, matureAt, expiresAt,
+        // authorityEpoch, configurationNonce, digest, actionCount]. The kind is
+        // the module's UTF-8 string ("configure" or "unfreeze"), not a number.
+        if (view.length !== 9) error("invalid governance intent view");
+        if (!(view[1] instanceof Uint8Array)) error("malformed intent kind");
+        const kind = new TextDecoder().decode(view[1]);
+        if (kind !== "configure" && kind !== "unfreeze") error("unknown governance intent kind");
+        intents.push(freeze({
+          intentId: uint(view[0], 64, "intent id"),
+          kind,
+          proposedAt: uint(view[2], 64, "intent proposedAt"),
+          matureAt: uint(view[3], 64, "intent matureAt"),
+          expiresAt: uint(view[4], 64, "intent expiresAt"),
+          authorityEpoch: uint(view[5], 64, "intent authority epoch"),
+          configurationNonce: uint(view[6], 64, "intent configuration nonce"),
+          digest: digest(view[7]),
+          actionCount: Number(uint(view[8], 8, "intent action count")),
+        }));
+      }
+      return freeze({ seat, supported: true, governanceDelayMs, intentIds, intents });
+    }
+
+    /// The recovery seat's call, built from the reviewed target alone. Receipt
+    /// restoration uses this: a request may already have executed, so nothing
+    /// here may read account or seat state.
+    buildRecoveryScript({ accountId, targetContract, action, newCustody }) {
+      if (!["beginRecovery", "cancelRecovery", "executeRecovery"].includes(action))
+        error("unsupported recovery operation");
+      const id = codec.hex(accountId, 20);
+      const target = codec.hex(targetContract, 20);
+      if (target === this.contractHash) error("a recovery call cannot target the core");
+      const args = [H(id)];
+      if (action === "beginRecovery") args.push(H(codec.hex(newCustody ?? ZERO, 20)));
+      return codec.dynamicCall(target, action, args);
     }
 
     async buildRecoveryModulePlan({ accountId, action, authority, newCustody }) {
       const id = codec.hex(accountId, 20);
       const state = await this.getAccount(id);
-      if (!state || state.recoveryAuthority === ZERO) error("recovery is not configured");
+      if (!state) error("account is not registered");
       const route = await this.getRecoverySeat(id);
       if (!route?.supported) error("no supported recovery seat installed");
       if (!["beginRecovery", "cancelRecovery", "executeRecovery"].includes(action)) error("unsupported recovery operation");
-      const { seat, pending } = route;
+      const { seat, policy, pending } = route;
+      if (!policy) error("the recovery seat has no policy snapshot");
       const signers = [];
+      // v4.1 module entry points take the account id alone; the module reads
+      // its own record, so no nonce or configuration nonce is supplied.
       const args = [H(id)];
-      let method = action;
       if (action !== "executeRecovery") {
-        const actor = codec.hex(authority, 20);
-        if (![state.custodyAddress, state.recoveryAuthority].includes(actor))
-          error("Only custody or the recovery authority can start or cancel recovery.");
+        const actor = codec.hex(authority ?? state.custodyAddress, 20);
+        if (actor !== state.custodyAddress && actor !== policy.authority &&
+            !policy.guardians.includes(actor))
+          error("Only custody, the recovery authority or a guardian can start or cancel recovery.");
         signers.push(actor);
       }
       if (action === "beginRecovery") {
         if (pending) error("a recovery is already pending");
         const recipient = codec.hex(newCustody ?? ZERO, 20);
-        if ([state.accountAddress, this.contractHash].includes(recipient)) error("invalid new custody");
+        if ([state.accountAddress, this.contractHash, seat.contractHash].includes(recipient))
+          error("invalid new custody");
         if (recipient !== ZERO && !signers.includes(recipient)) signers.push(recipient);
         args.push(H(recipient));
-      } else {
-        if (!pending) error("no pending recovery");
-        if (action === "executeRecovery") {
-          if (pending.authorityEpochAtInit !== state.authorityEpoch) error("pending recovery epoch is stale");
-          const count = await this._send("getblockcount", []);
-          if (!Number.isSafeInteger(count) || count < 1) error("invalid block height");
-          const header = await this._send("getblockheader", [count - 1, true]);
-          if (!Number.isSafeInteger(header?.time) || header.time < 0 || BigInt(header.time) < BigInt(pending.matureAt))
-            error("the recovery timelock has not matured");
-        }
-        method = action === "cancelRecovery" ? "cancelReviewedRecovery" : "executeReviewedRecovery";
-        args.push(I(pending.nonce), I(state.configurationNonce));
+      } else if (!pending) {
+        error("no pending recovery");
+      } else if (action === "executeRecovery") {
+        if (pending.authorityEpochAtInit !== state.authorityEpoch) error("pending recovery epoch is stale");
+        if (pending.configurationNonceAtInit !== state.configurationNonce)
+          error("pending recovery configuration nonce is stale");
+        const count = await this._send("getblockcount", []);
+        if (!Number.isSafeInteger(count) || count < 1) error("invalid block height");
+        const header = await this._send("getblockheader", [count - 1, true]);
+        if (!Number.isSafeInteger(header?.time) || header.time < 0 || BigInt(header.time) < BigInt(pending.executableAt))
+          error("the recovery timelock has not matured");
       }
-      return freeze({ kind: "recovery", method, action, accountId: id, accountAddress: state.accountAddress,
+      return freeze({ kind: "recovery", method: action, action, accountId: id, accountAddress: state.accountAddress,
         targetContract: seat.contractHash, moduleId: seat.moduleId, nefSha256: seat.nefSha256,
-        configurationNonce: state.configurationNonce, pending, signers, args,
+        governanceDelayMs: null, configurationNonce: state.configurationNonce, policy, pending, signers, args,
         newCustody: action === "beginRecovery" ? codec.hex(newCustody ?? ZERO, 20) : null,
-        script: codec.dynamicCall(seat.contractHash, method, args) });
+        script: this.buildRecoveryScript({ accountId: id, targetContract: seat.contractHash, action, newCustody }) });
     }
 
-    buildRecoveryPolicyScript(input) {
-      return codec.dynamicCall(this.contractHash, "setRecoveryPolicy",
-        [H(codec.hex(input.accountId, 20)), ...recoveryPolicyFields(input).fields]);
+    /// The governance seat's thaw call, built from the reviewed target alone.
+    /// Receipt restoration uses this: a request may already have executed, so
+    /// nothing here may read account or seat state.
+    buildGovernanceScript({ accountId, targetContract, action, intentId }) {
+      if (!GOVERNANCE_ACTIONS.includes(action)) error("unsupported governance operation");
+      const id = codec.hex(accountId, 20);
+      const target = codec.hex(targetContract, 20);
+      if (target === this.contractHash) error("a governance call cannot target the core");
+      const args = [H(id)];
+      if (action === "confirmConfiguration")
+        args.push(
+          I(codec.unsigned(intentId, 64, "governance intent id")),
+          // ConfirmConfiguration(accountId, intentId, actions) repeats the
+          // proposal byte for byte: one action holding the bare code [11].
+          A([A([I(GOVERNANCE_UNFREEZE_ACTION)])]),
+        );
+      return codec.dynamicCall(target, action, args);
     }
 
-    async buildRecoveryPolicyPlan(input) {
-      const id = codec.hex(input.accountId, 20);
-      const { recipient, fields } = recoveryPolicyFields(input);
+    /// One thaw, two custody-signed calls to the installed governance module.
+    /// `unfreezeAccount` proposes the single-action intent; `confirmConfiguration`
+    /// lands it once the module's delay has matured. The core's own
+    /// `unfreezeAccount` admits only the bound governance module as its caller
+    /// (SmartAccount.UnfreezeAccount), so no custody-signed core call can thaw.
+    async buildGovernanceModulePlan({ accountId, action, intentId }) {
+      const id = codec.hex(accountId, 20);
+      if (!GOVERNANCE_ACTIONS.includes(action)) error("unsupported governance operation");
       const state = await this.getAccount(id);
-      if (!state || state.status !== 0) error("account is not active");
-      if ([ZERO, state.custodyAddress, this.contractHash, state.accountAddress].includes(recipient))
-        error("invalid recovery authority");
-      const signers = recipient === state.recoveryAuthority ? [state.custodyAddress] : [state.custodyAddress, recipient];
-      return freeze({
-        kind: "account", method: "setRecoveryPolicy", accountId: id, accountAddress: state.accountAddress,
-        recoveryAuthority: recipient, configurationNonce: state.configurationNonce, signers,
-        script: codec.dynamicCall(this.contractHash, "setRecoveryPolicy",
-          [H(id), ...fields]),
-      });
+      if (!state) error("account is not registered");
+      const route = await this.getGovernanceSeat(id);
+      if (!route?.supported) error("no supported governance module installed");
+      const { seat, governanceDelayMs, intents } = route;
+      const pending = intents.filter((intent) => intent.kind === "unfreeze");
+      if (pending.length > 1) error("more than one unfreeze intent is pending");
+      // Both module entries check the account's custody witness
+      // (GovernanceModule.RequireCustody); no guardian or roster takes part.
+      const signers = [state.custodyAddress];
+      if (state.status !== 1) error("account is not frozen");
+      let record = null;
+      if (action === "unfreezeAccount") {
+        if (pending.length) error("an unfreeze intent is already pending");
+      } else {
+        [record] = pending;
+        if (!record) error("no pending unfreeze intent");
+        if (record.actionCount !== 1) error("the pending unfreeze intent is not the single unfreeze action");
+        if (String(record.intentId) !== String(codec.unsigned(intentId, 64, "governance intent id")))
+          error("the pending unfreeze intent changed; review again");
+        if (record.authorityEpoch !== state.authorityEpoch) error("pending unfreeze intent epoch is stale");
+        if (record.configurationNonce !== state.configurationNonce)
+          error("pending unfreeze intent configuration nonce is stale");
+        // The module compares Runtime.Time with matureAt and expiresAt. The
+        // header of the current block is the chain time a sent transaction lands after.
+        const count = await this._send("getblockcount", []);
+        if (!Number.isSafeInteger(count) || count < 1) error("invalid block height");
+        const header = await this._send("getblockheader", [count - 1, true]);
+        if (!Number.isSafeInteger(header?.time) || header.time < 0) error("invalid block time");
+        if (BigInt(header.time) < BigInt(record.matureAt)) error("the governance delay has not matured");
+        if (BigInt(header.time) > BigInt(record.expiresAt)) error("the pending unfreeze intent expired");
+      }
+      return freeze({ kind: "governance", method: action, action, accountId: id, accountAddress: state.accountAddress,
+        targetContract: seat.contractHash, moduleId: seat.moduleId, nefSha256: seat.nefSha256,
+        governanceDelayMs, configurationNonce: state.configurationNonce,
+        intentId: record ? record.intentId : null, pending: record, signers,
+        script: this.buildGovernanceScript({ accountId: id, targetContract: seat.contractHash, action,
+          intentId: record?.intentId }) });
     }
 
-    /** Canonical bytes for audit and historical receipts, independent of current account state. */
+    /// Canonical bytes for audit and historical receipts, independent of current account state.
     buildConfigurationBatchScript(input) {
       return configurationBatch(this.contractHash, input).script;
     }
 
-    /** Direct custody administration. Resolve all recipient witnesses from one account read. */
+    /** Direct custody administration. The kernel admits install/remove/
+     * configure/setBuiltinAuthorization/setRequiredValidator (1, 2, 3, 5, 7);
+     * actions 3 and 7 are governance-only on chain and are reported as such by
+     * the caller, not silently dropped. */
     async buildConfigurationBatchPlan(input) {
-      const { id, script, recipients } = configurationBatch(this.contractHash, input);
+      const { id, script } = configurationBatch(this.contractHash, input);
       const state = await this.getAccount(id);
       if (!state || state.status !== 0) error("account is not active");
-      const signers = new Set([state.custodyAddress]);
-      let current = state.recoveryAuthority;
-      for (const recipient of recipients) {
-        if ([ZERO, state.custodyAddress, this.contractHash, state.accountAddress].includes(recipient))
-          error("invalid recovery authority");
-        if (current !== recipient) signers.add(recipient);
-        current = recipient;
-      }
-      if (signers.size > 16) error("configuration batch requires more than 16 transaction signers");
       return freeze({ kind: "account", method: "applyConfigurationActions", accountId: id,
-        accountAddress: state.accountAddress, configurationNonce: state.configurationNonce, signers: [...signers], script });
+        accountAddress: state.accountAddress, configurationNonce: state.configurationNonce,
+        governanceDelayMs: null, signers: [state.custodyAddress], script });
     }
 
     buildAccountActionScript({ method, accountId, args = [] }) {
-      if (method === "setRecoveryPolicy") error("use buildRecoveryPolicyPlan to resolve the required signers");
       if (method === "applyConfigurationActions") error("use buildConfigurationBatchPlan to resolve the required signers");
       if (!Object.hasOwn(NATIVE_REQUIRED_ABI, method) || NATIVE_REQUIRED_ABI[method][2]) error(`unknown account action ${method}`);
       const id = codec.hex(accountId, 20);
@@ -1211,9 +1496,63 @@ export function createNativeClientClass(codec, {
       });
     }
 
+    /// §8 message signing is a module responsibility: the built-in native
+    /// isValidSignature is retired. The client resolves an installed message
+    /// -capable module instance (a SigningModule) and reads its public
+    /// `isValidSignature` entry; it never routes message verification through
+    /// the native core.
+    async resolveMessageModule(accountId) {
+      const id = codec.hex(accountId, 20);
+      const page = await this.getModules(id, "validator");
+      if (page.nextCursor !== "0") error("validator roster is paginated; refresh the module page first");
+      for (const moduleId_ of page.moduleIds) {
+        const module = await this.getModule(id, moduleId_);
+        if (module?.messageCapability && module.instanceIsolation) return module;
+      }
+      return null;
+    }
+
+    buildMessageVerificationScript({ module, accountId, originalSender, validatorId, generation, hash: digestHex, pairs }) {
+      if (!module?.contractHash || !module.messageCapability)
+        error("an active message-capable module instance is required");
+      if (!Array.isArray(pairs) || pairs.length < 1 || pairs.length > 16)
+        error("message verification requires 1 to 16 signature pairs");
+      // SigningModule.IsValidSignature takes one flat object[] of alternating
+      // script/signature ByteStrings (it walks the array with `i += 2`), so the
+      // [script, signature] pairs are flattened here, never nested.
+      const signaturePairs = [];
+      for (const pair of pairs) {
+        if (!Array.isArray(pair) || pair.length !== 2) error("signature pair must be [script, signature]");
+        signaturePairs.push({ type: "ByteString", value: codec.hex(pair[0]) });
+        signaturePairs.push({ type: "ByteString", value: codec.hex(pair[1]) });
+      }
+      return codec.dynamicCall(module.contractHash, MESSAGE_VERIFY_METHOD, [
+        H(codec.hex(accountId, 20)),
+        H(originalSender),
+        I(codec.unsigned(validatorId, 64, "validator id")),
+        I(codec.unsigned(generation, 64, "credential generation")),
+        { type: "ByteString", value: codec.hex(digestHex, 32) },
+        A(signaturePairs),
+      ], 5);
+    }
+
+    async verifyMessage(input) {
+      await this._ready();
+      const module = input?.module ?? await this.resolveMessageModule(input.accountId);
+      if (!module) error("no active message-capable signing module is installed on this account");
+      const script = this.buildMessageVerificationScript({ ...input, module });
+      const result = await this.invokeScript(script);
+      if (result.stack.length !== 1) error("isValidSignature must return exactly one stack item");
+      const accepted = decode(result.stack[0]);
+      if (typeof accepted !== "boolean") error("malformed message signature result");
+      return freeze({ accepted, moduleId: module.moduleId, contractHash: module.contractHash });
+    }
+
     /**
      * Simulate a prepared plan. A failed simulation is reported, not thrown:
-     * the review must be able to show why the plan is unusable.
+     * the review must be able to show why the plan is unusable. A HALT quotes
+     * the gas the script consumed; that value is the system fee the transaction
+     * declares.
      */
     async simulate(plan, signers = []) {
       if (!this._plans.has(plan)) error("unprepared plan");
@@ -1224,9 +1563,7 @@ export function createNativeClientClass(codec, {
       if (result?.state === "HALT" && (result.exception != null || !Array.isArray(result.stack)))
         error("HALT simulation has an exception or a missing result stack");
       const halted = result?.state === "HALT";
-      const fees = halted
-        ? parseNativeRpcFees(result)
-        : { gasConsumed: null, minimumRequiredFee: null };
+      const fees = halted ? parseNativeRpcFees(result) : { gasConsumed: null };
       return freeze({
         state: result?.state ?? null,
         exception: result?.exception ?? null,
@@ -1267,7 +1604,13 @@ export function createNativeClientClass(codec, {
         if (JSON.stringify(current) !== JSON.stringify(plan)) error("recovery record or authority changed; review again");
         return true;
       }
-      if (plan.method === "setRecoveryPolicy" || plan.method === "applyConfigurationActions") {
+      if (plan.kind === "governance") {
+        const current = await this.buildGovernanceModulePlan({ accountId: plan.accountId, action: plan.action,
+          intentId: plan.intentId });
+        if (JSON.stringify(current) !== JSON.stringify(plan)) error("governance intent or account changed; review again");
+        return true;
+      }
+      if (plan.method === "applyConfigurationActions") {
         const state = await this.getAccount(plan.accountId);
         if (!state || state.status !== 0 || state.configurationNonce !== plan.configurationNonce)
           error("account configuration changed; review the required signers again");

@@ -176,14 +176,14 @@ async function routedOperation(sdk, accountId, {
 /** Broadcast one execution whose transaction carries extra witnesses. */
 async function executeWithWitnesses(chain, sdk, { accountId, operation: op, authorizers = [], label }) {
   return h.sendPlan(chain, sdk, {
-    ...h.executionPlan(sdk, { accountId, operations: [op] }),
+    ...h.executionPlan(sdk, { accountId, operation: op }),
     authorizers,
     label: label || `executeUserOp(${op.method})`,
   });
 }
 
 function refusalSpec(sdk, { accountId, operation: op, authorizers = [] }) {
-  return { ...h.executionPlan(sdk, { accountId, operations: [op] }), authorizers };
+  return { ...h.executionPlan(sdk, { accountId, operation: op }), authorizers };
 }
 
 // ---------------------------------------------------------------------------

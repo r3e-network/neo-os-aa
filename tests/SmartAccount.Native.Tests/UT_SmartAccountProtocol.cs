@@ -18,6 +18,7 @@ using Neo.SmartContract.Native;
 using Neo.VM;
 using Neo.VM.Types;
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using System.Linq;
 using System.Numerics;
@@ -67,15 +68,28 @@ namespace Neo.UnitTests.SmartContract.Native
             Signature, new Array(),
         ]);
 
-        /// <summary>Digest exactly as the kernel derives it: the routing counters
-        /// come from the operation itself.</summary>
+        /// <summary>Digest exactly as the specification lays it out: the 106-byte domain and the canonical
+        /// unsigned operation bytes, hashed once by SHA-256.</summary>
         private static byte[] Digest(Array op, uint network = Network, UInt160 account = null,
-            UInt160 core = null) => SmartAccountProtocol.ComputeOperationDigest(network, core ?? Service,
-                account ?? Account, op,
-                op[SmartAccountModuleProtocol.OpValidatorId].GetInteger(),
-                op[SmartAccountModuleProtocol.OpCredentialGeneration].GetInteger(),
-                op[SmartAccountModuleProtocol.OpAuthorityEpoch].GetInteger(),
-                op[SmartAccountModuleProtocol.OpConfigurationNonce].GetInteger());
+            UInt160 core = null)
+        {
+            byte[] canonical = SmartAccountTestSupport.Canonical(op);
+            byte[] preimage = new byte[29 + 1 + 4 + UInt160.Length + UInt160.Length + 4 * 8 + canonical.Length];
+            "NeoSmartAccount/UserOperation"u8.CopyTo(preimage);
+            preimage[29] = SmartAccountProtocol.Version;
+            BinaryPrimitives.WriteUInt32LittleEndian(preimage.AsSpan(30), network);
+            (core ?? Service).GetSpan().CopyTo(preimage.AsSpan(34));
+            (account ?? Account).GetSpan().CopyTo(preimage.AsSpan(54));
+            WriteUInt64Be(preimage.AsSpan(74), op[SmartAccountModuleProtocol.OpValidatorId].GetInteger());
+            WriteUInt64Be(preimage.AsSpan(82), op[SmartAccountModuleProtocol.OpCredentialGeneration].GetInteger());
+            WriteUInt64Be(preimage.AsSpan(90), op[SmartAccountModuleProtocol.OpAuthorityEpoch].GetInteger());
+            WriteUInt64Be(preimage.AsSpan(98), op[SmartAccountModuleProtocol.OpConfigurationNonce].GetInteger());
+            canonical.CopyTo(preimage.AsSpan(106));
+            return System.Security.Cryptography.SHA256.HashData(preimage);
+        }
+
+        private static void WriteUInt64Be(Span<byte> destination, BigInteger value) =>
+            BinaryPrimitives.WriteUInt64BigEndian(destination, (ulong)value);
 
         private static string DigestHex(Array op) => Convert.ToHexStringLower(Digest(op));
 
@@ -140,7 +154,7 @@ namespace Neo.UnitTests.SmartContract.Native
         public void PublishedOperationBytesAndDigestMatch()
         {
             Array op = Operation();
-            string canonical = Convert.ToHexStringLower(SmartAccountProtocol.SerializeCanonicalOperation(op));
+            string canonical = Convert.ToHexStringLower(SmartAccountTestSupport.Canonical(op));
             Assert.AreEqual(Hex(Vectors.GetProperty("operation"), "canonical"), canonical, canonical);
             Assert.AreEqual(Hex(Vectors.GetProperty("operation"), "digest"), DigestHex(op));
             Assert.AreEqual(Hex(Vectors.GetProperty("digests"), "epoch2"),
@@ -164,14 +178,14 @@ namespace Neo.UnitTests.SmartContract.Native
             Array op = Operation();
             byte[] signature = [1, 2, 3];
             op[SmartAccountModuleProtocol.OpSignature] = signature;
-            byte[] serialized = SmartAccountProtocol.SerializeCanonicalOperation(op);
+            byte[] serialized = SmartAccountTestSupport.Canonical(op);
             Assert.AreEqual(Hex(Vectors.GetProperty("operation"), "canonical"), Convert.ToHexStringLower(serialized));
             Assert.AreSequenceEqual(signature, op[SmartAccountModuleProtocol.OpSignature].GetSpan().ToArray());
             serialized[0] ^= 1;
             Assert.AreEqual(Hex(Vectors.GetProperty("operation"), "canonical"),
-                Convert.ToHexStringLower(SmartAccountProtocol.SerializeCanonicalOperation(op)));
+                Convert.ToHexStringLower(SmartAccountTestSupport.Canonical(op)));
             Array decoded = (Array)BinarySerializer.Deserialize(
-                SmartAccountProtocol.SerializeCanonicalOperation(op), ExecutionEngineLimits.Default);
+                SmartAccountTestSupport.Canonical(op), ExecutionEngineLimits.Default);
             Assert.AreEqual(ByteString.Empty, decoded[SmartAccountModuleProtocol.OpSignature]);
         }
 
@@ -309,7 +323,7 @@ namespace Neo.UnitTests.SmartContract.Native
                     new Array([new Array([new Integer(1), new Integer(7)])]); break;
                 default: Assert.Fail(defect); break;
             }
-            FormatException fault = Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SerializeCanonicalOperation(value));
+            FormatException fault = Assert.ThrowsExactly<FormatException>(() => SmartAccountTestSupport.Canonical(value));
             // Every rejection names a protocol symbol rather than prose, so the
             // executor and the SDK can map the fault without parsing English.
             Assert.StartsWith("SA_", fault.Message);
@@ -383,7 +397,7 @@ namespace Neo.UnitTests.SmartContract.Native
             op[SmartAccountModuleProtocol.OpConfigurationNonce] = ulong.MaxValue;
             op[SmartAccountModuleProtocol.OpSignature] = new byte[SmartAccountModuleProtocol.SignatureBytesMax];
             Array decoded = (Array)BinarySerializer.Deserialize(
-                SmartAccountProtocol.SerializeCanonicalOperation(op), ExecutionEngineLimits.Default);
+                SmartAccountTestSupport.Canonical(op), ExecutionEngineLimits.Default);
             Assert.AreEqual(new Integer((BigInteger.One << 254) - 1), decoded[SmartAccountModuleProtocol.OpNonce]);
             Assert.AreEqual(op[SmartAccountModuleProtocol.OpDeadline], decoded[SmartAccountModuleProtocol.OpDeadline]);
             Assert.AreEqual(ByteString.Empty, decoded[SmartAccountModuleProtocol.OpSignature]);
@@ -400,13 +414,13 @@ namespace Neo.UnitTests.SmartContract.Native
             Array op = Operation();
             op[SmartAccountModuleProtocol.OpArgs] = new Array([item]);
             if (valid)
-                Assert.IsNotEmpty(SmartAccountProtocol.SerializeCanonicalOperation(op));
+                Assert.IsNotEmpty(SmartAccountTestSupport.Canonical(op));
             else
-                Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SerializeCanonicalOperation(op));
+                Assert.ThrowsExactly<FormatException>(() => SmartAccountTestSupport.Canonical(op));
 
             Array withStruct = Operation();
             withStruct[SmartAccountModuleProtocol.OpArgs] = new Array([new Struct([true])]);
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SerializeCanonicalOperation(withStruct));
+            Assert.ThrowsExactly<FormatException>(() => SmartAccountTestSupport.Canonical(withStruct));
         }
 
         [TestMethod]
@@ -417,9 +431,9 @@ namespace Neo.UnitTests.SmartContract.Native
             Array op = Operation();
             op[SmartAccountModuleProtocol.OpArgs] = new Array([new ByteString(new byte[length])]);
             if (valid)
-                Assert.IsNotEmpty(SmartAccountProtocol.SerializeCanonicalOperation(op));
+                Assert.IsNotEmpty(SmartAccountTestSupport.Canonical(op));
             else
-                Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SerializeCanonicalOperation(op));
+                Assert.ThrowsExactly<FormatException>(() => SmartAccountTestSupport.Canonical(op));
         }
 
         [TestMethod]
@@ -428,12 +442,12 @@ namespace Neo.UnitTests.SmartContract.Native
             Array op = Operation();
             op[SmartAccountModuleProtocol.OpArgs] = new Array(
                 Enumerable.Range(0, SmartAccountModuleProtocol.ArgsCountMax).Select(_ => (StackItem)new Array()));
-            Assert.IsNotEmpty(SmartAccountProtocol.SerializeCanonicalOperation(op));
+            Assert.IsNotEmpty(SmartAccountTestSupport.Canonical(op));
 
             Array deep = Operation();
             deep[SmartAccountModuleProtocol.OpArgs] = new Array([new Array(Enumerable.Repeat(
                 (StackItem)new ByteString(new byte[128]), 32))]);
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SerializeCanonicalOperation(deep));
+            Assert.ThrowsExactly<FormatException>(() => SmartAccountTestSupport.Canonical(deep));
         }
 
         [TestMethod]
@@ -459,7 +473,7 @@ namespace Neo.UnitTests.SmartContract.Native
             }
             Array op = Operation();
             op[SmartAccountModuleProtocol.OpArgs] = args;
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SerializeCanonicalOperation(op));
+            Assert.ThrowsExactly<FormatException>(() => SmartAccountTestSupport.Canonical(op));
         }
 
         [TestMethod]
@@ -470,7 +484,7 @@ namespace Neo.UnitTests.SmartContract.Native
                 new Array([1]), new Array([1]),
                 new Array([StackItem.Null, true, -1, ByteString.Empty])]);
             Array decoded = (Array)BinarySerializer.Deserialize(
-                SmartAccountProtocol.SerializeCanonicalOperation(op), ExecutionEngineLimits.Default);
+                SmartAccountTestSupport.Canonical(op), ExecutionEngineLimits.Default);
             Assert.AreSequenceEqual(
                 BinarySerializer.Serialize(op[SmartAccountModuleProtocol.OpArgs], ExecutionEngineLimits.Default),
                 BinarySerializer.Serialize(decoded[SmartAccountModuleProtocol.OpArgs], ExecutionEngineLimits.Default));
@@ -481,17 +495,20 @@ namespace Neo.UnitTests.SmartContract.Native
         {
             BigInteger[] ids = [BigInteger.One, new BigInteger(7), ulong.MaxValue];
             byte[] channel = Enumerable.Repeat((byte)0x5A, SmartAccountModuleProtocol.NonceChannelSize).ToArray();
+            // The keys are the platform KeyBuilder layout (prefix ‖ account ‖ optional type ‖ fixed-width
+            // big-endian id), built exactly as the kernel builds them.
+            SmartAccount core = NativeContract.SmartAccount;
             (byte Prefix, Func<byte[]> Build, int Length)[] keys =
             [
-                (SmartAccountModuleProtocol.PrefixProtocolInfo, () => SmartAccountProtocol.GetProtocolKey(), 1),
-                (SmartAccountModuleProtocol.PrefixAccountControl, () => SmartAccountProtocol.GetAccountControlKey(Account), 21),
-                (SmartAccountModuleProtocol.PrefixModuleInstance, () => SmartAccountProtocol.GetModuleInstanceKey(Account, ids[0]), 29),
-                (SmartAccountModuleProtocol.PrefixModuleIndex, () => SmartAccountProtocol.GetModuleIndexKey(Account, SmartAccountModuleProtocol.ModuleTypeCodeValidator, ids[0]), 30),
-                (SmartAccountModuleProtocol.PrefixNonceCursor, () => SmartAccountProtocol.GetNonceCursorKey(Account, channel), 45),
-                (SmartAccountModuleProtocol.PrefixNonceNamespace, () => SmartAccountProtocol.GetNonceNamespaceKey(Account, channel), 45),
+                (SmartAccountModuleProtocol.PrefixProtocolInfo, () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixProtocolInfo)).Key.ToArray(), 1),
+                (SmartAccountModuleProtocol.PrefixAccountControl, () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixAccountControl).Add(Account)).Key.ToArray(), 21),
+                (SmartAccountModuleProtocol.PrefixModuleInstance, () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixModuleInstance).Add(Account).AddBigEndian(SmartAccountProtocol.UInt64(ids[0]))).Key.ToArray(), 29),
+                (SmartAccountModuleProtocol.PrefixModuleIndex, () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixModuleIndex).Add(Account).Add(SmartAccountModuleProtocol.ModuleTypeCodeValidator).AddBigEndian(SmartAccountProtocol.UInt64(ids[0]))).Key.ToArray(), 30),
+                (SmartAccountModuleProtocol.PrefixNonceCursor, () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixNonceCursor).Add(Account).Add(channel)).Key.ToArray(), 45),
+                (SmartAccountModuleProtocol.PrefixNonceNamespace, () => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixNonceNamespace).Add(Account).Add(channel)).Key.ToArray(), 45),
             ];
             var seen = new System.Collections.Generic.HashSet<byte>();
-            byte[] protocolKey = SmartAccountProtocol.GetProtocolKey();
+            byte[] protocolKey = keys[0].Build();
             Assert.AreSequenceEqual([SmartAccountModuleProtocol.PrefixProtocolInfo], protocolKey);
             seen.Add(protocolKey[0]);
             foreach (var (prefix, build, length) in keys[1..])
@@ -504,23 +521,19 @@ namespace Neo.UnitTests.SmartContract.Native
             }
             Assert.HasCount(6, seen);
             // The id tail is big-endian and fixed width.
-            Assert.AreSequenceEqual(new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 },
-                SmartAccountProtocol.GetModuleInstanceKey(Account, BigInteger.One)[21..]);
-            Assert.AreSequenceEqual(Enumerable.Repeat((byte)0xFF, 8).ToArray(),
-                SmartAccountProtocol.GetModuleInstanceKey(Account, ulong.MaxValue)[21..]);
+            byte[] ModuleInstanceKey(BigInteger moduleId) =>
+                ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixModuleInstance).Add(Account).AddBigEndian(SmartAccountProtocol.UInt64(moduleId))).Key.ToArray();
+            byte[] ModuleIndexKey(byte type) => ((StorageKey)core.Key(SmartAccountModuleProtocol.PrefixModuleIndex).Add(Account).Add(type)
+                .AddBigEndian(SmartAccountProtocol.UInt64(BigInteger.One))).Key.ToArray();
+            Assert.AreSequenceEqual(new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 }, ModuleInstanceKey(BigInteger.One)[21..]);
+            Assert.AreSequenceEqual(Enumerable.Repeat((byte)0xFF, 8).ToArray(), ModuleInstanceKey(ulong.MaxValue)[21..]);
             // Module index keys carry the type code between the account and the id.
             Assert.AreEqual((byte)SmartAccountModuleProtocol.ModuleTypeCodeValidator,
-                SmartAccountProtocol.GetModuleIndexKey(Account, SmartAccountModuleProtocol.ModuleTypeCodeValidator,
-                    BigInteger.One)[21]);
+                ModuleIndexKey(SmartAccountModuleProtocol.ModuleTypeCodeValidator)[21]);
             Assert.AreEqual((byte)SmartAccountModuleProtocol.ModuleTypeCodeHook,
-                SmartAccountProtocol.GetModuleIndexKey(Account, SmartAccountModuleProtocol.ModuleTypeCodeHook,
-                    BigInteger.One)[21]);
-            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SmartAccountProtocol.GetModuleIndexKey(Account, 2, BigInteger.One));
-            Assert.ThrowsExactly<ArgumentException>(() =>
-                SmartAccountProtocol.GetNonceCursorKey(Account, new byte[SmartAccountModuleProtocol.NonceChannelSize - 1]));
-            Assert.ThrowsExactly<FormatException>(() =>
-                SmartAccountProtocol.GetModuleInstanceKey(Account, BigInteger.One << 64));
-            Assert.ThrowsExactly<ArgumentNullException>(() => SmartAccountProtocol.GetAccountControlKey(null));
+                ModuleIndexKey(SmartAccountModuleProtocol.ModuleTypeCodeHook)[21]);
+            // A module id is range-checked to UInt64 before it reaches any key.
+            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.UInt64(BigInteger.One << 64));
         }
 
         [TestMethod]
@@ -551,15 +564,20 @@ namespace Neo.UnitTests.SmartContract.Native
 
             foreach (BigInteger sequence in new BigInteger[] { 0, 1, ulong.MaxValue })
             {
-                BigInteger nonce = SmartAccountProtocol.EncodeNonce(channel, (ulong)sequence);
-                Assert.AreSequenceEqual(channel, SmartAccountProtocol.ChannelFromNonce(nonce));
+                // channel ‖ sequence, packed exactly as §4.1 defines the field.
+                BigInteger nonce = (new BigInteger(channel, isUnsigned: true, isBigEndian: true) << 64) | sequence;
+                Assert.AreSequenceEqual(channel, SmartAccountProtocol.EncodeChannel(nonce >> 64));
                 Assert.AreEqual((ulong)sequence, SmartAccountProtocol.SequenceFromNonce(nonce));
             }
-            BigInteger maximum = SmartAccountProtocol.EncodeNonce(
-                Enumerable.Repeat((byte)0xFF, SmartAccountModuleProtocol.NonceChannelSize).ToArray(), ulong.MaxValue);
-            Assert.AreEqual((BigInteger.One << 255) - 1, maximum);
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.ChannelFromNonce(-1));
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.ChannelFromNonce(BigInteger.One << 255));
+            // The largest encodable channel has a clear top bit (2^191 - 1); its packed nonce is the largest
+            // legal nonce below the 2^255 field bound.
+            byte[] widest = SmartAccountProtocol.EncodeChannel((BigInteger.One << 191) - 1);
+            Assert.AreEqual(((BigInteger.One << 191) - 1) << 64 | ulong.MaxValue,
+                (new BigInteger(widest, isUnsigned: true, isBigEndian: true) << 64) | ulong.MaxValue);
+            Assert.AreEqual((BigInteger.One << 255) - 1,
+                (new BigInteger(widest, isUnsigned: true, isBigEndian: true) << 64) | ulong.MaxValue);
+            Assert.ThrowsExactly<InvalidOperationException>(() => SmartAccountProtocol.EncodeChannel(-1));
+            Assert.ThrowsExactly<InvalidOperationException>(() => SmartAccountProtocol.EncodeChannel(BigInteger.One << 191));
             Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SequenceFromNonce(-1));
             Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.SequenceFromNonce(BigInteger.One << 255));
         }
@@ -567,14 +585,14 @@ namespace Neo.UnitTests.SmartContract.Native
         [TestMethod]
         public void EncodingHelpersPinNetworkAndCounterEndianness()
         {
-            Assert.AreEqual("78563412", Convert.ToHexStringLower(SmartAccountProtocol.UInt32Le(Network)));
-            Assert.AreEqual("0000000000000001", Convert.ToHexStringLower(SmartAccountProtocol.UInt64Be(BigInteger.One)));
-            Assert.AreEqual("ffffffffffffffff",
-                Convert.ToHexStringLower(SmartAccountProtocol.UInt64Be(ulong.MaxValue)));
+            Span<byte> counter = stackalloc byte[8];
+            SmartAccountProtocol.WriteUInt64Be(counter, BigInteger.One);
+            Assert.AreEqual("0000000000000001", Convert.ToHexStringLower(counter.ToArray()));
+            SmartAccountProtocol.WriteUInt64Be(counter, ulong.MaxValue);
+            Assert.AreEqual("ffffffffffffffff", Convert.ToHexStringLower(counter.ToArray()));
             Assert.AreEqual(ulong.MaxValue, SmartAccountProtocol.UInt64(ulong.MaxValue));
-            Assert.AreEqual("0102ff", Convert.ToHexStringLower(SmartAccountProtocol.Concat([1], [2], [0xff])));
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.UInt64Be(-1));
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.UInt64Be(BigInteger.One << 64));
+            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.WriteUInt64Be(new byte[8], -1));
+            Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.WriteUInt64Be(new byte[8], BigInteger.One << 64));
             Assert.ThrowsExactly<FormatException>(() => SmartAccountProtocol.UInt64(-1));
         }
     }

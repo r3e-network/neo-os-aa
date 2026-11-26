@@ -69,6 +69,18 @@ class NativeProfileCiTests(unittest.TestCase):
         # rows. The current source/artifact identity guard is exercised separately.
         receipt = json.loads((Path(__file__).resolve().parents[1] / "docs/reports/sa-native-ci-probe-consistency-20261009.json").read_text())
         receipt.update(runtimeAssemblyHashes=copy.deepcopy(runtime), artifactHashes=copy.deepcopy(modules), probeSourceHashes=copy.deepcopy(sources))
+        del receipt["pricing"]["rootCallbackLimitDatoshi"]
+        # The historical trace supplies the scenario matrix and the execution rows. Its verification and
+        # callback rows predate admissibility-only verification and the removal of the per-callback budget,
+        # so they are projected here to the shape the current probe emits.
+        for case in receipt["cases"]:
+            if "result" not in case:
+                continue  # the two signer-alias controls carry no trigger rows
+            del case["result"]["minimum"]
+            case["verification"] = {**case["verification"], "state": "HALT", "authorized": True, "exception": None,
+                                    "resultCount": 1, "resultType": "Boolean", "booleanResult": True}
+            for phase in case["phases"]:
+                del phase["limitDatoshi"], phase["remainingDatoshi"]
         return receipt, runtime, modules, sources
 
     def test_probe_requires_each_real_scenario_once_and_rejects_unknown_cases(self):
@@ -84,23 +96,22 @@ class NativeProfileCiTests(unittest.TestCase):
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 ci.validate_probe(receipt, runtime, modules, sources)
 
-    def test_probe_checks_execution_verification_budgets_and_rollback_outcomes(self):
+    def test_probe_checks_execution_verification_admissibility_and_rollback_outcomes(self):
         changes = (
             (0, ("result", "state"), "FAULT"), (0, ("verification", "state"), "FAULT"),
-            (16, ("result", "state"), "HALT"), (16, ("verification", "state"), "HALT"),
+            (16, ("result", "state"), "HALT"), (16, ("verification", "state"), "FAULT"),
             (16, ("result", "error"), "Insufficient GAS"),
-            (0, ("result", "notifications"), 0), (0, ("result", "minimum"), 0),
-            (0, ("result", "minimum"), "1"), (0, ("result", "minimum"), None),
-            (0, ("verification", "authorized"), False), (16, ("verification", "authorized"), True),
+            (0, ("result", "notifications"), 0), (0, ("result", "gas"), 0),
+            (0, ("verification", "authorized"), False), (16, ("verification", "authorized"), False),
+            (17, ("verification", "authorized"), False),
+            (0, ("verification", "exception"), "SA_UNAUTHORIZED"),
+            (0, ("verification", "gasConsumedDatoshi"), 0),
             (0, ("verification", "resultCount"), 0), (0, ("verification", "resultCount"), 2),
             (0, ("verification", "resultType"), "Integer"), (0, ("verification", "booleanResult"), False),
             (0, ("verification", "booleanResult"), 1),
             (0, ("verification", "gasConsumedDatoshi"), 150000001),
             (0, ("verification", "gasLimitDatoshi"), 150000001),
-            (0, ("phases", 0, "consumedDatoshi"), "100000000"),
-            (0, ("phases", 1, "consumedDatoshi"), "100000001"),
-            (0, ("phases", 1, "limitDatoshi"), "200000000"),
-            (0, ("phases", 0, "remainingDatoshi"), "0"),
+            (0, ("phases", 0, "consumedDatoshi"), "01"),
             (0, ("phases", 0, "consumedDatoshi"), "-1"),
             (0, ("phases", 0, "consumedDatoshi"), True),
             (0, ("phases",), []),

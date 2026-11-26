@@ -1,4 +1,4 @@
-# Native MultiSig VM budget and policy probe
+# Native MultiSig gas consumption and policy probe
 
 Run from the repository root against an explicitly built native core runtime and
 its matching packaged module artifacts:
@@ -18,8 +18,8 @@ The surrounding source-runtime build receipt supplies core commit provenance.
 
 This is an in-memory ApplicationEngine probe using real compiled module NEFs,
 real P-256 operation signatures and synthetic transaction signers. It checks the
-actual proxy Verification script under the global 1.5 GAS ceiling, and Application
-under unchanged 1 GAS callback limits. It does not relay transactions, validate
+actual proxy Verification script under the platform's witness-trigger ceiling (`Helper.MaxVerificationGas`, 1.5 GAS). Application
+runs under the transaction's declared system fee, with no per-callback limit. It does not relay transactions, validate
 external payer signatures, use a public network or prove private-chain persistence.
 The separate SDK/NeoExpress runner covers those boundaries.
 
@@ -71,7 +71,7 @@ applies within each scenario run; receipts compare scenario parameters and key
 semantics, and do not prove identical signature or transaction-script bytes across
 different runs.
 The original acceptance execution then runs once with diagnostics to check
-callback budgets, committed nonce, selected Session allowances, metadata and
+callback gas consumption, committed nonce, selected Session allowances, metadata and
 rollback. Duplicate-domain and invalid-point controls also run as before.
 
 Only `ApplicationEngine.Execute()` is inside the monotonic `Stopwatch` interval.
@@ -84,8 +84,8 @@ Warmups default to 5 and measured samples to 30; counts are explicit in the
 receipt and may be changed with `--warmup` (0..10000) and `--samples` (1..10000).
 A zero-warmup run includes possible cold JIT work and should be labeled accordingly.
 
-Each sample records raw elapsed ticks, actual fee consumed, the engine's minimum
-required fee, VM state and logical storage metrics. Convert ticks to seconds
+Each sample records raw elapsed ticks, actual fee consumed, VM state, logical
+storage metrics and the committed-storage-unchanged check. Convert ticks to seconds
 using `environment.stopwatchFrequency`. `p50Ticks` and `p95Ticks` use the
 nearest-rank order statistic: sorted sample at index `ceil(percentile * n) - 1`.
 Small samples have coarse percentiles; raw samples remain available for analysis.

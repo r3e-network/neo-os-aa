@@ -26,8 +26,10 @@ namespace SmartAccount.Validators
     /// actionNullifier(32) ‖ r‖s(64)</c>. The signature covers
     /// <c>SHA256("NeoSmartAccount/DelegatedIdentity" ‖ U1(4) ‖ signingDigest ‖
     /// U8(providerLength) ‖ provider ‖ masterNullifier ‖ actionNullifier)</c>,
-    /// where <c>signingDigest</c> is the core operation digest (or the
-    /// threshold member digest on a threshold route).
+    /// where <c>signingDigest</c> is <c>D = SHA256(opPreimage)</c> on a standalone
+    /// route (or <c>D_i = SHA256(memberPreimage)</c> on a threshold route). The
+    /// platform applies that single hash: the module hands
+    /// <c>CryptoLib.verifyWithECDsa</c> the identity preimage, never the digest.
     /// </remarks>
     [DisplayName("DelegatedIdentityValidator")]
     [ContractPermission("*", "getAuthorizedModuleId")]
@@ -82,7 +84,7 @@ namespace SmartAccount.Validators
         /// <summary>
         /// <c>initData</c>: empty, or <c>["setConfig", signerPublicKey, provider, masterNullifier]</c>.
         /// </summary>
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             if (initData.Length > 0) ApplyConfig(accountId, moduleId, initData);
@@ -93,13 +95,13 @@ namespace SmartAccount.Validators
         /// The key is a 33-byte compressed or 65-byte uncompressed secp256r1 key, the
         /// provider is 1–255 bytes and the master nullifier is exactly 32 bytes.
         /// </summary>
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             ApplyConfig(accountId, moduleId, configData);
         }
 
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             Storage.Delete(Storage.CurrentContext, ValidatorAuthority.InstanceKey(Prefix_Config, accountId, moduleId));
@@ -191,9 +193,11 @@ namespace SmartAccount.Validators
             cursor += NullifierLength;
             ByteString signature = (ByteString)Helper.Range(proof, cursor, SignatureLength);
 
-            ByteString digest = ValidatorPayload.SigningDigest(accountId, operationDigest, operation, moduleId);
-            return ValidatorPayload.VerifyP256(
-                IdentityDigest(digest, provider, masterNullifier, actionNullifier),
+            byte[] signingPreimage = ValidatorPayload.VerifiedSigningPreimage(accountId, operationDigest, operation, moduleId);
+            if (signingPreimage.Length == 0) return false;
+            ByteString signingDigest = CryptoLib.Sha256((ByteString)signingPreimage);
+            return ValidatorPayload.VerifyPreimage(
+                IdentityPreimage(signingDigest, provider, masterNullifier, actionNullifier),
                 (ByteString)config[0],
                 signature);
         }
@@ -220,13 +224,18 @@ namespace SmartAccount.Validators
 
         private static ByteString IdentityDigest(ByteString signingDigest, ByteString provider, ByteString masterNullifier, ByteString actionNullifier)
         {
+            return CryptoLib.Sha256((ByteString)IdentityPreimage(signingDigest, provider, masterNullifier, actionNullifier));
+        }
+
+        private static byte[] IdentityPreimage(ByteString signingDigest, ByteString provider, ByteString masterNullifier, ByteString actionNullifier)
+        {
             byte[] preimage = Helper.Concat(IdentityDomain, new byte[] { 4 });
             preimage = Helper.Concat(preimage, (byte[])signingDigest);
             preimage = Helper.Concat(preimage, new byte[] { (byte)provider.Length });
             preimage = Helper.Concat(preimage, (byte[])provider);
             preimage = Helper.Concat(preimage, (byte[])masterNullifier);
             preimage = Helper.Concat(preimage, (byte[])actionNullifier);
-            return CryptoLib.Sha256((ByteString)preimage);
+            return preimage;
         }
     }
 }

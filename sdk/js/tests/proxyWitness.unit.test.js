@@ -3,8 +3,8 @@
  *
  * The proxy verification script carries no secret: it calls `core.verify(
  * accountId)`, and the core accepts it only when the whole transaction is one
- * `executeUserOp`/`executeUserOps` call on that core for that account. So the
- * proxy witness has exactly one safe construction, and this suite pins it:
+ * `executeUserOp` call on that core for that account. So the proxy witness has
+ * exactly one safe construction, and this suite pins it:
  *
  * - the transaction script is one shaped v4 call and nothing else;
  * - the proxy signer's rule is exactly one Allow/CalledByContract(core);
@@ -146,25 +146,29 @@ test('the transaction script is one shaped executeUserOp call and nothing else',
     }),
     script,
   );
-  const batch = buildExecuteUserOpScript({
-    coreHash: CORE,
-    accountId: ACCOUNT,
-    invocation: invocation(undefined, 'executeUserOps'),
-  });
-  assert.notEqual(batch, script);
+  // The retired batch entry is refused by name: the witness never authorizes a
+  // list, so no older caller can smuggle an executeUserOps script through here.
+  for (const retired of ['executeUserOps', 'executeSponsoredUserOps', 'executeSponsoredUserOp']) {
+    assert.throws(
+      () =>
+        buildExecuteUserOpScript({
+          coreHash: CORE,
+          accountId: ACCOUNT,
+          invocation: invocation(undefined, retired),
+        }),
+      /protocol-incompatible: .* is retired in v4\.1/,
+    );
+  }
 
   const op = operation();
   const rejects = [
-    [invocation(op, 'executeSponsoredUserOp'), /executeUserOp or executeUserOps/],
-    [{ ...invocation(op), operation: 'setAdmin' }, /executeUserOp or executeUserOps/],
+    [{ ...invocation(op), operation: 'setAdmin' }, /requires an executeUserOp invocation, not setAdmin/],
     [{ ...invocation(op), scriptHash: TARGET }, /different core/],
     [{ ...invocation(op), args: [codec.hashValue(PAYER), value(op)] }, /does not name this account/],
     [{ ...invocation(op), args: [{ type: 'Hash160', value: '11zz' }, value(op)] }, /does not name this account/],
     [{ ...invocation(op), args: [value(op)] }, /exactly two arguments/],
     [{ ...invocation(op), args: [ACCOUNT_ARG, value(op), value(op)] }, /exactly two arguments/],
     [{ ...invocation(op), args: [ACCOUNT_ARG, { type: 'Array', value: [] }] }, /13-field user operation/],
-    // A batch with no operations authorizes nothing.
-    [{ ...invocation(op, 'executeUserOps'), args: [ACCOUNT_ARG, { type: 'Array', value: [] }] }, /at least one user operation/],
     // The v3 6-field envelope is refused, never adapted.
     [{ ...invocation(op), args: [ACCOUNT_ARG, { type: 'Array', value: [{ type: 'Integer', value: '1' }] }] }, /13-field user operation/],
   ];

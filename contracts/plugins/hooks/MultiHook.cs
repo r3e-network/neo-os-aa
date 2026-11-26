@@ -57,19 +57,19 @@ namespace SmartAccount.Hooks
 
         // ---- Lifecycle: no new installs (spec §1.2) ----
 
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             HookAuthority.RequireLifecycle(accountId, moduleId);
             ExecutionEngine.Assert(false, "MultiHook is not installable in protocol v4; use the core hookOrder");
         }
 
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             HookAuthority.RequireLifecycle(accountId, moduleId);
             ExecutionEngine.Assert(false, "MultiHook is retired in protocol v4");
         }
 
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             // No instance storage exists: v4 never installs this contract.
             HookAuthority.RequireLifecycle(accountId, moduleId);

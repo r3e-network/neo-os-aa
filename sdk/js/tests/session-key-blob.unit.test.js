@@ -105,10 +105,10 @@ test("the command encodes to the same bytes twice and inside an install action",
   // The install script carries that very encoding: the command the caller built
   // is the command the chain deserialises.
   assert.ok(installSessionKey(command).script.includes(encoded));
-  // The array is also a legal operand of an execution operation.
+  // The array is also a legal operand of one execution operation.
   const plan = client.buildExecutionScript({
     accountId: ACCOUNT,
-    operations: [{
+    operation: {
       targetContract: TARGET,
       method: "configure",
       args: [A(...command)],
@@ -120,9 +120,10 @@ test("the command encodes to the same bytes twice and inside an install action",
       authorityEpoch: "0",
       configurationNonce: "0",
       signature: "ab".repeat(64),
-    }],
+    },
   });
   assert.ok(plan.script.includes(encoded));
+  assert.equal(plan.method, "executeUserOp");
 });
 
 test("installing and clearing a session key are two custody-gated account plans", () => {

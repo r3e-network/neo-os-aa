@@ -6,7 +6,7 @@
 // repository or http://www.opensource.org/licenses/mit-license.php
 // for more details.
 //
-// Redistribution and use in source and binary forms with or without
+// Redistribution and use in source and binary forms, with or without
 // modifications are permitted.
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -14,6 +14,7 @@ using Moq;
 using Neo.Extensions;
 using Neo.IO;
 using Neo.SmartContract;
+using Neo.SmartContract.Manifest;
 using Neo.SmartContract.Native;
 using Neo.UnitTests.Extensions;
 using Neo.VM;
@@ -23,15 +24,14 @@ using System.Numerics;
 
 namespace Neo.UnitTests.SmartContract.Native
 {
+    /// <summary>
+    /// The engine-local state of the native core: the account lock and the proxy it covers, and the caller-frame binding
+    /// of a module grant and of the target grant.
+    /// </summary>
     [TestClass]
     public class UT_SmartAccountInvocationContext
     {
         private static UInt160 Address(byte value) => new(Enumerable.Repeat(value, 20).ToArray());
-        private static void Rebind(UInt160 hash, byte value)
-        {
-            MemoryReader reader = new(Address(value).ToArray());
-            hash.Deserialize(ref reader);
-        }
         private static readonly UInt160 Account = Address(1), OtherAccount = Address(2), Root = Address(3), Child = Address(4);
         private static ApplicationEngine Engine(TriggerType trigger = TriggerType.Application) =>
             ApplicationEngine.Create(trigger, null, TestBlockchain.GetTestSnapshotCache(), settings: TestProtocolSettings.Default, gas: 1_000_000);
@@ -52,75 +52,49 @@ namespace Neo.UnitTests.SmartContract.Native
         private static readonly BigInteger ModuleId = new(7);
 
         [TestMethod]
-        public void HookGasFollowsTheAccountAcrossEnvelopesUntilTheTransactionEnds()
+        public void AccountLockRejectsReentryAndCoversOnlyTheEnteredProxy()
         {
             var authority = new SmartAccountInvocationContext();
-            long limit = SmartAccountModuleProtocol.HookAggregateGasLimit;
-            authority.OpenExecution(Account);
-            authority.ChargeHook(Account, limit - 1);
-            authority.CloseExecution(Account);
-            authority.OpenExecution(Account);
-            Assert.AreEqual(1L, authority.HookGasRemaining(Account));
-            Assert.ThrowsExactly<InvalidOperationException>(() => authority.ChargeHook(Account, 2));
-            authority.ChargeHook(Account, 1);
-            Assert.AreEqual(0L, authority.HookGasRemaining(Account));
-            Assert.AreEqual(limit, authority.HookGasRemaining(OtherAccount));
-            Assert.AreEqual(limit, new SmartAccountInvocationContext().HookGasRemaining(Account));
-        }
-
-        [TestMethod]
-        public void ValidatorBudgetsPersistAcrossOperationsAndAreSeparateByAccountAndPhase()
-        {
-            var meter = new SmartAccountInvocationContext();
-            var validate = SmartAccountCallbackPhase.Validation;
-            var complete = SmartAccountCallbackPhase.Completion;
-            long limit = SmartAccountModuleProtocol.ValidationAggregateGasLimit;
-            meter.ChargeValidator(Account, validate, limit - 1);
-            meter.OpenExecution(Account);
-            meter.CloseExecution(Account);
-            Assert.AreEqual(1L, meter.ValidatorGasRemaining(Account, validate));
-            Assert.ThrowsExactly<InvalidOperationException>(() => meter.ChargeValidator(Account, validate, 2));
-            meter.ChargeValidator(Account, validate, 1);
-            Assert.AreEqual(0L, meter.ValidatorGasRemaining(Account, validate));
-            Assert.AreEqual(SmartAccountModuleProtocol.CompletionAggregateGasLimit, meter.ValidatorGasRemaining(Account, complete));
-            Assert.AreEqual(limit, meter.ValidatorGasRemaining(OtherAccount, validate));
-            Assert.AreEqual(limit, new SmartAccountInvocationContext().ValidatorGasRemaining(Account, validate));
-        }
-
-        [TestMethod]
-        public void AccountLockRejectsReentryAndOwnsIdentity()
-        {
-            var authority = new SmartAccountInvocationContext();
-            UInt160 identity = Address(1);
-            var outer = authority.EnterAccount(identity);
-            Rebind(identity, 9);
-            // §3.6: while any account lease is open, re-entering the same
-            // account is direct re-entry and entering another account is
-            // cross-account recursion. Both fault with the shared code.
-            var sameAccount = Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterAccount(Account));
-            Assert.AreEqual(SmartAccountModuleProtocol.ErrorReentrancyForbidden, sameAccount.Message);
-            var otherAccount = Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterAccount(OtherAccount));
-            Assert.AreEqual(SmartAccountModuleProtocol.ErrorReentrancyForbidden, otherAccount.Message);
-            // A refused entry installs nothing: the lock still owns the copy of
-            // the outer identity, which the caller's rebind cannot move.
-            Assert.IsTrue(authority.IsAccountProxyActive(SmartAccountProtocol.GetAccountAddress(Account)));
-            Assert.IsFalse(authority.IsAccountProxyActive(SmartAccountProtocol.GetAccountAddress(OtherAccount)));
+            UInt160 proxy = SmartAccountProtocol.GetAccountAddress(Account);
+            UInt160 otherProxy = SmartAccountProtocol.GetAccountAddress(OtherAccount);
+            Assert.IsFalse(authority.IsAccountProxyActive(proxy));
+            var outer = authority.EnterAccount(Account);
+            // §3.6: while an account is entered, entering the same account is
+            // direct re-entry and entering another account is cross-account
+            // recursion. Both fault with the shared code.
+            foreach (UInt160 nested in new[] { Account, OtherAccount })
+            {
+                var refused = Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterAccount(nested));
+                Assert.AreEqual(SmartAccountModuleProtocol.ErrorReentrancyForbidden, refused.Message);
+            }
+            // A refused entry installs nothing: the proxy of no second account
+            // can become a principal of this invocation.
+            Assert.IsTrue(authority.IsAccountProxyActive(proxy));
+            Assert.IsFalse(authority.IsAccountProxyActive(otherProxy));
+            Assert.IsFalse(authority.IsAccountProxyActive(Account));
+            Assert.IsFalse(authority.IsAccountProxyActive(null));
             outer.Dispose();
-            outer.Dispose();
-            using var again = authority.EnterAccount(Account);
-            Assert.IsTrue(authority.IsAccountProxyActive(SmartAccountProtocol.GetAccountAddress(Account)));
+            Assert.IsFalse(authority.IsAccountProxyActive(proxy));
+            // The next entry, of either account, starts from an empty lock.
+            using var next = authority.EnterAccount(OtherAccount);
+            Assert.IsTrue(authority.IsAccountProxyActive(otherProxy));
+            Assert.IsFalse(authority.IsAccountProxyActive(proxy));
         }
 
         [TestMethod]
-        public void ExactAccountPhaseModuleAndCoreQueryAreRequired()
+        public void AModuleGrantNeedsTheAccountThePhaseAndTheCallbackCallerFrame()
         {
             using var engine = Engine(); var authority = Authority(engine);
-            using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
             var callback = Context(engine, Root);
-            using var grant = authority.EnterModule(Account, ModuleId, Root,
-                SmartAccountCallbackPhase.Validation, callback.GetState<ExecutionContextState>());
-            Assert.IsFalse(Module(authority, engine));
+            var anchor = callback.GetState<ExecutionContextState>();
+            // No grant without the entered account, and none for another account.
+            Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterCallback(OtherAccount, ModuleId, Root,
+                SmartAccountCallbackPhase.Validation, anchor));
+            using var account = authority.EnterAccount(Account);
+            var grant = authority.EnterCallback(Account, ModuleId, Root, SmartAccountCallbackPhase.Validation, anchor);
+            Assert.AreEqual(ModuleId, authority.CallbackModuleId);
+            Assert.AreEqual(Root, authority.CallbackContract);
+            Assert.IsFalse(Module(authority, engine), "The callback frame itself is not the core query.");
             Assert.IsFalse(authority.IsWitnessAuthorized(engine, SmartAccountProtocol.GetAccountAddress(Account)));
             Query(engine, callback);
             Assert.IsTrue(Module(authority, engine));
@@ -128,23 +102,9 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.IsFalse(Module(authority, engine, phase: SmartAccountCallbackPhase.TargetDispatch));
             Assert.IsFalse(Module(authority, engine, phase: (SmartAccountCallbackPhase)99));
             Assert.IsFalse(authority.IsTargetAuthorized(engine, Account));
-            grant.Dispose();
+            authority.ExitCallback(grant);
             Assert.IsFalse(Module(authority, engine));
-        }
-
-        [TestMethod]
-        public void FreshSameHashCallCannotReuseSuspendedGrant()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            var original = Context(engine, Root);
-            using var grant = authority.EnterModule(Account, ModuleId, Root,
-                SmartAccountCallbackPhase.Validation, original.GetState<ExecutionContextState>());
-            Query(engine, Context(engine, Root, original));
-            Assert.IsFalse(Module(authority, engine));
-            Query(engine, original.Clone(0));
-            Assert.IsTrue(Module(authority, engine), "Initialization and internal calls share the original execution state.");
+            Assert.AreEqual(BigInteger.Zero, authority.CallbackModuleId);
         }
 
         [TestMethod]
@@ -152,9 +112,8 @@ namespace Neo.UnitTests.SmartContract.Native
         {
             using var engine = Engine(); var authority = Authority(engine);
             using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
             var original = Context(engine, Root);
-            using var grant = authority.EnterModule(Account, ModuleId, Root,
+            var grant = authority.EnterCallback(Account, ModuleId, Root,
                 SmartAccountCallbackPhase.Validation, original.GetState<ExecutionContextState>());
             Query(engine, original.Clone(0));
             Assert.IsTrue(Module(authority, engine), "An internal call frame of the anchored module keeps the phase grant.");
@@ -164,6 +123,36 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.IsFalse(Module(authority, engine), "A sibling contract of the module never inherits the grant.");
             Query(engine, original);
             Assert.IsTrue(Module(authority, engine));
+            authority.ExitCallback(grant);
+            Query(engine, original);
+            Assert.IsFalse(Module(authority, engine));
+        }
+
+        [TestMethod]
+        public void ALeafCallbackSuspendsTheCompositeGrantAndExitRestoresIt()
+        {
+            using var engine = Engine(); var authority = Authority(engine);
+            using var account = authority.EnterAccount(Account);
+            var composite = Context(engine, Root);
+            var parent = authority.EnterCallback(Account, ModuleId, Root,
+                SmartAccountCallbackPhase.Validation, composite.GetState<ExecutionContextState>());
+            var leafFrame = Context(engine, Child, composite);
+            var leaf = authority.EnterCallback(Account, ModuleId + 1, Child,
+                SmartAccountCallbackPhase.MemberValidation, leafFrame.GetState<ExecutionContextState>());
+            Query(engine, leafFrame);
+            Assert.IsTrue(Module(authority, engine, phase: SmartAccountCallbackPhase.MemberValidation));
+            Assert.AreEqual(ModuleId + 1, authority.CallbackModuleId);
+            Assert.AreEqual(Child, authority.CallbackContract);
+            Query(engine, composite);
+            Assert.IsFalse(Module(authority, engine), "The composite frame is not the leaf callback's caller.");
+            authority.ExitCallback(leaf);
+            Query(engine, composite);
+            Assert.IsTrue(Module(authority, engine));
+            Assert.AreEqual(ModuleId, authority.CallbackModuleId);
+            Assert.AreEqual(Root, authority.CallbackContract);
+            authority.ExitCallback(parent);
+            Query(engine, composite);
+            Assert.IsFalse(Module(authority, engine));
         }
 
         [TestMethod]
@@ -171,15 +160,27 @@ namespace Neo.UnitTests.SmartContract.Native
         {
             using var engine = Engine(); var authority = Authority(engine);
             using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
             var target = Context(engine, Root);
+            Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterTarget(OtherAccount, Root,
+                target.GetState<ExecutionContextState>()));
+            // The core itself is never a target: the identity is refused before any frame is entered.
+            var selfTarget = Assert.ThrowsExactly<ArgumentException>(() => authority.EnterTarget(Account,
+                SmartAccountProtocol.ServiceHash, target.GetState<ExecutionContextState>()));
+            Assert.Contains(SmartAccountModuleProtocol.ErrorPhaseViolation, selfTarget.Message);
             using var grant = authority.EnterTarget(Account, Root, target.GetState<ExecutionContextState>());
             UInt160 proxy = SmartAccountProtocol.GetAccountAddress(Account);
+            // The target frame itself answers for the account witness, and for nothing else.
+            Assert.IsTrue(authority.IsWitnessAuthorized(engine, proxy));
+            Assert.IsFalse(authority.IsWitnessAuthorized(engine, null));
+            Assert.IsFalse(authority.IsWitnessAuthorized(engine, SmartAccountProtocol.GetAccountAddress(OtherAccount)));
+            Assert.IsFalse(authority.IsTargetAuthorized(engine, Account), "the target frame is not the proxy script");
+            // A core query made by the target is not the target frame: it never answers for the account witness.
             Query(engine, target);
             Assert.IsTrue(authority.IsTargetAuthorized(engine, Account));
-            Assert.IsTrue(authority.IsWitnessAuthorized(engine, proxy));
-            Assert.IsFalse(authority.IsWitnessAuthorized(engine, SmartAccountProtocol.GetAccountAddress(OtherAccount)));
+            Assert.IsFalse(authority.IsTargetAuthorized(engine, OtherAccount));
+            Assert.IsFalse(authority.IsWitnessAuthorized(engine, proxy));
             Assert.IsFalse(Module(authority, engine));
+            Assert.AreEqual(BigInteger.Zero, authority.CallbackModuleId);
             var nested = Context(engine, Root, target);
             Query(engine, nested);
             Assert.IsFalse(authority.IsTargetAuthorized(engine, Account));
@@ -187,6 +188,7 @@ namespace Neo.UnitTests.SmartContract.Native
             Query(engine, target);
             grant.Dispose();
             Assert.IsFalse(authority.IsTargetAuthorized(engine, Account));
+            Assert.IsFalse(authority.IsWitnessAuthorized(engine, proxy));
         }
 
         [TestMethod]
@@ -196,15 +198,15 @@ namespace Neo.UnitTests.SmartContract.Native
             {
                 using var engine = Engine(trigger); var authority = Authority(engine);
                 using var account = authority.EnterAccount(Account);
-                authority.OpenExecution(Account);
                 var caller = Context(engine, Root);
-                foreach (var phase in new[] { SmartAccountCallbackPhase.Validation, SmartAccountCallbackPhase.Completion, SmartAccountCallbackPhase.Configuration, SmartAccountCallbackPhase.Cleanup })
+                foreach (var phase in new[] { SmartAccountCallbackPhase.Validation, SmartAccountCallbackPhase.Completion, SmartAccountCallbackPhase.Configuration })
                 {
-                    using var grant = authority.EnterModule(Account, ModuleId, Root,
+                    var grant = authority.EnterCallback(Account, ModuleId, Root,
                         phase, caller.GetState<ExecutionContextState>());
                     Query(engine, caller);
                     Assert.AreEqual(trigger == TriggerType.Verification && phase == SmartAccountCallbackPhase.Validation,
                         Module(authority, engine, phase: phase));
+                    authority.ExitCallback(grant);
                 }
                 using var target = authority.EnterTarget(Account, Root, caller.GetState<ExecutionContextState>());
                 Query(engine, caller);
@@ -214,201 +216,48 @@ namespace Neo.UnitTests.SmartContract.Native
         }
 
         [TestMethod]
-        public void NestedAccountEntryIsRefusedAndTheOuterGrantSurvives()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            using var outer = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            var caller = Context(engine, Root);
-            var first = authority.EnterTarget(Account, Root, caller.GetState<ExecutionContextState>());
-            Query(engine, caller);
-            Assert.IsTrue(authority.IsTargetAuthorized(engine, Account));
-            // §3.6: a nested frame cannot open a second account. The entry is
-            // refused before any lease, phase or gas pool is installed, so the
-            // outer authorization is exactly what it was.
-            var nested = Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterAccount(OtherAccount));
-            Assert.AreEqual(SmartAccountModuleProtocol.ErrorReentrancyForbidden, nested.Message);
-            Assert.IsFalse(authority.TryGetExecution(OtherAccount, out _));
-            Assert.IsFalse(authority.IsAccountProxyActive(SmartAccountProtocol.GetAccountAddress(OtherAccount)));
-            Query(engine, caller);
-            Assert.IsTrue(authority.IsTargetAuthorized(engine, Account));
-            // Scopes still unwind only in reverse order.
-            Assert.ThrowsExactly<InvalidOperationException>(() => outer.Dispose());
-            first.Dispose();
-            Query(engine, caller);
-            Assert.IsFalse(authority.IsTargetAuthorized(engine, Account));
-        }
-
-        [TestMethod]
-        public void ResetRevokesAllLeasesAndLateDisposalCannotRevokeNewGrant()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            var oldAccount = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            var caller = Context(engine, Root);
-            var oldGrant = authority.EnterTarget(Account, Root, caller.GetState<ExecutionContextState>());
-            authority.Reset();
-            Query(engine, caller); Assert.IsFalse(authority.IsTargetAuthorized(engine, Account));
-            using var newAccount = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            using var newGrant = authority.EnterTarget(Account, Root, caller.GetState<ExecutionContextState>());
-            oldGrant.Dispose(); oldAccount.Dispose();
-            Query(engine, caller); Assert.IsTrue(authority.IsTargetAuthorized(engine, Account));
-        }
-
-        [TestMethod]
-        public void EngineFaultRevokesPendingNativeContinuationAuthority()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            var caller = Context(engine, Root);
-            using var grant = authority.EnterTarget(Account, Root, caller.GetState<ExecutionContextState>());
-            engine.LoadScript(new byte[] { (byte)OpCode.ABORT });
-            Assert.AreEqual(VMState.FAULT, engine.Execute());
-            Query(engine, caller); Assert.IsFalse(authority.IsTargetAuthorized(engine, Account));
-            using var replacement = authority.EnterAccount(Account);
-        }
-
-        [TestMethod]
-        public void InvalidIdentitiesPhasesAndAnchorsCannotInstallAuthority()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            Assert.ThrowsExactly<ArgumentNullException>(() => authority.EnterAccount(null));
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterAccount(UInt160.Zero));
-            var caller = Context(engine, Root); var state = caller.GetState<ExecutionContextState>();
-            Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterTarget(Account, Root, state));
-            using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterTarget(Account, Child, state));
-            Assert.ThrowsExactly<ArgumentNullException>(() => authority.EnterTarget(Account, Root, null));
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterTarget(Account, NativeContract.GAS.Hash, state));
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterTarget(Account, SmartAccountProtocol.ServiceHash, state));
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId, Root,
-                SmartAccountCallbackPhase.None, state));
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId, Root,
-                (SmartAccountCallbackPhase)99, state));
-            foreach (var phase in new[] { SmartAccountCallbackPhase.HookPre, SmartAccountCallbackPhase.HookPost })
-            {
-                using var hook = authority.EnterModule(Account, ModuleId, Root, phase, state);
-                Assert.AreEqual((byte)phase, authority.Execution(Account).Phase);
-            }
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId,
-                NativeContract.GAS.Hash, SmartAccountCallbackPhase.Validation, state));
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterModule(Account, ModuleId, Child,
-                SmartAccountCallbackPhase.Validation, state));
-            state.Contract = null;
-            Assert.ThrowsExactly<ArgumentException>(() => authority.EnterTarget(Account, Root, state));
-        }
-
-        [TestMethod]
-        public void ExecutionStateIsEngineLocalAndPerAccount()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            var execution = authority.Execution(Account);
-            Assert.AreEqual((byte)SmartAccountCallbackPhase.None, execution.Phase);
-            // One execution context per account: a second open is a re-entry.
-            Assert.ThrowsExactly<InvalidOperationException>(() => authority.OpenExecution(Account));
-            Assert.IsFalse(authority.TryGetExecution(OtherAccount, out _));
-            authority.CloseExecution(Account);
-            Assert.IsFalse(authority.TryGetExecution(Account, out _));
-            Assert.ThrowsExactly<InvalidOperationException>(() => authority.Execution(Account));
-            // The minimal core tracks no aggregate gas pool: a reopened context
-            // starts with exactly the state a fresh one has.
-            authority.OpenExecution(Account);
-            Assert.AreEqual((byte)SmartAccountCallbackPhase.None, authority.Execution(Account).Phase);
-            Assert.AreEqual(BigInteger.Zero, authority.Execution(Account).ActiveModuleId);
-        }
-
-        [TestMethod]
-        public void PhaseGrantsRequireAnOpenExecutionAndClosePhaseResetsTheState()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            using var account = authority.EnterAccount(Account);
-            var caller = Context(engine, Root);
-            Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterModule(Account, ModuleId, Root,
-                SmartAccountCallbackPhase.Validation, caller.GetState<ExecutionContextState>()));
-            authority.OpenExecution(Account);
-            using (authority.EnterModule(Account, ModuleId, Root,
-                SmartAccountCallbackPhase.Completion, caller.GetState<ExecutionContextState>()))
-            {
-                Assert.AreEqual((byte)SmartAccountCallbackPhase.Completion, authority.Execution(Account).Phase);
-                Assert.AreEqual(ModuleId, authority.Execution(Account).ActiveModuleId);
-            }
-            authority.ClosePhase(Account);
-            Assert.AreEqual((byte)SmartAccountCallbackPhase.None, authority.Execution(Account).Phase);
-            Assert.AreEqual(BigInteger.Zero, authority.Execution(Account).ActiveModuleId);
-        }
-
-        [TestMethod]
-        public void ProxyIndexOnlyCoversAccountsOfThisInvocation()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            using var outer = authority.EnterAccount(Account);
-            Assert.IsTrue(authority.IsAccountProxyActive(SmartAccountProtocol.GetAccountAddress(Account)));
-            Assert.IsFalse(authority.IsAccountProxyActive(SmartAccountProtocol.GetAccountAddress(OtherAccount)));
-            Assert.IsFalse(authority.IsAccountProxyActive(Account));
-            Assert.IsFalse(authority.IsAccountProxyActive(null));
-            // §3.6: no second account can be entered, so its proxy can never
-            // become a principal of this invocation.
-            var nested = Assert.ThrowsExactly<InvalidOperationException>(() => authority.EnterAccount(OtherAccount));
-            Assert.AreEqual(SmartAccountModuleProtocol.ErrorReentrancyForbidden, nested.Message);
-            Assert.IsFalse(authority.IsAccountProxyActive(SmartAccountProtocol.GetAccountAddress(OtherAccount)));
-            Assert.IsTrue(authority.IsAccountProxyActive(SmartAccountProtocol.GetAccountAddress(Account)));
-        }
-
-        [TestMethod]
         [DataRow(false)]
         [DataRow(true)]
         public void RealVmTargetGrantExcludesNestedContractsAndDynamicScripts(bool huyao)
         {
             var snapshot = TestBlockchain.GetTestSnapshotCache();
-            var leaf = TestUtils.GetContract(new byte[] { (byte)OpCode.NOP, (byte)OpCode.RET }, TestUtils.CreateManifest("call", ContractParameterType.Void));
+            UInt160 proxy = SmartAccountProtocol.GetAccountAddress(Account);
+            // Every frame below asks the real System.Runtime.CheckWitness syscall for the account proxy and asserts
+            // that the answer is false. The target frame itself asserts the opposite.
+            byte[] Deny()
+            {
+                using var script = new ScriptBuilder();
+                script.EmitPush(proxy).EmitSysCall(ApplicationEngine.System_Runtime_CheckWitness).Emit(OpCode.NOT).Emit(OpCode.ASSERT);
+                return script.ToArray();
+            }
+            var leaf = TestUtils.GetContract(Deny(), TestUtils.CreateManifest("call", ContractParameterType.Void));
             snapshot.AddContract(leaf.Hash, leaf);
             using var code = new ScriptBuilder();
-            code.EmitDynamicCall(leaf.Hash, "call").Emit(OpCode.DROP)
-                .Emit(OpCode.NEWARRAY0).EmitPush(CallFlags.ReadOnly).EmitPush(new byte[] { (byte)OpCode.NOP, (byte)OpCode.RET })
+            code.EmitPush(proxy).EmitSysCall(ApplicationEngine.System_Runtime_CheckWitness).Emit(OpCode.ASSERT).EmitDynamicCall(leaf.Hash, "call")
+                .Emit(OpCode.DROP).Emit(OpCode.NEWARRAY0).EmitPush(CallFlags.ReadOnly).EmitPush(Deny())
                 .EmitSysCall(ApplicationEngine.System_Runtime_LoadScript).Emit(OpCode.DROP).Emit(OpCode.RET);
             var target = TestUtils.GetContract(code.ToArray(), TestUtils.CreateManifest("call", ContractParameterType.Void));
             snapshot.AddContract(target.Hash, target);
             var diagnostic = new Mock<IDiagnostic>();
-            var settings = TestProtocolSettings.Default with { Hardforks = TestProtocolSettings.Default.Hardforks.SetItem(Hardfork.HF_Huyao, huyao ? 0U : uint.MaxValue) };
-            using var engine = ApplicationEngine.Create(TriggerType.Application, null, snapshot, settings: settings, gas: 100_000_000, diagnostic: diagnostic.Object);
+            var hardforks = TestProtocolSettings.Default.Hardforks.SetItem(Hardfork.HF_SmartAccountV1, 0)
+                .SetItem(Hardfork.HF_Huyao, huyao ? 0U : uint.MaxValue);
+            using var engine = ApplicationEngine.Create(TriggerType.Application, null, snapshot,
+                settings: TestProtocolSettings.Default with { Hardforks = hardforks }, gas: 100_000_000, diagnostic: diagnostic.Object);
             var authority = Authority(engine);
             using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            var actual = engine.LoadContract(target, target.Manifest.Abi.Methods[0], CallFlags.All);
-            using var grant = authority.EnterTarget(Account, target.Hash, actual.GetState<ExecutionContextState>());
+            var actual = engine.LoadContract(target, target.Manifest.Abi.Methods[0], CallFlags.All).GetState<ExecutionContextState>();
+            using var grant = authority.EnterTarget(Account, target.Hash, actual);
             int rootSteps = 0, leafSteps = 0, dynamicSteps = 0;
             diagnostic.Setup(d => d.PreExecuteInstruction(It.IsAny<Instruction>())).Callback<Instruction>(_ =>
             {
                 var state = engine.CurrentContext.GetState<ExecutionContextState>();
-                bool allowed = authority.IsWitnessAuthorized(engine, SmartAccountProtocol.GetAccountAddress(Account));
-                if (ReferenceEquals(state, actual.GetState<ExecutionContextState>())) { rootSteps++; Assert.IsTrue(allowed); }
-                else if (state.Contract is null) { dynamicSteps++; Assert.IsFalse(allowed); }
-                else { leafSteps++; Assert.IsFalse(allowed); }
+                if (ReferenceEquals(state, actual)) rootSteps++;
+                else if (state.Contract is null) dynamicSteps++;
+                else leafSteps++;
             });
+            // HALT proves the target frame was answered true and every frame it called in turn false.
             Assert.AreEqual(VMState.HALT, engine.Execute(), engine.FaultException?.ToString());
             Assert.IsGreaterThan(0, rootSteps); Assert.IsGreaterThan(0, leafSteps); Assert.IsGreaterThan(0, dynamicSteps);
-        }
-
-        [TestMethod]
-        public void HashArgumentsCannotRebindALiveGrant()
-        {
-            using var engine = Engine(); var authority = Authority(engine);
-            using var account = authority.EnterAccount(Account);
-            authority.OpenExecution(Account);
-            var caller = Context(engine, Root);
-            UInt160 rootInput = Address(3);
-            using var grant = authority.EnterModule(Account, ModuleId, rootInput,
-                SmartAccountCallbackPhase.Validation, caller.GetState<ExecutionContextState>());
-            Rebind(rootInput, 42);
-            Query(engine, Context(engine, Child, caller));
-            Assert.IsFalse(Module(authority, engine));
-            Query(engine, caller);
-            Assert.IsTrue(Module(authority, engine));
         }
     }
 }

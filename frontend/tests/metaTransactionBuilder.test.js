@@ -162,18 +162,12 @@ test('the operation route takes its generation from the chain, and follows an ad
                 { type: 'Boolean', value: true },
                 { type: 'Integer', value: '0' },
                 bs('11'.repeat(20)),
-                bs('00'.repeat(20)),
                 { type: 'Integer', value: '4' },
                 { type: 'Integer', value: '9' },
-                { type: 'Integer', value: '0' },
                 { type: 'Boolean', value: true },
-                { type: 'Boolean', value: false },
                 { type: 'Boolean', value: false },
                 { type: 'Integer', value: '0' },
                 { type: 'Integer', value: '1' },
-                { type: 'Boolean', value: false },
-                { type: 'Integer', value: '0' },
-                { type: 'Boolean', value: false },
               ],
             },
           ],
@@ -182,7 +176,7 @@ test('the operation route takes its generation from the chain, and follows an ad
       if (params[1] === 'getModules') {
         return jsonResponse({
           state: 'HALT',
-          stack: [{ type: 'Array', value: [{ type: 'Integer', value: '2' }] }, { type: 'Integer', value: '0' }],
+          stack: [{ type: 'Array', value: [{ type: 'Integer', value: '2' }] }, { type: 'Integer', value: '0' }, { type: 'Integer', value: '9' }],
         });
       }
       if (params[1] === 'getModule') {
@@ -205,6 +199,9 @@ test('the operation route takes its generation from the chain, and follows an ad
                 { type: 'Boolean', value: false },
                 { type: 'Boolean', value: true },
                 { type: 'Boolean', value: true },
+                { type: 'Boolean', value: false },
+                { type: 'Boolean', value: false },
+                { type: 'Boolean', value: false },
               ],
             },
           ],
@@ -281,23 +278,17 @@ test('fetchNonce refuses a missing account id before any chain read', async () =
   assert.equal(reads, 0);
 });
 
-test('assertAccountExists returns the 15-field control descriptor', async () => {
+test('assertAccountExists returns the 9-field v4.1 control descriptor', async () => {
   const descriptor = [
     { type: 'Boolean', value: true },
     { type: 'Integer', value: '0' },
     { type: 'ByteString', value: Buffer.from('11'.repeat(20), 'hex').toString('base64') },
-    { type: 'ByteString', value: Buffer.from('11'.repeat(20), 'hex').toString('base64') },
     { type: 'Integer', value: '4' },
     { type: 'Integer', value: '9' },
-    { type: 'Integer', value: '0' },
     { type: 'Boolean', value: true },
-    { type: 'Boolean', value: false },
     { type: 'Boolean', value: false },
     { type: 'Integer', value: '0' },
     { type: 'Integer', value: '1' },
-    { type: 'Boolean', value: false },
-    { type: 'Integer', value: '0' },
-    { type: 'Boolean', value: false },
   ];
   const fetchImpl = async () => jsonResponse({ state: 'HALT', stack: [{ type: 'Array', value: descriptor }] });
 

@@ -13,6 +13,10 @@
 // 13 fields an unsponsored execution carries, its argument list is made only of the operand kinds
 // §4.1 admits (a value the grammar cannot classify is refused rather than silently carried), a batch
 // reproduces its operations in order, and the plan survives a JSON round trip unchanged.
+//
+// Target: the retired custom v4 wallet kernel (contracts/build), driven by scenario SA-11 of
+// sa_rpc_scenarios.py. The sponsored entries executeSponsoredUserOp/executeSponsoredUserOps are that
+// kernel's ABI and are not in the v4.1 native IDL (docs/proposals/smartaccount-v4.1.idl.json).
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';

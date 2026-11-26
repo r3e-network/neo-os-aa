@@ -53,13 +53,18 @@ def profile(raw, name, role):
             p["contractName"] == name and p["moduleType"] == role and role in ROLES, f"{name}: identity/role")
     caps = p["capabilities"]
     flags = {"instanceIsolation", "messageCapability", "thresholdMemberEligible"}
-    require(isinstance(caps, dict) and set(caps) == flags | {"compositeLayer"} and
-            all(type(caps[k]) is bool for k in flags) and type(caps["compositeLayer"]) is int and
+    # governance/hookPlanner are optional seat flags: the core routes the module
+    # instance by them, so they are declared in the profile and omitted when false.
+    seats = {"governance", "hookPlanner"}
+    require(isinstance(caps, dict) and flags <= set(caps) <= flags | seats | {"compositeLayer"} and
+            all(type(caps[k]) is bool for k in set(caps) & (flags | seats)) and
+            all(caps[k] is True for k in set(caps) & seats) and type(caps["compositeLayer"]) is int and
             caps["compositeLayer"] in (0, 1), f"{name}: capability fields/types")
-    require(role == "validator" or not (caps["messageCapability"] or caps["thresholdMemberEligible"]),
-            f"{name}: invalid role capabilities")
-    require(p["callbacks"] == ROLES[role] + (["isValidSignature"] if caps["messageCapability"] else []),
-            f"{name}: callback list")
+    require(role == "validator" or not (caps["messageCapability"] or caps["thresholdMemberEligible"]
+            or set(caps) & seats), f"{name}: invalid role capabilities")
+    callbacks = ROLES[role] + (["isValidSignature"] if caps["messageCapability"] else []) \
+        + (["planHooks"] if "hookPlanner" in caps else [])
+    require(p["callbacks"] == callbacks, f"{name}: callback list")
     require(p["lifecycle"] in (["onInstall", "onUninstall"], ["onInstall", "onUninstall", "configure"]),
             f"{name}: lifecycle list")
     return p
@@ -71,18 +76,28 @@ def discovery_schema():
     variants = []
     for role, callbacks in ROLES.items():
         for messages in ([False, True] if role == "validator" else [False]):
-            flags = {"messageCapability": {"const": messages}}
-            if role != "validator":
-                flags["thresholdMemberEligible"] = {"const": False}
-            variants.append({"properties": {"moduleType": {"const": role},
-                             "callbacks": {"const": callbacks + (["isValidSignature"] if messages else [])},
-                             "capabilities": {"properties": flags}}})
+            for planner in ([False, True] if role == "validator" else [False]):
+                flags = {"messageCapability": {"const": messages}}
+                capabilities = {"properties": flags}
+                if role != "validator":
+                    flags["thresholdMemberEligible"] = {"const": False}
+                    # A hook or recovery seat never declares a validator seat flag.
+                    capabilities["not"] = {"anyOf": [{"required": ["governance"]},
+                                                     {"required": ["hookPlanner"]}]}
+                callbacks = callbacks + (["isValidSignature"] if messages else []) \
+                    + (["planHooks"] if planner else [])
+                variants.append({"properties": {"moduleType": {"const": role},
+                                 "callbacks": {"const": callbacks}, "capabilities": capabilities}})
     caps = {k: {"type": "boolean"} for k in ("instanceIsolation", "messageCapability", "thresholdMemberEligible")}
     caps["compositeLayer"] = {"type": "integer", "enum": [0, 1]}
+    # Optional seat flags: present means exactly true, absent means false.
+    caps["governance"] = {"const": True}
+    caps["hookPlanner"] = {"const": True}
+    required = ["instanceIsolation", "messageCapability", "thresholdMemberEligible", "compositeLayer"]
     properties = {
         "contractName": {"type": "string", "pattern": r"[^\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]"},
         "moduleType": {"enum": list(ROLES)}, "profileVersion": {"const": 1},
-        "capabilities": {"type": "object", "additionalProperties": False, "required": list(caps), "properties": caps},
+        "capabilities": {"type": "object", "additionalProperties": False, "required": required, "properties": caps},
         "callbacks": {"type": "array"},
         "lifecycle": {"enum": [["onInstall", "onUninstall"], ["onInstall", "onUninstall", "configure"]]},
     }
@@ -107,7 +122,8 @@ def check_project_coverage(contracts, projects):
         for base, dirs, files in os.walk(root):
             dirs[:] = [d for d in dirs if d not in ("bin", "obj")]
             actual.update(Path(base) / f for f in files if f.endswith(".csproj"))
-    require(actual == covered, f"module project inventory mismatch: {sorted(str(p.relative_to(contracts)) for p in actual ^ covered)}")
+    # as_posix(): the diagnostic names the same path on every platform.
+    require(actual == covered, f"module project inventory mismatch: {sorted(p.relative_to(contracts).as_posix() for p in actual ^ covered)}")
 
 
 def check_core_envelope(proposal, protocol, native):
@@ -125,12 +141,14 @@ def check_core_envelope(proposal, protocol, native):
 
 def sources():
     require(json.loads(SCHEMA.read_bytes(), object_pairs_hook=unique) == discovery_schema(), "stale discovery JSON Schema")
-    check_core_envelope((DOC/"nep-smartaccount-entry-verifier.mediawiki").read_text(),
-                        (DOC.parent/"SA-MODULE-PROTOCOL.md").read_text(),
-                        (ROOT/"contracts/native/SmartAccount/SmartAccountModuleProtocol.cs").read_text())
-    entries = re.findall(r"^=== (\w+) ===\nRole: (\w+)\.", CATALOG.read_text(), re.M)
+    # Every text read and write names UTF-8: the sources carry non-ASCII bytes
+    # and a platform default such as cp1252 must not decide the outcome.
+    check_core_envelope((DOC/"nep-smartaccount-entry-verifier.mediawiki").read_text(encoding="utf-8"),
+                        (DOC.parent/"SA-MODULE-PROTOCOL.md").read_text(encoding="utf-8"),
+                        (ROOT/"contracts/native/SmartAccount/SmartAccountModuleProtocol.cs").read_text(encoding="utf-8"))
+    entries = re.findall(r"^=== (\w+) ===\nRole: (\w+)\.", CATALOG.read_text(encoding="utf-8"), re.M)
     roles = unique(entries)
-    links = re.findall(r"\[(\w+)\]\(nep-smartaccount-module-profiles\.mediawiki#(\w+)\)", GUIDE.read_text())
+    links = re.findall(r"\[(\w+)\]\(nep-smartaccount-module-profiles\.mediawiki#(\w+)\)", GUIDE.read_text(encoding="utf-8"))
     require(unique(links) == {name: name for name in roles}, "Chinese module index differs from named clauses")
     paths = list((ROOT / "contracts/modules").glob("*/*.csproj"))
     files = [p.with_suffix(".cs") for p in paths]
@@ -144,7 +162,7 @@ def sources():
                     f"{project.stem}: plugin project missing named clause or profile")
         for src in base.glob("*.cs"):
             sidecar = src.with_suffix(".profile.json")
-            if "GetModuleProfile(" in src.read_text() or sidecar.exists():
+            if "GetModuleProfile(" in src.read_text(encoding="utf-8") or sidecar.exists():
                 require(sidecar.is_file() and src.with_suffix(".csproj").is_file(), f"{src.stem}: missing sidecar/project")
                 files.append(src)
         for sidecar in base.glob("*.profile.json"):
@@ -155,7 +173,7 @@ def sources():
     profiles = {}
     for src in sorted(files, key=lambda p: p.stem):
         name = src.stem
-        source = src.read_text()
+        source = src.read_text(encoding="utf-8")
         values = CONSTANT.findall(source)
         require(len(values) == 1 and re.search(r"GetModuleProfile\(\)\s*=>\s*ModuleProfileJson\s*;", source),
                 f"{name}: cannot verify profile getter")
@@ -173,7 +191,7 @@ def sources():
 def signatures():
     pattern = r"^(?:all|optional|validator|message|hook)\s+(\w+)\(([^)]*)\) -> (\w+)( \[safe\])?$"
     return unique([(n, (args.split(",") if args else [], ret, bool(safe)))
-                   for n, args, ret, safe in re.findall(pattern, INTERFACE.read_text(), re.M)])
+                   for n, args, ret, safe in re.findall(pattern, INTERFACE.read_text(encoding="utf-8"), re.M)])
 
 
 def check_method(name, methods, key, types, ret, safe, script_length=None):
@@ -337,12 +355,12 @@ def main():
     profiles, projects = sources()
     named = named_interfaces()
     require(named.keys() == profiles.keys(), "named interface inventory differs from catalogue")
-    check_command_clauses(named, CATALOG.read_text())
+    check_command_clauses(named, CATALOG.read_text(encoding="utf-8"))
     for name, (p, _) in profiles.items():
         for field in ("moduleType", "lifecycle", "capabilities"):
             require(named[name][field] == p[field], f"{name}: stale {field} in named interface")
-    profile(TEMPLATE.read_text().removesuffix("\n"), "ExampleValidator", "validator")
-    example = re.search(r"<pre>\n(\{[^\n]+\})\n</pre>", INTERFACE.read_text()).group(1)
+    profile(TEMPLATE.read_text(encoding="utf-8").removesuffix("\n"), "ExampleValidator", "validator")
+    example = re.search(r"<pre>\n(\{[^\n]+\})\n</pre>", INTERFACE.read_text(encoding="utf-8")).group(1)
     require(profile(example, "RecoveryModule", "recovery") == profiles["RecoveryModule"][0], "stale recovery example")
     if args.compiler or args.manifests:
         def check_artifacts(folder):
@@ -370,11 +388,11 @@ def main():
         else:
             expected = check_artifacts(args.manifests)
         if args.write_abi:
-            APPENDIX.write_text(expected)
+            APPENDIX.write_text(expected, encoding="utf-8")
         else:
-            require(APPENDIX.read_text() == expected, "ABI appendix differs from compiled manifests")
+            require(APPENDIX.read_text(encoding="utf-8") == expected, "ABI appendix differs from compiled manifests")
     else:
-        recorded = re.findall(r"^## (\w+)\n\nRole: (\w+)\. Profile SHA-256: `([a-f0-9]{64})`\.", APPENDIX.read_text(), re.M)
+        recorded = re.findall(r"^## (\w+)\n\nRole: (\w+)\. Profile SHA-256: `([a-f0-9]{64})`\.", APPENDIX.read_text(encoding="utf-8"), re.M)
         require(recorded == [(n, p["moduleType"], d) for n, (p, d) in profiles.items()], "stale ABI profile inventory")
     print(f"{len(profiles)} module profiles verified" + (" against compiled manifests" if args.manifests or args.compiler else " against source"))
 

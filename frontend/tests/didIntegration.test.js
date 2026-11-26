@@ -81,8 +81,13 @@ test("morpheus did service can bind DIDs and invoke SA verifier requests", () =>
   assert.match(source, /fetchAccountIdentity/);
   assert.doesNotMatch(source, /getAccountIdByAddress|getVerifierContractByAddress/);
   assert.match(source, /fetchPendingConfigurationState/);
-  assert.match(source, /getPendingConfigurationIntentIds/);
-  assert.match(source, /getPendingConfiguration/);
+  // The configuration window and the intent queue are the governance module's
+  // state: the reads target the module instance (moduleHash), never the core
+  // (saContractHash) and never a retired native entry point.
+  assert.match(source, /operation: 'configurationMaturity'/);
+  assert.match(source, /operation: 'getPendingConfigurationIntentIds'/);
+  assert.match(source, /governanceModuleHash/);
+  assert.doesNotMatch(source, /saContractHash: core,\s*\n\s*operation: 'getPendingConfiguration/);
   assert.match(source, /hex\.length === 40 \|\| hex\.length === 64/);
   assert.match(source, /pendingConfiguration/);
   assert.match(source, /fetchAccountRecoveryState/);

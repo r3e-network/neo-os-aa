@@ -20,7 +20,7 @@ const integer = (value) => ({ type: 'Integer', value: String(value) });
 const bool = (value) => ({ type: 'Boolean', value });
 const halt = (value) => ({ state: 'HALT', stack: [value] });
 
-/** The 12-field `getModule` descriptor of §9. */
+/** The 15-field v4.1 `getModule` descriptor of §9. */
 function moduleDescriptor({
   moduleId = 2,
   contractHash = memberContract,
@@ -33,6 +33,8 @@ function moduleDescriptor({
       integer(moduleId), integer(1), hash(contractHash), integer(0), integer(0),
       bytes('aa'.repeat(32)), bytes('bb'.repeat(32)), integer(1), integer(credentialGeneration),
       bool(true), bool(false), bool(thresholdMemberEligible),
+      // compositeLayer, governance, hookPlanner
+      bool(false), bool(false), bool(false),
     ],
   };
 }

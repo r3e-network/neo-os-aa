@@ -19,10 +19,15 @@ const crypto = require("node:crypto");
 const { createProxyWitness } = require("../../../shared/proxyWitness.mjs");
 const {
   ACCOUNT,
+  ANY,
+  ARG_HASH,
   A,
   BOOL,
   CAPS,
+  GOVERNANCE,
   I,
+  RECOVERY,
+  RECOVERY_MODULE_ID,
   build,
   c,
   clone,
@@ -86,7 +91,6 @@ function staged(artifact, stack = [{ type: "Boolean", value: true }]) {
       relayed: false,
       mempoolChecked: false,
       gasconsumed: "10",
-      minimumrequiredfee: "100",
       stack,
     },
   };
@@ -145,50 +149,159 @@ test("a fee payer that is also custody receives the actual core witness scope", 
     scopes: "CustomContracts", allowedcontracts: ["0x" + node.client.contractHash] }]);
 });
 
-test("a recovery policy review signs with custody and the newly introduced wallet", async () => {
+test("a recovery review signs with custody and the newly introduced wallet", async () => {
   const node = createNode();
   const custody = spyWallet(), recipient = spyWallet();
   node.setAccount({ custody: custody.account });
-  const recipe = { method: "buildRecoveryPolicyPlan", input: { accountId: ACCOUNT,
-    recoveryAuthority: recipient.account, recoveryTimelockMs: "604800000" } };
-  const plan = await node.client.buildRecoveryPolicyPlan(recipe.input);
-  await assert.rejects(prepare(node, plan, options(custody, { recipe })), /missing authority/);
+  node.setRecoverySeat();
+  const recipe = { method: "buildRecoveryModulePlan", input: { accountId: ACCOUNT,
+    action: "beginRecovery", newCustody: recipient.account } };
+  const plan = await node.client.buildRecoveryModulePlan(recipe.input);
+  // Recovery is a user-space seat: the script targets the module, never the core.
+  assert.equal(plan.kind, "recovery");
+  assert.equal(plan.targetContract, RECOVERY);
+  assert.equal(plan.governanceDelayMs, null);
+  assert.equal(plan.policy.threshold, 1);
+  await assert.rejects(prepare(node, plan, options(custody, { recipe })), /missing authority witness/);
+  // beginRecovery answers the allocated request nonce.
+  node.state.simulate = { state: "HALT", stack: [I(1)], gasconsumed: "10" };
   const prepared = await prepare(node, plan, options(custody, { recipe, authorizers: [recipient] }));
   assert.deepEqual(descriptors(prepared), [custody, recipient].map(({ account }) => ({
-    account: "0x" + account, scopes: "CustomContracts", allowedcontracts: ["0x" + node.client.contractHash]
+    account: "0x" + account, scopes: "CustomContracts", allowedcontracts: ["0x" + RECOVERY]
   })));
   const signed = await node.client.signTransaction(prepared);
-  Object.assign(node.state, staged(node.client.exportSignedTransaction(signed), [{ type: "Any" }]));
+  // A beginRecovery receipt carries the request nonce the module allocated.
+  Object.assign(node.state, staged(node.client.exportSignedTransaction(signed), [I(1)]));
   node.setAccount({ custody: recipient.account, status: 1 });
   assert.equal((await node.client.getTransactionReceipt(signed)).succeeded, true);
 });
 
-test("the reserved owner-only recovery bit is refused before a plan is built", async () => {
+test("a thaw review signs the governance module's call with custody, scoped to the module", async () => {
   const node = createNode();
-  const custody = spyWallet(), recipient = spyWallet();
-  node.setAccount({ custody: custody.account });
-  const policy = { accountId: ACCOUNT, recoveryAuthority: recipient.account,
-    recoveryTimelockMs: "604800000", ownerOnlyRecovery: true };
-  await assert.rejects(node.client.buildRecoveryPolicyPlan(policy), /ownerOnlyRecovery is reserved/);
-  await assert.rejects(node.client.buildConfigurationBatchPlan({ accountId: ACCOUNT,
-    actions: [{ method: "setRecoveryPolicy", ...policy }] }), /ownerOnlyRecovery is reserved/);
+  const custody = spyWallet(), payer = spyWallet();
+  node.setAccount({ custody: custody.account, status: 1, configurationNonce: 3 });
+  // No governance instance: the core's own thaw is not a route the SDK can sign.
+  node.answer("getModules", [ARG_HASH(ACCOUNT), c.stringValue("validator"), I(0), I(32)], A([A([]), I(0), I(0)]));
+  await assert.rejects(
+    node.client.buildGovernanceModulePlan({ accountId: ACCOUNT, action: "unfreezeAccount" }),
+    /no supported governance module installed/,
+  );
+  node.setGovernanceSeat();
+  const recipe = { method: "buildGovernanceModulePlan", input: { accountId: ACCOUNT, action: "unfreezeAccount" } };
+  const plan = await node.client.buildGovernanceModulePlan(recipe.input);
+  // The thaw is a module plan: its script targets the governance instance.
+  assert.equal(plan.kind, "governance");
+  assert.equal(plan.targetContract, GOVERNANCE);
+  assert.deepEqual(plan.signers, [custody.account]);
+  assert.notEqual(plan.script, node.client.buildAccountActionScript({ method: "unfreezeAccount", accountId: ACCOUNT, args: [] }).script);
+  // The node's Void answer is not the intent id a proposal must return.
+  await assert.rejects(
+    prepare(node, plan, options(payer, { authorizers: [custody], recipe })),
+    /positive intent id/,
+  );
+  node.state.simulate = { state: "HALT", stack: [I(4)], gasconsumed: "10" };
+  // A payer alone is not custody: the module's RequireCustody would fault on chain.
+  await assert.rejects(prepare(node, plan, options(payer, { recipe })), /missing authority witness/);
+  // Only the governance recipe rebuilds this plan; a core action recipe does not.
+  await assert.rejects(
+    prepare(node, plan, options(payer, { authorizers: [custody],
+      recipe: { method: "buildAccountActionScript", input: { method: "unfreezeAccount", accountId: ACCOUNT, args: [] } } })),
+    /does not rebuild the plan/,
+  );
+  const prepared = await prepare(node, plan, options(payer, { authorizers: [custody], recipe }));
+  // Custody is scoped to the module, not to the core.
+  assert.deepEqual(descriptors(prepared), [
+    { account: "0x" + payer.account, scopes: "None" },
+    { account: "0x" + custody.account, scopes: "CustomContracts", allowedcontracts: ["0x" + GOVERNANCE] },
+  ]);
+  const signed = await node.client.signTransaction(prepared);
+  // The proposal's receipt carries the intent id the module allocated, and it
+  // stays readable after the account has moved on.
+  Object.assign(node.state, staged(node.client.exportSignedTransaction(signed), [I(4)]));
+  node.setAccount({ custody: custody.account, status: 1, configurationNonce: 3 });
+  node.setGovernanceSeat({ intents: [{ intentId: 4, kind: "unfreeze", proposedAt: 1699996400000,
+    matureAt: 1699999999000, expiresAt: 1700604799000, epoch: 1, nonce: 3, actionCount: 1 }] });
+  assert.equal((await node.client.getTransactionReceipt(signed)).succeeded, true);
+
+  // Confirmation: once the intent is pending, the step is confirmConfiguration
+  // with the exact [[11]] action bytes, still custody-signed on the module.
+  await assert.rejects(
+    node.client.buildGovernanceModulePlan(recipe.input),
+    /an unfreeze intent is already pending/,
+  );
+  const confirmRecipe = { method: "buildGovernanceModulePlan", input: { accountId: ACCOUNT, action: "confirmConfiguration", intentId: "4" } };
+  const confirm = await node.client.buildGovernanceModulePlan(confirmRecipe.input);
+  assert.equal(confirm.method, "confirmConfiguration");
+  assert.equal(confirm.intentId, "4");
+  assert.equal(confirm.script, c.dynamicCall(GOVERNANCE, "confirmConfiguration", [
+    c.hashValue(ACCOUNT), I(4), A([A([I(11)])])]));
+  node.state.simulate = { state: "HALT", stack: [ANY], gasconsumed: "10" };
+  // The recipe names the intent that was reviewed; another one rebuilds another plan.
+  await assert.rejects(
+    prepare(node, confirm, options(payer, { authorizers: [custody],
+      recipe: { ...confirmRecipe, input: { ...confirmRecipe.input, intentId: "5" } } })),
+    /intent changed|does not rebuild/,
+  );
+  const confirmPrepared = await prepare(node, confirm, options(payer, { authorizers: [custody], recipe: confirmRecipe }));
+  assert.deepEqual(descriptors(confirmPrepared), descriptors(prepared));
+  const confirmSigned = await node.client.signTransaction(confirmPrepared);
+  // The landed thaw leaves the account active with an advanced nonce; the
+  // archived confirmation is still restorable for its receipt.
+  Object.assign(node.state, staged(node.client.exportSignedTransaction(confirmSigned), [ANY]));
+  node.setAccount({ custody: custody.account, status: 0, configurationNonce: 4 });
+  assert.equal((await node.client.getTransactionReceipt(confirmSigned)).succeeded, true);
 });
 
-test("a direct batch requires the incoming authority and its receipt survives a later account change", async () => {
+test("a recovery plan requires the reviewed seat and reports an unknown one as unsupported", async () => {
   const node = createNode();
   const custody = spyWallet(), recipient = spyWallet();
   node.setAccount({ custody: custody.account });
+  // No seat installed: there is no native recovery entry to fall back to.
+  await assert.rejects(
+    node.client.buildRecoveryModulePlan({ accountId: ACCOUNT, action: "beginRecovery", newCustody: recipient.account }),
+    /no supported recovery seat installed/,
+  );
+  // A seat whose code or profile is not the reviewed one is reported, not driven.
+  node.setRecoverySeat({ nefSha256: "ab".repeat(32) });
+  assert.deepEqual(await node.client.getRecoverySeat(ACCOUNT), { seat: (await node.client.getModule(ACCOUNT, RECOVERY_MODULE_ID)), supported: false });
+  await assert.rejects(
+    node.client.buildRecoveryModulePlan({ accountId: ACCOUNT, action: "beginRecovery", newCustody: recipient.account }),
+    /no supported recovery seat installed/,
+  );
+  // A new custody may not be the account's own proxy, the core or the seat.
+  node.setRecoverySeat();
+  await assert.rejects(
+    node.client.buildRecoveryModulePlan({ accountId: ACCOUNT, action: "beginRecovery",
+      newCustody: node.client.proxyAddress(ACCOUNT) }),
+    /invalid new custody/,
+  );
+  await assert.rejects(
+    node.client.buildRecoveryModulePlan({ accountId: ACCOUNT, action: "beginRecovery", authority: recipient.account }),
+    /Only custody, the recovery authority or a guardian/,
+  );
+});
+
+test("a direct batch requires the custody witness and its receipt survives a later account change", async () => {
+  const node = createNode();
+  const custody = spyWallet();
+  node.setAccount({ custody: custody.account });
   const recipe = { method: "buildConfigurationBatchPlan", input: { accountId: ACCOUNT, actions: [
-    { method: "setBuiltinAuthorization", defaultOperationAuthorization: true, defaultMessageAuthorization: false },
-    { method: "setRecoveryPolicy", recoveryAuthority: recipient.account, recoveryTimelockMs: "604800000" }] } };
+    { method: "installModule", moduleType: 1, moduleContractHash: MODULE,
+      profileDigest: "77".repeat(32), initData: [] },
+    { method: "setBuiltinAuthorization", defaultOperationAuthorization: true, defaultMessageAuthorization: false }] } };
   const plan = await node.client.buildConfigurationBatchPlan(recipe.input);
-  await assert.rejects(prepare(node, plan, options(custody, { recipe })), /missing authority/);
-  const prepared = await prepare(node, plan, options(custody, { recipe, authorizers: [recipient] }));
-  assert.deepEqual(descriptors(prepared), [custody, recipient].map(({account}) => ({
-    account: "0x" + account, scopes: "CustomContracts", allowedcontracts: ["0x" + node.client.contractHash] })));
+  assert.equal(plan.method, "applyConfigurationActions");
+  assert.deepEqual(plan.signers, [custody.account]);
+  const stranger = spyWallet();
+  await assert.rejects(prepare(node, plan, options(stranger, { recipe })), /missing authority witness/);
+  const prepared = await prepare(node, plan, options(stranger, { recipe, authorizers: [custody] }));
+  assert.deepEqual(descriptors(prepared), [
+    { account: "0x" + stranger.account, scopes: "None" },
+    { account: "0x" + custody.account, scopes: "CustomContracts", allowedcontracts: ["0x" + node.client.contractHash] },
+  ]);
   const signed = await node.client.signTransaction(prepared);
   Object.assign(node.state, staged(node.client.exportSignedTransaction(signed), [{ type: "Any" }]));
-  node.setAccount({ custody: recipient.account, status: 1 });
+  node.setAccount({ custody: custody.account, status: 1 });
   await assert.rejects(node.client.preflightTransaction(signed), /configuration changed/);
   const receipt = await node.client.getTransactionReceipt(signed);
   assert.equal(receipt.confirmed, true);
@@ -289,26 +402,31 @@ test("a plan that is not a v4 plan never reaches a wallet", async () => {
   assert.deepEqual(payer.calls, []);
 });
 
-test("fee gates: explicit budget, node admission, consumption and caps", async () => {
+test("fee gates: the declared system fee is the simulated consumption, never a budget", async () => {
   const node = createNode();
   const custody = wallet();
   const { plan, recipe } = build.registration(node, { custody });
+  const base = { feePayer: wallet(), authorizers: [custody], recipe };
+  // Plain Neo: with no explicit system fee the transaction declares exactly
+  // the gas the simulation consumed. No budget-derived minimum, no margin.
+  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "12866237" };
+  const automatic = await prepare(node, plan, { ...CAPS, maxSystemFee: "20000000", maxTotalFee: "20001000", nonce: 1, ...base, systemFee: undefined });
+  assert.equal(automatic.systemFeeSource, "simulation");
+  assert.equal(automatic.systemFee, "12866237");
+  assert.equal(automatic.transaction.systemFee, "12866237");
+  assert.deepEqual(automatic.review.simulation, { state: "HALT", gasConsumed: "12866237" });
+  // A simulation that consumed more than the approved cap is refused, not trimmed.
+  await assert.rejects(
+    prepare(node, plan, { ...CAPS, nonce: 1, ...base, systemFee: undefined }),
+    /exceeds approved cap/,
+  );
+  // A caller's explicit system fee must cover the simulated consumption.
+  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "210" };
+  await assert.rejects(
+    prepare(node, plan, options(wallet(), { recipe, authorizers: [custody] })),
+    /below actual simulated consumption/,
+  );
   node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "10" };
-  await assert.rejects(
-    prepare(node, plan, { ...CAPS, nonce: 1, feePayer: wallet(), authorizers: [custody], recipe, systemFee: undefined }),
-    /supply an explicit system fee budget/,
-  );
-  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "210", minimumrequiredfee: "100" };
-  await assert.rejects(
-    prepare(node, plan, options(wallet(), { recipe, authorizers: [custody] })),
-    /below gasconsumed/,
-  );
-  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "10", minimumrequiredfee: "300" };
-  await assert.rejects(
-    prepare(node, plan, options(wallet(), { recipe, authorizers: [custody] })),
-    /bounded-call admission/,
-  );
-  node.state.simulate = { state: "HALT", stack: [{ type: "Any" }], gasconsumed: "10", minimumrequiredfee: "100" };
   await assert.rejects(
     prepare(node, plan, options(wallet(), { recipe, authorizers: [custody], systemFee: "1001" })),
     /exceeds approved cap/,
@@ -318,18 +436,12 @@ test("fee gates: explicit budget, node admission, consumption and caps", async (
     /system fee cap is required/,
   );
   // The source of the signed system fee is part of the review, not a detail.
-  const automatic = await prepare(node, plan, {
-    ...CAPS,
-    nonce: 1,
-    feePayer: wallet(),
-    authorizers: [custody],
-    recipe,
-    systemFee: undefined,
-  });
-  assert.equal(automatic.systemFeeSource, "minimumrequiredfee");
-  assert.equal(automatic.systemFee, "100");
   const explicit = await prepare(node, plan, options(wallet(), { recipe, authorizers: [custody] }));
-  assert.equal(explicit.systemFeeSource, "explicit-budget");
+  assert.equal(explicit.systemFeeSource, "explicit");
+  assert.equal(explicit.systemFee, "200");
+  const simulated = await prepare(node, plan, { ...CAPS, nonce: 1, ...base, systemFee: undefined });
+  assert.equal(simulated.systemFeeSource, "simulation");
+  assert.equal(simulated.systemFee, "10");
 });
 
 test("the network quote stays inside the approved cap and is never guessed", async () => {
@@ -376,47 +488,43 @@ test("a failed simulation, a refused transfer or a malformed stack never reaches
   const node = createNode();
   node.setAccount({ custody: wallet().account });
   const payer = spyWallet();
-  const { plan, recipe } = build.execution(node, { ops: [operation()] });
-  node.state.simulate = { state: "FAULT", stack: [], gasconsumed: "10", minimumrequiredfee: "100", exception: "boom" };
+  const { plan, recipe } = build.execution(node, { operation: operation() });
+  node.state.simulate = { state: "FAULT", stack: [], gasconsumed: "10", exception: "boom" };
   await assert.rejects(prepare(node, plan, options(payer, { recipe })), /application preflight failed: boom/);
-  node.state.simulate = { state: "HALT", stack: [BOOL(false)], gasconsumed: "10", minimumrequiredfee: "100" };
+  node.state.simulate = { state: "HALT", stack: [BOOL(false)], gasconsumed: "10" };
   await assert.rejects(prepare(node, plan, options(payer, { recipe })), /did not return Boolean true/);
-  node.state.simulate = { state: "HALT", stack: [{ type: "Integer", value: "1" }], gasconsumed: "10", minimumrequiredfee: "100" };
+  node.state.simulate = { state: "HALT", stack: [{ type: "Integer", value: "1" }], gasconsumed: "10" };
   await assert.rejects(prepare(node, plan, options(payer, { recipe })), /token transfer/);
-  node.state.simulate = { state: "HALT", stack: [{ type: "Nope", value: null }], gasconsumed: "10", minimumrequiredfee: "100" };
+  node.state.simulate = { state: "HALT", stack: [{ type: "Nope", value: null }], gasconsumed: "10" };
   await assert.rejects(prepare(node, plan, options(payer, { recipe })), /unsupported RPC result stack type/);
-  node.state.simulate = { state: "HALT", stack: [], gasconsumed: "10", minimumrequiredfee: "100" };
+  node.state.simulate = { state: "HALT", stack: [], gasconsumed: "10" };
   await assert.rejects(prepare(node, plan, options(payer, { recipe })), /exactly one item/);
   assert.deepEqual(payer.calls, []);
 });
 
-test("a batch execution preflight must return one result per operation", async () => {
+test("a batch execution has no preflight: the retired entry is refused before a wallet sees it", async () => {
   const node = createNode();
   node.setAccount({ custody: wallet().account });
-  const ops = [operation(), operation()];
-  const { plan, recipe } = build.execution(node, { ops });
-  assert.equal(plan.batch, true);
-  node.state.simulate = {
-    state: "HALT",
-    stack: [A([BOOL(true), BOOL(true)])],
-    gasconsumed: "10",
-    minimumrequiredfee: "100",
-  };
-  await assert.doesNotReject(prepare(node, plan, options(wallet(), { recipe })));
+  const payer = spyWallet();
+  const single = operation();
+  assert.throws(
+    () => node.client.buildExecutionScript({ accountId: ACCOUNT, operations: [single, single] }),
+    /protocol-incompatible: executeUserOps is retired in v4\.1/,
+  );
+  assert.throws(
+    () => node.client.buildExecutionScript({ accountId: ACCOUNT, operations: [single] }),
+    /protocol-incompatible: executeUserOps is retired in v4\.1/,
+  );
+  // A single-result stack is the only execution stack: an Array answer for a
+  // single operation is a different protocol, not a shorter batch.
+  const { plan, recipe } = build.execution(node, { operation: single });
   node.state.simulate = {
     state: "HALT",
     stack: [A([BOOL(true)])],
     gasconsumed: "10",
-    minimumrequiredfee: "100",
   };
-  await assert.rejects(prepare(node, plan, options(wallet(), { recipe })), /exact Array/);
-  node.state.simulate = {
-    state: "HALT",
-    stack: [A([BOOL(true), BOOL(false)])],
-    gasconsumed: "10",
-    minimumrequiredfee: "100",
-  };
-  await assert.rejects(prepare(node, plan, options(wallet(), { recipe })), /did not return Boolean true/);
+  await assert.rejects(prepare(node, plan, options(payer, { recipe })), /unsupported RPC result stack type|did not return Boolean true/);
+  assert.deepEqual(payer.calls, []);
 });
 
 test("signing verifies every signature, keeps the bytes and refuses a raised fee", async () => {

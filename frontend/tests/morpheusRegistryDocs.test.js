@@ -90,13 +90,13 @@ for (const file of DOCUMENTS) {
     assert.deepEqual([testnet.domains.sa, testnet.domains.saAlias, testnet.domains.neodid], ['', '', '']);
 
     const mainnetNote = markdown.match(
-      new RegExp(`canonical mainnet ${sa} anchor now points to the clean deploy \`(0x[0-9a-f]{40})\` and resolves from \`([^\`]+)\` plus \`([^\`]+)\``),
+      new RegExp(`canonical mainnet ${sa} anchor is \`(0x[0-9a-f]{40})\` and resolves from \`([^\`]+)\` plus \`([^\`]+)\``),
     );
     assert.ok(mainnetNote, `${name}: mainnet status note`);
     assert.deepEqual(mainnetNote.slice(1), [mainnet.contracts.saCore, mainnet.domains.sa, mainnet.domains.saAlias]);
 
     const testnetNote = markdown.match(
-      new RegExp(`canonical shared testnet ${sa} anchor now points to the clean deployment \`(0x[0-9a-f]{40})\`, with shared \`Web3AuthVerifier\` \`(0x[0-9a-f]{40})\``),
+      new RegExp(`canonical shared testnet ${sa} anchor is \`(0x[0-9a-f]{40})\`, with shared \`Web3AuthVerifier\` \`(0x[0-9a-f]{40})\``),
     );
     assert.ok(testnetNote, `${name}: testnet status note`);
     assert.deepEqual(testnetNote.slice(1), [testnet.contracts.saCore, testnet.contracts.saWeb3AuthVerifier]);

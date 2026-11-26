@@ -222,18 +222,30 @@ async function nodeHarness() {
 test('relay prices and signs a complete proxy envelope and caps fees before broadcast', async () => {
   const node = await nodeHarness();
   try {
-    for (const metaInvocation of [invocation(), invocation({ batch: true })]) {
-      const reply = await withRelay(
-        node,
-        { SA_RELAY_PROXY_WITNESS_ENABLED: '1', SA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000' },
-        () => post({ metaInvocation }),
-      );
-      assert.equal(reply.status, 200, JSON.stringify(reply.body));
-      assert.ok(reply.body.txid);
-      assert.equal(reply.body.networkFee, '200010000');
-    }
+    const reply = await withRelay(
+      node,
+      { SA_RELAY_PROXY_WITNESS_ENABLED: '1', SA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000' },
+      () => post({ metaInvocation: invocation() }),
+    );
+    assert.equal(reply.status, 200, JSON.stringify(reply.body));
+    assert.ok(reply.body.txid);
+    assert.equal(reply.body.networkFee, '200010000');
+    // The retired batch envelope is refused before pricing or broadcast: v4.1
+    // relays one executeUserOp and never splits a list into transactions.
+    const batched = await withRelay(
+      node,
+      {
+        SA_RELAY_PROXY_WITNESS_ENABLED: '1',
+        SA_RELAY_PROXY_NETWORK_FEE_RESERVE: '200000000',
+        SA_RELAY_INCLUDE_RAW_ERRORS: '1',
+      },
+      () => post({ metaInvocation: invocation({ batch: true }) }),
+    );
+    assert.equal(batched.status, 502);
+    assert.match(batched.body.rawMessage || '', /executeUserOps is retired in v4\.1/);
+    assert.equal(batched.body.txid, undefined);
     const priced = node.requests.filter((item) => ['calculatenetworkfee', 'sendrawtransaction'].includes(item.method));
-    assert.equal(priced.length, 4);
+    assert.equal(priced.length, 2);
     for (const request of priced) {
       const transaction = tx.Transaction.deserialize(Buffer.from(request.params[0], 'base64').toString('hex'));
       assert.equal(transaction.signers.length, 2);
@@ -277,10 +289,15 @@ test('relay prices and signs a complete proxy envelope and caps fees before broa
   }
 });
 
-test('real relay handler refuses both sponsored proxy envelopes before fee calculation or broadcast', async () => {
+test('real relay handler refuses the sponsored entry and the retired batch before fee calculation or broadcast', async () => {
   const node = await nodeHarness();
   try {
-    for (const metaInvocation of [sponsoredInvocation(), sponsoredInvocation({ batch: true })]) {
+    for (const [metaInvocation, expected] of [
+      [sponsoredInvocation(), /Sponsored proxy transfers are not supported/],
+      // The sponsored batch is retired with every other list entrypoint, and the
+      // batch refusal is the one the caller must see: there is no v4.1 tail.
+      [sponsoredInvocation({ batch: true }), /executeSponsoredUserOps is retired in v4\.1/],
+    ]) {
       const reply = await withRelay(
         node,
         {
@@ -291,7 +308,7 @@ test('real relay handler refuses both sponsored proxy envelopes before fee calcu
         () => post({ metaInvocation }),
       );
       assert.equal(reply.status, 502);
-      assert.match(reply.body.rawMessage, /Sponsored proxy transfers are not supported/);
+      assert.match(reply.body.rawMessage, expected);
       assert.equal(reply.body.txid, undefined);
     }
     assert.equal(

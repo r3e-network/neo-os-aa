@@ -5,8 +5,8 @@ Creates a fresh single-node NeoExpress chain in a scratch directory, deploys the
 private PLATFORM core from contracts/bin/platform and the public modules from
 contracts/bin/public with the same deploy data the production tooling uses. Each
 deployment records its profile so provenance cannot join the public core to a
-bounded-callback receipt. The validator drives real transactions (native backup-owner path,
-escape hatch, bounded hook callbacks, lifecycle-ABI pre-checks, session-key relay
+callback receipt. The validator drives real transactions (native backup-owner path,
+escape hatch, hook callbacks, lifecycle-ABI pre-checks, session-key relay
 submission including a registration-time day-one key, account discovery and
 simulation reads, paymaster settlement, recovery cleanup with credit refund, MultiSig
 and MultiHook child pre-checks, market escrow including the silent-market owner
@@ -16,6 +16,11 @@ against the local NEF and manifest, and writes a dated receipt.
 Every assertion is fail-closed: the first mismatch aborts the run and the receipt
 records the failure. Nothing here touches a public network, and the receipt never
 contains wallet keys or absolute host paths.
+
+The contracts/bin/platform prototype core predates the platform-fee model: its bytes still carry the
+retired private callback interop, which no core built from this repository registers. A run therefore
+needs a runtime that still provides it, and its receipt is not evidence about the native SmartAccount
+core. A module callback there, as everywhere else, is bounded only by the declared system fee.
 
 The final scenario composes SA with the NeoDID registry: it deploys
 NeoDIDRegistry.nef/.manifest.json from the sibling neo-os-services pinned vendor tree
@@ -94,17 +99,12 @@ def services_build_directory():
     return ROOT.parent / "neo-os-services" / "vendor" / "neo-os-did" / "contracts" / "build"
 
 
-# The deployed SmartAccount prototype uses this application-trigger
-# callback budget. It is intentionally kept separate from the native profile:
-# native verifier callbacks are specified at 100,000,000 datoshi and Neo's
-# Verification-trigger envelope is 150,000,000 datoshi.
-APPLICATION_CALLBACK_GAS_LIMIT_DATOSHI = 1_000_000_000
-MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI = 250_000_000
-ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI = 11 * MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI
+# The system fee, in GAS, this private chain declares for the core transactions it sends. It is the only
+# bound a module callback has: a callback that overspends faults and the whole transaction rolls back.
+# The envelopes are NeoExpress-only and never fund a public-network transaction.
 NEO_MAX_VERIFICATION_GAS_DATOSHI = 150_000_000
-NATIVE_PROFILE_VERIFIER_BUDGET_DATOSHI = 100_000_000
-PRIVATE_EXECUTE_GAS_ENVELOPE = "200"       # NeoExpress-only execute transaction envelope
-PRIVATE_CORE_GAS_ENVELOPE = "40"           # Covers the bounded composite root and its nested leaf cleanups
+PRIVATE_EXECUTE_GAS_ENVELOPE = "200"
+PRIVATE_CORE_GAS_ENVELOPE = "40"
 PRIVATE_EXECUTE_OPERATIONS = frozenset({
     "executeUserOp",
     "executeUserOps",
@@ -157,21 +157,6 @@ def source_runtime_binding(runtime, build_receipt, dotnet, workdir):
         "runtimeFilesMatchedAfter": False,
         "pathsIncluded": False,
     }
-
-
-FAULT_ALIASES = {
-    # NeoExpress builds carrying the same bounded-call syscall have used both
-    # the public VM exception text and the older validator-facing wording.
-    # Treat only these exact equivalent messages as the same expected fault;
-    # all other text remains fail-closed.
-    "The bounded contract call gas limit has been exhausted.":
-        ("The bounded contract call gas limit has been exhausted.",
-         "Contract call gas limit exceeded."),
-}
-
-
-def fault_matches(expected, actual):
-    return any(alias in actual for alias in FAULT_ALIASES.get(expected, (expected,)))
 
 
 def validation_summary(chain):
@@ -598,9 +583,8 @@ class Chain:
         for name in WALLETS:
             self.nx("transfer", str(PRIVATE_WALLET_FUNDING_GAS), "GAS", "genesis", name)
         config = json.loads(self.file.read_text())
-        # The custom Neo core used by this private validation adds the bounded
-        # verifier syscall at HF_SmartAccountV1. Activate that hardfork from block zero;
-        # this setting is local-chain-only and never touches a public network.
+        # The core under test gates its SmartAccount behaviour on HF_SmartAccountV1. Activate that
+        # hardfork from block zero; this setting is local-chain-only and never touches a public network.
         config.setdefault("settings", {})["protocol.Hardforks.HF_SmartAccountV1"] = "0"
         self.file.write_text(json.dumps(config, indent=2) + "\n")
         self.magic = config.get("magic")
@@ -652,9 +636,8 @@ class Chain:
     def estimate(self, contract, operation, args, account):
         """Measure the private-chain pre-submission simulation for this invocation.
 
-        Execute paths use the same explicit 200 GAS envelope as the persisted
-        NeoExpress transaction path, so the simulation reaches the bounded
-        verifier callback instead of failing on the outer transaction budget.
+        Core paths use the same declared system fee as the persisted NeoExpress
+        transaction path, so the simulation and the transaction share one bound.
         """
         path = self.invoke_file(contract, operation, list(args))
         command = ["contract", "invoke", str(path), account, "-r", "-j"]
@@ -678,11 +661,9 @@ class Chain:
     def tx(self, step, contract, operation, args, account, scope=None, expect_fault=None):
         path = self.invoke_file(contract, operation, list(args))
         command = ["contract", "invoke", str(path), account, "-j"]
-        # The bounded callback syscall rejects a child cap larger than the caller's
-        # remaining execution budget. Give every state-changing core transition an
-        # explicit private-chain fee envelope so lifecycle and execution tests exercise
-        # the child cap itself rather than an underfunded outer transaction. This is
-        # NeoExpress-only and never funds a public-network transaction.
+        # Give every core transaction an explicit private-chain system fee: it is the only bound a
+        # module callback has, and an underfunded transaction would fail before the protocol path under
+        # test is reached. This is NeoExpress-only and never funds a public-network transaction.
         if contract == "SmartAccount":
             command += ["-g", (PRIVATE_EXECUTE_GAS_ENVELOPE
                                 if operation in PRIVATE_EXECUTE_OPERATIONS
@@ -699,7 +680,7 @@ class Chain:
             record["exception"] = reason
             if expect_fault is None:
                 raise ValidationFailure(f"{step}: unexpected fault: {reason}")
-            if not fault_matches(expect_fault, reason):
+            if expect_fault not in reason:
                 raise ValidationFailure(f"{step}: expected fault containing {expect_fault!r}, got {reason!r}")
             record["expectedFault"] = expect_fault
         else:
@@ -963,7 +944,7 @@ class Chain:
             else:
                 if execution["vmstate"] != "FAULT":
                     raise ValidationFailure(f"{step}: expected fault but transaction halted")
-                if not fault_matches(expect_fault, execution.get("exception") or ""):
+                if expect_fault not in (execution.get("exception") or ""):
                     raise ValidationFailure(
                         f"{step}: expected fault containing {expect_fault!r}, "
                         f"got {execution.get('exception')!r} "
@@ -1103,54 +1084,6 @@ def scenario_hook(c):
     blocked = A(H(c.contracts["TEEVerifier"]), S("supportsV3"), A(), I(1), I(FAR_DEADLINE), B(b""))
     c.execute("unlisted target", account, blocked, "owner", expect_fault="Target contract not in whitelist")
     c.check(c.nonce(account) == 1, "rejected pre-hook leaves the nonce unchanged")
-
-
-def scenario_hook_gas_cap(c):
-    c.scenario("bounded hook callback gas")
-    hook = c.contracts["MockTransferTarget"]
-    account, proxy = c.register("register adversarial hook", hook=hook)
-    # MockTransferTarget is deployed by the genesis account; only that account
-    # may arm its test-only burning callback.
-    c.tx("enable adversarial hook burn", "MockTransferTarget", "setBurnGas", [BOOL(True)], "genesis")
-    record = c.execute(
-        "hook callback exceeds its independent budget",
-        account,
-        c.transfer_op(hook, proxy, c.wallets["buyer"], 1, 0),
-        "owner",
-        expect_fault="The bounded contract call gas limit has been exhausted.")
-    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM hook-budget fault is surfaced by the SA invocation")
-    c.check(c.nonce(account) == 0, "a hook budget fault rolls back nonce consumption")
-    c.tx("enable adversarial post-hook burn", "MockTransferTarget", "setBurnPostGas", [BOOL(True)], "genesis")
-    c.tx("disable adversarial pre-hook burn", "MockTransferTarget", "setBurnGas", [BOOL(False)], "genesis")
-    record = c.execute(
-        "post-hook callback exceeds its independent budget",
-        account,
-        c.transfer_op(hook, proxy, c.wallets["buyer"], 1, 0),
-        "owner",
-        expect_fault="The bounded contract call gas limit has been exhausted.")
-    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM post-hook budget fault is surfaced by the SA invocation")
-    c.check(c.nonce(account) == 0, "a post-hook budget fault rolls back nonce consumption")
-
-    cleanup_account, _ = c.register("register account for bounded module cleanup", hook=hook)
-    c.tx("enable adversarial module cleanup burn", "MockTransferTarget", "setBurnClearGas", [BOOL(True)], "genesis")
-    c.tx("propose bounded hook cleanup", "SmartAccount", "updateHook",
-         [H(cleanup_account), H(ZERO)], "owner")
-    c.fastfwd(DAY)
-    record = c.tx(
-        "module cleanup callback exceeds its independent budget",
-        "SmartAccount",
-        "confirmHookUpdate",
-        [H(cleanup_account)],
-        "owner",
-        expect_fault="The bounded contract call gas limit has been exhausted.")
-    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM maintenance-budget fault is surfaced by the hook transition")
-    c.check(c.hash_result("SmartAccount", "getHook", H(cleanup_account)) == hook,
-            "maintenance-budget fault preserves the outgoing hook binding")
-    c.check(c.results("SmartAccount", "hasPendingHookUpdate", H(cleanup_account)) is True,
-            "maintenance-budget fault preserves the pending hook transition")
 
 
 def scenario_abi_precheck(c):
@@ -1298,59 +1231,6 @@ def scenario_profile_crypto(c, workdir):
     # and the account had to be rescued through the escape path).
     c.register("disabled ZKEmail verifier cannot bind", verifier=zk_email,
                expect_fault="Verifier does not implement V3 interface")
-
-
-def scenario_verifier_gas_cap(c):
-    c.scenario("bounded verifier callback gas")
-    verifier = c.contracts["MockVerifierCore"]
-    target = c.contracts["MockTransferTarget"]
-    account, proxy = c.register("register adversarial verifier", verifier=verifier)
-    c.tx("enable adversarial verifier burn", "MockVerifierCore", "setBurnGas", [BOOL(True)], "owner")
-    record = c.execute(
-        "verifier callback exceeds its independent budget",
-        account,
-        c.transfer_op(target, proxy, c.wallets["buyer"], 1, 0),
-        "owner",
-        expect_fault="The bounded contract call gas limit has been exhausted.")
-    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM child-budget fault is surfaced by the SA invocation")
-    c.check(c.nonce(account) == 0, "a verifier budget fault rolls back nonce consumption")
-    c.tx("disable adversarial verifier burn", "MockVerifierCore", "setBurnGas", [BOOL(False)], "owner")
-    c.tx("enable adversarial verifier post burn", "MockVerifierCore", "setBurnPostGas", [BOOL(True)], "owner")
-    record = c.execute(
-        "verifier post callback exceeds its independent budget",
-        account,
-        c.transfer_op(target, proxy, c.wallets["buyer"], 1, 0),
-        "owner",
-        expect_fault="The bounded contract call gas limit has been exhausted.")
-    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the NeoVM verifier post-budget fault is surfaced by the SA invocation")
-    c.check(c.nonce(account) == 0, "a verifier post-budget fault rolls back nonce consumption")
-    c.tx("disable adversarial verifier post burn", "MockVerifierCore", "setBurnPostGas",
-         [BOOL(False)], "owner")
-    c.tx("enable adversarial message-signature burn", "MockVerifierCore", "setBurnGas",
-         [BOOL(True)], "owner")
-    record = c.raw_tx(
-        "ERC-1271 verifier callback exceeds its independent budget",
-        "SmartAccount",
-        "isValidSignature",
-        [H(account), B(bytes([0x11]) * 32), B(bytes([0x22]) * 65)],
-        signer="owner",
-        system_fee=20 * GAS,
-        expect_fault="The bounded contract call gas limit has been exhausted.")
-    c.check(record.get("expectedFault") == "The bounded contract call gas limit has been exhausted.",
-            "the ERC-1271 adapter surfaces the NeoVM verifier-budget fault")
-    c.tx("disable adversarial message-signature burn", "MockVerifierCore", "setBurnGas",
-         [BOOL(False)], "owner")
-    record = c.raw_tx(
-        "ERC-1271 verifier callback succeeds within its independent budget",
-        "SmartAccount",
-        "isValidSignature",
-        [H(account), B(bytes([0x11]) * 32), B(bytes([0x22]) * 65)],
-        signer="owner",
-        system_fee=20 * GAS)
-    c.check(record.get("result") == "1626ba7e",
-            "the ERC-1271 adapter returns the success selector after the budget path")
 
 
 def scenario_session_key_and_paymaster(c, workdir):
@@ -1548,8 +1428,8 @@ def scenario_multisig(c, workdir):
     c.two_phase("setConfig with undeployed child", account, "verifier", "setConfig",
                 [H(account), A(H("0x1111111111111111111111111111111111111111")), I(1)],
                 expect_fault="Child verifier is not deployed")
-    # The native-only supportsComposition marker and its negative vector live in
-    # neoexpress_native_multisig_validate.py, not the public module profile.
+    # The native-only supportsComposition marker was asserted by the ABI v2 multisig
+    #    validator, which is retired; the public module profile does not assert it.
 
     c.check(c.results("SessionKeyVerifier", "getSessionKey", H(account)) is not None,
             "SessionKey leaf has durable state before topology maintenance")
@@ -2017,19 +1897,9 @@ def main():
         receipt["network"] = {"kind": "isolated-private-single-node", "networkMagic": chain.magic,
                               "rpcHost": "127.0.0.1", "publicNetwork": False}
         receipt["privateValidation"] = {
-            "platformSyscall": "System.Contract.CallWithGasLimit",
             "activationHardfork": "HF_SmartAccountV1",
             "activationBlock": 0,
-            "applicationCallbackGasLimitDatoshi": APPLICATION_CALLBACK_GAS_LIMIT_DATOSHI,
-            "applicationCallbackGasLimitGas": APPLICATION_CALLBACK_GAS_LIMIT_DATOSHI // GAS,
-            "applicationHookGasLimitDatoshi": 250_000_000,
-            "applicationHookGasLimitGas": 250_000_000 / GAS,
-            "moduleMaintenanceGasLimitDatoshi": MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI,
-            "moduleMaintenanceGasLimitGas": MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI / GAS,
-            "rootModuleMaintenanceGasLimitDatoshi": ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI,
-            "rootModuleMaintenanceGasLimitGas": ROOT_MODULE_MAINTENANCE_GAS_LIMIT_DATOSHI / GAS,
             "neoMaxVerificationGasDatoshi": NEO_MAX_VERIFICATION_GAS_DATOSHI,
-            "nativeProfileVerifierBudgetDatoshi": NATIVE_PROFILE_VERIFIER_BUDGET_DATOSHI,
             "executeGasEnvelopeGas": int(PRIVATE_EXECUTE_GAS_ENVELOPE),
             "maintenanceTransactionGasEnvelopeGas": int(PRIVATE_CORE_GAS_ENVELOPE),
             "scope": "private-chain-only; no public activation or broadcast",
@@ -2046,13 +1916,9 @@ def main():
         if not only_did:
             scenario_hook(chain)
         if not only_did:
-            scenario_hook_gas_cap(chain)
-        if not only_did:
             scenario_abi_precheck(chain)
         if not only_did:
             scenario_profile_crypto(chain, workdir)
-        if not only_did:
-            scenario_verifier_gas_cap(chain)
         if not only_did:
             scenario_session_key_and_paymaster(chain, workdir)
         if not only_did:

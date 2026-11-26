@@ -102,6 +102,9 @@ jobs:
           repository: neo-project/neo
           ref: ${{ env.NATIVE_CORE_COMMIT }}
           path: native-core
+          # Full history: scripts/native_core_pin.py diffs this checkout against upstream Neo
+          # commit 99618f48, which a shallow clone does not contain.
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
@@ -125,9 +128,13 @@ jobs:
       - name: Gate the core SmartAccount copies on the true source
         # contracts/native/SmartAccount/ is the only editable copy;
         # the pinned core must carry exactly its regenerated copies or the lane
-        # fails here, before any build or test work is spent.
+        # fails here, before any build or test work is spent. The same step holds
+        # the ABI IDL, native purity and the core-tree pin against upstream Neo.
         run: |
+          python3 scripts/check_smartaccount_v41_idl.py
+          python3 scripts/native_purity.py
           python3 scripts/sync_native_smartaccount.py --check --core "$GITHUB_WORKSPACE/native-core"
+          python3 scripts/native_core_pin.py --core "$GITHUB_WORKSPACE/native-core"
       - name: Check profile, metadata and evidence guards
         run: |
           python3 docs/proposals/validate-native-smartaccount-profile.py

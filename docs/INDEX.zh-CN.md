@@ -1,61 +1,60 @@
 
-> 中文版本与 `docs/INDEX.md` 同构。若两者冲突，以英文版本为准。
+中文版本与 `docs/INDEX.md` 同构。若两者冲突，以英文版本为准。
 
-产品名是 **Neo Smart Account —— SA**。"AA" 只保留在指以太坊账户抽象（ERC-4337/7579/7702/7715）时。协议字符串切换已完成：EIP-712 domain 名为 `"Neo Smart Account"`，`sa_contract` / `sa_proxy` 线上键使用 SA 前缀；切换前的旧域票据在本次切换时截止失效。下列所有文档都称本系统为 SA。
+产品名是 **Neo Smart Account —— SA**。"AA" 只在指以太坊账户抽象时使用。下列所有文档都称本系统为 SA。
 
-先读根目录 [README](../README.md)；本索引是地图，不是手册。原先平铺的主题页已 在文档角色化重组第一阶段并入六本按读者的“书”，七份过程文档则在第二阶段合并为 [engineering/](engineering/) 下的两本工程书；每本书开头带章节目录。`frontend/src/assets/docs/` 下的前端帮助页由这些书切片生成：修改某本书后，在 `frontend/` 运行 `npm run sync:docs`（或 `node scripts/sync-frontend-docs.mjs`）重新生成。
+先读根目录 [README](../README.md)；本索引是地图，不是手册。文档按读者组织成书，每本书开头带章节目录。`frontend/src/assets/docs/` 下的前端帮助页由这些书切片生成：修改某本书后，在 `frontend/` 运行 `npm run sync:docs`（或 `node scripts/sync-frontend-docs.mjs`）重新生成。
 
 ## 按角色导航
 
-模块作者可从[模块标准接入说明](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md)进入公共接口草案、各模块条款和编译后的 ABI。
-
 | 读者 | 读这里 | 它回答什么 |
 | --- | --- | --- |
-| 普通用户与钱包操作员 | [GUIDE.zh-CN.md](GUIDE.zh-CN.md) · [EN](GUIDE.md) | 端到端心智模型与运营者 / 签名方实操指南、快速参考、交易生命周期与提交流程、原生账户工作台、交易守卫、恢复与操作会话、阈值恢复、已签名交易导入（合并自 HOW_IT_WORKS、QUICK_REFERENCE、WORKFLOWS、四份 NATIVE_ACCOUNT_* 页面与 RECOVERY_AND_SESSIONS） |
-| DApp / SDK 开发者 | [SDK.zh-CN.md](SDK.zh-CN.md) · [EN](SDK.md) | 原生 SDK 使用、阈值会话、EIP-712 签名、代理转账、待处理配置更新读取（合并自 NATIVE_SDK、MULTISIG_SDK、SA-EIP-712-SPEC、SA-PROXY-TRANSFERS、PENDING_CONFIG_UPDATE_READ_ABI） |
-| 模块（插件）开发者 | [SA-MODULE-PROTOCOL.zh-CN.md](SA-MODULE-PROTOCOL.zh-CN.md) · [EN](SA-MODULE-PROTOCOL.md) | 协议模块设计；集成前核对开头的原生范围说明及协议原稿 §16.2 差距表，文末附录 "Appendix: Module developer guide"（仅英文）收录插件安全、生命周期与清理 |
-| 架构师 | [ARCHITECTURE.zh-CN.md](ARCHITECTURE.zh-CN.md) · [EN](ARCHITECTURE.md) —— 以及 —— [SECURITY.zh-CN.md](SECURITY.zh-CN.md) · [EN](SECURITY.md) | 架构书：技术架构、原生系统架构、仓库布局与验证地图、系统状态与能力边界、数据流与存储、与以太坊 AA 对比（合并自 architecture、NATIVE_SYSTEM_ARCHITECTURE、ORGANIZATION、SA-SYSTEM-STATUS、DATA_FLOW 与 ETHEREUM_AA_COMPARISON）；安全书：当前威胁模型与信任假设，含协议完备性审计（附录 A）与前端依赖安全评估（附录 B） |
-| 节点与运维 | [OPERATIONS.zh-CN.md](OPERATIONS.zh-CN.md) · [EN](OPERATIONS.md) | 先干跑再上链的测试网校验与只读的主网校验 runbook、部署后的前端冒烟清单、实测的原生预算与费用行为（合并自 validation-runbooks、POST_DEPLOY_SMOKE_TEST 与 NATIVE_ACCOUNT_PERFORMANCE） |
-| 协议规范全文 | [Neo-Smart-Account-Documentation-zh-CN.pdf](Neo-Smart-Account-Documentation-zh-CN.pdf) | 完整规范手稿（中文，PDF） |
+| 普通用户与钱包操作员 | [GUIDE.zh-CN.md](GUIDE.zh-CN.md) · [EN](GUIDE.md) | 端到端心智模型、工作流生命周期、原生账户工作台、阈值钱包权限与已签名交易导入 |
+| DApp / SDK 开发者 | [SDK.zh-CN.md](SDK.zh-CN.md) · [EN](SDK.md) | `NativeSmartAccountClient` 的用法：发现、身份、创建、账户状态、执行、凭证代次、模块、账户动作与费用，以及阈值会话 |
+| 模块（插件）开发者 | [SA-MODULE-PROTOCOL.zh-CN.md](SA-MODULE-PROTOCOL.zh-CN.md) · [EN](SA-MODULE-PROTOCOL.md) · [模块 NEP 接入说明](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md) | 闭合 26 方法原生 ABI 下的模块行为：命名空间、上限、操作编码、签名域、回调 ABI、生命周期与时间锁、gas 与成本、能力声明档案以及错误与事件表。模块行为不扩展原生 ABI；先读 [v4.1 IDL](proposals/smartaccount-v4.1.idl.json)。末尾两章 "Appendix: Module developer guide" 与 "Frontend module chooser guide" 仅提供英文 |
+| 架构师 | [ARCHITECTURE.zh-CN.md](ARCHITECTURE.zh-CN.md) · [EN](ARCHITECTURE.md) —— 以及 —— [SECURITY.zh-CN.md](SECURITY.zh-CN.md) · [EN](SECURITY.md) | 架构书：原生系统架构、账户身份与权限、执行与撤销、支持的策略模块、费用与用户体验、验证与激活。安全书：信任边界、执行安全、配置与治理、紧急遏制、恢复、失败语义、模块信任假设、开放边界与前端依赖安全评估 |
+| 节点与运维 | [OPERATIONS.zh-CN.md](OPERATIONS.zh-CN.md) · [EN](OPERATIONS.md) | 本地校验、生成与固定文件、证据规则 |
+| 演讲者 | [Neo-Smart-Account-Protocol-Design-zh-CN.pptx](Neo-Smart-Account-Protocol-Design-zh-CN.pptx) · [EN](Neo-Smart-Account-Protocol-Design-en-US.pptx) | 中英双语 48 页协议设计演示文稿（只讲协议，不讲实现）。每页自带演讲者备注与分步动画；独立讲稿、录像与字幕不入库 |
+| 协议规范全文 | [Neo-Smart-Account-Documentation-zh-CN.pdf](Neo-Smart-Account-Documentation-zh-CN.pdf) | 49 页；由权威源 [v4.1 IDL](proposals/smartaccount-v4.1.idl.json) 与 [SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md) 派生的完整中文阅读版（PDF）。它不是独立权威，冲突时以 IDL 与 SA-SPEC 为准 |
 
 ## 语言策略
 
-英文文本是规范文本。六本角色书与本索引都有名为 `<name>.zh-CN.md` 的中文对照，两侧保持结构一致，中文文件在首段声明冲突时以英文为准。过程 / 验证 / 审计 / 交接层——闭合门禁、形式化验证、逐入口点闭合、前端对应关系、迁移 manifest、合约交接、构建复现记录与未锁的 proposals——仅提供英文：这些章节随每次门禁运行变化，过期的译文会误述证据。[SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md) 仍是这一层的中文导读。
+读者书的英文文本是规范文本。五本读者书与本索引都有名为 `<name>.zh-CN.md` 的中文对照，其 H2/H3 标题序列与英文书一致，中文文件在首段声明冲突时以英文为准。唯一声明的例外是模块协议书：第 1–18 章中英对等，末尾两章 "Appendix: Module developer guide" 与 "Frontend module chooser guide" 仅提供英文。根 README 同样双语。`frontend/tests/docsTruth.test.js` 中有一条守卫比对标题序列。
 
 | 覆盖情况 | 涉及文档 | 说明 |
 | --- | --- | --- |
-| 双语（EN + `.zh-CN.md`） | 六本角色书、模块协议书、本索引、根 README、四份原生 proposals | 12 对 |
-| 仅英文 | [engineering/](engineering/) 下的两本工程书与未锁的 proposals | 5 篇；本索引保留条目并标注“仅英文” |
-
-## 工程师与过程记录
-
-过程层（仅英文）随每次门禁运行变化。文档重组第二阶段已把七份原过程文档合并为 [engineering/](engineering/) 下的两本书，每本开头带章节目录：
-
-- [engineering/VERIFICATION-AND-GATES.md](engineering/VERIFICATION-AND-GATES.md) —— SA 形式化验证（有界 Coq 模型、运行时对应关系、未覆盖边界）、可复现构建（固定工具链、逐字节重建、pin 升级）、决定某个入口点能否算作已验证的集成精化闭合门禁、逐入口点闭合清单
-- [engineering/HANDOFF-RECORDS.md](engineering/HANDOFF-RECORDS.md) —— 合约内部交接的内核检查结论（第十八号闭合作用域）与源码前端与编译器的对应关系记录
-- 这一层的中文导读：[SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md)
-- 构建打包：[../sdk/js/PACKAGING.md](../sdk/js/PACKAGING.md) 与经审计的 Neo 平台包固定值 [../contracts/neo-platform-packages.json](../contracts/neo-platform-packages.json)（SA 可复现构建章的依据）
-
-闭合回执是刻意失败关闭的：`status: NO-GO` 且已验证入口点为零，是诚实状态，不是回归。当前集成回执：[reports/sa-closure-gate-20261117.json](reports/sa-closure-gate-20261117.json)。
+| 双语（EN + `.zh-CN.md`） | 五本读者书、本索引、根 README、模块协议书与三份原生 proposals（[SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md)、[SMARTACCOUNT-NATIVE-MODULE-PROFILES](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md)、[SMARTACCOUNT-NATIVE-MULTISIG](proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md)） | 11 对；只有模块协议书有英文独有章节（末尾两章） |
+| 仅英文 | 下方“当前协议”一节列出的 [proposals/](proposals/) 下的 NEP 草案与机器可读文件、[验证书](engineering/VERIFICATION-AND-GATES.md) 与 [Morpheus 注册表记录](engineering/MORPHEUS-REGISTRY.md) | NEP 草案面向 Neo 流程，以英文撰写；机器可读文件没有可翻译的正文 |
+| 仅中文 | [SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md) 与 [SMARTACCOUNT-MODULE-NEPS.zh-CN.md](proposals/SMARTACCOUNT-MODULE-NEPS.zh-CN.md) | 协议规范与模块 NEP 导读 |
 
 ## 当前协议
 
-[模块协议](SA-MODULE-PROTOCOL.zh-CN.md)定义协议行为；[参数](proposals/smartaccount-native-profile-parameters.json)和[实现清单](../contracts/native/profile.json)定义钱包、打包与验收共同使用的配置。仅有这一份未发布协议。带日期的报告只说明所记录的源码与实验。
+协议只有一份，且未发布：没有任何东西部署到公有网络。
+
+| 层 | 来源 | 作用 |
+| --- | --- | --- |
+| 原生 ABI | [proposals/smartaccount-v4.1.idl.json](proposals/smartaccount-v4.1.idl.json) · [SA-SPEC.zh-CN.md](SA-SPEC.zh-CN.md) | 权威来源：26 个方法、15 个事件、操作编码、nonce 通道、摘要与签名域、存储布局与硬分叉规则。正文与 IDL 不一致时以 IDL 为准。`python scripts/check_smartaccount_v41_idl.py` 校验 IDL 与原生属性、manifest fixture 一致 |
+| 模块行为 | [SA-MODULE-PROTOCOL.zh-CN.md](SA-MODULE-PROTOCOL.zh-CN.md) · [EN](SA-MODULE-PROTOCOL.md) | validator、hook 与策略模块在原生 ABI 下必须做什么 |
+| 参数 | [proposals/smartaccount-native-profile-parameters.json](proposals/smartaccount-native-profile-parameters.json) · [profile.json](../contracts/native/profile.json) | 钱包、打包与验收共同使用的唯一参数集；由 `docs/proposals/validate-native-smartaccount-profile.py` 校验 |
+| 核心 NEP 草案 | [nep-smartaccount-entry-verifier.mediawiki](proposals/nep-smartaccount-entry-verifier.mediawiki) | 原生 SmartAccount 协议服务及其入口验证 |
+| 模块 NEP 草案 | [nep-smartaccount-module-interface.mediawiki](proposals/nep-smartaccount-module-interface.mediawiki) · [nep-smartaccount-module-profiles.mediawiki](proposals/nep-smartaccount-module-profiles.mediawiki) | 公共模块接口与具名模块档案 |
+| 编译后的模块 ABI | [smartaccount-module-abis.md](proposals/smartaccount-module-abis.md) · [smartaccount-named-module-interfaces.json](proposals/smartaccount-named-module-interfaces.json) · [smartaccount-module-profile.schema.json](proposals/smartaccount-module-profile.schema.json) | 编译后的模块回调 ABI、具名接口与档案 schema |
+| 原生设计说明 | [SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH](proposals/SMARTACCOUNT-NATIVE-AUTHORITY-EPOCH.zh-CN.md) · [SMARTACCOUNT-NATIVE-MODULE-PROFILES](proposals/SMARTACCOUNT-NATIVE-MODULE-PROFILES.zh-CN.md) · [SMARTACCOUNT-NATIVE-MULTISIG](proposals/SMARTACCOUNT-NATIVE-MULTISIG.zh-CN.md) | 权限代次、模块档案与多签托管；三份均有 `.zh-CN.md` 对照 |
+| 评审地图 | [SMARTACCOUNT-ISSUE-242-CONFORMANCE.md](proposals/SMARTACCOUNT-ISSUE-242-CONFORMANCE.md) | 把[原生 SmartAccount 讨论](https://github.com/neo-project/proposals/issues/242)的每个评审领域映射到规则与证据；不记录上游是否接受 |
+
+## 工程师与验证
+
+- [engineering/VERIFICATION-AND-GATES.md](engineering/VERIFICATION-AND-GATES.md) —— “SA 形式化验证”（状态、ABI 投影验收义务、工件、安全边界）与“SA 合约：基于已发布包的可复现构建”（固定内容、还原 / 构建 / 测试、复现、字节能证明什么与不能证明什么、如何升级 pin）
+- [engineering/MORPHEUS-REGISTRY.md](engineering/MORPHEUS-REGISTRY.md) —— 外部 Morpheus 钱包服务注册表；不属于协议
+- 构建打包：[../sdk/js/PACKAGING.md](../sdk/js/PACKAGING.md) 与 Neo 平台包固定值 [../contracts/neo-platform-packages.json](../contracts/neo-platform-packages.json)
+- 机器可读的开放边界台账：[SA-NATIVE-OPEN-BOUNDARIES.json](SA-NATIVE-OPEN-BOUNDARIES.json)
 
 ## 证据回执
 
-`docs/reports/` 存放带日期的机器回执。回执只对它指名的提交、工件与运行时构成证据，从来不是对当前工作树的陈述。当前固定的集合：
+`docs/reports/` 存放带日期的机器回执。回执只对它指名的提交、工件与运行时构成证据，从来不是对当前工作树的陈述。留存的每份回执都有脚本读取：
 
-| 回执 | 覆盖内容 |
-| --- | --- |
-| [sa-closure-gate-20261117.json](reports/sa-closure-gate-20261117.json) | 集成闭合，NO-GO |
-| [sa-artifact-reproducibility-20261116.json](reports/sa-artifact-reproducibility-20261116.json) | 逐字节一致的工件重建 |
-| [sa-formal-gate-20261031.json](reports/sa-formal-gate-20261031.json) | Coq 门禁与变异集 |
-| [sa-neoexpress-validation-20261031.json](reports/sa-neoexpress-validation-20261031.json) | 私有链部署与回读 |
-| [sa-ordinary-candidate-compatibility-20261116.json](reports/sa-ordinary-candidate-compatibility-20261116.json) | custom 账户候选兼容矩阵 |
-
-历史与已被取代的回执，只在某道守卫或某个形式化作用域固定它时才保留。
-
-## Matrix 域
-
-对兼容的 Neo 钱包，支持在同一笔交易内完成 SA 创建与 `.matrix` 注册。`.matrix` 把人可读名字解析到一个控制地址；前端随后读取核心的按账户状态（`getAccount`、推导出的代理与账户控制记录）来确认该地址背后的账户。合约不提供从所有者地址到其账户的反向索引，因此 `.matrix` 名字只是一次查询的起点，不是账户所有权的证明。
+| 回执 | 读取方 | 覆盖内容 |
+| --- | --- | --- |
+| [sa-formal-gate-20261031.json](reports/sa-formal-gate-20261031.json) | `formal/test_verify.py` | 它所指名那次运行的 Coq 门禁与变异集 |
+| [sa-native-ci-probe-consistency-20261009.json](reports/sa-native-ci-probe-consistency-20261009.json) | `.github/workflows/native-profile.yml`、`scripts/test_native_profile_ci.py`、`scripts/test_native_budget_benchmark.py` | 原生多签宿主探针及其计价 |
+| [smartaccount-current-20261124/](reports/smartaccount-current-20261124/) | `formal/refinement/` | 2026-11-24 工作树的本地验收回执 |

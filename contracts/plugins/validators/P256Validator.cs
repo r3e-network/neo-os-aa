@@ -13,8 +13,12 @@ namespace SmartAccount.Validators
     /// <remarks>
     /// <para>
     /// One instance holds one P-256 public key. The signature field of a routed
-    /// operation is the raw 64-byte <c>r‖s</c> over the digest the core passes to
-    /// <c>validateUserOp</c> (docs/SA-MODULE-PROTOCOL.md §4.3, §5).
+    /// operation is the raw 64-byte <c>r‖s</c> over
+    /// <c>D = SHA256(opPreimage)</c> on a standalone route, or over
+    /// <c>D_i = SHA256(memberPreimage)</c> on a threshold route
+    /// (docs/SA-MODULE-PROTOCOL.md §4.3, §5). The platform applies that one
+    /// hash: this module hands <c>CryptoLib.verifyWithECDsa</c> the preimage,
+    /// never the digest.
     /// </para>
     /// <para>
     /// It is <b>not</b> a WebAuthn relying party. Nothing of the WebAuthn ceremony is
@@ -63,7 +67,7 @@ namespace SmartAccount.Validators
         /// <summary>
         /// <c>initData</c>: empty, or <c>["setPublicKey", publicKey]</c>.
         /// </summary>
-        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] initData)
+        public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             if (initData.Length > 0) ApplyConfig(accountId, moduleId, initData);
@@ -73,13 +77,13 @@ namespace SmartAccount.Validators
         /// <c>configData</c>: <c>["setPublicKey", publicKey]</c> (33-byte compressed or
         /// 65-byte uncompressed P-256 key).
         /// </summary>
-        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] configData)
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             ApplyConfig(accountId, moduleId, configData);
         }
 
-        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger generation, object[] deInitData)
+        public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             ValidatorAuthority.RequireLifecycle(accountId, moduleId);
             Storage.Delete(Storage.CurrentContext, ValidatorAuthority.InstanceKey(Prefix_PublicKey, accountId, moduleId));
@@ -122,8 +126,8 @@ namespace SmartAccount.Validators
 
             ByteString signature = ModuleOperation.MemberSignature(operation, moduleId);
             if (signature.Length != 64) return false;
-            ByteString digest = ValidatorPayload.SigningDigest(accountId, operationDigest, operation, moduleId);
-            return ValidatorPayload.VerifyP256(digest, publicKey, signature);
+            byte[] preimage = ValidatorPayload.VerifiedSigningPreimage(accountId, operationDigest, operation, moduleId);
+            return ValidatorPayload.VerifyPreimage(preimage, publicKey, signature);
         }
 
         public static void OnUserOpComplete(UInt160 accountId, object[] operation, object result)

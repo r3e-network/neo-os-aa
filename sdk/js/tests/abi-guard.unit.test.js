@@ -32,6 +32,14 @@ const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const abi = nativeAbi(repoRoot);
 const nativeSource = 'contracts/native/SmartAccount';
 
+/**
+ * Repo text with `core.autocrlf=true` is checked out as CRLF while the index is
+ * LF, so any line-oriented comparison (splitting on `\n`, `$` anchors) would see
+ * a trailing `\r`. Normalize at the read site: the test compares content, not the
+ * platform's checkout style.
+ */
+const readText = (file, encoding = 'utf8') => fs.readFileSync(file, encoding).replace(/\r\n/g, '\n');
+
 /** Every declared signature of one name, normalised for comparison. */
 const signatures = (name) => abi.get(name) ?? [];
 
@@ -59,34 +67,68 @@ function csharpSources(directory) {
 
 test('native client and core pin the canonical atomic-configuration parameters', () => {
   const crypto = require('node:crypto');
-  const params = JSON.parse(fs.readFileSync(path.join(repoRoot, 'docs/proposals/smartaccount-native-profile-parameters.json')));
+  const params = JSON.parse(readText(path.join(repoRoot, 'docs/proposals/smartaccount-native-profile-parameters.json')));
   const canonical = JSON.stringify(params, Object.keys(params).sort());
   const digest = crypto.createHash('sha256').update('NeoSmartAccount/Profile').update(Buffer.from([4])).update(canonical).digest('hex');
-  assert.deepEqual(params.configurationCoreActions, [1, 2, 5, 8]);
-  assert.deepEqual(params.governanceOnlyCoreActions, [3, 7, 9]);
+  assert.deepEqual(params.configurationCoreActions, [1, 2, 5]);
+  assert.deepEqual(params.governanceOnlyCoreActions, [3, 7]);
   assert.equal(params.configurationActionsMax, 16);
   assert.equal(NATIVE_PROFILE_PARAMETER_DIGEST, digest);
-  assert.ok(fs.readFileSync(path.join(repoRoot, nativeSource, 'SmartAccount.cs'), 'utf8').includes('ParameterDigest = "' + digest + '"'));
+  assert.ok(readText(path.join(repoRoot, nativeSource, 'SmartAccount.cs'), 'utf8').includes('ParameterDigest = "' + digest + '"'));
 });
 
-test('the native ABI is the minimal-core v4 surface', () => {
-  // The 29 exported entry points of the minimal core (spec §3, §7, §9, §10,
-  // §12.5): the configuration family plus the four restricted landing
-  // entries behind the module decisions.
-  for (const name of [
-    'computeAccountIdentity',
+test('the standard recovery module pins follow the profile parameters', () => {
+  // The NEF and manifest of the reviewed standard RecoveryModule are part of
+  // the protocol identity: the same checked-in profile parameters that feed
+  // the fingerprint carry their hashes, so the client constants and the
+  // derived profile can never disagree.
+  const params = JSON.parse(
+    readText(path.join(repoRoot, 'docs/proposals/smartaccount-native-profile-parameters.json')),
+  );
+  const {
+    NATIVE_STANDARD_RECOVERY_NEF_SHA256,
+    NATIVE_STANDARD_RECOVERY_MANIFEST_SHA256,
+    NATIVE_STANDARD_RECOVERY_PROFILE_SHA256,
+  } = require('../src/native/client');
+  assert.match(NATIVE_STANDARD_RECOVERY_NEF_SHA256, /^[0-9a-f]{64}$/);
+  assert.match(NATIVE_STANDARD_RECOVERY_MANIFEST_SHA256, /^[0-9a-f]{64}$/);
+  assert.equal(NATIVE_STANDARD_RECOVERY_NEF_SHA256, params.recoveryNefSha256);
+  assert.equal(NATIVE_STANDARD_RECOVERY_MANIFEST_SHA256, params.recoveryManifestSha256);
+  // The core publishes the descriptor's profile hash as SHA-256 of the exact
+  // getModuleProfile() bytes, and the reviewed-seat check refuses a seat whose
+  // hash differs. That pin is therefore derived, never typed: it is the hash of
+  // the profile literal the standard recovery module returns.
+  const recoverySource = readText(path.join(repoRoot, 'contracts/modules/RecoveryModule/RecoveryModule.cs'));
+  const profileLiteral = /ModuleProfileJson\s*=\s*"((?:[^"\\]|\\.)*)"\s*;/.exec(recoverySource);
+  assert.ok(profileLiteral, 'the standard recovery module must publish a literal module profile');
+  assert.equal(
+    NATIVE_STANDARD_RECOVERY_PROFILE_SHA256,
+    require('node:crypto').createHash('sha256').update(JSON.parse('"' + profileLiteral[1] + '"')).digest('hex'),
+    'the reviewed-seat profile pin must be the hash of the profile the module returns',
+  );
+});
+
+test('the native ABI is the frozen v4.1 surface', () => {
+  // The 26 entry points of the v4.1 core. The manifest fixture is the published
+  // surface (`scripts/check_smartaccount_v41_idl.py` proves it is the IDL's);
+  // the C# declarations are the source the chain projects it from.
+  const surface = [
     'createAccount',
     'createAccounts',
-    'getMessageSubjects', 'getThresholdPolicy', 'isValidSignature',
-    'getOperationDigest',
-    'validateUserOp',
+    'getAccount',
+    'getAccountAddress',
+    'freezeAccount',
+    'unfreezeAccount',
     'executeUserOp',
-    'executeUserOps',
+    'validateUserOp',
+    'validateMember',
+    'verify',
+    'getOperationDigest',
     'getNonce',
     'getNonceSequence',
     'installModule',
     'removeModule',
-    'setRecoveryPolicy',
+    'configureModule',
     'setBuiltinAuthorization',
     'applyConfigurationActions',
     'revokeModuleCredentials',
@@ -95,24 +137,27 @@ test('the native ABI is the minimal-core v4 surface', () => {
     'getModule',
     'isModuleInstalled',
     'getAuthorizedModuleId',
-    'freezeAccount',
-    'unfreezeAccount',
     'getProtocolInfo',
-    'getAccount',
-    'getAccountAddress',
     'getAccountImplementationId',
-    'verify',
-  ]) {
-    if (name === 'computeAccountIdentity') continue; // a pure helper, not a contract method
-    assert.ok(abi.has(name), `missing v4 method ${name}`);
+  ];
+  const manifest = require('../../../tests/fixtures/native-smartaccount.manifest.json');
+  assert.deepEqual(manifest.abi.methods.map(({ name }) => name).sort(), [...surface].sort());
+  for (const name of surface) {
+    assert.ok(abi.has(name), `missing v4.1 method ${name}`);
   }
-  assert.equal([...abi.keys()].length, 29, 'the minimal core exports exactly 29 methods');
-  // Removed with the single-slot verifier/hook model, the platform services and
-  // the features that moved to user-space modules. There is no alias, so an old
-  // caller must fail to resolve rather than silently reach a renamed method.
+  // Retired: the single-slot verifier/hook model, the platform services, the
+  // native message/threshold/recovery-policy surface (now SigningModule,
+  // ThresholdPolicyModule and RecoveryModule) and the features that moved to
+  // user-space modules. There is no alias, so an old caller must fail to
+  // resolve rather than silently reach a renamed method.
+  const published = new Set(surface);
   for (const name of [
+    // The v4.0 batch execution entry: physically deleted, not aliased onto
+    // executeUserOp, so a caller that still builds a list fails to resolve.
+    'executeUserOps',
     'registerAccount',
     'registerAccounts',
+    'computeAccountIdentity',
     'updateVerifier',
     'confirmVerifierUpdate',
     'cancelVerifierUpdate',
@@ -148,7 +193,7 @@ test('the native ABI is the minimal-core v4 surface', () => {
     'isMigrationRequired',
     'markMigrationRequired',
     'getMigrationState',
-    // Features that are user-space module concerns in the minimal core.
+    // Features that are user-space module concerns in the v4.1 core.
     'proposeConfiguration',
     'confirmConfiguration',
     'cancelConfiguration',
@@ -158,6 +203,8 @@ test('the native ABI is the minimal-core v4 surface', () => {
     'cancelRecovery',
     'executeRecovery',
     'getRecoveryStatus',
+    'getRecoveryPolicySnapshot',
+    'setRecoveryPolicy',
     'getHookOrder',
     'setHookOrder',
     'revokeCredentials',
@@ -165,10 +212,23 @@ test('the native ABI is the minimal-core v4 surface', () => {
     'supportsModuleType',
     'supportsExecutionMode',
     'setThresholdPolicy',
+    'getThresholdPolicy',
+    'getMessageSubjects',
     'updateMessageSubject',
+    'getUserOpDigest',
+    'getConfigurationNonce',
   ]) {
-    assert.equal(abi.has(name), false, `retired method ${name} is still in the ABI`);
+    assert.equal(published.has(name), false, `retired method ${name} is still published`);
   }
+  // Message signature verification has exactly one route: the active signing
+  // module's own entry point. The native client must not reach a core method.
+  const client = readText(path.join(repoRoot, 'shared', 'nativeSmartAccountClient.mjs'));
+  assert.equal(
+    /nativeCall\([^)]*['"]isValidSignature['"]/.test(client),
+    false,
+    'the native client must not call a core isValidSignature',
+  );
+  assert.match(client, /MESSAGE_VERIFY_METHOD\s*=\s*["']isValidSignature["']/, 'the module entry is a named constant');
 });
 
 test('every SDK-required operation is declared once with the exact shape', () => {
@@ -184,7 +244,7 @@ test('every SDK-required operation is declared once with the exact shape', () =>
 });
 
 test('the native-only account address query is declared by the native kernel', () => {
-  const native = csharpSources(nativeSource).map((file) => fs.readFileSync(file, 'utf8'));
+  const native = csharpSources(nativeSource).map((file) => readText(file, 'utf8'));
   for (const [name, [types, returntype, safe, names]] of Object.entries(
     NATIVE_ACCOUNT_ADDRESS_ABI,
   )) {
@@ -217,8 +277,24 @@ test('the operation argument is a compound the client always serializes as an Ar
     const [entry] = signatures(name);
     assert.deepEqual(entry.types.slice(1).filter((type) => type === 'Array').length, 1, name);
   }
-  // `executeUserOps` takes the operations Array itself, so it declares Array too.
-  assert.equal(signatures('executeUserOps')[0].types[1], 'Array');
+  // `executeUserOps` took the operations Array itself; that entry is retired, so
+  // the surface carries exactly one execute entry and it takes one operation.
+  assert.equal(abi.has('executeUserOps'), false, 'the batch entry must not be published');
+  assert.equal(REQUIRED.executeUserOps, undefined, 'the client must not require the batch entry');
+  assert.ok(
+    !Object.keys(REQUIRED).includes('executeUserOps'),
+    'NATIVE_REQUIRED_ABI must carry exactly the 26 single-operation methods',
+  );
+  // REQUIRED is the discovery gate's whole surface: 25 core entries plus the
+  // native-only account address query, exactly the 26 methods the IDL publishes.
+  assert.equal(Object.keys(REQUIRED).length, 26);
+  assert.deepEqual(
+    Object.keys(REQUIRED).sort(),
+    require('../../../tests/fixtures/native-smartaccount.manifest.json').abi.methods
+      .map(({ name }) => name)
+      .sort(),
+    'the discovery gate requires exactly the published 26 methods',
+  );
   for (const [name, entries] of abi) {
     for (const entry of entries) {
       assert.equal(
@@ -229,7 +305,7 @@ test('the operation argument is a compound the client always serializes as an Ar
     }
   }
   // The native build declares `Array` on the entry points themselves.
-  const native = csharpSources(nativeSource).map((file) => fs.readFileSync(file, 'utf8'));
+  const native = csharpSources(nativeSource).map((file) => readText(file, 'utf8'));
   for (const method of ['GetOperationDigest', 'ValidateUserOp', 'ExecuteUserOp']) {
     // Declarations wrap, so the parameter list is matched across lines.
     const declaration = native
@@ -246,7 +322,7 @@ test('wallet discovery and the native kernel declare exactly the same events', (
   // positional argument, there is no `Name =` property in the attribute.
   const declared = new Set(
     [...csharpSources(nativeSource).flatMap((file) => [
-      ...fs.readFileSync(file, 'utf8').matchAll(/\[ContractEvent\(\s*[^,]+,\s*\d+\s*,\s*"([A-Za-z0-9_]+)"/g),
+      ...readText(file, 'utf8').matchAll(/\[ContractEvent\(\s*[^,]+,\s*\d+\s*,\s*"([A-Za-z0-9_]+)"/g),
     ])].map((match) => match[1]),
   );
   assert.ok(declared.size > 0, 'the native source declares no events');
@@ -258,7 +334,7 @@ test('both protocol event tables match the manifest emitted by the native build'
   const expected = abi.events.map(({ name, parameters }) =>
     `| \`${name}\` | ${parameters.map(p => `\`${p.name}: ${p.type}\``).join(', ')} |`);
   for (const doc of ['SA-MODULE-PROTOCOL.md', 'SA-MODULE-PROTOCOL.zh-CN.md']) {
-    const section = fs.readFileSync(path.join(repoRoot, 'docs', doc), 'utf8')
+    const section = readText(path.join(repoRoot, 'docs', doc), 'utf8')
       .split(/^## 18\. /m)[1].split(/^---$/m)[0];
     assert.deepEqual(section.split('\n').filter(line => line.startsWith('| `')), expected, doc);
   }
@@ -273,7 +349,7 @@ test('every operation string the SDK emits exists in the native ABI', () => {
   ];
   const emitted = new Map();
   for (const file of files) {
-    const source = fs.readFileSync(file, 'utf8');
+    const source = readText(file, 'utf8');
     // Reads are dispatched by name; plan builders pass literal contract calls.
     for (const [, name] of source.matchAll(/_read\(\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]/g)) {
       emitted.set(name, path.basename(file));
@@ -292,7 +368,7 @@ test('every operation string the SDK emits exists in the native ABI', () => {
   // A read through invokescript must be declared safe: an unsafe method is a
   // state change requested by a read path.
   for (const file of files) {
-    const source = fs.readFileSync(file, 'utf8');
+    const source = readText(file, 'utf8');
     for (const [, name] of source.matchAll(/_read\(\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]/g)) {
       const [entry] = signatures(name);
       assert.equal(entry?.safe, true, `${name} is read but not safe`);
@@ -330,7 +406,7 @@ test('the SDK source carries no removed v3 operation', () => {
     'CUSTOM_PROXY_CALL_FLAGS',
   ];
   for (const file of files) {
-    const source = stripComments(fs.readFileSync(file, 'utf8'));
+    const source = stripComments(readText(file, 'utf8'));
     for (const name of removed) {
       assert.equal(
         new RegExp(`\\b${name}\\b`).test(source),
@@ -344,14 +420,12 @@ test('the SDK source carries no removed v3 operation', () => {
 test('the SA_* vocabulary is exactly the vocabulary the native kernel raises', () => {
   assert.equal(PROTOCOL_VERSION, 4);
   const codes = (directory) =>
-    new Set(
-      csharpSources(directory).flatMap((file) =>
-        [...fs.readFileSync(file, 'utf8').matchAll(/"(SA_[A-Z0-9_]+)"/g)].map((match) => match[1]),
-      ),
+    csharpSources(directory).flatMap((file) =>
+      [...readText(file, 'utf8').matchAll(/"(SA_[A-Z0-9_]+)"/g)].map((match) => match[1]),
     );
-  // The native kernel in contracts/native/SmartAccount is the only kernel left,
-  // so it is the sole vocabulary the SDK must map exactly.
-  const native = codes(nativeSource);
+  // The kernel and its user-space modules are the vocabulary the SDK maps: the
+  // core owns the operation/account codes, the modules the policy codes.
+  const native = new Set([...codes(nativeSource), ...codes('contracts/modules')]);
   const sdk = new Set(SA_ERROR_CODES);
   // The minimal core raises exactly thirty-three distinct codes; the floor keeps
   // a wholesale truncation of the map from passing the set comparison below.

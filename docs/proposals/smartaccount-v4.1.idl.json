@@ -1,0 +1,1977 @@
+{
+  "schema": "smartaccount-idl/v4.1",
+  "protocol": {
+    "name": "SmartAccount",
+    "version": 4,
+    "revision": "4.1",
+    "status": "frozen",
+    "moduleProtocol": "docs/SA-MODULE-PROTOCOL.md",
+    "normativeSpec": "docs/SA-SPEC.zh-CN.md",
+    "generated": false,
+    "note": "The 26 native methods and 15 events below are the complete native ABI. Names, parameter order, manifest types, call flags and safe flags are extracted from the current C# attributes, the native manifest fixture and the native tests. Exactly one execution entry exists: executeUserOp."
+  },
+  "authority": {
+    "implementationSources": [
+      "docs/proposals/smartaccount-v4.1.idl.json",
+      "docs/SA-SPEC.zh-CN.md",
+      "docs/SA-MODULE-PROTOCOL.md"
+    ],
+    "rule": "For the v4.1 native contract these two documents plus this IDL are the only implementation sources. Where they disagree with any other document, they win.",
+    "otherDocuments": [
+      {
+        "path": "docs/Neo-Smart-Account-Documentation-zh-CN.pdf",
+        "status": "derived",
+        "reason": "Chinese reading edition derived from the IDL, SA-SPEC and the module protocol. It adds no fact and is not an implementation source."
+      },
+      {
+        "path": "docs/proposals/nep-smartaccount-entry-verifier.mediawiki",
+        "status": "draft",
+        "reason": "Core protocol NEP draft. Where it disagrees with the IDL and SA-SPEC, the IDL and SA-SPEC win."
+      }
+    ]
+  },
+  "nativeContract": {
+    "name": "SmartAccount",
+    "kind": "native",
+    "hash": "0x398dc3f0227d7efac5533ed5ce9937390c158084",
+    "implementationId": "NativeSmartAccount",
+    "activationHardfork": "HF_SmartAccountV1",
+    "manifestExtra": {
+      "smartAccount.abiVersion": 4,
+      "smartAccount.profileParameterDigest": "f9692d8cf7d74333b37142525de479f5742b1442aaf8baff64d883c4d16002f1"
+    },
+    "permissions": [
+      {
+        "contract": "*",
+        "methods": "*"
+      }
+    ],
+    "trusts": [],
+    "supportedStandards": []
+  },
+  "responsibilityBoundary": {
+    "nativeOwns": [
+      "account identity and the stable proxy address",
+      "custody, account status, authority epoch, configuration nonce and control revision",
+      "module registration, enumeration and code binding metadata",
+      "operation nonce channels and namespace collision detection",
+      "canonical operation encoding, digest and signing domain",
+      "single-route validation and execution, target-frame witness lease and non-reentrancy",
+      "resource bounds, atomic rollback and freeze",
+      "credential revocation",
+      "restricted reset landing"
+    ],
+    "nativeDoesNotOwn": [
+      "message signature subjects, message digest domain or message quorum (SigningModule)",
+      "guardians, recovery delay and recovery lifecycle (RecoveryModule)",
+      "threshold members, weights, quorum or threshold policy state (ThresholdPolicyModule)",
+      "governance delay, execution window, conflict detection or action commitment (GovernanceModule)",
+      "hook order and planner snapshot storage (HookOrchestratorModule)",
+      "asset balances or asset transfers (Neo N3 native assets and NEP-17 contracts)"
+    ],
+    "narrowLandings": {
+      "validateMember": "Accepts leaf validation only from the active composite caller for the exact operation bytes and digest. It stores no member roster, weight or quorum.",
+      "configureModule": "Narrow write sink for one module configuration callback. It stores no governance intent or delay policy.",
+      "applyConfigurationActions": "Narrow atomic batch write sink. It stores no governance intent or delay policy."
+    }
+  },
+  "types": {
+    "AccountDescriptor": {
+      "kind": "Array",
+      "arity": 9,
+      "fields": [
+        {
+          "index": 0,
+          "name": "exists",
+          "type": "Boolean"
+        },
+        {
+          "index": 1,
+          "name": "status",
+          "type": "Integer",
+          "domain": "0=Active, 1=Frozen"
+        },
+        {
+          "index": 2,
+          "name": "custody",
+          "type": "Hash160"
+        },
+        {
+          "index": 3,
+          "name": "authorityEpoch",
+          "type": "Integer"
+        },
+        {
+          "index": 4,
+          "name": "configurationNonce",
+          "type": "Integer"
+        },
+        {
+          "index": 5,
+          "name": "defaultOperationAuthorization",
+          "type": "Boolean"
+        },
+        {
+          "index": 6,
+          "name": "defaultMessageAuthorization",
+          "type": "Boolean",
+          "v41Effect": "compatibility field only; the native message entry is retired"
+        },
+        {
+          "index": 7,
+          "name": "requiredValidatorId",
+          "type": "Integer"
+        },
+        {
+          "index": 8,
+          "name": "controlRevision",
+          "type": "Integer"
+        }
+      ],
+      "unknownAccount": [
+        false,
+        0,
+        "0x0000000000000000000000000000000000000000",
+        0,
+        0,
+        false,
+        false,
+        0,
+        0
+      ]
+    },
+    "ModuleDescriptor": {
+      "kind": "Array",
+      "arity": 15,
+      "fields": [
+        {
+          "index": 0,
+          "name": "moduleId",
+          "type": "Integer"
+        },
+        {
+          "index": 1,
+          "name": "moduleType",
+          "type": "Integer",
+          "domain": "1=validator, 4=hook, 5=recovery"
+        },
+        {
+          "index": 2,
+          "name": "contractHash",
+          "type": "Hash160"
+        },
+        {
+          "index": 3,
+          "name": "contractId",
+          "type": "Integer"
+        },
+        {
+          "index": 4,
+          "name": "updateCounter",
+          "type": "Integer"
+        },
+        {
+          "index": 5,
+          "name": "nefSha256",
+          "type": "ByteArray"
+        },
+        {
+          "index": 6,
+          "name": "profileSha256",
+          "type": "ByteArray"
+        },
+        {
+          "index": 7,
+          "name": "moduleRevision",
+          "type": "Integer"
+        },
+        {
+          "index": 8,
+          "name": "credentialGeneration",
+          "type": "Integer"
+        },
+        {
+          "index": 9,
+          "name": "instanceIsolation",
+          "type": "Boolean"
+        },
+        {
+          "index": 10,
+          "name": "messageCapability",
+          "type": "Boolean"
+        },
+        {
+          "index": 11,
+          "name": "thresholdMemberEligible",
+          "type": "Boolean"
+        },
+        {
+          "index": 12,
+          "name": "compositeLayer",
+          "type": "Boolean"
+        },
+        {
+          "index": 13,
+          "name": "governance",
+          "type": "Boolean"
+        },
+        {
+          "index": 14,
+          "name": "hookPlanner",
+          "type": "Boolean"
+        }
+      ],
+      "missingInstance": []
+    },
+    "ModulePage": {
+      "kind": "Array",
+      "arity": 3,
+      "fields": [
+        {
+          "index": 0,
+          "name": "items",
+          "type": "Array",
+          "element": "Integer (moduleId), ascending"
+        },
+        {
+          "index": 1,
+          "name": "nextCursor",
+          "type": "Integer",
+          "semantics": "0 when the page is the last page"
+        },
+        {
+          "index": 2,
+          "name": "configurationNonce",
+          "type": "Integer"
+        }
+      ]
+    },
+    "ValidationPreview": {
+      "kind": "Array",
+      "arity": 2,
+      "fields": [
+        {
+          "index": 0,
+          "name": "accepted",
+          "type": "Boolean"
+        },
+        {
+          "index": 1,
+          "name": "operationDigest",
+          "type": "ByteArray"
+        }
+      ]
+    }
+  },
+  "methods": [
+    {
+      "name": "createAccount",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "custody",
+          "type": "Hash160"
+        },
+        {
+          "name": "salt",
+          "type": "ByteArray"
+        },
+        {
+          "name": "actions",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "custody witness; accountId must equal RIPEMD160(SHA256(0xAA524704 || custody || salt)) reversed",
+      "effects": [
+        "writes the 0x51 control record and the 0x11 proxy index",
+        "executes 0..16 initial install actions atomically under the registering custody witness",
+        "advances the configuration nonce once when actions are present",
+        "emits AccountRegistered and the events of the executed actions"
+      ],
+      "guards": [
+        "salt 1..128 bytes",
+        "custody is not a proxy address or the core",
+        "proxy address is unused",
+        "accountId is not registered"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_OPERATION_MALFORMED",
+        "SA_MODULE_LIMIT_ACTIONS",
+        "SA_BUILTIN_ROUTE_REQUIRED"
+      ],
+      "notes": "Initial actions are the only configuration path that is not governance-delayed: registration itself is the account's consent."
+    },
+    {
+      "name": "createAccounts",
+      "parameters": [
+        {
+          "name": "accountIds",
+          "type": "Array"
+        },
+        {
+          "name": "custody",
+          "type": "Hash160"
+        },
+        {
+          "name": "salts",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "custody witness",
+      "effects": [
+        "registers 1..64 id/salt pairs in order, each without initial actions"
+      ],
+      "guards": [
+        "accountIds.Length == salts.Length",
+        "1..64 pairs"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_OPERATION_MALFORMED",
+        "SA_MODULE_LIMIT_BATCH"
+      ],
+      "notes": "All or nothing: a failing pair rolls the whole batch back."
+    },
+    {
+      "name": "getAccount",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        }
+      ],
+      "returnType": "Array",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returnLayout": "AccountDescriptor",
+      "faults": [
+        "SA_OPERATION_MALFORMED"
+      ],
+      "notes": "Non-faulting for an unknown account: returns the all-zero descriptor with exists=false."
+    },
+    {
+      "name": "getAccountAddress",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        }
+      ],
+      "returnType": "Hash160",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returns": "script hash of the fixed proxy verification script; stable across freeze, recovery and reset",
+      "faults": [
+        "SA_OPERATION_MALFORMED"
+      ]
+    },
+    {
+      "name": "freezeAccount",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "custody witness only, whatever route is pinned; freezing is never governance-delayed",
+      "effects": [
+        "status becomes Frozen",
+        "advances authority epoch, configuration nonce and control revision",
+        "emits AccountFrozen"
+      ],
+      "guards": [
+        "account exists and is Active",
+        "account has no open execution"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_ACCOUNT_FROZEN",
+        "SA_ACCOUNT_STATUS",
+        "SA_REENTRANCY_FORBIDDEN"
+      ],
+      "notes": "Emergency path: immediate, never governance-delayed. Custody may always freeze."
+    },
+    {
+      "name": "unfreezeAccount",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "governance-only: the account's bound, code-bound governance instance; the custody witness cannot thaw",
+      "effects": [
+        "status becomes Active",
+        "advances authority epoch, configuration nonce and control revision",
+        "emits AccountUnfrozen"
+      ],
+      "guards": [
+        "account exists and is Frozen",
+        "account has no open execution"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_ACCOUNT_STATUS",
+        "SA_REENTRANCY_FORBIDDEN"
+      ],
+      "notes": "Ordinary thaw is a 24 h governance action. Freeze and credential revocation stay immediate."
+    },
+    {
+      "name": "executeUserOp",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "operation",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Any",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "permissionless relayer; authority comes from the signed operation",
+      "effects": [
+        "validates and consumes one nonce",
+        "runs the hook bracket and the single target dispatch",
+        "emits UserOpExecuted"
+      ],
+      "guards": [
+        "Active account",
+        "13-field canonical operation",
+        "authority epoch and configuration nonce equal current values",
+        "deadline not passed",
+        "code bindings unchanged before commit",
+        "no open execution for this account"
+      ],
+      "faults": [
+        "SA_OPERATION_MALFORMED",
+        "SA_EPOCH_STALE",
+        "SA_CONFIGURATION_NONCE_STALE",
+        "SA_NONCE_INVALID",
+        "SA_NONCE_EXHAUSTED",
+        "SA_DEADLINE_EXPIRED",
+        "SA_VALIDATION_REJECTED",
+        "SA_REENTRANCY_FORBIDDEN"
+      ],
+      "notes": "Returns the target call result. A target FAULT rolls the whole invocation back."
+    },
+    {
+      "name": "validateUserOp",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "operation",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Array",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returnLayout": "ValidationPreview",
+      "effects": [
+        "none; no nonce is consumed and no state is written"
+      ],
+      "guards": [
+        "performs the same envelope, epoch, configuration-nonce, deadline, nonce and signature checks as executeUserOp, including a dead channel that previews as a rejection"
+      ],
+      "faults": [
+        "SA_OPERATION_MALFORMED",
+        "SA_ACCOUNT_NOT_FOUND"
+      ],
+      "notes": "A rejection is reported as accepted=false, not as a fault, after structural validation succeeds. An exhausted nonce channel is one such rejection: the preview never faults on exhaustion and never writes the sentinel."
+    },
+    {
+      "name": "validateMember",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "memberId",
+          "type": "Integer"
+        },
+        {
+          "name": "operationDigest",
+          "type": "ByteArray"
+        },
+        {
+          "name": "operation",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Boolean",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "only the active composite validator instance that is being validated, during the Validation phase",
+      "effects": [
+        "records one leaf approval in engine-local operation state",
+        "no persistent write"
+      ],
+      "guards": [
+        "operationDigest is exactly the digest being validated",
+        "operation bytes are byte-identical to the in-flight operation",
+        "member is an active, threshold-member-eligible, non-composite validator",
+        "no duplicate member",
+        "at most 10 members"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_OPERATION_MALFORMED",
+        "SA_MODULE_LIMIT_VALIDATOR"
+      ],
+      "notes": "Leaf validation only. The core never reads a member roster, weight or quorum here."
+    },
+    {
+      "name": "verify",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        }
+      ],
+      "returnType": "Boolean",
+      "callFlags": "ReadOnly",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "the fixed proxy verification script of the account",
+      "faults": [
+        "SA_UNAUTHORIZED"
+      ],
+      "notes": "Admissibility-only witness gate embedded in the fixed proxy verification script. Verification trigger: the caller is the account's proxy and is not the payer, the account exists and is Active, the transaction script carries exactly one executeUserOp(accountId, operation) call for this account, and deadline, authority epoch, configuration nonce and nonce availability hold. It performs no signature check and calls no module, because one witness is capped at 1.5 GAS; authorisation happens once in executeUserOp, so an invalid signature passes the witness and faults at execution. Application trigger: only the proxy frame inside its own target dispatch answers true. It is not a legacy alias."
+    },
+    {
+      "name": "getOperationDigest",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "operation",
+          "type": "Array"
+        }
+      ],
+      "returnType": "ByteArray",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returns": "32-byte SHA-256 digest defined by digestDomains.userOperation",
+      "faults": [
+        "SA_OPERATION_MALFORMED",
+        "SA_ACCOUNT_NOT_FOUND"
+      ]
+    },
+    {
+      "name": "getNonce",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "validatorId",
+          "type": "Integer"
+        },
+        {
+          "name": "nonceSubkey",
+          "type": "ByteArray"
+        }
+      ],
+      "returnType": "Integer",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returns": "(channel << 64) | sequence while the channel is live; once exhausted the raw sentinel 2^64 is returned (never a packed nonce, so it cannot alias the next channel)",
+      "faults": [
+        "SA_OPERATION_MALFORMED",
+        "SA_ACCOUNT_NOT_FOUND"
+      ]
+    },
+    {
+      "name": "getNonceSequence",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "channel",
+          "type": "Integer"
+        }
+      ],
+      "returnType": "Integer",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returns": "the stored 64-bit sequence cursor of the explicit channel (0..2^64-1), or the raw exhaustion sentinel 2^64",
+      "faults": [
+        "SA_OPERATION_MALFORMED",
+        "SA_ACCOUNT_NOT_FOUND"
+      ]
+    },
+    {
+      "name": "installModule",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleType",
+          "type": "Integer"
+        },
+        {
+          "name": "moduleContractHash",
+          "type": "Hash160"
+        },
+        {
+          "name": "initData",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Integer",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "governance-only: the account's bound, code-bound governance instance; creation is the only consent to an initial install",
+      "effects": [
+        "allocates a never-reused moduleId",
+        "binds code identity and profile digest",
+        "runs onInstall",
+        "advances the configuration nonce once",
+        "emits ModuleInstanceInstalled and ModuleInstalled"
+      ],
+      "guards": [
+        "Active, idle account",
+        "type is 1, 4 or 5",
+        "per-type instance caps",
+        "callback surface and code binding match",
+        "same-address re-install needs instanceIsolation"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_MODULE_TYPE_UNSUPPORTED",
+        "SA_MODULE_LIMIT_VALIDATOR",
+        "SA_MODULE_LIMIT_HOOK",
+        "SA_MODULE_LIMIT_RECOVERY",
+        "SA_MODULE_CODE_BINDING_MISMATCH",
+        "SA_MODULE_INSTANCE_ISOLATION_REQUIRED"
+      ],
+      "notes": "Initial installation during createAccount is the atomic, non-delayed exception."
+    },
+    {
+      "name": "removeModule",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleId",
+          "type": "Integer"
+        },
+        {
+          "name": "deInitData",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "governance-delayed; resetAccount is the only non-governance sweep",
+      "effects": [
+        "runs onUninstall",
+        "deletes the instance and its index row",
+        "advances the configuration nonce once",
+        "emits ModuleInstanceRemoved and ModuleRemoved"
+      ],
+      "guards": [
+        "Active, idle account",
+        "final route check passes",
+        "moduleId is installed"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_MODULE_NOT_INSTALLED",
+        "SA_MODULE_ID_INVALID",
+        "SA_BUILTIN_ROUTE_REQUIRED",
+        "SA_MODULE_CODE_BINDING_MISMATCH"
+      ],
+      "notes": "Removing the last validator requires the built-in operation route to stay open."
+    },
+    {
+      "name": "configureModule",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleId",
+          "type": "Integer"
+        },
+        {
+          "name": "data",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "governance-delayed: the code-bound GovernanceModule submits the mature action",
+      "effects": [
+        "increments moduleRevision",
+        "runs the module configure callback",
+        "advances the configuration nonce once",
+        "emits ModuleInstanceConfigured"
+      ],
+      "guards": [
+        "Active, idle account",
+        "module is installed",
+        "module exposes configure(4)",
+        "hook order changes only through this path"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_MODULE_NOT_INSTALLED",
+        "SA_MODULE_CODE_BINDING_MISMATCH",
+        "SA_OPERATION_MALFORMED"
+      ],
+      "notes": "Narrow write sink. Governance delay, intent identity and conflict detection live in GovernanceModule; this method stores none of them."
+    },
+    {
+      "name": "setBuiltinAuthorization",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "defaultOperationAuthorization",
+          "type": "Boolean"
+        },
+        {
+          "name": "defaultMessageAuthorization",
+          "type": "Boolean"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "governance-delayed: the code-bound GovernanceModule submits the mature action",
+      "effects": [
+        "writes both switches",
+        "advances the configuration nonce once",
+        "emits BuiltinAuthorizationSet"
+      ],
+      "guards": [
+        "Active, idle account",
+        "closing the operation switch requires an installed validator route"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_BUILTIN_ROUTE_REQUIRED",
+        "SA_OPERATION_MALFORMED"
+      ],
+      "notes": "The operation switch gates the built-in custody route. The message switch is part of the account record layout and grants no native message authority: the native message entry does not exist and SigningModule is the only message surface."
+    },
+    {
+      "name": "applyConfigurationActions",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "actions",
+          "type": "Array"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "governance-delayed; during createAccount the registering custody witness applies the initial group; the seat that just reset an account may apply exactly one install-only group in the same transaction (restricted initialization)",
+      "effects": [
+        "applies 1..16 ordered actions atomically",
+        "advances the configuration nonce and control revision exactly once",
+        "in the restricted reset initialization the reset already advanced both counters, so the landing only saves the restored composition"
+      ],
+      "guards": [
+        "Active, idle account",
+        "final operation route present",
+        "every ordinary action needs the currently installed, code-bound governance caller",
+        "the restricted initialization admits install (1) actions only and must leave at least one installed validator with the governance capability",
+        "configure (3) and required-validator (7) actions require the governance caller when governed"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_OPERATION_MALFORMED",
+        "SA_MODULE_LIMIT_ACTIONS",
+        "SA_BUILTIN_ROUTE_REQUIRED",
+        "and the faults of the contained actions"
+      ],
+      "notes": "Narrow batch sink. Governance delay, execution window and conflict policy are GovernanceModule state."
+    },
+    {
+      "name": "revokeModuleCredentials",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleId",
+          "type": "Integer"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "custody witness or the code-bound governance caller; immediate",
+      "effects": [
+        "increments the instance credential generation",
+        "advances the configuration nonce once",
+        "emits ModuleCredentialsRevoked"
+      ],
+      "guards": [
+        "Active, idle account",
+        "module is an installed validator",
+        "generation is not saturated"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_MODULE_NOT_INSTALLED",
+        "SA_MODULE_TYPE_UNSUPPORTED",
+        "SA_CREDENTIAL_STALE"
+      ],
+      "notes": "Emergency path: callback-free and immediate. It cannot be interpreted as a grant."
+    },
+    {
+      "name": "resetAccount",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "newCustody",
+          "type": "Hash160"
+        }
+      ],
+      "returnType": "Void",
+      "callFlags": "All",
+      "cpuFee": 32768,
+      "safe": false,
+      "kind": "write",
+      "authorization": "only the account's currently installed, code-bound recovery module, after that module has matured its own record",
+      "effects": [
+        "removes every module instance and emits ModuleInstanceRemoved per instance",
+        "deletes every nonce cursor and namespace row",
+        "writes newCustody when nonzero",
+        "restores Active, default operation/message switches on, requiredValidatorId 0",
+        "advances authority epoch, configuration nonce and control revision",
+        "keeps the moduleId allocator and the proxy address",
+        "opens one engine-local, single-use, install-only initialization for the same seat",
+        "emits AccountReset"
+      ],
+      "guards": [
+        "Active or Frozen account",
+        "idle account",
+        "caller is the bound recovery instance",
+        "newCustody is a valid authority address when nonzero"
+      ],
+      "faults": [
+        "SA_UNAUTHORIZED",
+        "SA_ACCOUNT_STATUS",
+        "SA_REENTRANCY_FORBIDDEN",
+        "SA_MODULE_CODE_BINDING_MISMATCH",
+        "SA_PHASE_VIOLATION"
+      ],
+      "notes": "The core enforces binding and landing only. Guardian quorum, delay and maturity are RecoveryModule state and are checked there before this call. The reset alone leaves no module instance; the same seat may then land exactly one install-only composition through applyConfigurationActions in the same transaction. The transaction has to end with a governance-capable, code-bound validator: a landing that leaves none, a transaction that ends without the landing, or a later call in the same transaction that removes the last one faults the whole transaction and rolls the reset back."
+    },
+    {
+      "name": "getModules",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleType",
+          "type": "String"
+        },
+        {
+          "name": "cursor",
+          "type": "Integer"
+        },
+        {
+          "name": "limit",
+          "type": "Integer"
+        }
+      ],
+      "returnType": "Array",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returnLayout": "ModulePage",
+      "faults": [
+        "SA_MODULE_TYPE_UNSUPPORTED",
+        "SA_OPERATION_MALFORMED"
+      ],
+      "notes": "moduleType is the manifest string validator, hook or recovery. limit is 1..32; cursor is the last moduleId of the previous page."
+    },
+    {
+      "name": "getModule",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleId",
+          "type": "Integer"
+        }
+      ],
+      "returnType": "Array",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returnLayout": "ModuleDescriptor",
+      "faults": [
+        "SA_OPERATION_MALFORMED"
+      ],
+      "notes": "Returns an empty array for a missing instance."
+    },
+    {
+      "name": "isModuleInstalled",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleType",
+          "type": "String"
+        },
+        {
+          "name": "moduleHash",
+          "type": "Hash160"
+        },
+        {
+          "name": "additionalContext",
+          "type": "ByteArray"
+        }
+      ],
+      "returnType": "Boolean",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "faults": [
+        "SA_MODULE_TYPE_UNSUPPORTED",
+        "SA_OPERATION_MALFORMED"
+      ],
+      "notes": "additionalContext is accepted and ignored in v4.1; the answer is derived from installed instances of the type."
+    },
+    {
+      "name": "getAuthorizedModuleId",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "phase",
+          "type": "Integer"
+        }
+      ],
+      "returnType": "Integer",
+      "callFlags": "ReadStates",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returns": "the instance id the core is addressing in this phase, or -1",
+      "faults": [
+        "SA_OPERATION_MALFORMED"
+      ],
+      "notes": "Valid phases are 1..9; phase 7 (Cleanup) is reserved and never granted."
+    },
+    {
+      "name": "getProtocolInfo",
+      "parameters": [],
+      "returnType": "Array",
+      "callFlags": "None",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returns": "[4]",
+      "faults": []
+    },
+    {
+      "name": "getAccountImplementationId",
+      "parameters": [],
+      "returnType": "String",
+      "callFlags": "None",
+      "cpuFee": 32768,
+      "safe": true,
+      "kind": "read",
+      "authorization": "permissionless",
+      "returns": "NativeSmartAccount",
+      "faults": []
+    }
+  ],
+  "events": [
+    {
+      "id": 0,
+      "name": "AccountRegistered",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "custody",
+          "type": "Hash160"
+        }
+      ],
+      "note": "Registration identity only; no policy state."
+    },
+    {
+      "id": 1,
+      "name": "ModuleInstalled",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleType",
+          "type": "String"
+        },
+        {
+          "name": "moduleHash",
+          "type": "Hash160"
+        }
+      ],
+      "note": "Legacy indexer feed, emitted beside ModuleInstanceInstalled."
+    },
+    {
+      "id": 2,
+      "name": "ModuleRemoved",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleType",
+          "type": "String"
+        },
+        {
+          "name": "moduleHash",
+          "type": "Hash160"
+        }
+      ],
+      "note": "Legacy indexer feed, emitted beside ModuleInstanceRemoved."
+    },
+    {
+      "id": 3,
+      "name": "UserOpExecuted",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "targetContract",
+          "type": "Hash160"
+        },
+        {
+          "name": "method",
+          "type": "String"
+        },
+        {
+          "name": "nonce",
+          "type": "Integer"
+        }
+      ],
+      "note": "Generic execution metadata; no policy payload."
+    },
+    {
+      "id": 4,
+      "name": "ModuleInstanceInstalled",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleId",
+          "type": "Integer"
+        },
+        {
+          "name": "moduleType",
+          "type": "Integer"
+        },
+        {
+          "name": "contractHash",
+          "type": "Hash160"
+        },
+        {
+          "name": "credentialGeneration",
+          "type": "Integer"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "ModuleInstanceRemoved",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleId",
+          "type": "Integer"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "NonceChannelOpened",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "channelDigest",
+          "type": "ByteArray"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "NonceChannelExhausted",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "channelDigest",
+          "type": "ByteArray"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "AccountFrozen",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "authorityEpoch",
+          "type": "Integer"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "AccountUnfrozen",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "authorityEpoch",
+          "type": "Integer"
+        }
+      ],
+      "note": "Emitted by the governance-delayed thaw."
+    },
+    {
+      "id": 10,
+      "name": "ModuleCredentialsRevoked",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleId",
+          "type": "Integer"
+        },
+        {
+          "name": "credentialGeneration",
+          "type": "Integer"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "AccountReset",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "custody",
+          "type": "Hash160"
+        },
+        {
+          "name": "authorityEpoch",
+          "type": "Integer"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "BuiltinAuthorizationSet",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "defaultOperationAuthorization",
+          "type": "Boolean"
+        },
+        {
+          "name": "defaultMessageAuthorization",
+          "type": "Boolean"
+        }
+      ],
+      "note": "defaultMessageAuthorization is reported for record layout compatibility only."
+    },
+    {
+      "id": 16,
+      "name": "ModuleInstanceConfigured",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "moduleId",
+          "type": "Integer"
+        },
+        {
+          "name": "credentialGeneration",
+          "type": "Integer"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "name": "RequiredValidatorSet",
+      "parameters": [
+        {
+          "name": "accountId",
+          "type": "Hash160"
+        },
+        {
+          "name": "validatorId",
+          "type": "Integer"
+        },
+        {
+          "name": "required",
+          "type": "Boolean"
+        }
+      ],
+      "note": "Mandatory route pointer only. It names one route; it does not carry a member roster, weight or quorum."
+    }
+  ],
+  "retiredEvents": [
+    {
+      "id": 11,
+      "name": "RecoveryPolicySet",
+      "status": "hardfork-retired",
+      "reason": "Recovery policy and delay are RecoveryModule state. The id is never reused."
+    },
+    {
+      "id": 14,
+      "name": "ThresholdPolicySet",
+      "status": "hardfork-retired",
+      "reason": "Threshold members and quorum are ThresholdPolicyModule state. The id is never reused."
+    },
+    {
+      "id": 15,
+      "name": "MessageSubjectUpdated",
+      "status": "hardfork-retired",
+      "reason": "Message subjects are SigningModule state. The id is never reused."
+    }
+  ],
+  "retiredNativeSurface": {
+    "methods": [
+      {
+        "name": "isValidSignature",
+        "status": "retired",
+        "replacement": "SigningModule.isValidSignature",
+        "reason": "The native message entry is removed; SigningModule is the only public message-signature entry."
+      },
+      {
+        "name": "setRecoveryPolicy",
+        "status": "retired",
+        "replacement": "RecoveryModule configuration",
+        "reason": "Recovery policy, guardians and delay are module state."
+      },
+      {
+        "name": "getMessageSubjects",
+        "status": "retired",
+        "replacement": "SigningModule reads",
+        "reason": "Message roster is module state."
+      },
+      {
+        "name": "getThresholdPolicy",
+        "status": "retired",
+        "replacement": "ThresholdPolicyModule reads",
+        "reason": "Threshold roster and quorum are module state."
+      },
+      {
+        "name": "beginRecovery",
+        "status": "retired",
+        "replacement": "RecoveryModule.beginRecovery",
+        "reason": "Recovery lifecycle is module state."
+      },
+      {
+        "name": "cancelRecovery",
+        "status": "retired",
+        "replacement": "RecoveryModule.cancelRecovery",
+        "reason": "Recovery lifecycle is module state."
+      },
+      {
+        "name": "executeRecovery",
+        "status": "retired",
+        "replacement": "RecoveryModule.executeRecovery -> native resetAccount",
+        "reason": "The module matures the record; the core only lands the reset."
+      },
+      {
+        "name": "getRecoveryStatus",
+        "status": "retired",
+        "replacement": "RecoveryModule.getRecoveryStatus",
+        "reason": "Recovery lifecycle is module state."
+      },
+      {
+        "name": "getHookOrder",
+        "status": "retired",
+        "replacement": "HookOrchestratorModule.getHookOrder",
+        "reason": "Hook order is module state."
+      },
+      {
+        "name": "setHookOrder",
+        "status": "retired",
+        "replacement": "governed configureModule -> HookOrchestratorModule",
+        "reason": "Hook order changes only through a governed module configuration callback."
+      },
+      {
+        "name": "executeUserOps",
+        "status": "retired",
+        "replacement": "executeUserOp",
+        "reason": "The kernel exposes exactly one execution entry; a multi-operation envelope is not a native surface and must be split by the caller."
+      }
+    ],
+    "forbiddenAdditions": [
+      "getConfigurationNonce",
+      "getUserOpDigest",
+      "getOperationDomain",
+      "listModules",
+      "getAddress"
+    ],
+    "rule": "No alias, rename or additional entry for any of these names may be added to the native ABI."
+  },
+  "canonicalOperation": {
+    "arity": 13,
+    "container": "Array (Struct rejected)",
+    "fields": [
+      {
+        "index": 0,
+        "name": "version",
+        "type": "Integer",
+        "domain": "exactly 4"
+      },
+      {
+        "index": 1,
+        "name": "target",
+        "type": "ByteArray",
+        "domain": "20 bytes, nonzero"
+      },
+      {
+        "index": 2,
+        "name": "method",
+        "type": "ByteArray",
+        "domain": "1..128 strict UTF-8 bytes"
+      },
+      {
+        "index": 3,
+        "name": "args",
+        "type": "Array",
+        "domain": "at most 64 entries, depth at most 8, serialized at most 4096 bytes"
+      },
+      {
+        "index": 4,
+        "name": "nonce",
+        "type": "Integer",
+        "domain": "nonnegative, channel[191] || sequence[64]"
+      },
+      {
+        "index": 5,
+        "name": "nonceSubkey",
+        "type": "ByteArray",
+        "domain": "exactly 32 bytes"
+      },
+      {
+        "index": 6,
+        "name": "deadline",
+        "type": "Integer",
+        "domain": "nonnegative, below 2^255, runtime milliseconds"
+      },
+      {
+        "index": 7,
+        "name": "validatorId",
+        "type": "Integer",
+        "domain": "nonnegative; 0 = built-in custody route"
+      },
+      {
+        "index": 8,
+        "name": "credentialGeneration",
+        "type": "Integer",
+        "domain": "at least 1"
+      },
+      {
+        "index": 9,
+        "name": "authorityEpoch",
+        "type": "Integer",
+        "domain": "nonnegative UInt64 domain"
+      },
+      {
+        "index": 10,
+        "name": "configurationNonce",
+        "type": "Integer",
+        "domain": "nonnegative UInt64 domain"
+      },
+      {
+        "index": 11,
+        "name": "signature",
+        "type": "ByteArray",
+        "domain": "1..8192 bytes, validator-defined"
+      },
+      {
+        "index": 12,
+        "name": "hookProofs",
+        "type": "Array",
+        "domain": "0..8 pairs [hookId, proof], unique strictly ascending hookIds, at most 4096 proof bytes"
+      }
+    ],
+    "canonicalBytes": "NeoVM binary stack-item serialization of the 13-field Array with field 11 replaced by the empty ByteString",
+    "sizeLimits": {
+      "operation": 16384
+    }
+  },
+  "digestDomains": {
+    "userOperation": {
+      "domain": "UTF8(\"NeoSmartAccount/UserOperation\") || U1(4) || U32LE(networkMagic) || coreHash[20] || accountId[20] || U64BE(validatorId) || U64BE(credentialGeneration) || U64BE(authorityEpoch) || U64BE(configurationNonce)",
+      "digest": "SHA256(domain || canonicalUnsignedOperation)",
+      "coreHash": "the actual executing native SmartAccount hash, never a caller-declared value",
+      "addressEncoding": "raw UInt160 bytes, never display-reversed"
+    },
+    "thresholdMember": {
+      "owner": "ThresholdPolicyModule via the validator member digest",
+      "domain": "UTF8(\"NeoSmartAccount/ThresholdMember\") || U1(4) || operationDigest || U64BE(memberId) || U64BE(memberCredentialGeneration)",
+      "digest": "SHA256(domain)"
+    },
+    "message": {
+      "owner": "SigningModule",
+      "nativeEntry": null,
+      "note": "SigningModule owns the message domain, subject roster and quorum. The native contract defines no message digest and exposes no message entry."
+    }
+  },
+  "nonce": {
+    "channel": "low 191 bits of SHA256(U1(4) || coreHash || accountId || U64BE(authorityEpoch) || U64BE(validatorId) || U64BE(credentialGeneration) || nonceSubkey)",
+    "channelBytes": "24 bytes big-endian, channel[0] = digest[8] & 0x7F",
+    "namespaceDigest": "full 256-bit derivation digest stored at 0x5C for truncation-collision fail-closed detection",
+    "sequence": "low 64 bits of the operation nonce",
+    "packedQuery": "(channel << 64) | sequence",
+    "exhaustionSentinel": "2^64; an internal cursor value outside the encodable sequence domain 0..2^64-1, the channel is dead and never wraps",
+    "collision": "a second derivation mapping to an already-used 191-bit channel is rejected with SA_NONCE_CHANNEL_COLLISION"
+  },
+  "configuration": {
+    "actionCodes": [
+      {
+        "code": 1,
+        "name": "install",
+        "shape": "[1, moduleType, moduleHash, profileDigest, initData]"
+      },
+      {
+        "code": 2,
+        "name": "remove",
+        "shape": "[2, moduleId, deInitData]"
+      },
+      {
+        "code": 3,
+        "name": "configure",
+        "shape": "[3, moduleId, data]",
+        "governedOnly": true
+      },
+      {
+        "code": 5,
+        "name": "setBuiltinAuthorization",
+        "shape": "[5, defaultOperationAuthorization, defaultMessageAuthorization]"
+      },
+      {
+        "code": 7,
+        "name": "setRequiredValidator",
+        "shape": "[7, validatorId, required]",
+        "governedOnly": true
+      }
+    ],
+    "retiredActionCodes": [
+      4,
+      6,
+      8,
+      9,
+      10
+    ],
+    "configurationNonce": {
+      "advance": "exactly once per successful configuration call; a batch of 1..16 actions advances it once",
+      "signatureBinding": "inside the operation digest; a write signed against a stale nonce faults with SA_CONFIGURATION_NONCE_STALE",
+      "notAnOperationNonce": true
+    },
+    "governance": {
+      "owner": "GovernanceModule",
+      "delayMs": 86400000,
+      "windowMs": 604800000,
+      "pendingIntentsMax": 16,
+      "nativeDelay": false,
+      "rule": "install, remove, configure, setBuiltinAuthorization and ordinary unfreeze take effect only through a mature GovernanceModule confirmation. Freeze, credential revocation and the atomic initial actions of createAccount are immediate."
+    },
+    "initialActions": {
+      "max": 16,
+      "atomic": true,
+      "immediate": true,
+      "allowedCodes": [
+        1
+      ],
+      "note": "Creation is the account's consent, so it may install default modules atomically without a governance delay. configure (hook order), setRequiredValidator, remove and setBuiltinAuthorization are governance paths and are rejected in the initial group on the v4.1 target."
+    }
+  },
+  "lifecycle": {
+    "phases": [
+      {
+        "code": 0,
+        "name": "None"
+      },
+      {
+        "code": 1,
+        "name": "Validation"
+      },
+      {
+        "code": 2,
+        "name": "HookPre"
+      },
+      {
+        "code": 3,
+        "name": "TargetDispatch"
+      },
+      {
+        "code": 4,
+        "name": "HookPost"
+      },
+      {
+        "code": 5,
+        "name": "Completion"
+      },
+      {
+        "code": 6,
+        "name": "Configuration"
+      },
+      {
+        "code": 7,
+        "name": "Cleanup",
+        "granted": false
+      },
+      {
+        "code": 8,
+        "name": "MemberValidation"
+      },
+      {
+        "code": 9,
+        "name": "HookPlanning"
+      }
+    ],
+    "callbacks": [
+      {
+        "name": "getModuleProfile",
+        "abi": "() -> String",
+        "safe": true
+      },
+      {
+        "name": "onInstall",
+        "abi": "(Hash160 accountId, Integer moduleId, Integer moduleType, Array initData) -> Void"
+      },
+      {
+        "name": "onUninstall",
+        "abi": "(Hash160 accountId, Integer moduleId, Integer moduleType, Array deInitData) -> Void"
+      },
+      {
+        "name": "configure",
+        "abi": "(Hash160 accountId, Integer moduleId, Integer moduleType, Array configData) -> Void"
+      },
+      {
+        "name": "validateUserOp",
+        "abi": "(Hash160 accountId, ByteArray operationDigest, Array operation) -> Boolean",
+        "safe": true
+      },
+      {
+        "name": "onUserOpComplete",
+        "abi": "(Hash160 accountId, Array operation, Any result) -> Void"
+      },
+      {
+        "name": "preCheck",
+        "abi": "(Hash160 accountId, Array operation) -> ByteArray"
+      },
+      {
+        "name": "postCheck",
+        "abi": "(Hash160 accountId, Array operation, Any result, ByteArray hookData) -> Void"
+      },
+      {
+        "name": "isValidSignature",
+        "abi": "(Hash160 accountId, Hash160 originalSender, Integer validatorId, Integer generation, ByteArray hash, Array pairs) -> Boolean",
+        "safe": true,
+        "owner": "SigningModule",
+        "publicMessageEntry": true
+      },
+      {
+        "name": "planHooks",
+        "abi": "(Hash160 accountId, ByteArray operationDigest, Array operation) -> Array",
+        "safe": true,
+        "owner": "HookOrchestratorModule"
+      }
+    ],
+    "codeBinding": {
+      "record": "0x52 stores contractHash, contractId, updateCounter, SHA256(NEF), SHA256(canonical profile), moduleRevision and credentialGeneration",
+      "checked": "on install, before and after every module callback, and before commit",
+      "comparison": "contractId and updateCounter name one deployment slot and revision",
+      "drift": "any mismatch faults with SA_MODULE_CODE_BINDING_MISMATCH; an address redeploy never inherits authorization"
+    },
+    "hookOrder": {
+      "owner": "HookOrchestratorModule",
+      "changePath": "governance-delayed configureModule -> module configure callback",
+      "plannerSnapshot": "the planHooks reply is validated as a permutation of installed hook ids, frozen in engine-local invocation state and consumed exactly once for the operation",
+      "pre": "ascending planned order",
+      "post": "reverse planned order over the same frozen set",
+      "nativeSetter": null
+    }
+  },
+  "storage": {
+    "keyEncoding": "1-byte prefix || raw 20-byte accountId || fixed-width big-endian integer suffixes",
+    "prefixes": [
+      {
+        "prefix": "0x11",
+        "suffix": "proxyAddress",
+        "use": "proxy -> accountId reverse index"
+      },
+      {
+        "prefix": "0x50",
+        "suffix": "bare",
+        "use": "protocol info"
+      },
+      {
+        "prefix": "0x51",
+        "suffix": "accountId",
+        "use": "account control record"
+      },
+      {
+        "prefix": "0x52",
+        "suffix": "accountId || moduleId[8 BE]",
+        "use": "module instance record"
+      },
+      {
+        "prefix": "0x53",
+        "suffix": "accountId || type[1] || moduleId[8 BE]",
+        "use": "installed-instance enumeration index"
+      },
+      {
+        "prefix": "0x56",
+        "suffix": "accountId || channel[24 BE]",
+        "use": "nonce cursor"
+      },
+      {
+        "prefix": "0x5C",
+        "suffix": "accountId || channel[24 BE]",
+        "use": "nonce namespace full digest"
+      }
+    ],
+    "reservedPrefixes": [
+      "0x54",
+      "0x55",
+      "0x57",
+      "0x58",
+      "0x59",
+      "0x5A",
+      "0x5B",
+      "0x5D",
+      "0x5E",
+      "0x5F"
+    ],
+    "accountControl": {
+      "currentArity": 9,
+      "fields": [
+        "status (Integer)",
+        "custody (Hash160)",
+        "authorityEpoch (Integer)",
+        "configurationNonce (Integer)",
+        "nextModuleId (Integer)",
+        "defaultOperationAuthorization (Boolean)",
+        "defaultMessageAuthorization (Boolean)",
+        "requiredValidatorId (Integer)",
+        "controlRevision (Integer)"
+      ],
+      "registrationValues": [
+        0,
+        "custody",
+        1,
+        0,
+        1,
+        true,
+        true,
+        0,
+        1
+      ],
+      "schema": {
+        "arity": 11,
+        "version": 1,
+        "layout": "[kind ByteString \"SA:AC\", version Integer 1, 9 fields above]",
+        "status": "the only accepted shape; a record of another kind, version or arity fails closed"
+      }
+    },
+    "moduleInstance": {
+      "currentArity": 14,
+      "fields": [
+        "moduleType (Integer)",
+        "contractHash (Hash160)",
+        "contractId (Integer)",
+        "updateCounter (Integer)",
+        "nefSha256 (ByteArray32)",
+        "profileSha256 (ByteArray32)",
+        "moduleRevision (Integer)",
+        "credentialGeneration (Integer)",
+        "instanceIsolation (Boolean)",
+        "messageCapability (Boolean)",
+        "thresholdMemberEligible (Boolean)",
+        "compositeLayer (Boolean)",
+        "governance (Boolean)",
+        "hookPlanner (Boolean)"
+      ],
+      "schema": {
+        "arity": 16,
+        "version": 1,
+        "layout": "[kind ByteString \"SA:MI\", version Integer 1, 14 fields above]",
+        "status": "the only accepted shape; a record of another kind, version or arity fails closed"
+      }
+    },
+    "failClosed": "unknown schema version, kind mismatch, unknown arity, truncation, extra fields, non-canonical encoding and out-of-domain values are rejected; no read repairs a record"
+  },
+  "hardfork": {
+    "currentGate": "HF_SmartAccountV1",
+    "interpretation": "one profile only: the tagged records, the closed ABI and the module protocol below are the sole semantics; there is no pre-activation variant",
+    "irreversible": "after activation the state format cannot be downgraded; later releases must keep schema, ABI, native hash and proxy address compatible",
+    "invariants": [
+      "native id",
+      "native hash",
+      "accountId derivation",
+      "proxy address derivation"
+    ]
+  },
+  "reset": {
+    "caller": "the currently installed, code-bound recovery module only",
+    "maturity": "checked by RecoveryModule before the call; the core checks binding and landing only",
+    "postState": {
+      "status": "Active",
+      "custody": "newCustody when nonzero, otherwise unchanged",
+      "defaultOperationAuthorization": true,
+      "defaultMessageAuthorization": true,
+      "requiredValidatorId": 0,
+      "moduleInstances": "all removed by the reset; the same transaction may reinstall one composition through the restricted install-only initialization, and a transaction that does not end with a governance-capable, code-bound validator faults as a whole and rolls the reset back",
+      "nonceRows": "all deleted",
+      "authorityEpoch": "advanced by one",
+      "configurationNonce": "advanced by one",
+      "controlRevision": "advanced by one",
+      "moduleIdAllocator": "kept, never reused",
+      "proxyAddress": "unchanged"
+    },
+    "restrictedInitialization": {
+      "context": "engine-local, single-use, bound to the reset seat, the account and the post-reset authority epoch",
+      "entry": "applyConfigurationActions (no new ABI entry)",
+      "admittedActions": "install (1) only",
+      "rejected": [
+        "uninstall (2)",
+        "configure (3)",
+        "built-in switches (5)",
+        "required-validator pin (7)",
+        "any custody change beyond the reset's newCustody"
+      ],
+      "landingRule": "at least one installed validator has to keep the governance capability with an intact code binding when the script halts: a landing that leaves none, a transaction that ends without the landing, or a later call that removes the last one faults the whole transaction and rolls the reset back",
+      "counters": "no second advance: epoch, configuration nonce and control revision moved exactly once, in the reset"
+    },
+    "invalidated": [
+      "all prior operation signatures",
+      "all prior credential generations",
+      "all nonce channels",
+      "all pending module-local records by unreachable instance identity"
+    ]
+  },
+  "errors": {
+    "native": [
+      "SA_PROTOCOL_VERSION",
+      "SA_OPERATION_MALFORMED",
+      "SA_OPERATION_FIELD_COUNT",
+      "SA_MODULE_TYPE_UNSUPPORTED",
+      "SA_MODULE_LIMIT_VALIDATOR",
+      "SA_MODULE_LIMIT_HOOK",
+      "SA_MODULE_LIMIT_RECOVERY",
+      "SA_MODULE_LIMIT_PLANNER",
+      "SA_MODULE_LIMIT_ACTIONS",
+      "SA_MODULE_LIMIT_BATCH",
+      "SA_MODULE_NOT_INSTALLED",
+      "SA_MODULE_ID_INVALID",
+      "SA_MODULE_INSTANCE_ISOLATION_REQUIRED",
+      "SA_MODULE_CODE_BINDING_MISMATCH",
+      "SA_MODULE_NOT_ROUTABLE",
+      "SA_VALIDATION_REJECTED",
+      "SA_VALIDATOR_NOT_FOUND",
+      "SA_CALLBACK_RETURN_TYPE",
+      "SA_HOOK_DATA_TOO_LARGE",
+      "SA_PROOF_INVALID",
+      "SA_NONCE_INVALID",
+      "SA_NONCE_EXHAUSTED",
+      "SA_NONCE_CHANNEL_COLLISION",
+      "SA_DEADLINE_EXPIRED",
+      "SA_EPOCH_STALE",
+      "SA_CONFIGURATION_NONCE_STALE",
+      "SA_CREDENTIAL_STALE",
+      "SA_ACCOUNT_NOT_FOUND",
+      "SA_ACCOUNT_FROZEN",
+      "SA_ACCOUNT_STATUS",
+      "SA_REENTRANCY_FORBIDDEN",
+      "SA_BUILTIN_ROUTE_REQUIRED",
+      "SA_UNAUTHORIZED",
+      "SA_PHASE_VIOLATION"
+    ],
+    "moduleOnly": [
+      "SA_INTENT_IMMATURE",
+      "SA_INTENT_EXPIRED",
+      "SA_INTENT_NOT_FOUND",
+      "SA_INTENT_LIMIT",
+      "SA_INTENT_CONFLICT",
+      "SA_RECOVERY_PENDING",
+      "SA_RECOVERY_LOCKED"
+    ],
+    "removed": [
+      "SA_MARKET_LOCKED",
+      "SA_CORE_NOT_CONFIGURED",
+      "SA_MODULE_LIMIT_INTENTS",
+      "SA_MESSAGE_INVALID",
+      "SA_MODULE_MESSAGE_CAPABILITY_ABSENT",
+      "SA_HOOK_REJECTED"
+    ]
+  },
+  "p256": {
+    "digestInput": "strict 32-byte digest",
+    "mode": "prehashed verify over the digest",
+    "implicitHash": false,
+    "signature": "64-byte r||s",
+    "publicKey": "33-byte compressed P-256 point",
+    "v41Change": "the implementation must not hash the digest again: contract validators hand the preimage to CryptoLib, whose platform step applies SHA-256 exactly once; the native post-gate calls Crypto.CreateECDsa(key).VerifyHash(D, signature) over the 32-byte digest with no second hash"
+  },
+  "assets": {
+    "owner": "Neo N3 native assets and NEP-17 contracts",
+    "nativeRole": "stable proxy address plus authenticated generic dispatch",
+    "nativeBalanceState": false,
+    "note": "The native contract never owns a token ledger and never mutates NEP-17 balances outside the dispatched target call."
+  },
+  "verification": {
+    "checker": "scripts/check_smartaccount_v41_idl.py",
+    "checks": [
+      "JSON parses and required top-level sections exist",
+      "method names are unique and exactly the 26 frozen names",
+      "parameter names, manifest types, return types and safe flags match the native manifest fixture for every shared method",
+      "call flags match the C# ContractMethod attributes",
+      "events are unique with ids {0..10,12,13,16,17} and payloads match the C# ContractEvent attributes",
+      "no retired native method name or forbidden alias appears in the method list"
+    ]
+  }
+}

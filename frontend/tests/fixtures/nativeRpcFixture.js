@@ -1,11 +1,13 @@
 /**
- * v4 native-kernel RPC fixture.
+ * v4.1 native-kernel RPC fixture.
  *
  * The answers here are the exact stack shapes of `contracts/native/SmartAccount
- * /*`: a 15-field account descriptor, the 8-field intent record, the 12-field
- * module descriptor, [wire tag] from `getProtocolInfo`, and
- * the shipped implementation id. Anything the client does not gate on is left
- * out on purpose, so a new client read fails here instead of silently passing.
+ * /*`: a nine-field account descriptor, the fifteen-field module descriptor,
+ * [wire tag] from `getProtocolInfo`, and the shipped implementation id. The
+ * recovery policy and request record are answered by the recovery *module*,
+ * because v4.1 keeps no native recovery state. Anything the client does not
+ * gate on is left out on purpose, so a new client read fails here instead of
+ * silently passing.
  */
 import {
   nativeCodec as c,
@@ -38,17 +40,6 @@ const I = (value) => ({ type: "Integer", value: String(value) }),
   H = (hex) => B(Buffer.from(hex, "hex").reverse().toString("hex")),
   A = (value) => ({ type: "Array", value }),
   N = { type: "Any", value: null };
-// Canonical VM values become RPC stack items. A ByteString travels as base64
-// over RPC and as hex inside the script builder, so this round trip is exactly
-// what `getPendingConfiguration` has to survive to rebuild a confirm script.
-const RPC = (v) => {
-  if (v === null || v === undefined) return N;
-  if (v.type === "Integer") return I(v.value);
-  if (v.type === "Boolean") return BOOL(v.value);
-  if (v.type === "ByteString") return B(v.value);
-  if (v.type === "Array") return A(v.value.map(RPC));
-  throw Error("fixture: unsupported canonical VM value");
-};
 
 export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountId, accountAddress = nativeTestIdentity.accountAddress } = {}) {
   const state = {
@@ -62,11 +53,16 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     status: 0,
     epoch: 1,
     config: 0,
+    controlRevision: 1,
+    requiredValidatorId: "0",
     custody: nativeTestCustody,
     recovery: "00".repeat(20),
     timelock: String(604800000),
     pendingRecovery: null,
-    intents: {},
+    // The governance window and its intent queue live in the governance module
+    // (a validator instance with the governance flag), never in the core.
+    governanceDelayMs: "86400000",
+    pendingConfigIntents: [],
     modules: [],
     neoBalance: "17", gasBalance: "200000001",
     hookOrder: [],
@@ -101,55 +97,36 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       events: NATIVE_REQUIRED_EVENTS.map((name) => ({ name, parameters: [] })),
     },
   });
+  // GetAccount answers exactly nine fields in v4.1:
+  // [exists, status, custody, authorityEpoch, configurationNonce,
+  //  defaultOperationAuthorization, defaultMessageAuthorization,
+  //  requiredValidatorId, controlRevision].
   const notFound = () =>
     A([
       BOOL(false),
       I(0),
       H("00".repeat(20)),
-      H("00".repeat(20)),
-      I(0),
       I(0),
       I(0),
       BOOL(false),
       BOOL(false),
-      BOOL(false),
       I(0),
       I(0),
-      BOOL(false),
-      I(0),
-      BOOL(false),
     ]);
   const record = () =>
     A([
       BOOL(true),
       I(state.status),
       H(state.malformed ? "99".repeat(20) : state.custody),
-      H(state.recovery),
       I(state.epoch),
       I(state.config),
-      I(state.timelock),
       BOOL(state.defaultOperationAuthorization),
       BOOL(true),
-      BOOL(false),
-      I(state.hookRevision),
-      I(state.config),
-      BOOL(!!state.pendingRecovery),
-      I(state.pendingRecovery?.matureAt ?? 0),
-      BOOL(false),
-    ]);
-  const intentRecord = (intent) =>
-    A([
-      BOOL(true),
-      I(intent.intentId),
-      I(intent.proposedAt),
-      I(intent.matureAt),
-      I(intent.expiresAt),
-      I(intent.authorityEpoch ?? state.epoch),
-      intent.actionDigest,
-      A((intent.actions ?? []).map(RPC)),
+      I(state.requiredValidatorId),
+      I(state.controlRevision),
     ]);
   // The chain publishes each module instance's CredentialGeneration (field 8 of
-  // the 12-field descriptor), so the fixture requires the test to declare it.
+  // the 15-field descriptor), so the fixture requires the test to declare it.
   // Inventing 1 here would hide exactly the stale-generation bug the routing
   // generation exists to expose.
   const generation = (module) => {
@@ -173,6 +150,9 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       BOOL(module.instanceIsolation === true),
       BOOL(module.messageCapability === true),
       BOOL(module.thresholdMemberEligible !== false),
+      BOOL(module.compositeLayer === true),
+      BOOL(module.governance === true),
+      BOOL(module.hookPlanner === true),
     ]);
   function answers() {
     const map = new Map();
@@ -190,34 +170,6 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
     add("getProtocolInfo", [], A([I(state.protocolVersion)]));
     add("getAccountImplementationId", [], TEXT(state.implementationId));
     add("getAccount", [id], state.registered ? record() : notFound());
-    add(
-      "getRecoveryStatus",
-      [id],
-      state.pendingRecovery
-        ? A([
-            BOOL(true),
-            I(state.pendingRecovery.initiatedAt ?? state.time - 1000),
-            I(state.pendingRecovery.matureAt),
-            I(state.pendingRecovery.authorityEpochAtInit ?? state.epoch),
-            H(state.pendingRecovery.newCustody ?? "66".repeat(20)),
-          ])
-        : A([]),
-    );
-    const intents = Object.values(state.intents);
-    add(
-      "getPendingConfigurationIntentIds",
-      [id],
-      A(intents.map((intent) => I(intent.intentId))),
-    );
-    for (const intent of intents)
-      add("getPendingConfiguration", [id, I(intent.intentId)], intentRecord(intent));
-    // A node answers an empty Array for an id that is not pending. The client
-    // must see that shape, not a null stack item, so ids outside the fixture's
-    // state are answered explicitly for the range the tests exercise.
-    const pendingIds = new Set(intents.map((intent) => intent.intentId));
-    for (let intentId = 0; intentId <= 64; intentId++)
-      if (!pendingIds.has(intentId))
-        add("getPendingConfiguration", [id, I(intentId)], A([]));
     for (const [type, code] of [
       ["validator", 1],
       ["hook", 4],
@@ -238,19 +190,47 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       );
     for (const seat of state.modules.filter(m => m.moduleType === 5)) {
       map.set(c.dynamicCall(seat.contractHash, "authorizedCore", [], 5), H(CORE));
+      // The recovery policy is the module's own state: guardians, threshold,
+      // timelock, authority, revision, digest. A seat with no configured
+      // authority answers the empty Array, which the client reads as "no
+      // policy" rather than inventing one.
+      map.set(
+        c.dynamicCall(seat.contractHash, "getRecoveryPolicySnapshot", [id], 5),
+        state.recovery === "00".repeat(20)
+          ? A([])
+          : A([A([H(state.recovery)]), I(1), I(state.timelock), H(state.recovery), I(1), B("cc".repeat(32))]),
+      );
       const p = state.pendingRecovery;
       map.set(c.dynamicCall(seat.contractHash, "getRecoveryStatus", [id], 5), !p ? A([]) : A([
         I(p.nonce ?? 1), H(state.custody), I(p.initiatedAt ?? state.time - 1000), I(p.matureAt), I(1),
-        H(p.newCustody ?? "66".repeat(20)), I(p.authorityEpochAtInit ?? state.epoch)
+        H(p.newCustody ?? "66".repeat(20)), I(p.authorityEpochAtInit ?? state.epoch),
+        I(p.configurationNonceAtInit ?? state.config), B(p.policyDigest ?? "dd".repeat(32)), I(p.policyRevision ?? 1),
+        I(0), I(0),
       ]));
     }
     for (const module of state.modules)
       add("getModule", [id, I(module.moduleId)], moduleRecord(module));
-    add(
-      "getHookOrder",
-      [id],
-      A([A(state.hookOrder.map((hookId) => I(hookId))), I(state.hookRevision)]),
-    );
+    // Governance reads target the module instance, exactly like recovery: the
+    // core publishes neither the maturity window nor the intent queue.
+    for (const seat of state.modules.filter(m => m.governance === true)) {
+      map.set(c.dynamicCall(seat.contractHash, "authorizedCore", [], 5), H(CORE));
+      map.set(c.dynamicCall(seat.contractHash, "configurationMaturity", [], 5), I(state.governanceDelayMs));
+      map.set(
+        c.dynamicCall(seat.contractHash, "getPendingConfigurationIntentIds", [id], 5),
+        A(state.pendingConfigIntents.map((intent) => I(intent.intentId))),
+      );
+      for (const intent of state.pendingConfigIntents)
+        map.set(
+          c.dynamicCall(seat.contractHash, "getPendingConfiguration", [id, I(intent.intentId)], 5),
+          A([
+            // The module stores the kind as its UTF-8 string ("configure" / "unfreeze").
+            I(intent.intentId), TEXT(intent.kind ?? "configure"), I(intent.proposedAt ?? state.time - 1000),
+            I(intent.matureAt ?? state.time + 86399000), I(intent.expiresAt ?? state.time + 604799000),
+            I(intent.authorityEpoch ?? state.epoch), I(intent.configurationNonce ?? state.config),
+            B(intent.digest ?? "ab".repeat(32)), I(intent.actionCount ?? 1),
+          ]),
+        );
+    }
     return map;
   }
   async function send(method, params) {
@@ -284,11 +264,10 @@ export function createNativeRpcFixture({ accountId = nativeTestIdentity.accountI
       state: "HALT",
       stack: [known.has(script) ? known.get(script) : N],
       gasconsumed: "100000",
-      minimumrequiredfee: "100000",
     };
   }
   return { state, send, answers, add, manifest, record,
     setInvocationResult: (script, item) => extras.set(script, item) };
 }
 
-export const nativeTestRecoverySeat = Object.freeze({ nefSha256: "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e", moduleType: 5, moduleId: 17, contractHash: "ef".repeat(20), credentialGeneration: 1, profileSha256: "9e3aa360fd7b9bc1d04d368140639e44985a07045f338a3036df3e0859e536e6" });
+export const nativeTestRecoverySeat = Object.freeze({ nefSha256: "70e94cd8d1aa55411ed7612ba3d50ec7262714c5f133aa5dbb8cc9782a285870", moduleType: 5, moduleId: 17, contractHash: "ef".repeat(20), credentialGeneration: 1, profileSha256: "64e4a614163968e6306083058044c6fad3c1c0c6a6e938737485f3325b9f13e3" });

@@ -152,16 +152,14 @@ def validate_receipt(receipt):
             integer(sample.get("elapsedTicks"), "elapsedTicks")
             require(sample.get("state") == state, "Sample state differs from expectedState")
             fee = integer(sample.get("feeConsumedDatoshi"), "feeConsumedDatoshi")
-            minimum = integer(sample.get("minimumRequiredFeeDatoshi"), "minimumRequiredFeeDatoshi")
-            require(minimum >= fee, "Minimum required fee is below consumption")
-            require(fee == control["result"]["gas"] and minimum == control["result"]["minimum"], "Sample fees differ from the fixed execution result")
+            require(fee == control["result"]["gas"], "Sample fees differ from the fixed execution result")
             require(sample.get("committedStorageUnchanged") is True, "Sample committed storage was not unchanged")
             logical = storage(sample.get("logicalStorage"), "logicalStorage")
             delta = storage(sample.get("storageDelta"), "storageDelta", signed=True)
             require(all(logical[field] - start[field] == delta[field] for field in STORAGE_FIELDS), "Sample storageDelta differs from logicalStorage minus startingStorage")
             if state == "FAULT":
                 require(logical == start and all(value == 0 for value in delta.values()), "FAULT must retain starting storage")
-            current = (sample["state"], fee, minimum, logical, delta)
+            current = (sample["state"], fee, logical, delta)
             require(fixed_result is None or current == fixed_result, "Repeated samples do not have fixed execution and storage outcomes")
             fixed_result = current
         for field, percentile in (("p50Ticks", 50), ("p95Ticks", 95)):
@@ -176,12 +174,10 @@ def normalized_controls(controls):
     for control in normalized:
         if "label" in control:
             continue
-        for field in ("gas", "minimum"):
-            del control["result"][field]
+        del control["result"]["gas"]
         del control["verification"]["gasConsumedDatoshi"]
         for phase in control["phases"]:
             del phase["consumedDatoshi"]
-            del phase["remainingDatoshi"]
     # JSON sorting also keeps Boolean selectors distinct from integer aliases.
     return sorted(normalized, key=lambda value: json.dumps(value, sort_keys=True))
 
@@ -227,7 +223,6 @@ def compare_receipts(baseline, candidate, allow_artifact_change=(), require_impr
                             "p50Milliseconds": metric(before["p50Ticks"] * 1000 / frequency, after["p50Ticks"] * 1000 / frequency),
                             "p95Milliseconds": metric(before["p95Ticks"] * 1000 / frequency, after["p95Ticks"] * 1000 / frequency),
                             "feeConsumedDatoshi": metric(before["executionResult"]["gas"], after["executionResult"]["gas"]),
-                            "minimumRequiredFeeDatoshi": metric(before["executionResult"]["minimum"], after["executionResult"]["minimum"]),
                             "verificationGasConsumedDatoshi": metric(before["verification"]["gasConsumedDatoshi"], after["verification"]["gasConsumedDatoshi"]),
                             "phaseGasConsumedDatoshi": phases,
                             "startingStorage": {field: metric(before["startingStorage"][field], after["startingStorage"][field]) for field in STORAGE_FIELDS},

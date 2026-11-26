@@ -33,7 +33,19 @@ jobs:
           repository: neo-project/neo
           ref: ${{ env.NATIVE_CORE_COMMIT }}
           path: native-core
+          # Full history: scripts/native_core_pin.py diffs this checkout against upstream Neo
+          # commit 99618f48, which a shallow clone does not contain.
+          fetch-depth: 0
           persist-credentials: false
+      # Source-only architecture gates, before any toolchain or restore work: the 26-method ABI
+      # IDL, native purity (contracts/native/SmartAccount carries no SDK-style logic) and the
+      # core-tree pin (the checked-out core differs from upstream Neo only inside the reviewed
+      # allowlist). verify_repo.sh runs the same gates inside the acceptance entrypoint.
+      - name: Architecture gates (ABI IDL, native purity, core-tree pin)
+        run: |
+          python3 scripts/check_smartaccount_v41_idl.py
+          python3 scripts/native_purity.py
+          python3 scripts/native_core_pin.py --core "$GITHUB_WORKSPACE/native-core"
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.x

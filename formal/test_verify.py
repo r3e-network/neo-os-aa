@@ -27,11 +27,14 @@ class VerificationGateTests(unittest.TestCase):
         # These assertions validate the October archive, not the current native kernel.
         receipt_path = verify.ROOT.parent / 'docs/reports/sa-formal-gate-20261031.json'
         self.assertTrue(receipt_path.exists())
+        # The committed form is LF; a core.autocrlf=true checkout materialises CRLF.
+        # Hash the LF-normalized bytes, the same digest convention verify.content_digest
+        # uses for the source pins.
         self.assertEqual(
             '0e4d67450a326c318f971ddd7c31c6c5383fe097d5aa9a33ef48b2e814088198',
-            hashlib.sha256(receipt_path.read_bytes()).hexdigest(),
+            hashlib.sha256(receipt_path.read_bytes().replace(b"\r\n", b"\n")).hexdigest(),
         )
-        receipt = json.loads(receipt_path.read_text())
+        receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
         self.assertTrue(receipt['modelChecksPassed'])
         self.assertFalse(receipt['implementationVerified'])
         self.assertIn('coq/OrdinaryGovernance.v', receipt['modelProfiles'])
@@ -47,7 +50,7 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_native_composite_phase_model_is_registered(self):
         self.assertIn('coq/NativeCompositePhase.v', verify.ARTIFACTS)
-        model = (verify.ROOT / 'coq/NativeCompositePhase.v').read_text()
+        model = (verify.ROOT / 'coq/NativeCompositePhase.v').read_text(encoding='utf-8')
         for name in ('selection_preserves_membership', 'selection_preserves_uniqueness',
                      'selection_has_exact_threshold', 'post_requires_application_operation',
                      'local_receipt_requires_fresh_application_validation',
@@ -81,10 +84,10 @@ class VerificationGateTests(unittest.TestCase):
     def test_native_composite_profile_drift_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            relative = Path('docs/archive/native-research/smartaccount-native-profile-v2-parameters.json')
+            relative = Path('formal/reference/smartaccount-profile-v2-parameters.json')
             destination = root / relative
             destination.parent.mkdir(parents=True)
-            profile = json.loads((verify.ROOT.parent / relative).read_text())
+            profile = json.loads((verify.ROOT.parent / relative).read_text(encoding='utf-8'))
             for field, value in (('compositeVerifierMaxChildren', 10),
                                  ('compositeVerifierMaxThreshold', 3),
                                  ('compositeVerifierMaxApprovedChildren', 3),
@@ -107,7 +110,7 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_native_restricted_policy_is_registered_and_fail_closed(self):
         self.assertIn('coq/NativeRestrictedPolicy.v', verify.ARTIFACTS)
-        model=(verify.ROOT/'coq/NativeRestrictedPolicy.v').read_text()
+        model=(verify.ROOT/'coq/NativeRestrictedPolicy.v').read_text(encoding='utf-8')
         for name in ('missing_snapshot_rejects', 'invalid_query_rejects',
                      'outflow_rejects', 'inflow_allowed', 'direct_target_rejects',
                      'every_restriction_must_hold', 'false_result_does_not_bypass',
@@ -118,7 +121,7 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_native_session_scope_has_uncapped_and_key_reuse_controls(self):
         self.assertIn('coq/NativeSessionScope.v', verify.ARTIFACTS)
-        model=(verify.ROOT/'coq/NativeSessionScope.v').read_text()
+        model=(verify.ROOT/'coq/NativeSessionScope.v').read_text(encoding='utf-8')
         for name in ('wildcard_retains_target', 'uncapped_shape_independent',
                      'uncapped_false_completes', 'uncapped_spending_unchanged',
                      'target_fault_rolls_back', 'capped_false_rolls_back',
@@ -129,7 +132,7 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_native_daily_window_model_is_registered(self):
         self.assertIn('coq/NativeDailyPolicy.v',verify.ARTIFACTS)
-        model=(verify.ROOT/'coq/NativeDailyPolicy.v').read_text()
+        model=(verify.ROOT/'coq/NativeDailyPolicy.v').read_text(encoding='utf-8')
         for theorem in ('fixed_anchor_stays', 'fixed_expiry_restarts', 'fixed_charge_within_cap',
                         'zero_outflow_preserves_window', 'false_result_still_meters', 'inflow_is_not_outflow',
                         'rolling_lower_boundary_included', 'rolling_expired_excluded', 'rolling_full_rejects',
@@ -142,15 +145,26 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn('contracts/plugins/hooks/DailyLimitHook.cs',verify.SOURCE_FILES)
         self.assertEqual(15,len(verify.COQ_MODULES['NativeDailyPolicy.v']))
 
-    def test_budget_model_is_bounded_profiles_only(self):
+    def test_callback_gas_budget_model_is_retired(self):
+        # The per-callback gas budgets and their syscall left the core, so no
+        # model, profile or mutation roster may still describe them.
         profiles = verify.MODEL_PROFILES
-        self.assertEqual(["platform", "native"], profiles["coq/VerifierGasBudget.v"])
+        self.assertNotIn("coq/VerifierGasBudget.v", verify.ARTIFACTS)
+        self.assertFalse((verify.ROOT / "coq" / "VerifierGasBudget.v").exists())
+        self.assertNotIn("VerifierGasBudget.v", verify.COQ_MODULES)
         self.assertEqual(verify.ARTIFACTS, set(profiles))
-        self.assertFalse(verify.RUNTIME_PROFILES["public"]["verifierChildBudgetEnforced"])
-        self.assertTrue(verify.RUNTIME_PROFILES["platform"]["verifierChildBudgetEnforced"])
+        self.assertEqual({name for name in verify.ARTIFACTS if name.startswith("coq/")},
+                         {"coq/" + module for module in verify.COQ_MODULES})
+        self.assertFalse([name for name, profile in verify.RUNTIME_PROFILES.items()
+                          if profile.get("verifierChildBudgetEnforced")
+                          or "verifierBudgetDatoshi" in profile or "hookBudgetDatoshi" in profile])
+        for name in ("CallWithGasLimit", "LoadBoundedContractCall", "ContractCallGasBudget",
+                     "MinimumRequiredFee", "callback_budget", "ancestor_charge"):
+            for model in (verify.ROOT / "coq").glob("*.v"):
+                self.assertNotIn(name, model.read_text(encoding="utf-8"), model.name)
 
     def test_native_scope_and_authority_model_are_explicit(self):
-        self.assertTrue(verify.RUNTIME_PROFILES["native"]["verifierChildBudgetEnforced"])
+        self.assertEqual("System.Contract.Call", verify.RUNTIME_PROFILES["native"]["verifierCall"])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NativeAuthorityEpoch.v"])
         self.assertEqual(["native"], verify.MODEL_PROFILES["coq/CallbackPluginTopology.v"])
         self.assertEqual(["public", "platform"], verify.MODEL_PROFILES["coq/ProxyWitnessScript.v"])
@@ -163,7 +177,7 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_custom_governance_model_is_registered_and_scoped(self):
         self.assertIn('coq/CustomGovernance.v', verify.ARTIFACTS)
-        model = (verify.ROOT / 'coq' / 'CustomGovernance.v').read_text()
+        model = (verify.ROOT / 'coq' / 'CustomGovernance.v').read_text(encoding='utf-8')
         for theorem in (
             'OG_001_proposal_requires_current_registrar_and_valid_owner',
             'OG_002_duplicate_pending_proposal_is_rejected',
@@ -192,7 +206,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn('contracts/native/SmartAccount/SmartAccount.Modules.cs', verify.SOURCE_FILES)
         for path in verify.SOURCE_FILES:
             self.assertTrue((verify.ROOT.parent / path).is_file(), path)
-        lock = json.loads((verify.ROOT / 'source-lock.json').read_text())
+        lock = json.loads((verify.ROOT / 'source-lock.json').read_text(encoding='utf-8'))
         self.assertEqual(set(lock['sources']), verify.SOURCE_FILES)
         verify.check_inventory()
 
@@ -213,7 +227,7 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_custom_sponsorship_is_transaction_wide_and_scoped(self):
         self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/CustomSponsorship.v'])
-        model = (verify.ROOT / 'coq/CustomSponsorship.v').read_text()
+        model = (verify.ROOT / 'coq/CustomSponsorship.v').read_text(encoding='utf-8')
         for name in ('OS_001_same_transaction_retains_spend', 'OS_002_new_transaction_starts_at_zero',
                      'OS_005_success_preserves_transaction_and_total_cap',
                      'OS_007_multiple_calls_share_one_total_fee_cap', 'OS_008_exhausted_fee_rejects',
@@ -225,7 +239,7 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_custom_recovery_is_callback_free_and_irreversible(self):
         self.assertEqual(['public', 'platform'], verify.MODEL_PROFILES['coq/CustomRecovery.v'])
-        model = (verify.ROOT / 'coq/CustomRecovery.v').read_text()
+        model = (verify.ROOT / 'coq/CustomRecovery.v').read_text(encoding='utf-8')
         for name in ('OR_001_recovery_does_not_depend_on_old_plugin',
                      'OR_002_recovery_requires_authority_and_safe_boundary',
                      'OR_003_success_detaches_all_authority', 'OR_004_success_preserves_identity_and_nonce',
@@ -260,10 +274,10 @@ class VerificationGateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Native core source missing"):
                 verify.check_native_core_sources(lock, core)
 
-    def test_source_lock_may_not_claim_public_child_budget(self):
+    def test_source_lock_may_not_widen_a_model_profile(self):
         lock = {"runtimeProfiles": copy.deepcopy(verify.RUNTIME_PROFILES), "modelProfiles": copy.deepcopy(verify.MODEL_PROFILES)}
         verify.check_profile_scope(lock)
-        lock["modelProfiles"]["coq/VerifierGasBudget.v"].append("public")
+        lock["modelProfiles"]["coq/NativeCompositePhase.v"].append("public")
         with self.assertRaisesRegex(ValueError, "Model profile scope"):
             verify.check_profile_scope(lock)
 
@@ -322,12 +336,12 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("dependency-replacement-publishes-on-failure", verify.CALLBACK_PLUGIN_COQ_MUTATIONS)
 
     def test_callback_model_includes_verifier_post_phase(self):
-        model = (verify.ROOT / "coq" / "CallbackPluginTopology.v").read_text()
+        model = (verify.ROOT / "coq" / "CallbackPluginTopology.v").read_text(encoding='utf-8')
         self.assertIn("| VerifierPost", model)
         self.assertIn("PostHook; VerifierPost; Emit", model)
 
     def test_legacy_execution_model_scopes_optional_callbacks(self):
-        model = (verify.ROOT / "coq" / "SmartAccountSA.v").read_text()
+        model = (verify.ROOT / "coq" / "SmartAccountSA.v").read_text(encoding='utf-8')
         declarations = verify.coq_declarations(model)
         self.assertIn("SA_020_disabled_callbacks_do_not_gate_execution", declarations)
         self.assertIn("pre_callback_valid", model)
@@ -335,7 +349,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("hookInstalled s || verifierConfigured s", model)
 
     def test_callback_model_includes_dependency_registry_atomicity(self):
-        model = (verify.ROOT / "coq" / "CallbackPluginTopology.v").read_text()
+        model = (verify.ROOT / "coq" / "CallbackPluginTopology.v").read_text(encoding='utf-8')
         self.assertIn("CPT_014_dependency_replacement_requires_cleanup", model)
         self.assertIn("CPT_015_failed_dependency_replacement_is_atomic", model)
         self.assertIn("CPT_016_successful_dependency_replacement_has_no_removed_child", model)
@@ -352,28 +366,54 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation, verify.CALLBACK_PLUGIN_COQ_MUTATIONS)
 
     def test_authorization_evidence_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "AuthorizationEvidence.v").read_text()
+        model = (verify.ROOT / "coq" / "AuthorizationEvidence.v").read_text(encoding='utf-8')
         self.assertIn("accepted_evidence_is_bound", model)
         self.assertIn("accepted_evidence_cannot_be_replayed", model)
         self.assertIn("evidence-replay-freshness", verify.AUTHORIZATION_EVIDENCE_COQ_MUTATIONS)
 
     def test_attestation_proof_envelope_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "AttestationProofBinding.v").read_text()
+        model = (verify.ROOT / "coq" / "AttestationProofBinding.v").read_text(encoding='utf-8')
         self.assertIn("accepted_proof_is_bound", model)
         self.assertIn("accepted_proof_cannot_be_replayed", model)
         self.assertIn("proof-measurement-binding", verify.ATTESTATION_PROOF_COQ_MUTATIONS)
         self.assertIn("proof-replay-freshness", verify.ATTESTATION_PROOF_COQ_MUTATIONS)
 
     def test_open_formal_boundary_ledger_remains_explicit(self):
-        ledger = json.loads((verify.ROOT.parent / "docs/SA-NATIVE-OPEN-BOUNDARIES.json").read_text())
+        repo = verify.ROOT.parent
+        ledger = json.loads((repo / "docs/SA-NATIVE-OPEN-BOUNDARIES.json").read_text(encoding='utf-8'))
+        profile = json.loads((repo / "contracts/native/profile.json").read_text(encoding='utf-8'))
+        self.assertEqual("aa-native-formal-open-boundaries/v2", ledger["schema"])
         self.assertEqual("OPEN_BOUNDARIES_RETAINED", ledger["status"])
-        statuses = {item["id"]: item["status"] for item in ledger["boundaries"]}
-        self.assertEqual("OPEN", statuses["FORMAL-NEOVM-COMPILER-REFINEMENT"])
-        self.assertEqual("PARTIAL", statuses["FORMAL-CRYPTO-WITNESS-ATTESTATION-ZK"])
-        self.assertEqual("PARTIAL", statuses["FORMAL-MULTISIG-FUTURE-PLUGIN"])
+        self.assertFalse(ledger["implementationVerified"])
+        # The ledger describes the shipped profile, not the retired v2 one.
+        self.assertEqual(profile["version"], ledger["profileVersion"])
+        self.assertEqual(profile["protocolVersion"], ledger["abiVersion"])
+        self.assertEqual(profile["version"], verify.RUNTIME_PROFILES["native-current"]["abiVersion"])
+        # Every open gate of the native profile has exactly one ledger entry with the
+        # same owner and required evidence, and no ledger entry names a closed or
+        # unknown gate.
+        self.assertEqual(8, len(profile["openGates"]))
+        gates = [dict(item) for item in profile["openGates"]]
+        self.assertEqual(gates, [{k: item[k] for k in ("id", "owner", "evidence")} for item in ledger["boundaries"]])
+        self.assertEqual(len(gates), len({gate["id"] for gate in gates}))
+        for gate in gates:
+            with self.subTest(gate=gate["id"]):
+                self.assertEqual(sorted(gate), ["evidence", "id", "owner"])
+                self.assertIn(gate["owner"], ("repo", "external"))
+                self.assertTrue(gate["evidence"].strip())
+        self.assertEqual(["OPEN"] * len(gates), [item["status"] for item in ledger["boundaries"]])
+        for item in ledger["boundaries"]:
+            self.assertTrue(item["scope"].strip(), item["id"])
+        self.assertEqual("OPEN", {item["id"]: item["status"] for item in ledger["boundaries"]}["FORMAL-NEOVM-COMPILER-REFINEMENT"])
+        # Model limits that are not profile gates stay visible and partial.
+        limits = {item["id"]: item["status"] for item in ledger["modelLimitations"]}
+        self.assertEqual("PARTIAL", limits["FORMAL-CRYPTO-WITNESS-ATTESTATION-ZK"])
+        self.assertEqual("PARTIAL", limits["FORMAL-MULTISIG-FUTURE-PLUGIN"])
+        self.assertEqual("PARTIAL", limits["FORMAL-AUTHORITY-EPOCH-BYTE-STORAGE"])
+        self.assertFalse(set(limits) & {gate["id"] for gate in gates})
 
     def test_native_service_witness_boundary_is_registered(self):
-        model = (verify.ROOT / "coq" / "NativeInvocation.v").read_text()
+        model = (verify.ROOT / "coq" / "NativeInvocation.v").read_text(encoding='utf-8')
         for theorem in ("inactive_service_preserves_legacy", "dispatcher_never_supplies_a_witness",
                         "registered_proxy_requires_frame", "registered_proxy_requires_legacy_witness",
                         "unregistered_nonservice_preserves_legacy"):
@@ -383,14 +423,14 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation, verify.NATIVE_INVOCATION_COQ_MUTATIONS)
 
     def test_witness_rule_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "WitnessRuleSemantics.v").read_text()
+        model = (verify.ROOT / "coq" / "WitnessRuleSemantics.v").read_text(encoding='utf-8')
         self.assertIn("first_matching_rule_decides", model)
         self.assertIn("default_deny", model)
         self.assertIn("deny_precedes_later_allow", model)
         self.assertIn("witness-called-by-entry-depth", verify.WITNESS_RULE_COQ_MUTATIONS)
 
     def test_witness_fault_semantics_have_general_correspondence_proofs(self):
-        model = (verify.ROOT / "coq" / "WitnessRuleFaultSemantics.v").read_text()
+        model = (verify.ROOT / "coq" / "WitnessRuleFaultSemantics.v").read_text(encoding='utf-8')
         for theorem in ("readable_group_condition_refines_boolean",
                         "readable_called_group_condition_refines_boolean",
                         "faulting_rule_prevents_later_allow",
@@ -402,30 +442,30 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutant, verify.WITNESS_RULE_FAULT_COQ_MUTATIONS)
 
     def test_bounded_neo_vm_call_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "NeoVmCallSubset.v").read_text()
+        model = (verify.ROOT / "coq" / "NeoVmCallSubset.v").read_text(encoding='utf-8')
         self.assertIn("NVM_001_canonical_program_is_accepted", model)
         self.assertIn("NVM_004_trailing_instruction_is_rejected", model)
         self.assertIn("neo-vm-safe-prefix", verify.NEO_VM_CALL_SUBSET_COQ_MUTATIONS)
 
     def test_signer_independence_countermodel_is_registered(self):
-        model = (verify.ROOT / "coq" / "SignerIndependence.v").read_text()
+        model = (verify.ROOT / "coq" / "SignerIndependence.v").read_text(encoding='utf-8')
         self.assertIn("SID_001_domain_uniqueness_does_not_imply_key_independence", model)
         self.assertIn("signer-domain-uniqueness", verify.SIGNER_INDEPENDENCE_COQ_MUTATIONS)
 
     def test_future_plugin_cleanup_countermodel_is_registered(self):
-        model = (verify.ROOT / "coq" / "PluginLifecycle.v").read_text()
+        model = (verify.ROOT / "coq" / "PluginLifecycle.v").read_text(encoding='utf-8')
         self.assertIn("PL_001_lifecycle_abi_does_not_imply_cleanup_completeness", model)
         self.assertIn("PL_002_certified_clear_is_complete", model)
         self.assertIn("plugin-admission", verify.PLUGIN_LIFECYCLE_COQ_MUTATIONS)
 
     def test_signer_domain_binding_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "SignerDomainSeparation.v").read_text()
+        model = (verify.ROOT / "coq" / "SignerDomainSeparation.v").read_text(encoding='utf-8')
         self.assertIn("signature_match_binds_domain_and_payload", model)
         self.assertIn("cross_domain_replay_is_rejected", model)
         self.assertIn("signer-domain-binding", verify.SIGNER_DOMAIN_SEPARATION_COQ_MUTATIONS)
 
     def test_abi_manifest_projection_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "AbiManifestProjection.v").read_text()
+        model = (verify.ROOT / "coq" / "AbiManifestProjection.v").read_text(encoding='utf-8')
         for theorem in ("projected_descriptor_preserves_signature",
                         "abi_projection_rejects_missing_initializer",
                         "abi_projection_rejects_duplicate_dispatch_key",
@@ -445,24 +485,22 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation, verify.ABI_MANIFEST_PROJECTION_COQ_MUTATIONS)
 
     def test_neo_vm_continuation_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "NeoVmContinuationSemantics.v").read_text()
-        for theorem in ("oversized_callback_is_rejected",
-                        "load_script_inherits_budget_and_continuation",
+        # A module callback is an ordinary call frame: the model keeps the
+        # continuation and rollback obligations and tracks no gas budget.
+        model = (verify.ROOT / "coq" / "NeoVmContinuationSemantics.v").read_text(encoding='utf-8')
+        for theorem in ("load_script_pushes_shared_continuation",
                         "callt_ret_returns_to_saved_continuation",
+                        "ordinary_calls_share_continuation_chain",
                         "initialization_is_per_load_context",
-                        "callback_hardfork_gate_is_fail_closed",
-                        "rollback_restores_storage_but_preserves_consumed_budget"):
-            self.assertIn(theorem, model)
-        for mutation in ("neo-vm-child-budget-bound", "neo-vm-hardfork-gate",
-                         "neo-vm-loadscript-continuation", "neo-vm-callt-return-address",
-                         "neo-vm-rollback-storage", "neo-vm-ancestor-charge",
-                         "neo-vm-positive-child-budget", "neo-vm-ancestor-admission",
-                         "neo-vm-step-ancestor-charge", "neo-vm-bounded-return-parent",
-                         "neo-vm-bounded-return-ancestors", "neo-vm-atomic-chain-check"):
-            self.assertIn(mutation, verify.NEO_VM_CONTINUATION_COQ_MUTATIONS)
+                        "failed_transaction_restores_storage"):
+            self.assertIn(theorem, verify.coq_declarations(model))
+        self.assertEqual(["native"], verify.MODEL_PROFILES["coq/NeoVmContinuationSemantics.v"])
+        self.assertEqual(["neo-vm-loadscript-continuation", "neo-vm-callt-return-address",
+                         "neo-vm-rollback-storage", "neo-vm-ret-keeps-continuation"],
+                         list(verify.NEO_VM_CONTINUATION_COQ_MUTATIONS))
 
     def test_witness_fault_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "WitnessRuleFaultSemantics.v").read_text()
+        model = (verify.ROOT / "coq" / "WitnessRuleFaultSemantics.v").read_text(encoding='utf-8')
         for theorem in ("readable_group_condition_refines_boolean",
                         "readable_called_group_condition_refines_boolean",
                         "negation_preserves_fault", "and_short_circuits_false",
@@ -474,7 +512,7 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation, verify.WITNESS_RULE_FAULT_COQ_MUTATIONS)
 
     def test_witness_rule_refinement_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "WitnessRuleRefinement.v").read_text()
+        model = (verify.ROOT / "coq" / "WitnessRuleRefinement.v").read_text(encoding='utf-8')
         for theorem in ("readable_walker_refines_boolean",
                         "readable_condition_tree_has_no_spurious_fault",
                         "readable_rule_list_has_no_spurious_fault"):
@@ -486,7 +524,7 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation, verify.WITNESS_RULE_REFINEMENT_COQ_MUTATIONS)
 
     def test_parser_bounded_refinement_needs_no_external_fuel_certificate(self):
-        model = (verify.ROOT / "coq" / "WitnessRuleRefinement.v").read_text()
+        model = (verify.ROOT / "coq" / "WitnessRuleRefinement.v").read_text(encoding='utf-8')
         for theorem in ("parser_readable_condition_refines_boolean",
                         "parser_readable_rules_refine_boolean",
                         "parser_rejects_empty_compound",
@@ -501,8 +539,8 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation, verify.WITNESS_RULE_REFINEMENT_COQ_MUTATIONS)
 
     def test_witness_parser_models_have_identical_shape_predicates(self):
-        boolean = (verify.ROOT / "coq" / "WitnessRuleSemantics.v").read_text()
-        refinement = (verify.ROOT / "coq" / "WitnessRuleRefinement.v").read_text()
+        boolean = (verify.ROOT / "coq" / "WitnessRuleSemantics.v").read_text(encoding='utf-8')
+        refinement = (verify.ROOT / "coq" / "WitnessRuleRefinement.v").read_text(encoding='utf-8')
         def predicate(source, name):
             matched = re.search(r"Fixpoint " + name + r"\b.*?\n  end\.", source, re.S)
             self.assertIsNotNone(matched)
@@ -511,7 +549,7 @@ class VerificationGateTests(unittest.TestCase):
                          predicate(refinement, "parser_condition_admissible"))
 
     def test_native_dispatch_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "NativeDispatch.v").read_text()
+        model = (verify.ROOT / "coq" / "NativeDispatch.v").read_text(encoding='utf-8')
         for theorem in ("missing_activation_is_disabled", "future_activation_is_disabled",
                         "no_block_uses_ledger_height", "mismatched_caller_is_rejected",
                         "dispatch_uses_native_caller_fee_policy", "return_keeps_child_fee_policy"):
@@ -521,7 +559,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertEqual(7, len(verify.NATIVE_DISPATCH_COQ_MUTATIONS))
 
     def test_native_invocation_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "NativeInvocation.v").read_text()
+        model = (verify.ROOT / "coq" / "NativeInvocation.v").read_text(encoding='utf-8')
         for theorem in ("wrong_account_is_rejected", "wrong_phase_is_rejected",
                         "same_hash_new_frame_is_not_root_authority", "grandchild_is_rejected",
                         "target_does_not_authorize_modules", "fault_clears_all_authority",
@@ -549,7 +587,7 @@ class VerificationGateTests(unittest.TestCase):
 
     def test_native_session_policy_is_registered(self):
         self.assertIn("coq/NativeSessionPolicy.v", verify.ARTIFACTS)
-        model=(verify.ROOT / "coq/NativeSessionPolicy.v").read_text()
+        model=(verify.ROOT / "coq/NativeSessionPolicy.v").read_text(encoding='utf-8')
         for theorem in ("session_requires_context", "session_requires_signature", "session_requires_scope",
                         "session_requires_liveness", "session_requires_transfer_shape", "session_within_cap",
                         "false_target_preserves_spent", "session_fault_preserves_spent", "session_success_debits_exactly",
@@ -562,7 +600,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertIn("contracts/plugins/validators/ValidatorClock.cs",verify.SOURCE_FILES)
 
     def test_native_session_lifecycle_and_zero_cap_are_registered(self):
-        model=(verify.ROOT / "coq/NativeSessionPolicy.v").read_text()
+        model=(verify.ROOT / "coq/NativeSessionPolicy.v").read_text(encoding='utf-8')
         for theorem in ("rotation_preserves_spent", "rotation_sets_timestamp",
                         "rotation_before_cooldown_rejects", "first_grant_is_reachable",
                         "revoke_clears_key_and_spent", "revoke_retains_rotation",
@@ -574,7 +612,7 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation,verify.NATIVE_SESSION_COQ_MUTATIONS)
 
     def test_native_lifecycle_model_is_registered(self):
-        model = (verify.ROOT / "coq" / "NativeLifecycle.v").read_text()
+        model = (verify.ROOT / "coq" / "NativeLifecycle.v").read_text(encoding='utf-8')
         for theorem in ("pending_recovery_blocks_configuration", "frozen_blocks_configuration",
                         "joint_unfreeze_requires_recovery", "custody_cannot_cancel_at_maturity",
                         "advance_clears_all_intents", "advance_increments_exactly_once",
@@ -585,7 +623,7 @@ class VerificationGateTests(unittest.TestCase):
         self.assertEqual(17, len(verify.NATIVE_LIFECYCLE_COQ_MUTATIONS))
 
     def test_configuration_postcondition_checks_both_bindings_and_rollback(self):
-        model = (verify.ROOT / "coq" / "NativeLifecycle.v").read_text()
+        model = (verify.ROOT / "coq" / "NativeLifecycle.v").read_text(encoding='utf-8')
         for theorem in ("configuration_missing_root_rolls_back", "configuration_missing_child_rolls_back",
                         "configuration_changed_root_rolls_back", "configuration_changed_child_rolls_back",
                         "configuration_success_preserves_pins", "configuration_failure_keeps_entire_snapshot",
@@ -595,7 +633,7 @@ class VerificationGateTests(unittest.TestCase):
     def test_native_integer_domain_is_registered_with_semantic_mutations(self):
         module = "NativeIntegerDomain.v"
         self.assertIn(module, verify.COQ_MODULES)
-        model = (verify.ROOT / "coq" / module).read_text()
+        model = (verify.ROOT / "coq" / module).read_text(encoding='utf-8')
         for theorem in ("admissible_nonce_fits_vm_integer",
                         "unsigned_upper_half_cannot_fit_vm_integer",
                         "decomposition_has_representable_channel",
@@ -609,7 +647,7 @@ class VerificationGateTests(unittest.TestCase):
             self.assertIn(mutation, verify.COQ_MODULES[module])
 
     def test_native_batch_shadow_cursor_proofs_are_registered(self):
-        model = (verify.ROOT / "coq" / "NativeIntegerDomain.v").read_text()
+        model = (verify.ROOT / "coq" / "NativeIntegerDomain.v").read_text(encoding='utf-8')
         for theorem in ("consume_success_requires_exact_sequence",
                         "shadow_batch_preserves_unmentioned_channel",
                         "shadow_batch_rejects_immediate_replay",
@@ -654,7 +692,7 @@ class VerificationGateTests(unittest.TestCase):
         # compiles on its own; one that landed in a proof body would make the
         # "invalid mutation" guard pass without ever compiling the mutant.
         for module, mutations in verify.COQ_MODULES.items():
-            source = (verify.ROOT / "coq" / module).read_text()
+            source = (verify.ROOT / "coq" / module).read_text(encoding='utf-8')
             prefix = re.split(
                 r"^(?:Lemma|Theorem|Corollary|Proposition|Fact|Example|Remark) ",
                 source, maxsplit=1, flags=re.M)[0]

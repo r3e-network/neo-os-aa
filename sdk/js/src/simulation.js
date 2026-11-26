@@ -22,14 +22,16 @@ const fail = (errorCode, details) => {
 };
 
 /**
- * Simulates one execution script over 1..32 operations.
+ * Simulates one execution script: one transaction carries exactly one complete
+ * 13-field operation, never a list.
  *
  * @returns {Promise<Object>} `{ plan, state, exception, stack, incompleteTransfers,
- *   gasConsumed, minimumRequiredFee }` — a fault is reported, not thrown.
+ *   gasConsumed }` — a fault is reported, not thrown. `gasConsumed` is the gas
+ *   the script consumed; the transaction declares it as its system fee.
  */
-async function simulateUserOperation(client, { accountId, operations, signers = [] } = {}) {
+async function simulateUserOperation(client, { accountId, operation, signers = [] } = {}) {
   validateAccountId(codec.hex(accountId, 20));
-  const plan = client.buildExecutionScript({ accountId, operations });
+  const plan = client.buildExecutionScript({ accountId, operation });
   client.prepare(plan);
   return { plan, ...(await client.simulate(plan, signers)) };
 }

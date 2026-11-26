@@ -41,7 +41,7 @@ PROBE_SCENARIOS = {
     ("SSN", "100", False, False, False), ("SSN", "111", False, False, True),
 }
 PROBE_PRICING = {"executionFeeFactor": 30, "storagePriceDatoshi": 100000,
-                 "globalVerificationLimitDatoshi": 150000000, "rootCallbackLimitDatoshi": 100000000,
+                 "globalVerificationLimitDatoshi": 150000000,
                  "internalFeeScale": "10000000"}
 PROBE_DOMAIN = "95f9b24ea3b055e8bd3bce0bf24c6ec31b68689ad320de2adef18b0719f6f528"
 
@@ -226,28 +226,32 @@ def validate_probe_cases(receipt):
         state = "HALT" if expected else "FAULT"
         result, verification = case.get("result"), case.get("verification")
         require(isinstance(result, dict) and isinstance(verification, dict), "Probe omitted trigger results")
-        require(result.get("state") == state and verification.get("state") == state, "Probe trigger outcome differs from the expected approval")
-        require(type(result.get("gas")) is int and type(result.get("minimum")) is int and 0 < result["gas"] <= result["minimum"], "Probe admission fee is absent or below consumption")
+        require(result.get("state") == state, "Probe execution outcome differs from the expected approval")
+        require(type(result.get("gas")) is int and 0 < result["gas"], "Probe execution fee is absent")
         require(type(result.get("notifications")) is int and result["notifications"] == (1 if expected else 0), "Probe target notification outcome differs")
-        require(type(verification.get("gasConsumedDatoshi")) is int and 0 < verification["gasConsumedDatoshi"] <= PROBE_PRICING["globalVerificationLimitDatoshi"], "Verification exceeds its global budget")
-        require(verification.get("gasLimitDatoshi") == PROBE_PRICING["globalVerificationLimitDatoshi"], "Verification budget differs from the reviewed limit")
-        require(verification.get("authorized") is expected, "Verification did not report the expected authorization")
+        # Under the Verification trigger the native core answers admissibility only: every well formed operation
+        # of an active account is accepted and no credential is verified there. Credentials are verified once,
+        # by executeUserOp, whose outcome is the execution row above.
+        require(verification.get("state") == "HALT" and verification.get("authorized") is True, "Verification did not answer admissible for the well formed operation")
+        require(type(verification.get("gasConsumedDatoshi")) is int and 0 < verification["gasConsumedDatoshi"] <= PROBE_PRICING["globalVerificationLimitDatoshi"], "Verification exceeds the platform cap")
+        require(verification.get("gasLimitDatoshi") == PROBE_PRICING["globalVerificationLimitDatoshi"], "Verification gas limit differs from the platform cap")
+        require(type(verification.get("resultCount")) is int and verification["resultCount"] == 1
+                and verification.get("resultType") == "Boolean" and verification.get("booleanResult") is True,
+                "Verification HALT must return exactly one Boolean true")
+        require(verification.get("exception") is None, "Verification carries a VM failure")
         if expected:
-            require(type(verification.get("resultCount")) is int and verification["resultCount"] == 1
-                    and verification.get("resultType") == "Boolean" and verification.get("booleanResult") is True,
-                    "Verification HALT must return exactly one Boolean true")
-            require(result.get("error") is None and verification.get("exception") is None, "Successful scenario contains a VM failure")
+            require(result.get("error") is None, "Successful scenario contains a VM failure")
         else:
             reason = "Invalid child signature type" if case["Malformed"] else "Verifier rejected signature"
-            require(all(isinstance(error, str) and reason in error for error in (result.get("error"), verification.get("exception"))), "Negative scenario failed for an unrelated reason")
+            require(isinstance(result.get("error"), str) and reason in result["error"], "Negative scenario failed for an unrelated reason")
         phases = case.get("phases")
         names = ["validateCompositeSignature", "postExecuteComposite"] if expected else ["validateCompositeSignature"]
         require(isinstance(phases, list) and [p.get("phase") if isinstance(p, dict) else None for p in phases] == names, "Probe callback phases are absent, duplicated or incorrect")
         for phase in phases:
-            values = [phase.get(key) for key in ("limitDatoshi", "consumedDatoshi", "remainingDatoshi")]
-            require(all(isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]*", value) for value in values), "Callback measurements must be canonical nonnegative integers")
-            limit, consumed, remaining = map(int, values)
-            require(limit == PROBE_PRICING["rootCallbackLimitDatoshi"] and 0 < consumed < limit and remaining == limit - consumed, "Callback exceeds or misreports its fixed budget")
+            # A callback's consumption is the delta of the engine's own fee counter. The declared system fee of
+            # the transaction is its only bound, so there is no per-callback limit to report against.
+            consumed = phase.get("consumedDatoshi")
+            require(isinstance(consumed, str) and re.fullmatch(r"0|[1-9][0-9]*", consumed) is not None, "Callback measurements must be canonical nonnegative integers")
     require(seen == PROBE_SCENARIOS and aliases == {False, True}, "Probe omitted a required execution or signer-alias scenario")
 
 

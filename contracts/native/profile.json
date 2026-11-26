@@ -57,14 +57,46 @@
     "Hardfork activation, node integration, formal refinement and public-network readback remain required before native status can change"
   ],
   "openGates": [
-    "CURRENT-PROFILE-ARTIFACT-READBACK",
-    "EXTERNAL-PROTOCOL-ACCEPTANCE",
-    "FORMAL-NEOVM-COMPILER-REFINEMENT",
-    "FORMAL-NATIVE-FEE-RESOURCE-REFINEMENT",
-    "PUBLIC-HARDFORK-ACTIVATION",
-    "GOVERNANCE-CALLBACK-RESOURCE-CORRESPONDENCE",
-    "POLICY-STATE-OWNERSHIP-CORRESPONDENCE",
-    "GOVERNANCE-MODULE-CODE-REBINDING"
+    {
+      "id": "CURRENT-PROFILE-ARTIFACT-READBACK",
+      "owner": "external",
+      "evidence": "A tracked receipt that deploys the digest-pinned native build, reads the deployed script and manifest bytes back from the network and binds them to the packaged NEF and manifest digests. Local VM probes and the packaging receipt do not establish it."
+    },
+    {
+      "id": "EXTERNAL-PROTOCOL-ACCEPTANCE",
+      "owner": "external",
+      "evidence": "Recorded acceptance of the SmartAccount specification and parameter set (profileVersion 4, abiVersion 4) by the Neo N3 maintainers, with the accepted revision pinned here. Local tests cannot substitute for it."
+    },
+    {
+      "id": "FORMAL-NEOVM-COMPILER-REFINEMENT",
+      "owner": "repo",
+      "evidence": "A reviewed refinement from the formal/coq models to the nccs-compiled bytecode and NeoVM execution of the native core. Until then the models are handwritten and the correspondence rests on runtime tests and source pins."
+    },
+    {
+      "id": "FORMAL-NATIVE-FEE-RESOURCE-REFINEMENT",
+      "owner": "repo",
+      "evidence": "Formal fee and resource bounds for the complete operation path (fee estimation, execution limits, maximum roster cost) proved against the native implementation. The current models bound only selected callbacks."
+    },
+    {
+      "id": "PUBLIC-HARDFORK-ACTIVATION",
+      "owner": "external",
+      "evidence": "The Neo N3 hardfork that activates the native SmartAccount VM and storage semantics, with the activated height or protocol revision recorded here. The profile stays draft-unactivated until then."
+    },
+    {
+      "id": "GOVERNANCE-CALLBACK-RESOURCE-CORRESPONDENCE",
+      "owner": "repo",
+      "evidence": "Proof or exhaustive VM evidence that every governance callback path and its resource charging in the native build corresponds to the modelled core configuration batches and callback ordering. See localGovernedPolicies."
+    },
+    {
+      "id": "POLICY-STATE-OWNERSHIP-CORRESPONDENCE",
+      "owner": "repo",
+      "evidence": "Proof or exhaustive VM evidence that the storage layout of the provider and digest authenticated rosters, maturity and review state in the pinned governance module corresponds to the modelled policy state and its ownership."
+    },
+    {
+      "id": "GOVERNANCE-MODULE-CODE-REBINDING",
+      "owner": "repo",
+      "evidence": "Either a specified and tested native landing method for governance action 6 (module code rebinding) with its authorization and delay path, or a recorded protocol decision that the action stays rejected. The governance module currently refuses the action as not deployed."
+    }
   ],
   "localAuthorityAdmission": {
     "status": "implemented-in-local-candidate",

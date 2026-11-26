@@ -445,9 +445,8 @@ public class VerifierSignatureRuntimeTests
     }
 
     /// <summary>
-    /// Spec §11: the validator aggregates are sized cap × (1 + MaxThresholdPolicyMembers),
-    /// so the advertised maximum must actually validate. A flat pool failed here with
-    /// SA_GAS_BUDGET_EXCEEDED while the core still accepted 10 members.
+    /// The advertised member maximum must actually validate: callbacks run inside the
+    /// declared system fee of the transaction, not a per-call budget.
     /// </summary>
     [TestMethod]
     public void Threshold_MaximumMemberCount_ValidatesInsideTheAggregate()

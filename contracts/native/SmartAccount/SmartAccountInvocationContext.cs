@@ -1,33 +1,23 @@
 // Copyright (C) 2015-2026 The Neo Project.
 //
-// SmartAccountInvocationContext.cs file belongs to the neo project and is free
-// software distributed under the MIT software license, see the
-// accompanying file LICENSE in the main directory of the
-// repository or http://www.opensource.org/licenses/mit-license.php
-// for more details.
+// SmartAccountInvocationContext.cs file belongs to the neo project and is free software distributed under the MIT
+// software license, see the accompanying file LICENSE in the main directory of the repository or
+// http://www.opensource.org/licenses/mit-license.php for more details.
 //
-// Redistribution and use in source and binary forms with or without
-// modifications are permitted.
+// Redistribution and use in source and binary forms with or without modifications are permitted.
 
 // TRUE SOURCE: this is the only editable copy of this SmartAccount native
 // contract file. The neo-native-core checkout carries a generated copy —
 // regenerate it via scripts/sync_native_smartaccount.py.
 
-using Neo.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Numerics;
 
 namespace Neo.SmartContract.Native
 {
-    /// <summary>
-    /// Writer phases of the v4 execution state machine (spec §7.1/§9). A
-    /// module callback is authorized only while the recorded phase is the one
-    /// that callback belongs to, for the exact active module instance.
-    ///
-    /// Each callback has a hard cap. Pre and post hooks also share one budget
-    /// per account and transaction, including calls through different envelopes.
-    /// </summary>
+    /// <summary> Writer phases of the v4 execution state machine (spec §7.1/§9). A module callback is authorized only
+    /// while the recorded phase is the one that callback belongs to, for the exact active module instance. </summary>
     internal enum SmartAccountCallbackPhase : byte
     {
         None = 0,
@@ -37,310 +27,207 @@ namespace Neo.SmartContract.Native
         HookPost = 4,
         Completion = 5,
         Configuration = 6,
-        Cleanup = 7,
+        MemberValidation = 8,
+        HookPlanning = 9,
     }
 
-    /// <summary>Engine-local account locks, execution state and phase grants.</summary>
+    /// <summary>Engine-local state of the native core while an entry of one account is in progress: the entered account,
+    /// the module callback and the target dispatch in progress, the composite validation in progress and the post-reset
+    /// initialization credential. Every grant lives exactly as long as the native call that opened it: that call restores
+    /// the previous state in its own finally block, and a FAULT ends the engine, so nothing is revoked or carried over.
+    /// </summary>
     internal sealed class SmartAccountInvocationContext
     {
-        private readonly Dictionary<UInt160, AccountLease> _accounts = new();
-        private readonly Dictionary<UInt160, AccountExecution> _executions = new();
-        private readonly Stack<Lease> _scopes = new();
-        // One engine is one transaction, including separate direct invocations and batches.
-        private readonly Dictionary<UInt160, long> _hookGasSpent = new();
+        // ---- 1. The entered account: the re-entrancy lock, and the proxy IsAccountProxyActive answers for ----
+        private UInt160? _account;
+        private UInt160 _accountAddress = UInt160.Zero;
 
-        internal long HookGasRemaining(UInt160 accountId) =>
-            SmartAccountModuleProtocol.HookAggregateGasLimit - _hookGasSpent.GetValueOrDefault(accountId);
+        // ---- 2. The module callback in progress, authorized for its own caller frame only ----
+        private ExecutionContextState? _callbackAnchor;
+        private UInt160 _callbackContract = UInt160.Zero;
+        private BigInteger _callbackModuleId = BigInteger.Zero;
+        private SmartAccountCallbackPhase _callbackPhase = SmartAccountCallbackPhase.None;
 
-        internal void ChargeHook(UInt160 accountId, long spent)
+        // ---- 3. The target dispatch in progress: its frame is the only one that may act as the account ----
+        private ExecutionContextState? _targetAnchor;
+
+        // ---- 4. The composite validation in progress: written by the validation pass, read by validateMember ----
+        internal OperationValidation? Validation;
+
+        /// <summary> The operation of record of one validation pass and the members its routed composite has approved. </summary>
+        internal sealed class OperationValidation(BigInteger validatorId, BigInteger credentialGeneration,
+            ReadOnlyMemory<byte> signedBytes, ReadOnlyMemory<byte> digest)
         {
-            if (spent < 0 || spent > HookGasRemaining(accountId))
-                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
-            _hookGasSpent[accountId] = _hookGasSpent.GetValueOrDefault(accountId) + spent;
-        }
-        // Keep independent validation and completion balances across all operations
-        // in this engine, including two calls entered from separate script frames.
-        private readonly Dictionary<(UInt160, SmartAccountCallbackPhase), long> _validatorGasSpent = new();
-
-        internal long ValidatorGasRemaining(UInt160 accountId, SmartAccountCallbackPhase phase) =>
-            (phase switch
-            {
-                SmartAccountCallbackPhase.Validation => SmartAccountModuleProtocol.ValidationAggregateGasLimit,
-                SmartAccountCallbackPhase.Completion => SmartAccountModuleProtocol.CompletionAggregateGasLimit,
-                _ => throw new ArgumentOutOfRangeException(nameof(phase)),
-            }) - _validatorGasSpent.GetValueOrDefault((accountId, phase));
-
-        internal void ChargeValidator(UInt160 accountId, SmartAccountCallbackPhase phase, long spent)
-        {
-            if (spent < 0 || spent > ValidatorGasRemaining(accountId, phase))
-                throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
-            _validatorGasSpent[(accountId, phase)] = _validatorGasSpent.GetValueOrDefault((accountId, phase)) + spent;
-        }
-        private object _generation = new();
-
-        internal sealed class AccountExecution
-        {
-            internal byte Phase;
-            internal BigInteger ActiveModuleId = BigInteger.Zero;
-            internal UInt160 ActiveModuleContract = UInt160.Zero;
+            internal readonly BigInteger ValidatorId = validatorId;
+            internal readonly BigInteger CredentialGeneration = credentialGeneration;
+            internal readonly byte[] SignedBytes = signedBytes.ToArray();
+            internal readonly byte[] Digest = digest.ToArray();
+            internal readonly HashSet<BigInteger> ValidatedMembers = new();
+            internal readonly List<BigInteger> ApprovedIds = new();
+            internal readonly List<ModuleInstance> ApprovedModules = new();
         }
 
-        private abstract class Lease(SmartAccountInvocationContext owner) : IDisposable
-        {
-            internal readonly object Generation = owner._generation;
-            private bool _disposed;
-            internal abstract UInt160 Account { get; }
-            public void Dispose()
-            {
-                if (_disposed) return;
-                owner.Release(this);
-                _disposed = true;
-            }
-        }
+        // ---- 5. v4.1 restricted post-reset initialization (spec §12): the reset landing alone removes every instance, so the
+        // same recovery seat must be able to land one install-only composition in the same transaction. The initialization is
+        // engine-local and single-use: it is bound to the seat that reset, the account and the post-reset authority epoch, and
+        // it is only reachable through applyConfigurationActions. Excluding custody, plain-validator, configure and uninstall
+        // actions is enforced at the entry, not at the module callback.
+        // One record serves both the claim and the end-of-execution check, so no second state exists: the row of an account
+        // stays for the whole engine, and a landing only consumes the claim by clearing its epoch. The row therefore says
+        // "this engine reset the account" even after the landing, which is what the engine asks for when the script halts
+        // (SmartAccount.AssertResetsLanded): a transaction that ends on a reset with no governance validator left faults as a
+        // whole. Without that rule the seat could reset and stop, and the account would have no governance caller left for any
+        // later configuration. It is also what refuses a second reset of the same account in the engine.
+        private readonly Dictionary<UInt160, (UInt160 Seat, ulong? AuthorityEpoch)> _resetInitializations = new();
 
-        private sealed class AccountLease(SmartAccountInvocationContext owner, UInt160 identity) : Lease(owner)
-        {
-            internal readonly UInt160 Identity = Copy(identity);
-            internal readonly UInt160 Address = SmartAccountProtocol.GetAccountAddress(identity);
-            internal override UInt160 Account => Identity;
-        }
+        internal bool HasResetInitialization(UInt160 accountId) => _resetInitializations.ContainsKey(accountId);
 
-        private sealed class GrantLease(SmartAccountInvocationContext owner, UInt160 account,
-            BigInteger moduleId, UInt160 contract, SmartAccountCallbackPhase phase, ExecutionContextState anchor)
-            : Lease(owner)
-        {
-            internal override UInt160 Account => account;
-            internal readonly BigInteger ModuleId = moduleId;
-            internal readonly UInt160 Contract = Copy(contract);
-            internal readonly SmartAccountCallbackPhase Phase = phase;
-            internal readonly ExecutionContextState Anchor = anchor;
-        }
+        internal void OpenResetInitialization(UInt160 accountId, UInt160 seat, ulong authorityEpoch) =>
+            _resetInitializations.Add(accountId, (seat, authorityEpoch));
 
-        private sealed class TargetLease(SmartAccountInvocationContext owner, UInt160 account,
-            UInt160 target, ExecutionContextState anchor) : Lease(owner)
-        {
-            internal override UInt160 Account => account;
-            internal readonly UInt160 Target = Copy(target);
-            internal readonly ExecutionContextState Anchor = anchor;
-        }
+        internal bool IsResetInitialization(UInt160 accountId, UInt160 caller, ulong authorityEpoch) =>
+            _resetInitializations.TryGetValue(accountId, out var claim) && claim == (caller, (ulong?)authorityEpoch);
 
-        private static UInt160 Copy(UInt160 value) => new(value.ToArray());
+        /// <summary> Consumes the claim of a landed initialization; the row stays as the record of the reset. </summary>
+        internal void CloseResetInitialization(UInt160 accountId) =>
+            _resetInitializations[accountId] = (_resetInitializations[accountId].Seat, null);
 
-        private static void RequireIdentity(UInt160 identity)
-        {
-            ArgumentNullException.ThrowIfNull(identity);
-            if (identity == UInt160.Zero)
-                throw new ArgumentException("An invocation identity cannot be zero.", nameof(identity));
-        }
+        /// <summary> Every account this engine has reset, whether or not its initialization landed. </summary>
+        internal IEnumerable<UInt160> ResetAccounts => _resetInitializations.Keys;
 
-        private static bool MatchesContract(ExecutionContextState? state, UInt160 contract) =>
-            state?.Contract is not null && state.ScriptHash == contract && state.Contract.Hash == contract;
+        // ---- 6. Entry, callback and target grants -------------------------------------------------------------------------------
 
+        /// <summary> Enters an account for the duration of the returned scope. </summary>
+        /// <exception cref="InvalidOperationException"> SA_REENTRANCY_FORBIDDEN: while an account is entered, entering the same
+        /// account is direct re-entry and entering another is cross-account recursion (spec §3.6). An entry holds the
+        /// account for one operation and releases it when that operation ends. </exception>
         internal IDisposable EnterAccount(UInt160 accountId)
         {
             RequireIdentity(accountId);
-            // One authorized transition at a time (spec §3.6): while any account
-            // lease is open, entering the same account is direct re-entry and
-            // entering a different account is cross-account recursion. Both are
-            // reentrancy and fault with the shared code. A batch is unaffected:
-            // its operations run sequentially on one account and every lease is
-            // released before the next operation enters.
-            if (_accounts.Count > 0)
+            if (_account is not null)
                 throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorReentrancyForbidden);
-            var lease = new AccountLease(this, accountId);
-            _accounts.Add(lease.Identity, lease);
-            _scopes.Push(lease);
-            return lease;
+            _account = accountId;
+            _accountAddress = SmartAccountProtocol.GetAccountAddress(accountId);
+            return new AccountEntry(this);
         }
 
-        private AccountLease RequireAccount(UInt160 accountId)
+        private sealed class AccountEntry(SmartAccountInvocationContext owner) : IDisposable
         {
-            RequireIdentity(accountId);
-            if (!_accounts.TryGetValue(accountId, out var account) ||
-                !_scopes.TryPeek(out var active) || active.Account != accountId)
-                throw new InvalidOperationException("A grant requires the currently locked SmartAccount.");
-            return account;
+            public void Dispose()
+            {
+                owner._account = null;
+                owner._accountAddress = UInt160.Zero;
+            }
         }
 
-        /// <summary>Engine-local execution state of an account (phase and active grant).</summary>
-        internal AccountExecution Execution(UInt160 accountId)
+        private void RequireAccount(UInt160 accountId)
         {
-            if (!_executions.TryGetValue(accountId, out var execution))
-                throw new InvalidOperationException("The SmartAccount has no open execution context.");
-            return execution;
+            if (_account != accountId)
+                throw new InvalidOperationException(
+                    $"{SmartAccountModuleProtocol.ErrorPhaseViolation} A grant requires the entered SmartAccount.");
         }
 
-        internal bool TryGetExecution(UInt160 accountId, out AccountExecution execution) =>
-            _executions.TryGetValue(accountId, out execution!);
-
-        internal void OpenExecution(UInt160 accountId)
+        /// <summary> Opens a module callback of the entered account and returns the callback it suspends, if any (a leaf member
+        /// validated through its composite parent). <see cref="ExitCallback"/> restores it. </summary>
+        internal (BigInteger ModuleId, UInt160 Contract, SmartAccountCallbackPhase Phase, ExecutionContextState? Anchor) EnterCallback(
+            UInt160 accountId, BigInteger moduleId, UInt160 contract, SmartAccountCallbackPhase phase, ExecutionContextState anchor)
         {
-            if (_executions.ContainsKey(accountId))
-                throw new InvalidOperationException("The SmartAccount already has an open execution context.");
-            _executions.Add(accountId, new AccountExecution());
+            RequireAccount(accountId);
+            var suspended = (_callbackModuleId, _callbackContract, _callbackPhase, _callbackAnchor);
+            _callbackModuleId = moduleId;
+            _callbackContract = contract;
+            _callbackPhase = phase;
+            _callbackAnchor = anchor;
+            return suspended;
         }
 
-        internal void CloseExecution(UInt160 accountId) => _executions.Remove(accountId);
-
-        private static void RequireAnchor(UInt160 contract, ExecutionContextState anchor)
+        internal void ExitCallback((BigInteger ModuleId, UInt160 Contract, SmartAccountCallbackPhase Phase, ExecutionContextState? Anchor) suspended)
         {
-            RequireIdentity(contract);
-            ArgumentNullException.ThrowIfNull(anchor);
-            if (!MatchesContract(anchor, contract))
-                throw new ArgumentException("The grant must identify its loaded contract invocation.", nameof(anchor));
+            (_callbackModuleId, _callbackContract, _callbackPhase, _callbackAnchor) = suspended;
         }
 
-        internal void AssertModuleEntry(UInt160 accountId, UInt160 contract, SmartAccountCallbackPhase phase)
-        {
-            _ = RequireAccount(accountId);
-            RequireIdentity(contract);
-            if (phase == SmartAccountCallbackPhase.None || phase > SmartAccountCallbackPhase.Cleanup
-                || !Enum.IsDefined(phase)
-                || NativeContract.IsNative(contract) || contract == SmartAccountProtocol.ServiceHash)
-                throw new ArgumentException("The callback phase or module identity is invalid.");
-        }
+        internal BigInteger CallbackModuleId => _callbackModuleId;
+        internal UInt160 CallbackContract => _callbackContract;
 
-        internal IDisposable EnterModule(UInt160 accountId, BigInteger moduleId, UInt160 contract,
-            SmartAccountCallbackPhase phase, ExecutionContextState anchor)
-        {
-            AssertModuleEntry(accountId, contract, phase);
-            AccountLease account = RequireAccount(accountId);
-            RequireAnchor(contract, anchor);
-            AccountExecution execution = Execution(accountId);
-            execution.Phase = (byte)phase;
-            execution.ActiveModuleId = moduleId;
-            execution.ActiveModuleContract = Copy(contract);
-            var lease = new GrantLease(this, account.Identity, moduleId, contract, phase, anchor);
-            _scopes.Push(lease);
-            return lease;
-        }
-
-        /// <summary>
-        /// Opens the target-dispatch scope: from here until the scope is closed
-        /// the ONLY open authorization of the account is its dispatched target.
-        /// </summary>
+        /// <summary> Opens the target dispatch of the entered account: until the returned scope is closed the only open
+        /// authorization of the account is its dispatched target. The core itself is never a target; any other contract,
+        /// native ones included, may be. </summary>
         internal IDisposable EnterTarget(UInt160 accountId, UInt160 target, ExecutionContextState anchor)
         {
-            AccountLease account = RequireAccount(accountId);
-            RequireAnchor(target, anchor);
-            // Only the core itself is excluded: a dispatched target may be any
-            // contract, native ones included (transfers, registration, ...).
+            RequireAccount(accountId);
             if (target == SmartAccountProtocol.ServiceHash)
-                throw new ArgumentException("The dispatch target identity is invalid.");
-            AccountExecution execution = Execution(accountId);
-            execution.Phase = (byte)SmartAccountCallbackPhase.TargetDispatch;
-            execution.ActiveModuleId = BigInteger.Zero;
-            execution.ActiveModuleContract = Copy(target);
-            var lease = new TargetLease(this, account.Identity, target, anchor);
-            _scopes.Push(lease);
-            return lease;
+                throw new ArgumentException(
+                    $"{SmartAccountModuleProtocol.ErrorPhaseViolation} The dispatch target identity is invalid.");
+            _targetAnchor = anchor;
+            return new TargetEntry(this);
         }
 
-        /// <summary>
-        /// Trigger gate of a writer phase: an application invocation may address
-        /// every phase it runs (validation preview, completion, lifecycle), a
-        /// verification invocation may only address the validation phase, and
-        /// the native persist triggers never address account state at all.
-        /// </summary>
+        private sealed class TargetEntry(SmartAccountInvocationContext owner) : IDisposable
+        {
+            public void Dispose() => owner._targetAnchor = null;
+        }
+
+        // ---- 7. Queries of the core entry points -------------------------------------------------------------------------------
+
+        /// <summary> Trigger gate of a writer phase: an application invocation may address every phase it runs (validation,
+        /// completion, lifecycle), a verification invocation may only address the validation phase of a read-only
+        /// validateUserOp call, and the native persist triggers never address account state at all. </summary>
         private static bool AllowsPhase(ApplicationEngine engine, SmartAccountCallbackPhase phase) =>
             engine.Trigger == TriggerType.Application
-            || (engine.Trigger == TriggerType.Verification && phase == SmartAccountCallbackPhase.Validation);
-
-        /// <summary>
-        /// True while the account's proxy script is invoking the core from
-        /// inside that account's own target dispatch — the only window in which
-        /// an account witness may be granted without a transaction witness.
-        /// </summary>
-        internal bool IsTargetAuthorized(ApplicationEngine engine, UInt160 accountId)
-        {
-            if (engine.State == Neo.VM.VMState.FAULT || engine.Trigger != TriggerType.Application) return false;
-            if (!_scopes.TryPeek(out var active) || active is not TargetLease target || target.Account != accountId)
-                return false;
-            var proxy = engine.CurrentContext?.GetState<ExecutionContextState>();
-            var caller = proxy?.CallingContext?.GetState<ExecutionContextState>();
-            return ReferenceEquals(caller, target.Anchor);
-        }
-
-        /// <summary>Closes the writer phase of an account.</summary>
-        internal void ClosePhase(UInt160 accountId)
-        {
-            AccountExecution execution = Execution(accountId);
-            execution.Phase = (byte)SmartAccountCallbackPhase.None;
-            execution.ActiveModuleId = BigInteger.Zero;
-            execution.ActiveModuleContract = UInt160.Zero;
-        }
+            || (engine.Trigger == TriggerType.Verification && phase is
+                SmartAccountCallbackPhase.Validation or SmartAccountCallbackPhase.MemberValidation
+                or SmartAccountCallbackPhase.HookPlanning);
 
         private static ExecutionContextState? QueryCaller(ApplicationEngine engine) =>
             engine.State != Neo.VM.VMState.FAULT && engine.CurrentScriptHash == SmartAccountProtocol.ServiceHash
                 ? engine.CurrentContext!.GetState<ExecutionContextState>().CallingContext?.GetState<ExecutionContextState>()
                 : null;
 
-        /// <summary>
-        /// True when the caller of this core invocation is the module instance
-        /// that the current phase addresses. Used by the module-facing
-        /// <c>getAuthorizedModuleId</c> query.
-        /// </summary>
-        internal bool IsModuleAuthorized(ApplicationEngine engine, UInt160 accountId, SmartAccountCallbackPhase phase)
+        /// <summary> True when the caller of this core invocation is the module instance of the callback in progress, which
+        /// must belong to the phase asked for. Used by the module-facing <c>getAuthorizedModuleId</c> query and by
+        /// <c>validateMember</c>. </summary>
+        internal bool IsModuleAuthorized(ApplicationEngine engine, UInt160 accountId, SmartAccountCallbackPhase phase) =>
+            _callbackAnchor is not null && _account == accountId && _callbackPhase == phase
+            && AllowsPhase(engine, phase) && ReferenceEquals(QueryCaller(engine), _callbackAnchor);
+
+        /// <summary> True while the account's proxy script is invoking the core from inside that account's own target dispatch —
+        /// the only window in which an account witness may be granted without a transaction witness. </summary>
+        internal bool IsTargetAuthorized(ApplicationEngine engine, UInt160 accountId)
         {
-            if (!_scopes.TryPeek(out var active) || active is not GrantLease grant
-                || grant.Account != accountId || grant.Phase != phase)
+            if (engine.State == Neo.VM.VMState.FAULT || engine.Trigger != TriggerType.Application || _account != accountId
+                || _targetAnchor is not { } target || _callbackAnchor is not null)
                 return false;
-            if (!AllowsPhase(engine, phase)) return false;
-            ExecutionContextState? caller = QueryCaller(engine);
-            return ReferenceEquals(caller, grant.Anchor) && MatchesContract(caller, grant.Contract);
+            var proxy = engine.CurrentContext?.GetState<ExecutionContextState>();
+            var caller = proxy?.CallingContext?.GetState<ExecutionContextState>();
+            return ReferenceEquals(caller, target);
         }
 
-        /// <summary>
-        /// Whether the account address may witness from the current frame. Only
-        /// the account's own dispatched target acts as the account: either the
-        /// target frame itself, or the core invoked directly by that frame. A
-        /// module callback never carries the account witness, and anything the
-        /// target calls in turn (nested contracts, dynamic scripts) is excluded.
-        /// </summary>
+        /// <summary> Whether the account address may witness from the current frame. Only the account's own dispatched target
+        /// frame acts as the account. The core never evaluates the account proxy as a witness: every witness check it makes
+        /// names a custody address, and a custody address is never an account proxy. A module callback never carries the account
+        /// witness, and anything the target calls in turn (nested contracts, native ones included, dynamic scripts) is
+        /// excluded. </summary>
         internal bool IsWitnessAuthorized(ApplicationEngine engine, UInt160 accountAddress)
         {
-            if (engine.State == Neo.VM.VMState.FAULT || engine.Trigger != TriggerType.Application || accountAddress is null)
+            if (engine.State == Neo.VM.VMState.FAULT || engine.Trigger != TriggerType.Application || accountAddress is null
+                || _account is null || _targetAnchor is not { } target || _callbackAnchor is not null
+                || accountAddress != _accountAddress)
                 return false;
-            if (!_scopes.TryPeek(out var active) || active is not TargetLease target)
-                return false;
-            if (accountAddress != SmartAccountProtocol.GetAccountAddress(target.Account)) return false;
-            ExecutionContextState? current = engine.CurrentContext?.GetState<ExecutionContextState>();
-            if (ReferenceEquals(current, target.Anchor)) return true;
-            return engine.CurrentScriptHash == SmartAccountProtocol.ServiceHash
-                && ReferenceEquals(current?.CallingContext?.GetState<ExecutionContextState>(), target.Anchor);
+            return ReferenceEquals(engine.CurrentContext?.GetState<ExecutionContextState>(), target);
         }
 
-        /// <summary>
-        /// Whether the address is the proxy of an account this invocation is
-        /// currently executing. Such a proxy must never become a witness
-        /// principal through the legacy signer fast path: the only way it
-        /// authorizes anything is its own verified execution (spec §3.6).
-        /// </summary>
-        internal bool IsAccountProxyActive(UInt160 address)
-        {
-            if (address is null) return false;
-            foreach (AccountLease account in _accounts.Values)
-            {
-                if (account.Address == address) return true;
-            }
-            return false;
-        }
+        /// <summary> Whether the address is the proxy of the account this engine is currently executing. Such a proxy must
+        /// never become a witness principal through the legacy signer fast path: the only way it authorizes anything is its own
+        /// verified execution (spec §3.6). </summary>
+        internal bool IsAccountProxyActive(UInt160 address) =>
+            address is not null && _account is not null && _accountAddress == address;
 
-        private void Release(Lease lease)
+        private static void RequireIdentity(UInt160 identity)
         {
-            if (!ReferenceEquals(lease.Generation, _generation)) return;
-            if (!_scopes.TryPeek(out var active) || !ReferenceEquals(active, lease))
-                throw new InvalidOperationException("Invocation scopes must be released in reverse order.");
-            _scopes.Pop();
-            if (lease is AccountLease account) _accounts.Remove(account.Identity);
-        }
-
-        internal void Reset()
-        {
-            _scopes.Clear();
-            _accounts.Clear();
-            _executions.Clear();
-            _generation = new();
+            ArgumentNullException.ThrowIfNull(identity);
+            if (identity == UInt160.Zero)
+                throw new ArgumentException(
+                    $"{SmartAccountModuleProtocol.ErrorOperationMalformed} An invocation identity cannot be zero.", nameof(identity));
         }
     }
 }

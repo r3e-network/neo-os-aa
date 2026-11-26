@@ -469,25 +469,18 @@ export declare function decodeValidationPreviewStack(item: unknown): {
   operationDigest: string;
 };
 
-/** The raw 15-field `getAccount` Array, decoded without a client identity. */
+/** The raw 9-field v4.1 `getAccount` Array, decoded without a client identity. */
 export interface DecodedAccountDescriptor {
   readonly exists: true;
   readonly status: number;
   readonly statusName: string;
   readonly custody: string;
-  readonly recoveryAuthority: string;
   readonly authorityEpoch: string;
   readonly configurationNonce: string;
-  readonly recoveryTimelockMs: string;
   readonly defaultOperationAuthorization: boolean;
   readonly defaultMessageAuthorization: boolean;
-  /** Retained record field with no authorization meaning; current protocol accepts only false. */
-  readonly ownerOnlyRecovery: false;
-  readonly hookOrderRevision: string;
+  readonly requiredValidatorId: string;
   readonly controlRevision: string;
-  readonly recoveryPending: boolean;
-  readonly recoveryMatureAt: string;
-  readonly marketEscrowActive: boolean;
 }
 
 export interface DecodedModuleDescriptor {
@@ -503,14 +496,20 @@ export interface DecodedModuleDescriptor {
   readonly instanceIsolation: boolean;
   readonly messageCapability: boolean;
   readonly thresholdMemberEligible: boolean;
+  readonly compositeLayer: boolean;
+  readonly governance: boolean;
+  readonly hookPlanner: boolean;
 }
 
 export interface DecodedRecoveryStatus {
   readonly pending: boolean;
+  readonly nonce: string;
   readonly initiatedAt: string;
   readonly matureAt: string;
   readonly authorityEpochAtInit: string;
+  readonly configurationNonceAtInit: string;
   readonly newCustody: string;
+  readonly policyRevision: string;
 }
 
 export declare function decodeAccountDescriptorStack(

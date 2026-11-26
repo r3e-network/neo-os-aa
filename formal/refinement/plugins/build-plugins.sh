@@ -15,11 +15,21 @@
 #
 # Exits non-zero if any produced artifact's sha256 differs from the one recorded in
 # provenance.json, which is what makes the file a check rather than a description.
+#
+# Historical record (seen 2026-11-24): no current gate or workflow runs this script.
+# contracts/plugins/verifiers was renamed contracts/plugins/validators and carries no
+# MultiSigVerifier project any more, so the first build target cannot be rebuilt from
+# the current tree. provenance.json and the committed NEF bytes stay as the record
+# of what was built; see formal/refinement/README.md.
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
+if [[ ! -f "$REPO/contracts/plugins/verifiers/MultiSigVerifier.csproj" ]]; then
+  echo "build-plugins.sh: cannot replay - $REPO/contracts/plugins/verifiers/MultiSigVerifier.csproj no longer exists (the directory is now contracts/plugins/validators, which has no MultiSigVerifier project). The pinned bytes in plugins/provenance.json are a historical record." >&2
+  exit 1
+fi
 OUT="${1:-$(mktemp -d "${TMPDIR:-/tmp}/sa-plugins.XXXXXX")}"
 NCCS_VERSION="3.9.1+5fa9566e5165ede2165a9be1f4a0120c17602697"
 

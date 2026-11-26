@@ -120,5 +120,25 @@ class GateTest(unittest.TestCase):
         with self.assertRaisesRegex(suite.Fail, "SmartAccount.nef"):
             suite.validate_artifacts(expected)
 
+
+class ReceiptPrivacyTest(unittest.TestCase):
+    """Moved from the retired test_source_gate.py; it exercises the receipt writer."""
+
+    def test_receipt_redaction_removes_machine_specific_locations(self):
+        raw = {
+            "trace": f"file://{ROOT}/frontend/node_modules/x.js",
+            "workdir": "/private" + "/tmp/sa-localchain-1234",
+            "tool": "/opt/homebrew/Cellar/openssl@3/bin/openssl",
+            "nested": ["/tmp/sa-localchain-5678"],
+        }
+        rendered = json.dumps(suite._redact_receipt_value(raw))
+        for marker in ("/Users/", "/private/tmp/", "/tmp/", "/opt/homebrew/", "node_modules/"):
+            self.assertNotIn(marker, rendered)
+        self.assertIn("<repo>", rendered)
+        self.assertIn("<tmp>/", rendered)
+        self.assertIn("<toolchain>/", rendered)
+        self.assertIn("<dependencies>/", rendered)
+
+
 if __name__ == "__main__":
     unittest.main()

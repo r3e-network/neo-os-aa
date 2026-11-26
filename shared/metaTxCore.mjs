@@ -129,19 +129,22 @@ function arrayValues(item, length) {
 const ACCOUNT_STATUS_NAMES = ['Active', 'Frozen'];
 
 /**
- * Decodes the 15-field `getAccount` descriptor (docs/SA-MODULE-PROTOCOL.md §9).
+ * Decodes the 9-field v4.1 `getAccount` descriptor (docs/SA-SPEC.zh-CN.md §9).
  *
- * [exists, status, custody, recoveryAuthority, authorityEpoch,
- *  configurationNonce, recoveryTimelockMs, defaultOperationAuthorization,
- *  defaultMessageAuthorization, ownerOnlyRecovery, hookOrderRevision,
- *  controlRevision, recoveryPending, recoveryMatureAt, marketEscrowActive]
+ * [exists, status, custody, authorityEpoch, configurationNonce,
+ *  defaultOperationAuthorization, defaultMessageAuthorization,
+ *  requiredValidatorId, controlRevision]
+ *
+ * The v4.0 recovery authority, recovery timelock, hook-order revision,
+ * recovery-pending and market-escrow fields are gone: recovery is a user-space
+ * module, so its policy and pending request are read from the recovery seat.
  *
  * @param {Object} item - Array stack item from getAccount
  * @returns {Object|null} Descriptor, or null for a missing account
  */
 export function decodeAccountDescriptorStack(item) {
   if (item?.type === 'Null' || item == null) return null;
-  const values = arrayValues(item, 15);
+  const values = arrayValues(item, 9);
   if (values.length === 0) return null;
   if (!decodeStackBoolean(values[0])) return null;
   const status = Number(decodeIntegerStack(values[1]));
@@ -150,33 +153,28 @@ export function decodeAccountDescriptorStack(item) {
     status,
     statusName: ACCOUNT_STATUS_NAMES[status] ?? '',
     custody: decodeHash160Stack(values[2]),
-    recoveryAuthority: decodeHash160Stack(values[3]),
-    authorityEpoch: decodeIntegerStack(values[4]).toString(),
-    configurationNonce: decodeIntegerStack(values[5]).toString(),
-    recoveryTimelockMs: decodeIntegerStack(values[6]).toString(),
-    defaultOperationAuthorization: decodeStackBoolean(values[7]),
-    defaultMessageAuthorization: decodeStackBoolean(values[8]),
-    ownerOnlyRecovery: decodeStackBoolean(values[9]),
-    hookOrderRevision: decodeIntegerStack(values[10]).toString(),
-    controlRevision: decodeIntegerStack(values[11]).toString(),
-    recoveryPending: decodeStackBoolean(values[12]),
-    recoveryMatureAt: decodeIntegerStack(values[13]).toString(),
-    marketEscrowActive: decodeStackBoolean(values[14]),
+    authorityEpoch: decodeIntegerStack(values[3]).toString(),
+    configurationNonce: decodeIntegerStack(values[4]).toString(),
+    defaultOperationAuthorization: decodeStackBoolean(values[5]),
+    defaultMessageAuthorization: decodeStackBoolean(values[6]),
+    requiredValidatorId: decodeIntegerStack(values[7]).toString(),
+    controlRevision: decodeIntegerStack(values[8]).toString(),
   };
 }
 
 /**
- * Decodes the 12-field `getModule` descriptor.
+ * Decodes the 15-field v4.1 `getModule` descriptor.
  *
  * [moduleId, moduleType, contractHash, contractId, updateCounter, nefSha256,
  *  profileSha256, moduleRevision, credentialGeneration, instanceIsolation,
- *  messageCapability, thresholdMemberEligible]
+ *  messageCapability, thresholdMemberEligible, compositeLayer, governance,
+ *  hookPlanner]
  *
  * @param {Object} item - Array stack item from getModule
  * @returns {Object|null} Descriptor, or null for a missing module
  */
 export function decodeModuleDescriptorStack(item) {
-  const values = arrayValues(item, 12);
+  const values = arrayValues(item, 15);
   if (values.length === 0) return null;
   return {
     moduleId: decodeIntegerStack(values[0]).toString(),
@@ -191,6 +189,9 @@ export function decodeModuleDescriptorStack(item) {
     instanceIsolation: decodeStackBoolean(values[9]),
     messageCapability: decodeStackBoolean(values[10]),
     thresholdMemberEligible: decodeStackBoolean(values[11]),
+    compositeLayer: decodeStackBoolean(values[12]),
+    governance: decodeStackBoolean(values[13]),
+    hookPlanner: decodeStackBoolean(values[14]),
   };
 }
 
@@ -220,13 +221,18 @@ export function decodeValidationPreviewStack(item) {
 export function decodeRecoveryStatusStack(item) {
   const values = item?.type === 'Array' && Array.isArray(item.value) ? item.value : [];
   if (values.length === 0) return null;
-  if (values.length !== 5) return null;
+  // RecoveryModule v4.1 answers its twelve-field request record, or an empty
+  // Array when no request exists.
+  if (values.length !== 12) return null;
   return {
-    pending: decodeStackBoolean(values[0]),
-    initiatedAt: decodeIntegerStack(values[1]).toString(),
-    matureAt: decodeIntegerStack(values[2]).toString(),
-    authorityEpochAtInit: decodeIntegerStack(values[3]).toString(),
-    newCustody: decodeHash160Stack(values[4]),
+    pending: Number(decodeIntegerStack(values[4])) === 1,
+    nonce: decodeIntegerStack(values[0]).toString(),
+    initiatedAt: decodeIntegerStack(values[2]).toString(),
+    matureAt: decodeIntegerStack(values[3]).toString(),
+    authorityEpochAtInit: decodeIntegerStack(values[6]).toString(),
+    configurationNonceAtInit: decodeIntegerStack(values[7]).toString(),
+    newCustody: decodeHash160Stack(values[5]),
+    policyRevision: decodeIntegerStack(values[9]).toString(),
   };
 }
 

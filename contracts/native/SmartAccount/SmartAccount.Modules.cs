@@ -1,13 +1,10 @@
 // Copyright (C) 2015-2026 The Neo Project.
 //
-// SmartAccount.Modules.cs file belongs to the neo project and is free
-// software distributed under the MIT software license, see the
-// accompanying file LICENSE in the main directory of the
-// repository or http://www.opensource.org/licenses/mit-license.php
-// for more details.
+// SmartAccount.Modules.cs file belongs to the neo project and is free software distributed under the MIT software
+// license, see the accompanying file LICENSE in the main directory of the repository or
+// http://www.opensource.org/licenses/mit-license.php for more details.
 //
-// Redistribution and use in source and binary forms with or without
-// modifications are permitted.
+// Redistribution and use in source and binary forms with or without modifications are permitted.
 
 // TRUE SOURCE: this is the only editable copy of this SmartAccount native
 // contract file. The neo-native-core checkout carries a generated copy —
@@ -24,33 +21,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using SHA256 = System.Security.Cryptography.SHA256;
 using Array = Neo.VM.Types.Array;
 using Boolean = Neo.VM.Types.Boolean;
 
 namespace Neo.SmartContract.Native
 {
-    /// <summary>
-    /// Module registry of the native core (spec §3/§5/§9): the 0x52 instance
-    /// records, the 0x53 enumeration index, the install/remove transition, the
-    /// atomic registration actions, every budgeted module callback and the
-    /// restricted landing entries of the module decisions (spec §7.1/§12.5).
-    ///
-    /// The core installs validator, hook and recovery-seat instances. Hook
-    /// orchestration, threshold policies and composite layering stay
-    /// user-space module concerns: they are not declared, stored or executed
-    /// here; the core only lands their already-authorized state changes.
-    /// </summary>
+    /// <summary> Generic module registry and callback kernel. The core stores identity, code binding, credentials and capability
+    /// metadata only. Threshold, message, recovery and hook-order policy are owned by user-space modules. </summary>
     public sealed partial class SmartAccount
     {
-        // ========================================================================
-        // 1. Module instance records (0x52) and the 0x53 enumeration index
-        // ========================================================================
+        // ======================================================================== 1. Module instance records (0x52)
+        // and the 0x53 enumeration index ========================================================================
 
         private ModuleInstance? TryModuleInstance(IReadOnlyStore snapshot, UInt160 accountId, BigInteger moduleId)
         {
             if (moduleId < 1 || moduleId >> 64 != BigInteger.Zero) return null;
-            return TryRead(snapshot, SmartAccountProtocol.GetModuleInstanceKey(accountId, moduleId), out var value)
+            return TryRead(snapshot,
+                Key(SmartAccountModuleProtocol.PrefixModuleInstance).Add(accountId)
+                    .AddBigEndian(SmartAccountProtocol.UInt64(moduleId)), out var value)
                 ? ModuleInstance.Decode(value)
                 : null;
         }
@@ -59,35 +47,35 @@ namespace Neo.SmartContract.Native
             TryModuleInstance(snapshot, accountId, moduleId)
                 ?? throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleNotInstalled);
 
+        /// <summary> Persists the instance in the tagged canonical shape. </summary>
         private void SaveModuleInstance(ApplicationEngine engine, UInt160 accountId, BigInteger moduleId,
             ModuleInstance module)
         {
-            Write(engine, SmartAccountProtocol.GetModuleInstanceKey(accountId, moduleId), module.Serialize());
-            Write(engine, SmartAccountProtocol.GetModuleIndexKey(accountId, module.ModuleType, moduleId), [1]);
+            ulong id = SmartAccountProtocol.UInt64(moduleId);
+            Write(engine, Key(SmartAccountModuleProtocol.PrefixModuleInstance).Add(accountId).AddBigEndian(id),
+                module.Serialize());
+            // The 0x53 index row (prefix ‖ account ‖ type ‖ id) is what the per-type enumeration seeks.
+            Write(engine, Key(SmartAccountModuleProtocol.PrefixModuleIndex).Add(accountId).Add(module.ModuleType)
+                .AddBigEndian(id), [1]);
         }
 
         private void DeleteModuleInstance(ApplicationEngine engine, UInt160 accountId, BigInteger moduleId,
             ModuleInstance module)
         {
-            Delete(engine, SmartAccountProtocol.GetModuleInstanceKey(accountId, moduleId));
-            Delete(engine, SmartAccountProtocol.GetModuleIndexKey(accountId, module.ModuleType, moduleId));
+            ulong id = SmartAccountProtocol.UInt64(moduleId);
+            engine.SnapshotCache.Delete(Key(SmartAccountModuleProtocol.PrefixModuleInstance).Add(accountId).AddBigEndian(id));
+            engine.SnapshotCache.Delete(Key(SmartAccountModuleProtocol.PrefixModuleIndex).Add(accountId)
+                .Add(module.ModuleType).AddBigEndian(id));
         }
-
-        private byte[] ModuleTypePrefix(UInt160 accountId, int moduleType) =>
-            SmartAccountProtocol.Concat(
-                new[] { SmartAccountModuleProtocol.PrefixModuleIndex },
-                accountId.ToArray(),
-                new[] { (byte)moduleType });
 
         private int CountModulesOfType(IReadOnlyStore snapshot, UInt160 accountId, int moduleType)
         {
             int count = 0;
-            byte[] prefix = ModuleTypePrefix(accountId, moduleType);
-            foreach (var _ in snapshot.Find(new StorageKey { Id = Id, Key = prefix })) count++;
+            foreach (var _ in snapshot.Find(
+                Key(SmartAccountModuleProtocol.PrefixModuleIndex).Add(accountId).Add((byte)moduleType))) count++;
             return count;
         }
 
-        /// <summary>First installed moduleId of the given type bound to a contract hash, or 0.</summary>
         private BigInteger FindModuleIdByContract(IReadOnlyStore snapshot, UInt160 accountId, int moduleType,
             UInt160 contractHash)
         {
@@ -100,13 +88,6 @@ namespace Neo.SmartContract.Native
             return BigInteger.Zero;
         }
 
-        /// <summary>
-        /// Ascending installed module ids of one type strictly greater than
-        /// <paramref name="cursor"/> (spec §3.3: the cursor is a moduleId, never
-        /// an array index), up to <paramref name="limit"/> entries. The 0x53
-        /// index carries fixed-width big-endian ids, so key order IS numeric
-        /// order and a page never needs to sort or scan twice.
-        /// </summary>
         private IEnumerable<BigInteger> EnumerateModuleIds(IReadOnlyStore snapshot, UInt160 accountId,
             int moduleType, BigInteger cursor, int limit)
         {
@@ -114,14 +95,16 @@ namespace Neo.SmartContract.Native
                 throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleIdInvalid);
             if (limit < 1)
                 throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
-            byte[] prefix = ModuleTypePrefix(accountId, moduleType);
+            // The enumeration seeks the 0x53 index prefix ‖ account ‖ type; the module id is the 8-byte suffix.
+            StorageKey prefix = Key(SmartAccountModuleProtocol.PrefixModuleIndex).Add(accountId).Add((byte)moduleType);
             int emitted = 0;
-            foreach (var (key, _) in snapshot.Find(new StorageKey { Id = Id, Key = prefix }))
+            // Find already returns exactly the rows under this prefix, in key order.
+            foreach (var (key, _) in snapshot.Find(prefix))
             {
                 ReadOnlyMemory<byte> content = key.Key;
-                if (!content.Span.StartsWith(prefix)) break;
-                if (content.Length != prefix.Length + sizeof(ulong)) continue;
-                BigInteger moduleId = new(content.Span.Slice(prefix.Length).ToArray(), isUnsigned: true,
+                if (content.Length != prefix.Key.Length + sizeof(ulong)) continue;
+                // BigInteger reads the big-endian suffix in place; no suffix copy.
+                BigInteger moduleId = new(content.Span[prefix.Key.Length..], isUnsigned: true,
                     isBigEndian: true);
                 if (moduleId <= cursor) continue;
                 yield return moduleId;
@@ -129,7 +112,6 @@ namespace Neo.SmartContract.Native
             }
         }
 
-        /// <summary>[ids[], nextCursor]; nextCursor is 0 when the page is the last one.</summary>
         private Array EnumerateModulePage(IReadOnlyStore snapshot, UInt160 accountId, int moduleType,
             BigInteger cursor, BigInteger limit)
         {
@@ -146,10 +128,23 @@ namespace Neo.SmartContract.Native
             return new Array(new StackItem[] { ids, nextCursor });
         }
 
-        // ========================================================================
-        // 2. Install / remove transition (spec §7.1)
-        //    Both paths share one implementation: atomic registration actions and
-        //    the two public entrypoints must produce byte-identical state.
+        /// <summary>Live installed instances of one type, in ascending id order.</summary>
+        private IEnumerable<(BigInteger Id, ModuleInstance Module)> EnumerateModulesOfType(IReadOnlyStore snapshot,
+            UInt160 accountId, int moduleType, int limit)
+        {
+            foreach (BigInteger moduleId in EnumerateModuleIds(snapshot, accountId, moduleType, BigInteger.Zero, limit))
+            {
+                ModuleInstance? module = TryModuleInstance(snapshot, accountId, moduleId);
+                if (module is not null) yield return (moduleId, module);
+            }
+        }
+
+        private IEnumerable<(BigInteger Id, ModuleInstance Module)> EnumerateValidatorModules(IReadOnlyStore snapshot,
+            UInt160 accountId) =>
+            EnumerateModulesOfType(snapshot, accountId, SmartAccountModuleProtocol.ModuleTypeCodeValidator,
+                SmartAccountModuleProtocol.MaxValidatorModuleInstances);
+
+        // ======================================================================== 2. Install / remove transition
         // ========================================================================
 
         private static int MaxModuleInstancesOfType(int moduleType) => moduleType switch
@@ -167,42 +162,39 @@ namespace Neo.SmartContract.Native
             _ => SmartAccountModuleProtocol.ErrorModuleLimitValidator,
         };
 
-        /// <summary>
-        /// A v4 install type code. Only validator (1), hook (4) and recovery (5)
-        /// exist; every other value — including the retired display alias 2 —
-        /// is refused.
-        /// </summary>
+        /// <summary>Action arity by code (spec §4); an unknown code is malformed.</summary>
+        private static int ActionArity(int code) => code switch
+        {
+            SmartAccountModuleProtocol.ActionInstallModule => 5,
+            SmartAccountModuleProtocol.ActionUninstallModule
+                or SmartAccountModuleProtocol.ActionConfigureModule
+                or SmartAccountModuleProtocol.ActionSetBuiltinAuthorization
+                or SmartAccountModuleProtocol.ActionSetRequiredValidator => 3,
+            _ => throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed),
+        };
+
         private static int RequireModuleTypeCode(BigInteger moduleType)
         {
-            if (moduleType == SmartAccountModuleProtocol.ModuleTypeCodeValidator)
-                return SmartAccountModuleProtocol.ModuleTypeCodeValidator;
-            if (moduleType == SmartAccountModuleProtocol.ModuleTypeCodeHook)
-                return SmartAccountModuleProtocol.ModuleTypeCodeHook;
-            if (moduleType == SmartAccountModuleProtocol.ModuleTypeCodeRecovery)
-                return SmartAccountModuleProtocol.ModuleTypeCodeRecovery;
-            throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleTypeUnsupported);
+            Require(SmartAccountModuleProtocol.IsModuleTypeCode(moduleType),
+                SmartAccountModuleProtocol.ErrorModuleTypeUnsupported);
+            return (int)moduleType;
         }
 
         private async ContractTask<BigInteger> InstallModuleCoreAsync(ApplicationEngine engine, UInt160 accountId,
             AccountControl control, int moduleType, UInt160 contractHash, ReadOnlyMemory<byte>? declaredProfileDigest,
             Array initData)
         {
-            Require(moduleType is SmartAccountModuleProtocol.ModuleTypeCodeValidator
-                or SmartAccountModuleProtocol.ModuleTypeCodeHook
-                or SmartAccountModuleProtocol.ModuleTypeCodeRecovery,
+            Require(SmartAccountModuleProtocol.IsModuleTypeCode(moduleType),
                 SmartAccountModuleProtocol.ErrorModuleTypeUnsupported);
+            initData ??= new Array();
             Require(initData.Count <= SmartAccountModuleProtocol.ArgsCountMax,
                 SmartAccountModuleProtocol.ErrorOperationMalformed);
-
-            int existingCount = CountModulesOfType(engine.SnapshotCache, accountId, moduleType);
-            Require(existingCount < MaxModuleInstancesOfType(moduleType), ModuleLimitErrorOfType(moduleType));
-
-            SmartAccountModulePolicy.RequireModuleContractAddress(engine.SnapshotCache, contractHash);
+            Require(CountModulesOfType(engine.SnapshotCache, accountId, moduleType)
+                < MaxModuleInstancesOfType(moduleType), ModuleLimitErrorOfType(moduleType));
             ContractState contract = SmartAccountModulePolicy.RequireDeployed(engine.SnapshotCache, contractHash);
             Require(contract.Nef is not null && contract.Nef.Script.Length > 0
                 && !string.IsNullOrEmpty(contract.Manifest.Name),
                 SmartAccountModuleProtocol.ErrorModuleCodeBindingMismatch);
-
             ModuleInstance module = new() { ModuleType = (byte)moduleType };
             SmartAccountModulePolicy.CaptureCodeBinding(module, contract);
             await SmartAccountModulePolicy.BindProfileAsync(engine, module, contract);
@@ -214,84 +206,81 @@ namespace Neo.SmartContract.Native
             if (!module.InstanceIsolation)
                 Require(FindModuleIdByContract(engine.SnapshotCache, accountId, moduleType, contractHash)
                     == BigInteger.Zero, SmartAccountModuleProtocol.ErrorModuleInstanceIsolationRequired);
-
+            if (module.HookPlanner)
+                Require(FindHookPlanner(engine.SnapshotCache, accountId) is null,
+                    SmartAccountModuleProtocol.ErrorModuleLimitPlanner);
             BigInteger moduleId = control.AllocateModuleId();
             SaveModuleInstance(engine, accountId, moduleId, module);
-            if (module.IsHook) control.HookOrderRevision = checked(control.HookOrderRevision + 1);
-            // R-07-14: installing a module never rewrites the built-in
-            // authorization switches. The first validator no longer implicitly
-            // closes the built-in custody route — closing it is an explicit
-            // setBuiltinAuthorization call, which is itself refused while no
-            // validator instance is installed to remain as the routing subject
-            // (R-08-08: no account may lose every route, and there is no
-            // automatic custody fallback once the switch is closed).
-
             await CallModuleLifecycleAsync(engine, accountId, moduleId, module, "onInstall", initData);
             Notify(engine, SmartAccountModuleProtocol.EventNameModuleInstanceInstalled, accountId.ToArray(),
-                moduleId, new BigInteger(module.ModuleType), contractHash.ToArray(), new BigInteger(module.CredentialGeneration));
+                moduleId, new BigInteger(module.ModuleType), contractHash.ToArray(),
+                new BigInteger(module.CredentialGeneration));
             Notify(engine, "ModuleInstalled", accountId.ToArray(),
-                SmartAccountModulePolicy.SmartAccountModuleTypeName(module.ModuleType), contractHash.ToArray());
+                SmartAccountModuleProtocol.ModuleTypeName(module.ModuleType), contractHash.ToArray());
             return moduleId;
         }
 
         private async ContractTask RemoveModuleCoreAsync(ApplicationEngine engine, UInt160 accountId,
             AccountControl control, BigInteger moduleId, Array deInitData)
         {
+            deInitData ??= new Array();
             Require(deInitData.Count <= SmartAccountModuleProtocol.ArgsCountMax,
                 SmartAccountModuleProtocol.ErrorOperationMalformed);
             ModuleInstance module = RequireModuleInstance(engine.SnapshotCache, accountId, moduleId);
 
-            Require(!IsMemberOfActivePolicy(module), SmartAccountModuleProtocol.ErrorIntentConflict);
-            // Callback first, while the instance is still installed and its
-            // phase authorization is meaningful; a fault reverts the removal.
+            // Callback first, while the instance is still installed and authorized.
             await CallModuleLifecycleAsync(engine, accountId, moduleId, module, "onUninstall", deInitData);
             DeleteModuleInstance(engine, accountId, moduleId, module);
-            if (module.IsHook) control.HookOrderRevision = checked(control.HookOrderRevision + 1);
-            // The caller checks the final route after its single action or atomic batch.
             Notify(engine, SmartAccountModuleProtocol.EventNameModuleInstanceRemoved, accountId.ToArray(), moduleId);
             Notify(engine, "ModuleRemoved", accountId.ToArray(),
-                SmartAccountModulePolicy.SmartAccountModuleTypeName(module.ModuleType),
+                SmartAccountModuleProtocol.ModuleTypeName(module.ModuleType),
                 module.ContractHash.ToArray());
         }
 
-        // ========================================================================
-        // 3. Atomic registration actions (spec §10 exception list)
-        //    Only the two module-model actions the minimal core still executes.
-        // ========================================================================
+        // ======================================================================== 3. Generic registration and
+        // configuration actions ========================================================================
 
         private async ContractTask ExecuteRegistrationActionsAsync(ApplicationEngine engine, UInt160 accountId,
             AccountControl control, Array actions)
         {
             foreach (StackItem item in actions)
-                await ApplyModuleActionAsync(engine, accountId, control, RequireActionArray(item));
+                await ApplyModuleActionAsync(engine, accountId, control, RequireActionArray(item), governed: false);
         }
 
         private async ContractTask ApplyModuleActionAsync(ApplicationEngine engine, UInt160 accountId,
-            AccountControl control, Array action)
+            AccountControl control, Array action, bool governed)
         {
-            switch (ActionCode(action))
+            int code = ActionCode(action);
+            Require(action.Count == ActionArity(code), SmartAccountModuleProtocol.ErrorOperationMalformed);
+            switch (code)
             {
                 case SmartAccountModuleProtocol.ActionInstallModule:
-                    // [ActionInstallModule, moduleType, moduleContractHash, profileDigest, initData[]]
-                    Require(action.Count == 5, SmartAccountModuleProtocol.ErrorOperationMalformed);
                     await InstallModuleCoreAsync(engine, accountId, control,
                         RequireModuleTypeCode(SmartAccountRecordCodec.Unsigned(action[1])),
-                        SmartAccountRecordCodec.Address(action[2]),
-                        SmartAccountRecordCodec.Fixed(action[3], 32),
+                        SmartAccountRecordCodec.Address(action[2]), SmartAccountRecordCodec.Fixed(action[3], 32),
                         RequireActionArray(action[4]));
                     break;
                 case SmartAccountModuleProtocol.ActionUninstallModule:
-                    // [ActionUninstallModule, moduleId, deInitData[]]
-                    Require(action.Count == 3, SmartAccountModuleProtocol.ErrorOperationMalformed);
                     await RemoveModuleCoreAsync(engine, accountId, control,
                         SmartAccountRecordCodec.Unsigned(action[1]), RequireActionArray(action[2]));
                     break;
+                case SmartAccountModuleProtocol.ActionConfigureModule:
+                    if (governed) RequireGovernanceCaller(engine, accountId);
+                    await ConfigureModuleCoreAsync(engine, accountId,
+                        SmartAccountRecordCodec.Unsigned(action[1]), RequireActionArray(action[2]));
+                    break;
+                case SmartAccountModuleProtocol.ActionSetBuiltinAuthorization:
+                    ApplyBuiltinPolicy(engine, accountId, control, SmartAccountRecordCodec.Boolean(action[1]),
+                        SmartAccountRecordCodec.Boolean(action[2]));
+                    break;
                 default:
-                    throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
+                    if (governed) RequireGovernanceCaller(engine, accountId);
+                    ApplyRequiredValidator(engine, accountId, control,
+                        SmartAccountRecordCodec.Unsigned(action[1]), SmartAccountRecordCodec.Boolean(action[2]));
+                    break;
             }
         }
 
-        /// <summary>Every action is a strict Array of positional fields (never a Struct).</summary>
         private static Array RequireActionArray(StackItem item)
         {
             if (item.Type != StackItemType.Array || item is not Array action)
@@ -315,8 +304,6 @@ namespace Neo.SmartContract.Native
             }
             catch
             {
-                // Shape failures map uniformly to SA_OPERATION_MALFORMED; the
-                // executors re-validate precisely.
                 throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
             }
         }
@@ -324,47 +311,40 @@ namespace Neo.SmartContract.Native
         private static void ValidateActionShapeCore(Array action)
         {
             Require(action.Count >= 1, SmartAccountModuleProtocol.ErrorOperationMalformed);
-            switch (ActionCode(action))
+            int code = ActionCode(action);
+            Require(action.Count == ActionArity(code), SmartAccountModuleProtocol.ErrorOperationMalformed);
+            switch (code)
             {
                 case SmartAccountModuleProtocol.ActionInstallModule:
-                    // [ActionInstallModule, moduleType, contractHash, profileDigest, initData[]]
-                    Require(action.Count == 5, SmartAccountModuleProtocol.ErrorOperationMalformed);
-                    BigInteger installType = SmartAccountRecordCodec.Unsigned(action[1]);
-                    Require(installType == SmartAccountModuleProtocol.ModuleTypeCodeValidator
-                        || installType == SmartAccountModuleProtocol.ModuleTypeCodeHook
-                        || installType == SmartAccountModuleProtocol.ModuleTypeCodeRecovery,
+                    Require(SmartAccountModuleProtocol.IsModuleTypeCode(SmartAccountRecordCodec.Unsigned(action[1])),
                         SmartAccountModuleProtocol.ErrorModuleTypeUnsupported);
                     Require(SmartAccountRecordCodec.Address(action[2]) != UInt160.Zero,
                         SmartAccountModuleProtocol.ErrorOperationMalformed);
+                    _ = SmartAccountRecordCodec.Fixed(action[3], 32);
                     Require(RequireActionArray(action[4]).Count <= SmartAccountModuleProtocol.ArgsCountMax,
                         SmartAccountModuleProtocol.ErrorOperationMalformed);
                     break;
                 case SmartAccountModuleProtocol.ActionUninstallModule:
-                    Require(action.Count == 3, SmartAccountModuleProtocol.ErrorOperationMalformed);
+                case SmartAccountModuleProtocol.ActionConfigureModule:
                     Require(SmartAccountRecordCodec.Unsigned(action[1]) >= 1,
                         SmartAccountModuleProtocol.ErrorModuleIdInvalid);
                     Require(RequireActionArray(action[2]).Count <= SmartAccountModuleProtocol.ArgsCountMax,
                         SmartAccountModuleProtocol.ErrorOperationMalformed);
                     break;
+                case SmartAccountModuleProtocol.ActionSetBuiltinAuthorization:
+                    _ = SmartAccountRecordCodec.Boolean(action[1]);
+                    _ = SmartAccountRecordCodec.Boolean(action[2]);
+                    break;
                 default:
-                    throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
+                    _ = SmartAccountRecordCodec.Unsigned(action[1]);
+                    _ = SmartAccountRecordCodec.Boolean(action[2]);
+                    break;
             }
         }
 
-        // ========================================================================
-        // 4. Public module administration (spec §7.1)
-        //    Authorized by the custody witness OR by the witness of an already
-        //    installed validator instance — the governance shape a user-space
-        //    governance module uses to administer itself (R-07-11).
+        // ======================================================================== 4. Public module administration
         // ========================================================================
 
-        /// <summary>
-        /// <c>installModule(accountId, moduleType, contractHash, initData)</c>.
-        /// <paramref name="moduleType"/> is the v4 install code — validator (1)
-        /// or hook (4). The core reads the module's own profile, so the public
-        /// entry declares no digest; a registration action carries one and the
-        /// shared core compares it.
-        /// </summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private async ContractTask<BigInteger> InstallModule(ApplicationEngine engine, UInt160 accountId,
             BigInteger moduleType, UInt160 moduleContractHash, Array initData)
@@ -374,20 +354,13 @@ namespace Neo.SmartContract.Native
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             _ = RequireActive(control);
-            AssertAccountIdle(engine, accountId);
-            RequireModuleAdministration(engine, accountId, control);
-
+            RequireGovernanceCaller(engine, accountId);
             BigInteger moduleId = await InstallModuleCoreAsync(engine, accountId, control,
                 RequireModuleTypeCode(moduleType), moduleContractHash, null, initData ?? new Array());
-            control.Advance();
-            SaveControl(engine, accountId, control);
+            SettleConfiguration(engine, accountId, control);
             return moduleId;
         }
 
-        /// <summary>
-        /// <c>removeModule(accountId, moduleId, deInitData)</c> — the uninstall
-        /// companion of <see cref="InstallModule"/>, with the same authority.
-        /// </summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private async ContractTask RemoveModule(ApplicationEngine engine, UInt160 accountId, BigInteger moduleId,
             Array deInitData)
@@ -397,109 +370,98 @@ namespace Neo.SmartContract.Native
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             _ = RequireActive(control);
-            AssertAccountIdle(engine, accountId);
-            RequireModuleAdministration(engine, accountId, control);
-
+            RequireGovernanceCaller(engine, accountId);
             await RemoveModuleCoreAsync(engine, accountId, control, moduleId, deInitData ?? new Array());
             RequireFinalOperationRoute(engine, accountId, control);
-            control.Advance();
-            SaveControl(engine, accountId, control);
+            SettleConfiguration(engine, accountId, control);
         }
 
-        /// <summary>
-        /// Administration authority of the module model: the custody witness or
-        /// the witness of one installed module contract. The scan is bounded by
-        /// the validator instance limit, so it can never be unbounded work.
-        /// A witnessing instance must additionally still satisfy its recorded
-        /// code binding (R-07-11: the authorized instance's code binding must be
-        /// continuous) — the same check every execution callback replays — so a
-        /// validator contract that has since been updated (NEF or UpdateCounter
-        /// drift) loses its module-administration authority until it is
-        /// re-bound.
-        /// </summary>
-        private void RequireModuleAdministration(ApplicationEngine engine, UInt160 accountId, AccountControl control)
-        {
-            Require(control.RequiredPolicyId == 0, SmartAccountModuleProtocol.ErrorUnauthorized);
-            if (Witness(engine, control.Custody)) return;
-            foreach (BigInteger moduleId in EnumerateModuleIds(engine.SnapshotCache, accountId,
-                         SmartAccountModuleProtocol.ModuleTypeCodeValidator, BigInteger.Zero,
-                         SmartAccountModuleProtocol.MaxValidatorModuleInstances))
-            {
-                ModuleInstance? module = TryModuleInstance(engine.SnapshotCache, accountId, moduleId);
-                if (module is not null && Witness(engine, module.ContractHash))
-                {
-                    AssertModuleCodeBinding(engine.SnapshotCache, module);
-                    return;
-                }
-            }
-            throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorUnauthorized);
-        }
-
-        // ========================================================================
-        // 4b. Restricted landing entries (spec §7.1/§12.5, audit H-3/H-4)
-        //     Core-owned state behind module decisions: the recovery-policy
-        //     write, the built-in authorization switches, the credential-generation
-        //     bump and the §12.5 account reset. They implement no policy — they
-        //     land a decision a module (or the custody) already made, and
-        //     re-verify authority inside the core.
-        // ========================================================================
-
-        /// <summary>
-        /// <c>setRecoveryPolicy(accountId, recoveryAuthority, recoveryTimelockMs,
-        /// ownerOnlyRecovery)</c> — the landing write of governance action 8
-        /// (spec §11.5/§12.5). The governance module calls it once an intent has
-        /// matured and been confirmed; the custody may call it directly on its
-        /// own account. The authority domain is re-checked here because the
-        /// core is the only writer of the 0x51 record. <paramref name="ownerOnlyRecovery"/>
-        /// is a retained record field with no authorization meaning; only false
-        /// is a legal input in this protocol.
-        /// </summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
-        private void SetRecoveryPolicy(ApplicationEngine engine, UInt160 accountId, UInt160 recoveryAuthority,
-            BigInteger recoveryTimelockMs, bool ownerOnlyRecovery)
+        private async ContractTask ConfigureModule(ApplicationEngine engine, UInt160 accountId,
+            BigInteger moduleId, Array data)
         {
             RequireApplication(engine);
             RequireAccountId(accountId);
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             _ = RequireActive(control);
-            AssertAccountIdle(engine, accountId);
-            RequireModuleAdministration(engine, accountId, control);
+            // A mandatory validator is an authorization boundary, not merely a routing preference: every module
+            // reshape is a governance landing.
+            RequireGovernanceCaller(engine, accountId);
+            await ConfigureModuleCoreAsync(engine, accountId, moduleId, data ?? new Array());
+            SettleConfiguration(engine, accountId, control);
+        }
 
-            ApplyRecoveryPolicy(engine, accountId, control, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery);
-            control.Advance();
+        /// <summary> Settlement of a configuration: the transition advances the configuration nonce exactly once. Every
+        /// entry holds the account lock for the whole landing, so nothing inside the batch can advance it and an action loop
+        /// can never consume a second step. </summary>
+        private void SettleConfiguration(ApplicationEngine engine, UInt160 accountId, AccountControl control,
+            bool advanceAuthority = false)
+        {
+            if (advanceAuthority) control.AdvanceAuthority();
+            else control.Advance();
             SaveControl(engine, accountId, control);
         }
 
-        private void ApplyRecoveryPolicy(ApplicationEngine engine, UInt160 accountId, AccountControl control,
-            UInt160 recoveryAuthority, BigInteger recoveryTimelockMs, bool ownerOnlyRecovery)
+        private bool TryRequireGovernanceCaller(ApplicationEngine engine, UInt160 accountId)
         {
-            Require(!ownerOnlyRecovery, SmartAccountModuleProtocol.ErrorOperationMalformed);
-            Require(recoveryAuthority != UInt160.Zero && recoveryAuthority != control.Custody, SmartAccountModuleProtocol.ErrorOperationMalformed);
-            Require(recoveryTimelockMs >= AccountControl.RecoveryTimelockMinMs
-                && recoveryTimelockMs <= AccountControl.RecoveryTimelockMaxMs,
-                SmartAccountModuleProtocol.ErrorOperationMalformed);
-
-            RequireAuthorityAddress(engine, recoveryAuthority);
-            if (recoveryAuthority != control.RecoveryAuthority)
-                Require(Witness(engine, recoveryAuthority), SmartAccountModuleProtocol.ErrorUnauthorized);
-            control.RecoveryAuthority = recoveryAuthority;
-            control.RecoveryTimelockMs = (ulong)recoveryTimelockMs;
-            control.OwnerOnlyRecovery = ownerOnlyRecovery;
-            Notify(engine, SmartAccountModuleProtocol.EventNameRecoveryPolicySet, accountId.ToArray(),
-                recoveryAuthority.ToArray(), new BigInteger(control.RecoveryTimelockMs), ownerOnlyRecovery);
+            UInt160 caller = engine.CallingScriptHash ?? UInt160.Zero;
+            if (caller == UInt160.Zero) return false;
+            foreach (var (_, module) in EnumerateValidatorModules(engine.SnapshotCache, accountId))
+            {
+                if (module.ContractHash != caller || !module.Governance) continue;
+                AssertModuleCodeBinding(engine.SnapshotCache, module);
+                return true;
+            }
+            return false;
         }
 
-        /// <summary>
-        /// <c>setBuiltinAuthorization(accountId, defaultOperationAuthorization,
-        /// defaultMessageAuthorization)</c> — the landing write of governance
-        /// action 5 (spec §7.1/§7.5, R-07-14): both built-in authorization
-        /// switches change ONLY here or through the §12.5 recovery reset;
-        /// install/remove/revoke/recode/freeze never rewrite them implicitly.
-        /// The state gate precedes the authority re-check, mirroring the other
-        /// restricted landing entries; an invalid status is answered with the generic
-        /// account-status error because the account must be Active to reroute.
-        /// </summary>
+        /// <summary> Configuration landing (spec §4): install, remove, configure, setBuiltinAuthorization,
+        /// applyConfigurationActions and an ordinary thaw take effect only through the account's currently bound, code-bound
+        /// governance instance. The custody key of the account is not a module-administration principal. </summary>
+        private void RequireGovernanceCaller(ApplicationEngine engine, UInt160 accountId) =>
+            Require(TryRequireGovernanceCaller(engine, accountId), SmartAccountModuleProtocol.ErrorUnauthorized);
+
+        // ======================================================================== 5. Generic configuration and
+        // restricted account transitions ========================================================================
+
+        private async ContractTask ConfigureModuleCoreAsync(ApplicationEngine engine, UInt160 accountId,
+            BigInteger moduleId, Array data)
+        {
+            Require(data.Count <= SmartAccountModuleProtocol.ArgsCountMax,
+                SmartAccountModuleProtocol.ErrorOperationMalformed);
+            ModuleInstance module = RequireModuleInstance(engine.SnapshotCache, accountId, moduleId);
+            Require(module.ModuleRevision != ulong.MaxValue,
+                SmartAccountModuleProtocol.ErrorModuleCodeBindingMismatch);
+            ContractState target = SmartAccountModulePolicy.RequireDeployed(engine.SnapshotCache, module.ContractHash);
+            Require(SmartAccountModulePolicy.HasMethod(target, "configure", 4),
+                SmartAccountModuleProtocol.ErrorModuleCodeBindingMismatch);
+            module.ModuleRevision++;
+            SaveModuleInstance(engine, accountId, moduleId, module);
+            await CallModuleLifecycleAsync(engine, accountId, moduleId, module, "configure", data);
+            Notify(engine, "ModuleInstanceConfigured", accountId.ToArray(), moduleId,
+                new BigInteger(module.CredentialGeneration));
+        }
+
+        private void ApplyRequiredValidator(ApplicationEngine engine, UInt160 accountId, AccountControl control,
+            BigInteger validatorId, bool required)
+        {
+            if (required)
+            {
+                ModuleInstance module = RequireModuleInstance(engine.SnapshotCache, accountId, validatorId);
+                Require(module.IsValidator, SmartAccountModuleProtocol.ErrorModuleNotRoutable);
+                control.RequiredValidatorId = (ulong)validatorId;
+            }
+            else
+            {
+                Require(control.RequiredValidatorId == (ulong)validatorId,
+                    SmartAccountModuleProtocol.ErrorOperationMalformed);
+                control.RequiredValidatorId = 0;
+            }
+            Notify(engine, SmartAccountModuleProtocol.EventNameRequiredValidatorSet, accountId.ToArray(),
+                validatorId, required);
+        }
+
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private void SetBuiltinAuthorization(ApplicationEngine engine, UInt160 accountId,
             bool defaultOperationAuthorization, bool defaultMessageAuthorization)
@@ -508,23 +470,26 @@ namespace Neo.SmartContract.Native
             RequireAccountId(accountId);
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
-            Require(control.Status != SmartAccountStatus.Frozen,
-                SmartAccountModuleProtocol.ErrorAccountFrozen);
-            Require(control.Status == SmartAccountStatus.Active,
-                SmartAccountModuleProtocol.ErrorAccountStatus);
-            AssertAccountIdle(engine, accountId);
-            RequireModuleAdministration(engine, accountId, control);
-
-            ApplyBuiltinPolicy(engine, accountId, control, defaultOperationAuthorization, defaultMessageAuthorization);
+            _ = RequireActive(control);
+            RequireGovernanceCaller(engine, accountId);
+            ApplyBuiltinPolicy(engine, accountId, control, defaultOperationAuthorization,
+                defaultMessageAuthorization);
             RequireFinalOperationRoute(engine, accountId, control);
-            control.Advance();
-            SaveControl(engine, accountId, control);
+            SettleConfiguration(engine, accountId, control);
         }
 
         private void RequireFinalOperationRoute(ApplicationEngine engine, UInt160 accountId, AccountControl control)
         {
+            if (control.RequiredValidatorId != 0)
+            {
+                ModuleInstance module = RequireModuleInstance(engine.SnapshotCache, accountId,
+                    control.RequiredValidatorId);
+                Require(module.IsValidator, SmartAccountModuleProtocol.ErrorModuleNotRoutable);
+                return;
+            }
             Require(control.DefaultOperationAuthorization || CountModulesOfType(engine.SnapshotCache, accountId,
-                SmartAccountModuleProtocol.ModuleTypeCodeValidator) > 0, SmartAccountModuleProtocol.ErrorBuiltinRouteRequired);
+                SmartAccountModuleProtocol.ModuleTypeCodeValidator) > 0,
+                SmartAccountModuleProtocol.ErrorBuiltinRouteRequired);
         }
 
         private void ApplyBuiltinPolicy(ApplicationEngine engine, UInt160 accountId, AccountControl control,
@@ -536,85 +501,81 @@ namespace Neo.SmartContract.Native
                 operationEnabled, messageEnabled);
         }
 
-        /// <summary>Applies the ordered core-owned part of one configuration intent under one account
-        /// lock. Recipient consent and profile digests are checked by the same code as single writes.
-        /// The operation route is a final-state invariant; no user operation may enter during callbacks.</summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private async ContractTask ApplyConfigurationActions(ApplicationEngine engine, UInt160 accountId, Array actions)
         {
             RequireApplication(engine);
             RequireAccountId(accountId);
             Require(actions is { Count: > 0 }, SmartAccountModuleProtocol.ErrorOperationMalformed);
-            Require(actions.Count <= SmartAccountModuleProtocol.MaxConfigurationActions, SmartAccountModuleProtocol.ErrorModuleLimitActions);
+            Require(actions.Count <= SmartAccountModuleProtocol.MaxConfigurationActions,
+                SmartAccountModuleProtocol.ErrorModuleLimitActions);
             using var locked = Context(engine).EnterAccount(accountId);
-            var control = RequireControl(engine.SnapshotCache, accountId);
+            AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             _ = RequireActive(control);
-            AssertAccountIdle(engine, accountId);
-            RequireModuleAdministration(engine, accountId, control);
-
+            // Restricted post-reset initialization (spec §12): the seat that just reset this account in this
+            // engine may install exactly the new composition. It cannot reach custody, uninstall, configure, the
+            // built-in switches or the required-validator pin, and any other caller still needs the bound, code-bound
+            // governance instance. The epoch binds the claim to the reset that opened it, so a later transaction has
+            // no claim to use.
+            bool restricted = Context(engine).IsResetInitialization(accountId,
+                engine.CallingScriptHash ?? UInt160.Zero, control.AuthorityEpoch);
+            if (restricted)
+            {
+                foreach (StackItem item in actions)
+                    Require(ActionCode(RequireActionArray(item)) == SmartAccountModuleProtocol.ActionInstallModule,
+                        SmartAccountModuleProtocol.ErrorUnauthorized);
+            }
+            else RequireGovernanceCaller(engine, accountId);
             bool hasPriorAction = false;
             foreach (StackItem item in actions)
             {
-                Require(control.RequiredPolicyId == 0, SmartAccountModuleProtocol.ErrorUnauthorized);
                 Array action = RequireActionArray(item);
-                switch (ActionCode(action))
-                {
-                    case SmartAccountModuleProtocol.ActionInstallModule:
-                    case SmartAccountModuleProtocol.ActionUninstallModule:
-                        // A later lifecycle callback may query the results of earlier actions.
-                        // Expose the staged control with the old nonce until the whole group succeeds.
-                        if (hasPriorAction) SaveControl(engine, accountId, control);
-                        await ApplyModuleActionAsync(engine, accountId, control, action);
-                        break;
-                    case SmartAccountModuleProtocol.ActionConfigureModule:
-                        RequireGovernedPolicyCaller(engine, accountId);
-                        Require(action.Count == 3, SmartAccountModuleProtocol.ErrorOperationMalformed);
-                        var moduleId = SmartAccountRecordCodec.Unsigned(action[1]);
-                        var data = RequireActionArray(action[2]);
-                        Require(data.Count <= SmartAccountModuleProtocol.ArgsCountMax, SmartAccountModuleProtocol.ErrorOperationMalformed);
-                        var module = RequireModuleInstance(engine.SnapshotCache, accountId, moduleId);
-                        var target = SmartAccountModulePolicy.RequireDeployed(engine.SnapshotCache, module.ContractHash);
-                        SmartAccountModulePolicy.RequireMethod(target, "configure", ContractParameterType.Void, null,
-                            ContractParameterType.Hash160, ContractParameterType.Integer, ContractParameterType.Integer, ContractParameterType.Array);
-                        if (hasPriorAction) SaveControl(engine, accountId, control);
-                        await CallModuleLifecycleAsync(engine, accountId, moduleId, module, "configure", data);
-                        Notify(engine, "ModuleInstanceConfigured", accountId.ToArray(), moduleId, new BigInteger(module.CredentialGeneration));
-                        break;
-                    case SmartAccountModuleProtocol.ActionSetThresholdPolicy:
-                    case SmartAccountModuleProtocol.ActionSetMessageSubjects:
-                        RequireGovernedPolicyCaller(engine, accountId);
-                        if (ActionCode(action) == SmartAccountModuleProtocol.ActionSetThresholdPolicy)
-                            await ExecuteSetThresholdPolicyAction(engine, accountId, control, action);
-                        else await ExecuteSetMessageSubjectsAction(engine, accountId, action);
-                        break;
-                    case SmartAccountModuleProtocol.ActionSetBuiltinAuthorization:
-                        Require(action.Count == 3, SmartAccountModuleProtocol.ErrorOperationMalformed);
-                        ApplyBuiltinPolicy(engine, accountId, control, SmartAccountRecordCodec.Boolean(action[1]),
-                            SmartAccountRecordCodec.Boolean(action[2]));
-                        break;
-                    case SmartAccountModuleProtocol.ActionSetRecoveryPolicy:
-                        Require(action.Count == 4, SmartAccountModuleProtocol.ErrorOperationMalformed);
-                        ApplyRecoveryPolicy(engine, accountId, control, SmartAccountRecordCodec.Address(action[1]),
-                            SmartAccountRecordCodec.Unsigned(action[2]), SmartAccountRecordCodec.Boolean(action[3]));
-                        break;
-                    default:
-                        throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
-                }
+                if (hasPriorAction) SaveControl(engine, accountId, control);
+                await ApplyModuleActionAsync(engine, accountId, control, action, governed: true);
                 hasPriorAction = true;
             }
             RequireFinalOperationRoute(engine, accountId, control);
-            control.Advance();
-            SaveControl(engine, accountId, control);
+            if (restricted)
+            {
+                // The restricted landing must leave a usable, governable account: a composition without any
+                // governance-capable validator would lock every future configuration out. It also must not consume a
+                // second configuration step: the reset already advanced epoch, nonce and control revision exactly once.
+                RequireGovernanceInstalled(engine.SnapshotCache, accountId);
+                SaveControl(engine, accountId, control);
+                // Only the claim is consumed; the row stays because the engine checks it again when the script halts.
+                Context(engine).CloseResetInitialization(accountId);
+                return;
+            }
+            SettleConfiguration(engine, accountId, control);
         }
 
-        /// <summary>
-        /// <c>revokeModuleCredentials(accountId, moduleId)</c> — the landing
-        /// write behind HookOrchestratorModule's <c>revokeCredentials</c> (spec
-        /// §11.5/§14.2, R-11-13/R-14-11): bump one validator instance's
-        /// credential generation and the account's configuration nonce in the
-        /// same call frame. No callback, no delay. A hook or recovery seat has
-        /// no routable credential and is refused by type.
-        /// </summary>
+        /// <summary> End-of-execution check, called by <see cref="ApplicationEngine.Execute()"/> when a run halts (spec §12).
+        /// The reset is designed as one transaction: the seat resets and lands the new composition through the restricted
+        /// initialization of the same engine. Every configuration entry of a later transaction needs the governance caller,
+        /// so a transaction that ends on a reset without a code-bound governance validator would leave an account that
+        /// can never be configured again. Such a transaction faults as a whole, exactly like a landing that fails inside
+        /// it. The engine-local record of the resets is read here, so a validator that a later call of the same
+        /// transaction removed is caught as well; nothing is persisted. </summary>
+        internal void AssertResetsLanded(ApplicationEngine engine)
+        {
+            if (engine.GetState<SmartAccountInvocationContext>() is not { } context) return;
+            foreach (UInt160 accountId in context.ResetAccounts)
+                RequireGovernanceInstalled(engine.SnapshotCache, accountId);
+        }
+
+        /// <summary>A recovered composition is usable only when at least one installed validator retains the
+        /// governance capability and its code binding is still intact.</summary>
+        private void RequireGovernanceInstalled(IReadOnlyStore snapshot, UInt160 accountId)
+        {
+            foreach (var (_, module) in EnumerateValidatorModules(snapshot, accountId))
+            {
+                if (!module.Governance) continue;
+                AssertModuleCodeBinding(snapshot, module);
+                return;
+            }
+            throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorUnauthorized);
+        }
+
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private void RevokeModuleCredentials(ApplicationEngine engine, UInt160 accountId, BigInteger moduleId)
         {
@@ -623,14 +584,15 @@ namespace Neo.SmartContract.Native
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             _ = RequireActive(control);
-            AssertAccountIdle(engine, accountId);
-            RequireModuleAdministration(engine, accountId, control);
-
+            // Emergency revocation stays immediate and callback-free (spec §4): the custody witness may always
+            // revoke, and the bound governance instance may revoke as part of its module authority. Any other
+            // validator witness is no longer an administration principal.
+            Require(Witness(engine, control.Custody) || TryRequireGovernanceCaller(engine, accountId),
+                SmartAccountModuleProtocol.ErrorUnauthorized);
             ModuleInstance module = RequireModuleInstance(engine.SnapshotCache, accountId, moduleId);
             Require(module.IsValidator, SmartAccountModuleProtocol.ErrorModuleTypeUnsupported);
-            if (module.CredentialGeneration == ulong.MaxValue)
-                throw new InvalidOperationException("The credential generation is exhausted.");
-            module.CredentialGeneration = checked(module.CredentialGeneration + 1);
+            Require(module.CredentialGeneration != ulong.MaxValue, SmartAccountModuleProtocol.ErrorCredentialStale);
+            module.CredentialGeneration++;
             SaveModuleInstance(engine, accountId, moduleId, module);
             control.Advance();
             SaveControl(engine, accountId, control);
@@ -638,19 +600,6 @@ namespace Neo.SmartContract.Native
                 moduleId, new BigInteger(module.CredentialGeneration));
         }
 
-        /// <summary>
-        /// <c>resetAccount(accountId, newCustody)</c> — the §12.5 core-side reset,
-        /// called by the RecoveryModule's <c>executeRecovery</c> once its
-        /// timelock has matured. The only caller the core accepts is the
-        /// account's installed recovery seat (type 5, R-12-12): custody,
-        /// validators and the governance module cannot reach this transition
-        /// directly, so installing an ordinary hook can never become an
-        /// instant custody rotation. The reset removes every module instance
-        /// and nonce channel, rotates custody when a non-zero replacement is
-        /// given (zero keeps the current one), restores the registration
-        /// defaults and advances the authority epoch — atomically: any fault
-        /// reverts the whole reset (R-12-08).
-        /// </summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.All)]
         private void ResetAccount(ApplicationEngine engine, UInt160 accountId, UInt160 newCustody)
         {
@@ -659,23 +608,19 @@ namespace Neo.SmartContract.Native
             using var locked = Context(engine).EnterAccount(accountId);
             AccountControl control = RequireControl(engine.SnapshotCache, accountId);
             if (control.Status != SmartAccountStatus.Frozen) _ = RequireActive(control);
-            AssertAccountIdle(engine, accountId);
-            // A recovery authority that was never configured names no recovery
-            // to execute — the reset has no configuration to finish.
-            Require(control.RecoveryAuthority != UInt160.Zero, SmartAccountModuleProtocol.ErrorAccountStatus);
             RequireRecoverySeat(engine, accountId);
             if (newCustody != UInt160.Zero) RequireAuthorityAddress(engine, newCustody);
-
-            // Step 1 (§12.5): remove every module instance record and its 0x53
-            // index — validators, hooks and the recovery seat itself. No
-            // onUninstall is called (R-08-11/R-12-07); each removal is notified.
+            // Reduced reset (spec §12): the seat may land one reset per account in this engine, and the account it
+            // resets has to keep a governance validator until the engine halts (AssertResetsLanded). Custody and governance
+            // never reset through this path, and the landing advances the epoch exactly once below.
+            UInt160 seat = engine.CallingScriptHash ?? UInt160.Zero;
+            Require(!Context(engine).HasResetInitialization(accountId), SmartAccountModuleProtocol.ErrorPhaseViolation);
             List<(BigInteger Id, ModuleInstance Module)> instances = new();
             foreach (int type in new[]
                      {
                          SmartAccountModuleProtocol.ModuleTypeCodeValidator,
                          SmartAccountModuleProtocol.ModuleTypeCodeHook,
-                         SmartAccountModuleProtocol.ModuleTypeCodeRecovery,
-                     })
+                         SmartAccountModuleProtocol.ModuleTypeCodeRecovery, })
             {
                 foreach (BigInteger id in EnumerateModuleIds(engine.SnapshotCache, accountId, type,
                              BigInteger.Zero, int.MaxValue))
@@ -684,111 +629,81 @@ namespace Neo.SmartContract.Native
                     if (module is not null) instances.Add((id, module));
                 }
             }
-            if (instances.Any(item => item.Module.IsHook)) control.HookOrderRevision = checked(control.HookOrderRevision + 1);
-            foreach (var (id, module) in instances)
+            foreach (var (id, _) in instances)
             {
+                ModuleInstance module = RequireModuleInstance(engine.SnapshotCache, accountId, id);
                 DeleteModuleInstance(engine, accountId, id, module);
                 Notify(engine, SmartAccountModuleProtocol.EventNameModuleInstanceRemoved, accountId.ToArray(), id);
             }
-
-            // Clear every threshold policy, nonce cursor and channel digest.
-            DeleteAccountPrefix(engine, SmartAccountModuleProtocol.PrefixThresholdPolicy, accountId);
             DeleteAccountPrefix(engine, SmartAccountModuleProtocol.PrefixNonceCursor, accountId);
             DeleteAccountPrefix(engine, SmartAccountModuleProtocol.PrefixNonceNamespace, accountId);
-
-            // Steps 4–5 (§12.5): custody rotation (zero keeps the current
-            // holder), registration defaults, epoch advance. The id allocator
-            // is deliberately NOT reset (R-12-09).
             if (newCustody != UInt160.Zero) control.Custody = newCustody;
-            ResetMessageSubjects(engine, accountId, control);
-            control.RecoveryAuthority = UInt160.Zero;
-            control.OwnerOnlyRecovery = false;
-            control.RequiredPolicyId = 0;
+            control.RequiredValidatorId = 0;
             control.DefaultOperationAuthorization = true;
             control.DefaultMessageAuthorization = true;
             control.Status = SmartAccountStatus.Active;
             control.AdvanceAuthority();
             SaveControl(engine, accountId, control);
-
-            // Step 6 (§12.5).
+            // The reset advanced epoch, configuration nonce and control revision exactly once. The same seat may now
+            // restore one install-only composition in this engine; nothing else can use that claim. The row this adds
+            // outlives the claim: it is the record the engine reads at the end of the script.
+            Context(engine).OpenResetInitialization(accountId, seat, control.AuthorityEpoch);
             Notify(engine, SmartAccountModuleProtocol.EventNameAccountReset, accountId.ToArray(),
                 control.Custody.ToArray(), new BigInteger(control.AuthorityEpoch));
         }
 
-        /// <summary>
-        /// The reset entry's exclusive witness (R-12-12): the caller must be the
-        /// contract of the account's installed recovery seat, and that seat's
-        /// code binding must still be continuous. Custody, validators and the
-        /// governance module are all refused — the reset's proposal right
-        /// belongs to the control subjects, its trigger right to the seat.
-        /// </summary>
         private void RequireRecoverySeat(ApplicationEngine engine, UInt160 accountId)
         {
-            foreach (BigInteger moduleId in EnumerateModuleIds(engine.SnapshotCache, accountId,
-                         SmartAccountModuleProtocol.ModuleTypeCodeRecovery, BigInteger.Zero,
+            foreach (var (_, module) in EnumerateModulesOfType(engine.SnapshotCache, accountId,
+                         SmartAccountModuleProtocol.ModuleTypeCodeRecovery,
                          SmartAccountModuleProtocol.MaxRecoveryModuleInstances))
             {
-                ModuleInstance? module = TryModuleInstance(engine.SnapshotCache, accountId, moduleId);
-                if (module is not null && engine.CallingScriptHash == module.ContractHash)
-                {
-                    AssertModuleCodeBinding(engine.SnapshotCache, module);
-                    return;
-                }
+                if (engine.CallingScriptHash != module.ContractHash) continue;
+                AssertModuleCodeBinding(engine.SnapshotCache, module);
+                return;
             }
             throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorUnauthorized);
         }
 
-        /// <summary>
-        /// Deletes every core key under one prefix for one account (§12.5 steps
-        /// 2–3). Keys are collected before deleting: a Find cursor over a store
-        /// being mutated is not a stable iteration.
-        /// </summary>
         private void DeleteAccountPrefix(ApplicationEngine engine, byte prefix, UInt160 accountId)
         {
-            byte[] seek = SmartAccountProtocol.Concat(new[] { prefix }, accountId.ToArray());
-            List<byte[]> found = new();
-            foreach (var (key, _) in engine.SnapshotCache.Find(new StorageKey { Id = Id, Key = seek }))
-            {
-                if (!key.Key.Span.StartsWith(seek)) break;
-                found.Add(key.Key.ToArray());
-            }
-            foreach (byte[] content in found) Delete(engine, content);
+            foreach (var (key, _) in engine.SnapshotCache.Find(Key(prefix).Add(accountId)).ToArray())
+                engine.SnapshotCache.Delete(key);
         }
 
-        // ========================================================================
-        // 5. Module callbacks (spec §9/§11)
-        //    Every callback is addressed to a recorded 0x52 instance, runs under
-        //    a phase grant for exactly that instance and is capped by its own
-        //    hard per-call VM gas budget.
+        // ======================================================================== 6. Module callbacks
         // ========================================================================
 
-        /// <summary>
-        /// Opens the engine-local execution state if the caller did not already
-        /// own one (a batch owns a single envelope-wide state).
-        /// </summary>
-        private static SmartAccountInvocationContext.AccountExecution EnsureExecution(ApplicationEngine engine,
-            UInt160 accountId, out bool owned)
+        private void AssertCodeBindingsAtCommit(IReadOnlyStore snapshot, UInt160 accountId,
+            BigInteger validatorId, ValidationOutcome outcome)
         {
-            SmartAccountInvocationContext context = Context(engine);
-            if (context.TryGetExecution(accountId, out SmartAccountInvocationContext.AccountExecution? existing))
+            if (outcome.Module is not null)
+                AssertInstalledModuleBinding(snapshot, accountId, validatorId, outcome.Module);
+            if (outcome.Planner is not null)
+                AssertInstalledModuleBinding(snapshot, accountId, outcome.PlannerId, outcome.Planner);
+            for (int i = 0; i < outcome.ApprovedIds.Length; i++)
+                AssertInstalledModuleBinding(snapshot, accountId, outcome.ApprovedIds[i],
+                    outcome.ApprovedModules[i]);
+            for (int i = 0; i < outcome.HookIds.Length; i++)
             {
-                owned = false;
-                return existing;
+                ModuleInstance hook = RequireModuleInstance(snapshot, accountId, outcome.HookIds[i]);
+                Require(hook.IsHook, SmartAccountModuleProtocol.ErrorModuleNotInstalled);
+                AssertInstalledModuleBinding(snapshot, accountId, outcome.HookIds[i], hook);
             }
-            context.OpenExecution(accountId);
-            owned = true;
-            return context.Execution(accountId);
         }
 
-        /// <summary>
-        /// Spec §7.3 "before commit": every instance that took part in this
-        /// operation — the routing validator and every dispatched hook — must
-        /// still resolve to the code pinned when it was dispatched. A target that
-        /// updates or destroys a participating module faults the whole operation.
-        /// </summary>
-        private static void AssertCodeBindingsAtCommit(IReadOnlyStore snapshot, ValidationOutcome outcome)
+        private void AssertInstalledModuleBinding(IReadOnlyStore snapshot, UInt160 accountId,
+            BigInteger moduleId, ModuleInstance expected)
         {
-            if (outcome.Module is not null) AssertModuleCodeBinding(snapshot, outcome.Module);
+            ModuleInstance current = RequireModuleInstance(snapshot, accountId, moduleId);
+            Require(current.ContractHash == expected.ContractHash
+                && current.ContractId == expected.ContractId
+                && current.UpdateCounter == expected.UpdateCounter
+                && current.NefSha256.AsSpan().SequenceEqual(expected.NefSha256)
+                && current.ProfileSha256.AsSpan().SequenceEqual(expected.ProfileSha256)
+                && current.CredentialGeneration == expected.CredentialGeneration,
+                SmartAccountModuleProtocol.ErrorModuleCodeBindingMismatch);
+            AssertModuleCodeBinding(snapshot, current);
         }
 
         private static void AssertModuleCodeBinding(IReadOnlyStore snapshot, ModuleInstance module) =>
@@ -797,49 +712,27 @@ namespace Neo.SmartContract.Native
 
         private async ContractTask<StackItem> CallModuleAsync(ApplicationEngine engine, UInt160 accountId,
             BigInteger moduleId, ModuleInstance module, string method, SmartAccountCallbackPhase phase,
-            CallFlags flags, long budget, StackItem[] arguments)
+            CallFlags flags, StackItem[] arguments)
         {
-            SmartAccountModulePolicy.AssertCodeBinding(
-                NativeContract.ContractManagement.GetContract(engine.SnapshotCache, module.ContractHash), module);
+            AssertModuleCodeBinding(engine.SnapshotCache, module);
             SmartAccountInvocationContext context = Context(engine);
-            // Fail before loading a child VM frame: a failed lease acquisition
-            // must never leave an unawaited callback on the invocation stack.
-            context.AssertModuleEntry(accountId, module.ContractHash, phase);
-            _ = EnsureExecution(engine, accountId, out bool ownedExecution);
+            // A callback runs inside the declared system fee of the transaction. One that overspends faults the engine
+            // and the platform rolls the whole transaction back, so the loss is bounded by that fee and no per-call
+            // limit is needed.
+            var task = engine.CallFromNativeContractRawAsync(SmartAccountProtocol.ServiceHash, module.ContractHash,
+                method, flags, arguments);
+            var anchor = engine.CurrentContext!.GetState<ExecutionContextState>();
+            var suspended = context.EnterCallback(accountId, moduleId, module.ContractHash, phase, anchor);
             try
             {
-                bool isHook = phase is SmartAccountCallbackPhase.HookPre or SmartAccountCallbackPhase.HookPost;
-                bool isValidator = phase is SmartAccountCallbackPhase.Validation or SmartAccountCallbackPhase.Completion;
-                if (isHook) budget = Math.Min(budget, context.HookGasRemaining(accountId));
-                if (isValidator) budget = Math.Min(budget, context.ValidatorGasRemaining(accountId, phase));
-                Require(budget > 0, SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
-                long before = engine.GasLeft;
-                try
-                {
-                    var task = engine.CallFromNativeContractWithGasLimitAsync(SmartAccountProtocol.ServiceHash,
-                        module.ContractHash, method, flags, budget, arguments);
-                    var anchor = engine.CurrentContext!.GetState<ExecutionContextState>();
-                    StackItem result;
-                    using (context.EnterModule(accountId, moduleId, module.ContractHash, phase, anchor))
-                        result = (await task)!;
-                    // Spec §7.3: the binding must still hold AFTER the callback. A
-                    // callback that updates or destroys its own code (directly or
-                    // through a nested module) faults the whole attempt here.
-                    AssertModuleCodeBinding(engine.SnapshotCache, module);
-                    if (before - engine.GasLeft > budget)
-                        throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorGasBudgetExceeded);
-                    return result;
-                }
-                finally
-                {
-                    // A callback that faults still consumed transaction GAS.
-                    if (isHook) context.ChargeHook(accountId, before - engine.GasLeft);
-                    if (isValidator) context.ChargeValidator(accountId, phase, before - engine.GasLeft);
-                }
+                StackItem result = (await task)!;
+                // The instance's code identity is re-asserted as soon as its callback returns, and again before the commit.
+                AssertModuleCodeBinding(engine.SnapshotCache, module);
+                return result;
             }
             finally
             {
-                if (ownedExecution) context.CloseExecution(accountId);
+                context.ExitCallback(suspended);
             }
         }
 
@@ -847,42 +740,41 @@ namespace Neo.SmartContract.Native
             BigInteger moduleId, ModuleInstance module, string callback, Array data)
         {
             _ = await CallModuleAsync(engine, accountId, moduleId, module, callback,
-                SmartAccountCallbackPhase.Configuration, CallFlags.All,
-                SmartAccountModuleProtocol.LifecycleCallbackGasLimit,
-                new StackItem[]
+                SmartAccountCallbackPhase.Configuration, CallFlags.All, new StackItem[]
                 {
-                    // Table 10: onInstall/onUninstall(accountId, moduleId, moduleType, data).
-                    accountId.ToArray(), moduleId, new BigInteger(module.ModuleType), data,
-                });
+                    accountId.ToArray(), moduleId, new BigInteger(module.ModuleType), data, });
         }
 
-        /// <summary>
-        /// Signature validation by the routed validator instance. Read-only and
-        /// approval is exactly Boolean true (spec §9 ABI).
-        /// </summary>
         private async ContractTask<bool> CallValidatorValidateUserOpAsync(ApplicationEngine engine,
-            UInt160 accountId, BigInteger moduleId, ModuleInstance module, Array operation,
-            ReadOnlyMemory<byte> operationDigest)
+            UInt160 accountId, BigInteger moduleId, ModuleInstance module, byte[] operationBytes,
+            ReadOnlyMemory<byte> operationDigest, SmartAccountCallbackPhase phase)
         {
             StackItem reply = (await CallModuleAsync(engine, accountId, moduleId, module, "validateUserOp",
-                SmartAccountCallbackPhase.Validation, CallFlags.ReadOnly,
-                SmartAccountModuleProtocol.ValidationPerCallGasLimit,
-                new StackItem[]
+                phase, CallFlags.ReadOnly, new StackItem[]
                 {
-                    accountId.ToArray(), operationDigest.ToArray(), BuildCanonicalOperationView(operation, engine),
+                    accountId.ToArray(), operationDigest.ToArray(), BuildCanonicalOperationView(operationBytes, engine),
                 }))!;
             if (reply is not Boolean approved)
                 throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorCallbackReturnType);
             return approved.GetBoolean();
         }
 
+        private async ContractTask<StackItem> CallHookPlannerAsync(ApplicationEngine engine, UInt160 accountId,
+            BigInteger moduleId, ModuleInstance module, byte[] operationBytes, ReadOnlyMemory<byte> operationDigest)
+        {
+            return (await CallModuleAsync(engine, accountId, moduleId, module, "planHooks",
+                SmartAccountCallbackPhase.HookPlanning, CallFlags.ReadOnly, new StackItem[]
+                {
+                    accountId.ToArray(), operationDigest.ToArray(), BuildCanonicalOperationView(operationBytes, engine),
+                }))!;
+        }
+
         private async ContractTask<byte[]> CallHookPreCheckAsync(ApplicationEngine engine, UInt160 accountId,
-            BigInteger moduleId, ModuleInstance module, Array operation)
+            BigInteger moduleId, ModuleInstance module, byte[] operationBytes)
         {
             StackItem reply = (await CallModuleAsync(engine, accountId, moduleId, module, "preCheck",
                 SmartAccountCallbackPhase.HookPre, CallFlags.All,
-                SmartAccountModuleProtocol.HookCallbackGasLimit,
-                new StackItem[] { accountId.ToArray(), BuildCanonicalOperationView(operation, engine) }))!;
+                new StackItem[] { accountId.ToArray(), BuildCanonicalOperationView(operationBytes, engine) }))!;
             if (reply is Null) return [];
             if (reply is not ByteString hookData)
                 throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorCallbackReturnType);
@@ -892,124 +784,89 @@ namespace Neo.SmartContract.Native
         }
 
         private async ContractTask CallHookPostCheckAsync(ApplicationEngine engine, UInt160 accountId,
-            BigInteger moduleId, ModuleInstance module, Array operation, StackItem result, byte[] hookData)
+            BigInteger moduleId, ModuleInstance module, byte[] operationBytes, StackItem result, byte[] hookData)
         {
             await CallModuleAsync(engine, accountId, moduleId, module, "postCheck",
-                SmartAccountCallbackPhase.HookPost, CallFlags.All,
-                SmartAccountModuleProtocol.HookCallbackGasLimit,
-                new StackItem[]
+                SmartAccountCallbackPhase.HookPost, CallFlags.All, new StackItem[]
                 {
-                    accountId.ToArray(), BuildCanonicalOperationView(operation, engine),
-                    CloneValue(engine, result), hookData,
-                });
+                    accountId.ToArray(), BuildCanonicalOperationView(operationBytes, engine),
+                    result.DeepCopy(), hookData, });
         }
 
         private async ContractTask CallValidatorCompletionAsync(ApplicationEngine engine, UInt160 accountId,
-            BigInteger moduleId, ModuleInstance module, Array operation, StackItem result)
+            BigInteger moduleId, ModuleInstance module, byte[] operationBytes, StackItem result)
         {
             await CallModuleAsync(engine, accountId, moduleId, module, "onUserOpComplete",
-                SmartAccountCallbackPhase.Completion, CallFlags.All,
-                SmartAccountModuleProtocol.CompletionPerCallGasLimit,
-                new StackItem[]
+                SmartAccountCallbackPhase.Completion, CallFlags.All, new StackItem[]
                 {
-                    accountId.ToArray(), BuildCanonicalOperationView(operation, engine), CloneValue(engine, result),
+                    accountId.ToArray(), BuildCanonicalOperationView(operationBytes, engine), result.DeepCopy(),
                 });
         }
 
-        /// <summary>
-        /// Canonical 13-field operation view handed to every callback: a fresh
-        /// copy of the authenticated operation, so a module can never mutate the
-        /// content the target executes (spec §4.1/§9).
-        /// </summary>
-        private static Array BuildCanonicalOperationView(Array operation, ApplicationEngine engine)
+        /// <summary>Every callback receives its own bounded decode of the one validated signed encoding, so no mutable tree is
+        /// shared between frames. The CPU fee the decode charges is not waived for the native frame.</summary>
+        private static Array BuildCanonicalOperationView(byte[] encoded, ApplicationEngine engine)
         {
             engine.AddNativeCpuFee(1 << 12);
-            byte[] encoded = BinarySerializer.Serialize(operation,
-                SmartAccountModuleProtocol.OperationEncodedSizeMax,
-                SmartAccountModuleProtocol.OperationEncodedSizeMax);
             MemoryReader reader = new(encoded);
-            return (Array)BinarySerializer.Deserialize(ref reader,
-                SmartAccountModuleProtocol.OperationEncodedSizeMax,
-                SmartAccountModuleProtocol.OperationEncodedSizeMax);
+            return (Array)BinarySerializer.Deserialize(ref reader, SmartAccountModuleProtocol.OperationEncodedSizeMax,
+                SmartAccountModuleProtocol.OperationEncodedItemsMax);
         }
 
-        private static StackItem CloneValue(ApplicationEngine engine, StackItem value)
-        {
-            engine.AddNativeCpuFee(1 << 12);
-            byte[] encoded = BinarySerializer.Serialize(value, engine.Limits);
-            return BinarySerializer.Deserialize(encoded, engine.Limits);
-        }
-
-        // ========================================================================
-        // 6. Read-only module queries (spec §3.3)
+        // ======================================================================== 7. Read-only module queries
         // ========================================================================
 
-        /// <summary>Page of installed moduleIds: [ids[], nextCursor, configurationNonce].</summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
-        private Array GetModules(IReadOnlyStore snapshot, UInt160 accountId, string moduleType, BigInteger cursor,
+        private Array GetModules(ApplicationEngine engine, UInt160 accountId, string moduleType, BigInteger cursor,
             BigInteger limit)
         {
             RequireAccountId(accountId);
             int typeCode = ModuleTypeCodeFromName(moduleType);
-            Array page = EnumerateModulePage(snapshot, accountId, typeCode, cursor, limit);
-            AccountControl? control = TryControl(snapshot, accountId);
+            Array page = EnumerateModulePage(engine.SnapshotCache, accountId, typeCode, cursor, limit);
+            AccountControl? control = TryControl(engine.SnapshotCache, accountId);
             return new Array(new StackItem[]
             {
-                page[0], page[1], control is null ? BigInteger.Zero : new BigInteger(control.ConfigurationNonce),
-            });
+                page[0], page[1], control is null ? BigInteger.Zero : new BigInteger(control.ConfigurationNonce), });
         }
 
-        /// <summary>
-        /// Full instance descriptor or an empty Array. Layout: [moduleId,
-        /// moduleType, contractHash, contractId, updateCounter, nefSha256,
-        /// profileSha256, moduleRevision, credentialGeneration,
-        /// instanceIsolation, messageCapability, thresholdMemberEligible].
-        /// The two capability slots are retained for ABI stability and are
-        /// always false: the native core does not negotiate them.
-        /// </summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
-        private Array GetModule(IReadOnlyStore snapshot, UInt160 accountId, BigInteger moduleId)
+        private Array GetModule(ApplicationEngine engine, UInt160 accountId, BigInteger moduleId)
         {
             RequireAccountId(accountId);
-            ModuleInstance? module = TryModuleInstance(snapshot, accountId, moduleId);
+            ModuleInstance? module = TryModuleInstance(engine.SnapshotCache, accountId, moduleId);
             if (module is null) return new Array();
             return new Array(new StackItem[]
             {
-                SmartAccountProtocol.UInt64Be(moduleId), new BigInteger(module.ModuleType),
+                SmartAccountModuleProtocol.UInt64ToBigEndian(SmartAccountProtocol.UInt64(moduleId)),
+                new BigInteger(module.ModuleType),
                 module.ContractHash.ToArray(), new BigInteger(module.ContractId),
                 new BigInteger(module.UpdateCounter), module.NefSha256, module.ProfileSha256,
                 new BigInteger(module.ModuleRevision), new BigInteger(module.CredentialGeneration),
                 module.InstanceIsolation, module.MessageCapability, module.ThresholdMemberEligible,
-            });
+                module.CompositeLayer, module.Governance, module.HookPlanner, });
         }
 
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
-        private bool IsModuleInstalled(IReadOnlyStore snapshot, UInt160 accountId, string moduleType,
+        private bool IsModuleInstalled(ApplicationEngine engine, UInt160 accountId, string moduleType,
             UInt160 moduleHash, byte[] additionalContext)
         {
             RequireAccountId(accountId);
-            _ = additionalContext;
+            // additionalContext is a parameter of the frozen v4.1 ABI that the IDL declares as accepted and
+            // ignored: the answer comes from the installed instances of the type, so it is not read here.
             if (moduleHash is null || moduleHash == UInt160.Zero) return false;
             int typeCode = ModuleTypeCodeFromName(moduleType);
-            return FindModuleIdByContract(snapshot, accountId, typeCode, moduleHash) != BigInteger.Zero;
+            return FindModuleIdByContract(engine.SnapshotCache, accountId, typeCode, moduleHash) != BigInteger.Zero;
         }
 
-        /// <summary>
-        /// Phase-exact module authorization: the authorized moduleId while the
-        /// caller IS the contract of the instance the recorded phase addresses,
-        /// or -1. A module calls this from inside a callback to authenticate the
-        /// core and learn which of its instances is being addressed.
-        /// </summary>
         [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
         private BigInteger GetAuthorizedModuleId(ApplicationEngine engine, UInt160 accountId, int phase)
         {
             RequireAccountId(accountId);
-            if (phase < 1 || phase > (int)SmartAccountCallbackPhase.Cleanup) return BigInteger.MinusOne;
+            if (phase < 1 || phase > (int)SmartAccountCallbackPhase.HookPlanning) return BigInteger.MinusOne;
             SmartAccountInvocationContext context = Context(engine);
             if (!context.IsModuleAuthorized(engine, accountId, (SmartAccountCallbackPhase)phase))
                 return BigInteger.MinusOne;
-            SmartAccountInvocationContext.AccountExecution execution = context.Execution(accountId);
-            return execution.ActiveModuleId;
+            return context.CallbackModuleId;
         }
 
         private static int ModuleTypeCodeFromName(string moduleType) => moduleType switch
@@ -1019,168 +876,5 @@ namespace Neo.SmartContract.Native
             "recovery" => SmartAccountModuleProtocol.ModuleTypeCodeRecovery,
             _ => throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorModuleTypeUnsupported),
         };
-        private ThresholdPolicyRecord? TryThresholdPolicy(IReadOnlyStore snapshot, UInt160 accountId,
-            BigInteger policyId)
-        {
-            if (policyId < 1 || policyId >> 64 != BigInteger.Zero) return null;
-            return TryRead(snapshot, SmartAccountProtocol.GetThresholdPolicyKey(accountId, policyId), out var value)
-                ? ThresholdPolicyRecord.Decode(ReadGovernedPayload(snapshot, accountId, SpendingPolicySlot, value))
-                : null;
-        }
-
-        /// <summary>
-        /// True while the instance is a member of an ACTIVE threshold policy.
-        /// Active-policy members are never independently routable (spec §5) and
-        /// cannot be uninstalled while referenced. The member record carries the
-        /// back-pointer, so routing and uninstall checks are one read.
-        /// </summary>
-        private static bool IsMemberOfActivePolicy(ModuleInstance module) =>
-            module.ActivePolicyId != BigInteger.Zero;
-
-        private static void AssertNotMemberOfOtherActivePolicy(ModuleInstance member, BigInteger policyId)
-        {
-            Require(member.ActivePolicyId == BigInteger.Zero || member.ActivePolicyId == policyId,
-                SmartAccountModuleProtocol.ErrorIntentConflict);
-        }
-
-        /// <summary>
-        /// Routing eligibility (spec §5): the selected validator must be an
-        /// installed validator instance that is not a member of an active
-        /// threshold policy — a single-member entry must never bypass the
-        /// threshold.
-        /// </summary>
-        private ModuleInstance RequireRoutableValidator(IReadOnlyStore snapshot, UInt160 accountId,
-            BigInteger validatorId)
-        {
-            ModuleInstance module = RequireModuleInstance(snapshot, accountId, validatorId);
-            Require(module.IsValidator, SmartAccountModuleProtocol.ErrorModuleNotRoutable);
-            Require(!IsMemberOfActivePolicy(module), SmartAccountModuleProtocol.ErrorModuleNotRoutable);
-            return module;
-        }
-
-        private ModuleInstance RequireActiveValidator(IReadOnlyStore snapshot, UInt160 accountId,
-            BigInteger validatorId)
-        {
-            ModuleInstance module = RequireModuleInstance(snapshot, accountId, validatorId);
-            Require(module.IsValidator, SmartAccountModuleProtocol.ErrorValidatorNotFound);
-            return module;
-        }
-
-        private async ContractTask ExecuteSetThresholdPolicyAction(ApplicationEngine engine, UInt160 accountId,
-            AccountControl control, Array action)
-        {
-            // [ActionSetThresholdPolicy, policyId, threshold, memberIds[], active]
-            // policyId 0 requests a NEW policy from the SAME monotonic allocator
-            // as module instances, so a policy id can never alias a module id.
-            Require(action.Count == 5, SmartAccountModuleProtocol.ErrorOperationMalformed);
-            BigInteger requestedId = SmartAccountRecordCodec.Unsigned(action[1]);
-            BigInteger threshold = SmartAccountRecordCodec.Unsigned(action[2]);
-            BigInteger[] memberIds = SmartAccountRecordCodec.Integers(action[3],
-                SmartAccountModuleProtocol.MaxThresholdPolicyMembers);
-            bool active = SmartAccountRecordCodec.Boolean(action[4]);
-
-            Require(active && requestedId.IsZero && control.RequiredPolicyId == 0,
-                SmartAccountModuleProtocol.ErrorIntentConflict);
-            BigInteger policyId = control.AllocateModuleId();
-            Require(threshold >= SmartAccountModuleProtocol.MinThresholdPolicyValue
-                && threshold <= SmartAccountModuleProtocol.MaxThresholdPolicyValue,
-                SmartAccountModuleProtocol.ErrorModuleLimitThreshold);
-            Require(memberIds.Length > 0
-                && memberIds.Length <= SmartAccountModuleProtocol.MaxThresholdPolicyMembers,
-                SmartAccountModuleProtocol.ErrorModuleLimitMembers);
-            Require(threshold <= memberIds.Length, SmartAccountModuleProtocol.ErrorModuleLimitThreshold);
-            // A mandatory spending policy may only be exited through the preset delayed seat.
-            Require(control.RecoveryAuthority != UInt160.Zero, SmartAccountModuleProtocol.ErrorAccountStatus);
-            var recovery = EnumerateModuleIds(engine.SnapshotCache, accountId,
-                SmartAccountModuleProtocol.ModuleTypeCodeRecovery, BigInteger.Zero, 1).SingleOrDefault();
-            Require(recovery > 0, SmartAccountModuleProtocol.ErrorModuleNotInstalled);
-            RequireStandardPolicyModule(engine, RequireModuleInstance(engine.SnapshotCache, accountId, recovery),
-                RecoveryNefSha256, RecoveryManifestSha256);
-            var memberKeys = new HashSet<string>();
-            for (int i = 0; i < memberIds.Length; i++)
-            {
-                ModuleInstance member = RequireActiveValidator(engine.SnapshotCache, accountId, memberIds[i]);
-                Require(member.ThresholdMemberEligible, SmartAccountModuleProtocol.ErrorOperationMalformed);
-                for (int j = 0; j < i; j++)
-                    Require(memberIds[j] != memberIds[i],
-                        SmartAccountModuleProtocol.ErrorOperationMalformed);
-                AssertNotMemberOfOtherActivePolicy(member, policyId);
-                RequireStandardPolicyModule(engine, member, MemberNefSha256, MemberManifestSha256);
-                var key = await engine.CallFromNativeContractWithGasLimitAsync(Hash, member.ContractHash,
-                    "getMemberKey", CallFlags.ReadOnly, SmartAccountModuleProtocol.ValidationPerCallGasLimit,
-                    new StackItem[] { accountId.ToArray(), memberIds[i] });
-                Require(key is ByteString publicKey && publicKey.Size == 33
-                    && memberKeys.Add(Convert.ToHexString(publicKey.GetSpan())),
-                    SmartAccountModuleProtocol.ErrorOperationMalformed);
-            }
-            control.RequiredPolicyId = (ulong)policyId;
-            ApplyBuiltinPolicy(engine, accountId, control, false, control.DefaultMessageAuthorization);
-            // Retire recovery requests that were already maturing at enrollment.
-            control.AuthorityEpoch = checked(control.AuthorityEpoch + 1);
-            var policy = new ThresholdPolicyRecord { Threshold = (ulong)threshold, MemberIds = memberIds,
-                Active = true, CredentialGeneration = 1 };
-            var reference = await StoreGovernedPayload(engine, accountId, SpendingPolicySlot, policy.Serialize());
-            Write(engine, SmartAccountProtocol.GetThresholdPolicyKey(accountId, policyId), reference!);
-            foreach (BigInteger memberId in memberIds)
-            {
-                var member = RequireActiveValidator(engine.SnapshotCache, accountId, memberId);
-                member.ActivePolicyId = policyId;
-                SaveModuleInstance(engine, accountId, memberId, member);
-            }
-            Notify(engine, SmartAccountModuleProtocol.EventNameThresholdPolicySet, accountId.ToArray(),
-                policyId, new BigInteger(policy.Threshold),
-                new Array(policy.MemberIds.Select(id => (StackItem)id).ToArray()));
-        }
-        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
-        private Array GetThresholdPolicy(IReadOnlyStore snapshot, UInt160 accountId, BigInteger policyId)
-        {
-            if (!policyId.IsZero) return TryThresholdPolicy(snapshot, accountId, policyId)?.ToStackItem() ?? new Array();
-            ulong required = TryControl(snapshot, accountId)?.RequiredPolicyId ?? 0;
-            if (required == 0) return new Array();
-            var policy = TryThresholdPolicy(snapshot, accountId, required)
-                ?? throw new InvalidOperationException(SmartAccountModuleProtocol.ErrorOperationMalformed);
-            var row = policy.ToStackItem();
-            row.Add(new Integer(required));
-            return row;
-        }
-        [ContractMethod(CpuFee = BaseCpuFee, RequiredCallFlags = CallFlags.ReadStates)]
-        private Array GetMessageSubjects(IReadOnlyStore snapshot, UInt160 accountId) =>
-            TryMessageSubjects(snapshot, accountId)?.ToStackItem() ?? new Array();
-
-        // The standard governance binary enforces maturity, expiry, authority epoch, exact action
-        // bytes and one-shot consumption. Match the live ABI as well: a NEF alone does not bind
-        // manifest dispatch offsets. An ordinary custody or validator witness is insufficient.
-        private void RequireGovernedPolicyCaller(ApplicationEngine engine, UInt160 accountId)
-        {
-            var caller = engine.CallingScriptHash;
-            Require(caller is not null, SmartAccountModuleProtocol.ErrorUnauthorized);
-            var id = FindModuleIdByContract(engine.SnapshotCache, accountId, SmartAccountModuleProtocol.ModuleTypeCodeValidator, caller!);
-            Require(id > 0, SmartAccountModuleProtocol.ErrorUnauthorized);
-            var instance = RequireModuleInstance(engine.SnapshotCache, accountId, id);
-            var deployed = SmartAccountModulePolicy.RequireDeployed(engine.SnapshotCache, caller!);
-            SmartAccountModulePolicy.AssertCodeBinding(deployed, instance);
-            Require(deployed.UpdateCounter == 0 && instance.NefSha256.AsSpan().SequenceEqual(Convert.FromHexString(GovernanceNefSha256))
-                && SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(deployed.Manifest.ToJson().ToString()))
-                    .AsSpan().SequenceEqual(Convert.FromHexString(GovernanceManifestSha256)),
-                SmartAccountModuleProtocol.ErrorUnauthorized);
-        }
-        private static void RequireStandardPolicyModule(ApplicationEngine engine, ModuleInstance instance,
-            string nefDigest, string manifestDigest)
-        {
-            var deployed = SmartAccountModulePolicy.RequireDeployed(engine.SnapshotCache, instance.ContractHash);
-            SmartAccountModulePolicy.AssertCodeBinding(deployed, instance);
-            Require(deployed.UpdateCounter == 0
-                && instance.NefSha256.AsSpan().SequenceEqual(Convert.FromHexString(nefDigest))
-                && SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(deployed.Manifest.ToJson().ToString()))
-                    .AsSpan().SequenceEqual(Convert.FromHexString(manifestDigest)),
-                SmartAccountModuleProtocol.ErrorModuleCodeBindingMismatch);
-        }
-        internal const string RecoveryNefSha256 = "8306ab8e1c5f0b13aafef2a25a9f02e0b587e5a07ad10cfb1e128a4c353d018e";
-        internal const string RecoveryManifestSha256 = "c703f946a35e8d6c977e18b01f32148ddf38e84b813465acc60d462cfab6c6d7";
-        internal const string MemberNefSha256 = "908a226009c775d4661b4d36b2225b7aad731180a5dc95be07c5e40b0c1d0a00";
-        internal const string MemberManifestSha256 = "01ba484b1c29115a4eef446aa6b804ad351254297743c955e9d9f716d2730945";
-        internal const string GovernanceNefSha256 = "d604aa62813606b08a9f9aa4b780bbf4f5e3f19fa2e887a69fb3863613ca6410";
-        internal const string GovernanceManifestSha256 = "02d1f0e4d8bbfb68c179c803920eb625567a8d4b4fe84815ed973b9b36883815";
-
     }
 }

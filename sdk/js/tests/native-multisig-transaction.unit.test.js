@@ -75,7 +75,7 @@ function transactionFixture(role = "guardian", signer = multisig()) {
   // The plan's authority is the account state, not a list in the plan (v4).
   client.getAccount = async () => ({ custodyAddress: guardianHash, recoveryAuthority: null });
   client.revalidatePlan = async () => { revalidations++; return true; };
-  client.simulate = async () => ({ state: "HALT", gasConsumed: "10", minimumRequiredFee: "100", incompleteTransfers: [], stack: [{ type: "Any", value: null }] });
+  client.simulate = async () => ({ state: "HALT", gasConsumed: "10", incompleteTransfers: [], stack: [{ type: "Any", value: null }] });
   // Every native account action is custody-gated, so the multisig is always the
   // authority witness. Who pays the fee is the only variable: the guardian role
   // hands it to an independent payer, the others let the payer stay independent

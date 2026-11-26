@@ -2,69 +2,42 @@
 
 # How It Works & Usage Guide
 
-This guide explains the Neo Smart Account system end to end: what the contract does, how the website is organized, how a user creates and uses an account, how collaboration drafts work, and how transactions finally reach the chain.
+## 1. One contract, many accounts
 
-## 1. Who This Is For
-
-Use this page if you are trying to answer any of these questions:
-
-- **New user:** What is a Smart Account and what do I click first?
-- **Signer:** What can I review and sign without taking operator actions?
-- **Operator:** How do I collect approvals, run relay checks, and submit safely?
-- **Integrator:** Which parts are on-chain, off-chain, and server-side?
-
-If you only want one mental model, use this:
-
-> One global SA contract stores account configuration, while each logical account gets a deterministic verify address that routes authorization back through the shared policy-gated engine.
-
-## 2. Mental Model
-
-An Smart Account in this project is **not** a new smart contract deployed per user.
-
-Instead, the system uses one global master contract plus a deterministic verification account address for each logical account.
-
-```mermaid
-flowchart LR
-  User[User / Operator] --> UI[Frontend Workspace]
-  UI --> Drafts[Draft Store]
-  UI --> Relay[Optional Relay API]
-  UI --> Master[SmartAccount Master Contract]
-  Master --> Policies[Roles + Policies + Limits]
-  Master --> Target[Target Contract]
-  Master --> Proxy[Deterministic Verify Account Address]
-```
-
-The result is:
-
-- one shared on-chain execution engine
-- zero per-account deployment cost
-- isolated account configuration per `accountId`
-- support for both native Neo signatures and EVM EIP-712 signatures
-- one consistent permission surface for native calls, relay-assisted calls, and meta-transactions
-- optional on-chain Paymaster for trustless sponsored/gasless execution
-
-### Account Discovery and Batch Operations
-
-V3 has no admin, manager or threshold state and no reverse indices: that V1/V2 role model was
-removed in the V3 rewrite, and the SDK keeps `getAccountsByAdmin`/`getAccountsByManager` only as
-stubs that throw `LEGACY_V3_REMOVED`. Per-account state is read with `getAccount(accountId)`,
-one account at a time.
-
-- **Batch creation:** `createAccounts(UInt160[] accountIds, UInt160 custody, ByteString[] salts, Integer recoveryTimelockMs)`
-  creates several accounts for one custody in a single transaction (1-64 entries, all or nothing);
-  a batch entry installs no modules, so configuration afterwards travels the 24-hour intent path.
-- **Creation authority:** `createAccount(accountId, custody, salt, recoveryTimelockMs, actions)`
-  requires the `custody` witness (`contracts/native/SmartAccount/SmartAccount.cs`). The initial
-  configuration actions install atomically for a fresh account; every later change is a
-  `proposeConfiguration` → 24 h → `confirmConfiguration` intent.
+SmartAccount is a native protocol service, not a wallet contract deployed per
+user. Every account has a stable `accountId` and a funding address derived from
+it, so creating an account costs one transaction and no deployment. Receiving and
+transferring need no module at all.
 
 Identity is derived, not registered: `accountId = hash160('aa524704' || custody || salt)`.
-Persist each salt, because the salt is the only part of that preimage the chain does not hand
-back. Read an account you know with `getAccount(accountId)`: the control record answers custody,
-recovery authority and timelock, authority epoch, configuration nonce, hook-order revision,
-installed modules and the pending configuration intent.
+The salt is 1..128 bytes of public uniqueness input. Persist it: it is the only
+part of that preimage the chain does not hand back. Recovery replaces custody but
+never the identity or the funding address.
 
-**Via SDK:**
+## 2. Custody, modules and governance
+
+| Role | Authority |
+| --- | --- |
+| Custody | Witnesses account creation and, when no validator is installed, ordinary operations; `freezeAccount` and `revokeModuleCredentials` take effect at once |
+| Validator module (type 1) | Authorizes the exact operation; up to 32 instances per account |
+| Hook module (type 4) | Checks an operation before and after the target call; up to 8 instances |
+| Governance module | Holds every configuration change: 24-hour delay, 7-day window, at most 16 pending intents of 16 actions |
+| Recovery seat (type 5) | Holds the guardian policy and the only path to the native reset; one instance |
+| Fee payer | Signs and pays for the whole transaction; payment grants no account authority |
+| RPC, SDK, UI | Discovery, construction, simulation and submission; no authority |
+
+Custody proposes and confirms governance intents but never writes module state
+directly: the core accepts installation, removal, configuration, built-in
+authorization changes and unfreezing only from the account's installed governance
+instance. A custody-signed direct call fails with `SA_UNAUTHORIZED`.
+
+## 3. Creating an account
+
+- `createAccount(accountId, custody, salt, actions)` requires the custody witness.
+  The actions are install-only (at most 16) and apply atomically, so an account
+  can start with its validator, hooks, governance module and recovery seat.
+- `createAccounts(accountIds, custody, salts)` creates 1..64 accounts for one
+  custody in one transaction, all or nothing. A batch entry takes no actions.
 
 ```javascript
 const { createNativeSmartAccountClient } = require('./sdk/js/src');
@@ -73,228 +46,40 @@ const client = await createNativeSmartAccountClient({ rpcUrl, contractHash, netw
 await client.discover();
 
 const identity = client.deriveIdentity({ custodyAddress: custody, salt });
+const plan = client.buildCreateAccountScript({ custodyAddress: custody, salt, actions });
 const state = await client.getAccount(identity.accountId);
-const validators = await client.getModules(identity.accountId, 'validator');
 ```
 
-**Use cases:**
+## 4. Reading an account
 
-- Portfolio management: re-derive each account from its custody address and salt, then read it
-- Access audit: list the installed validator and hook modules and read each instance with
-  `getModule(accountId, moduleId)`
+`getAccount(accountId)` answers nine fields: existence, status, custody, authority
+epoch, configuration nonce, the two built-in authorization switches, the required
+validator id and the control revision. A fresh account is Active, at authority
+epoch 1 and configuration nonce 0, with both built-in switches on and no required
+validator. Modules are read with `getModules(accountId, 'validator' | 'hook' | 'recovery', ...)`
+and `getModule(accountId, moduleId)`; a pending intent is read from the governance
+module that holds it.
 
-The JS client builds one registration script at a time with `buildCreateAccountScript`; a
-`createAccounts` batch is the same call repeated per id/salt pair, submitted either as the
-contract's own `createAccounts` invocation or as one transaction per account. Every account
-shares the custody address and the recovery timelock; the call carries no recovery authority,
-because the core has no action that sets one — naming another recovery authority is a
-governance module's change, not the core's.
+## 5. Spending
 
-```javascript
-const plan = client.buildCreateAccountScript({
-  custodyAddress: custody,
-  salt: saltA,
-  recoveryTimelockMs: 30 * 86_400_000,
-});
-```
+An operation runs through `executeUserOp(accountId, operation)`: one operation per
+call and per transaction. The 13-field operation binds the target, method and
+arguments to the nonce channel, deadline, validator id, credential generation,
+authority epoch and configuration nonce. A validator route or the built-in custody
+signature authorizes it inside that call. The account itself cannot pay fees: an
+external payer signs the transaction.
 
-Key behaviors:
+## 6. Keep the right backups
 
-- The custody address must witness the transaction; each account id must equal
-  `hash160('aa524704' || custody || salt)` or the call faults
-- A timelock of `0` selects the 7-day minimum; the accepted range is 7..90 days, in milliseconds
-- A `createAccounts` batch is atomic: every account is created or none is
-- No verifier or hook is chosen at creation. Modules are installed afterwards by configuration
-  intents, which mature for 24 hours; only the single-account `createAccount` call can carry
-  initial install actions atomically
-
-Typical uses: team onboarding (several accounts under one custody witness), project setup
-(dev/staging/prod accounts together) and service accounts created atomically one call at a time.
-
-## 3. Choose the Right Path
-
-Use the path that matches your role and risk profile:
-
-| Situation | Recommended path | Why |
+| Item | Purpose | What to keep |
 | --- | --- | --- |
-| One user, one browser, ready to submit | Client-side broadcast | Simplest and safest default path. |
-| Shared review and signature collection | Draft + collaborator link | Lets signers review and approve without operator powers. |
-| Gasless / sponsored transaction | On-chain Paymaster + relay | Sponsor deposits GAS, relay submits and gets reimbursed atomically. |
-| Relay simulation before submit | Operator link + relay preflight | Shows VM state, gas, and payload details before final submission. |
-| EVM wallet approval flow | Meta signature + relay-ready invocation | Keeps EIP-712 signing while preserving Neo policy enforcement. |
-| No Supabase configured | Local-only draft flow | Compose, save, and sign in the same browser without cross-device sharing. |
+| Account ID | Identifies the account and its settings | Network and account ID |
+| Funding address | Holds the account's assets | The independently verified address shown after registration |
+| Public recovery descriptor | Records custody, salt, identity, funding address and configuration | A copy you can use to find and verify the account |
+| Custody wallet backup | Authorizes management and default execution | Wallet private key or recovery backup, stored safely |
+| Guardian wallet backups | Start a recovery request as a guardian quorum | A separate security backup, controlled independently from custody |
 
-## 4. What the System Contains
-
-Think of the full product as four connected surfaces:
-
-1. **On-chain engine** — the master contract plus deterministic verify path
-2. **Frontend workspace** — compose, review, sign, and broadcast UI
-3. **Collaboration storage** — immutable draft body plus append-only signatures/activity
-4. **Optional server helpers** — relay submission and signed operator mutations
-
-Those surfaces are connected, but they do not all have the same authority. Supabase does not replace the contract permission model, and a shared URL does not by itself bypass operator-only actions.
-
-## 5. What Happens During One Transaction?
-
-Most users interact through the home workspace:
-
-```mermaid
-sequenceDiagram
-  participant User
-  participant Frontend
-  participant DraftStore
-  participant Wallet
-  participant Relay
-  participant Chain
-
-  User->>Frontend: Load Smart Account
-  User->>Frontend: Compose operation
-  Frontend->>DraftStore: Persist draft
-  User->>Wallet: Sign natively or via EVM typed data
-  Wallet-->>Frontend: Signature / approval
-  Frontend->>DraftStore: Append signature
-  User->>Frontend: Choose client or relay path
-  Frontend->>Chain: Client broadcast
-  Frontend->>Relay: Relay preflight / relay submission
-  Relay->>Chain: Submit wrapped invocation
-```
-
-The key design choice is that the downstream target contract is **not** called directly by a raw proxy-signed transaction. Instead, execution routes through `executeUserOp(accountId, op)` (or `executeUserOps(accountId, ops)` for a batch), where the policy engine can enforce verifier, hook and target checks. The V1/V2 wrapper entrypoints were removed and exist in no deployed manifest and no contract source.
-
-## 6. Draft Collaboration Model
-
-The website uses a three-scope draft model:
-
-- **Share link** — read-only review
-- **Collaborator link** — signature collection only
-- **Operator link** — relay checks, broadcast, receipt updates, and link rotation
-
-That means:
-
-- people reviewing a draft cannot mutate it
-- signers cannot impersonate operators
-- operators can rotate write-capable links if one leaks
-- operator actions still pass through the signed server-side mutation path when configured
-
-## 7. Human-Readable Domain Access
-
-The frontend can use `.matrix` domains as a discovery layer. If you remember your `.matrix` name
-more easily than an SA address, enter the domain in the load field. During account creation, a
-compatible Neo wallet can submit a single batched transaction that both creates the SA and
-registers the `.matrix` domain to the signer wallet. Later, the frontend resolves the domain back
-to the controlling wallet address. V3 keeps no reverse index, so a domain does not list the SA
-accounts it controls: read each one with `getAccount(accountId)`.
-
-## 8. How a User Uses the Website
-
-### For a new user
-
-1. Open **Home**
-2. Load or derive the smart account
-3. Choose an operation preset or create a custom invocation
-4. Persist the draft
-5. Share links depending on the collaborator role
-6. Collect approvals
-7. Run relay checks if needed
-8. Broadcast through a wallet or relay
-
-### For a signer
-
-1. Open the collaborator link
-2. Review the draft and operation snapshot
-3. Add a manual signature or an EVM typed-data approval
-4. Leave relay/broadcast tasks to the operator
-
-### For an operator
-
-1. Open the operator link
-2. Monitor signatures and relay readiness
-3. Run preflight checks
-4. Broadcast client-side or via relay
-5. Rotate collaborator or operator links when needed
-
-### For a developer or auditor
-
-1. Read the **Core Architecture** page for contract structure
-2. Read the **Workflow Lifecycle** page for execution sequences
-3. Read the **Data Flow & Storage** page for boundary ownership
-4. Read **SDK Integration** for runtime and relay configuration
-
-## 9. What Gets Stored Where?
-
-The draft body and collaboration state live off-chain, while authority and execution rules live on-chain.
-
-- **On-chain:** verifier and hook configuration, backup owner, escape timelock, whitelist / blacklist rules, and transfer limits
-- **Browser / Supabase:** immutable draft body, collected signatures, activity timeline, relay preflight snapshots, and bounded submission receipt history
-- **Relay server:** simulation, raw transaction forwarding if explicitly enabled, and meta invocation submission when a relay signer is configured
-
-Shared draft metadata is intentionally bounded: the frontend retains only the latest **100 activity entries** and the latest **12 submission receipts** so collaboration records stay lightweight over time.
-
-## 10. Sponsored / Gasless Transactions
-
-The on-chain `SAPaymaster` contract enables users to execute operations without holding GAS:
-
-1. A **sponsor** (dApp, organization, or service) deposits GAS into the Paymaster contract and creates a sponsorship policy specifying which accounts, contracts, methods, and budgets to fund.
-2. The **relay** calls `executeSponsoredUserOp` on the SA core with the sponsor and paymaster details.
-3. Relays can optionally preflight `validatePaymasterOp`, while the SA core executes the UserOp normally (verifier + hooks) and then atomically settles the reimbursement — deducting from the sponsor's deposit and sending GAS to the relay.
-
-Sponsors can create **per-account policies** (specific accountId) or **global policies** (accountId = Zero) to sponsor any account. Policies support:
-- Per-operation GAS limits
-- Daily spend budgets (24-hour rolling window)
-- Total lifetime budgets
-- Target contract and method restrictions
-- Expiry timestamps
-
-The Paymaster never replaces the verifier or backup-owner — it only funds the relay after the operation has been fully authorized.
-
-## 11. Key Security Boundaries
-
-Every execution path still flows through the same protection layer:
-
-- account existence checks
-- verifier / backup-owner witness verification
-- optional custom verifier hook
-- escape timelock and finalization rules
-- method allowlist
-- blacklist / whitelist
-- max transfer restrictions
-
-The practical security result is:
-
-- deterministic proxy witnesses are limited to hardened SA wrapper flows
-- public links are read-only
-- collaborator links are signature-only
-- operator actions use signed server-side mutations
-- direct proxy-signed external spends remain invalid
-
-## 12. Recommended Reading Order
-
-If you are learning the system for the first time, read these pages in order:
-
-1. **How It Works & Usage Guide**
-2. **Core Architecture**
-3. **Workflow Lifecycle**
-4. **Data Flow & Storage**
-5. **SDK Integration**
-
-For practical operator and signer steps beyond this chapter, continue with
-the Quick Reference and Smart Account Workflow Lifecycle chapters above, plus
-the data-flow chapter of `docs/ARCHITECTURE.md` and `docs/SA-MODULE-PROTOCOL.md`.
-
-## 13. Glossary
-
-- **Smart Account** — a logical account identified by an `accountId`, enforced by the shared SA contract
-- **Deterministic account address** — the Neo address derived from the `verify(accountId)` script
-- **Master contract** — the shared on-chain execution and permission engine
-- **Draft** — the off-chain collaboration record containing operation data, signatures, and metadata
-- **Collaborator link** — a scoped link for signature collection only
-- **Operator link** — a scoped link for relay, broadcast, receipts, and link rotation
-- **Relay preflight** — a server-backed simulation of a relay-ready invocation before submission
-- **Meta invocation** — the SA payload created from EVM typed-data signatures; it targets `executeUserOp`
-- **Account discovery** — reading one account's state with `getAccount(accountId)`; the V1/V2 reverse indices were removed, so there is no admin/manager role query
-- **Batch registration** — creating several accounts for one custody in one transaction with `createAccounts` (no shared governance: every account carries its own validator instances, hook order and recovery timelock)
-- **Paymaster** — on-chain contract (`SAPaymaster`) that holds sponsor GAS deposits and reimburses relays after successful execution
-- **Sponsor** — an address that deposits GAS into the Paymaster and creates policies to fund operations for other accounts
-- **Sponsorship policy** — configuration defining which accounts, contracts, methods, and budgets a sponsor will fund
-- **Settlement** — atomic post-execution step where the Paymaster deducts from the sponsor deposit and sends GAS to the relay
+The descriptor contains no private key. Until the recovery seat is installed and
+its policy confirmed, the account has no recovery path: a lost custody key cannot
+be replaced. The [SDK guide](SDK.md) describes the supported signing interfaces and
+the exact transaction review.

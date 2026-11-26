@@ -9,346 +9,411 @@ using System.ComponentModel;
 namespace SmartAccount.Modules
 {
     /// <summary>
-    /// §12 recovery module (recovery seat).
+    /// Module-owned delayed recovery (SA-MODULE-PROTOCOL §10).
     ///
-    /// A recovery is a three-step conversation the account itself cannot hold:
+    /// Guardians, the configured recovery authority, the 7–90 day timelock and
+    /// the pending request are module state. The native core stores no recovery
+    /// policy and exposes exactly one landing: <c>resetAccount</c>, callable
+    /// only by the account's currently installed, code-bound recovery seat.
     ///
-    ///   beginRecovery   — the custodian or the recorded recovery authority
-    ///                     starts it (R-12-02), optionally naming the custody
-    ///                     the matured reset should rotate to (a zero newCustody
-    ///                     keeps the current one), and the start time is the
-    ///                     clock the account's own <c>recoveryTimelockMs</c>
-    ///                     runs against (the module never invents a delay);
-    ///   cancelRecovery  — the custodian or the recorded recovery authority
-    ///                     withdraws it before execution;
-    ///   executeRecovery — permissionless, because by then the delay the
-    ///                     account committed to has passed and there is nothing
-    ///                     left to decide: the module hands the recorded
-    ///                     newCustody to the core's §12.5 <c>resetAccount</c>,
-    ///                     the only transition that can re-land the account at
-    ///                     its registration defaults.
+    /// Flow:
+    ///   begin   — custody, the configured authority or the guardian quorum
+    ///             starts a request; a named new custodian must witness it;
+    ///   cancel  — the same authority withdraws an unexpired request;
+    ///   execute — permissionless once the timelock elapsed, provided the
+    ///             account epoch, configuration nonce and policy digest are
+    ///             unchanged; it then hands the approved custody to the native
+    ///             reset.
     ///
-    /// The module owns the conversation only: the core keeps custody, the
-    /// recovery authority and the timelock as account state, and
-    /// <see cref="ExecuteRecovery"/> is the wiring point that hands the
-    /// finished decision to the core through
-    /// <c>ModuleSupport.ResetAccount</c> — the reset's trigger right is pinned
-    /// to this module's installed recovery seat (R-12-12), so no other contract
-    /// (validator, hook or governance) can reach a custody rotation through it.
-    ///
-    /// The module is a <b>non-routing recovery seat</b>: nothing in §12 ever
-    /// routes an operation to it, so it is installed with module type code 5
-    /// (recovery-kind: the core dispatches only <c>onInstall</c>/
-    /// <c>onUninstall</c> to it and never the routing pair, per
-    /// SmartAccountModulePolicy.AssertCallbackAbi). The admission gate
-    /// therefore requires the <c>getModuleProfile</c> reader and the two
-    /// lifecycle callbacks only, and a recovery-kind profile may not claim
-    /// message or threshold capabilities — this module has neither.
-    ///
-    /// Storage is per account:
-    ///   <c>0x01 ‖ accountId</c>        → serialized recovery record
-    ///   <c>0x02 ‖ accountId</c>        → last executed recovery nonce
-    ///   <c>0x03 ‖ accountId</c>        → recovery authority + timelock snapshotted at begin
+    /// Storage is per account and per module instance
+    /// (<c>prefix ‖ accountId ‖ moduleId</c>); a reset allocates a new module id
+    /// and leaves the old namespace unreachable without native traversal.
     /// </summary>
     [DisplayName("RecoveryModule")]
     [ContractPermission("*", "getAccount")]
+    [ContractPermission("*", "getModules")]
+    [ContractPermission("*", "getModule")]
+    [ContractPermission("*", "getAuthorizedModuleId")]
+    [ContractPermission("*", "getContract")]
     [ContractPermission("*", "resetAccount")]
-    [ManifestExtra("Description", "Delayed account-recovery module (spec §12)")]
+    [ContractPermission("*", "applyConfigurationActions")]
+    [ManifestExtra("Description", "Module-owned guardian quorum and delayed custody recovery")]
     public class RecoveryModule : SmartContract
     {
-        // Canonical module capability profile (docs/SA-MODULE-PROTOCOL.md §12):
-        // keys sorted, no whitespace, no trailing newline. The core hashes these
-        // exact bytes into the install-time profile digest. Non-routing
-        // recovery seat (type code 5, capacity 1 per account, R-12-12) with no
-        // message or threshold capability; the recovery record is keyed by
-        // account, so a second instance of the same contract on one account is
-        // refused by the core (instanceIsolation false).
         private const string ModuleProfileJson =
-            "{\"callbacks\":[],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"RecoveryModule\",\"lifecycle\":[\"onInstall\",\"onUninstall\"],\"moduleType\":\"recovery\",\"profileVersion\":1}";
+            "{\"callbacks\":[],\"capabilities\":{\"compositeLayer\":0,\"instanceIsolation\":false,\"messageCapability\":false,\"thresholdMemberEligible\":false},\"contractName\":\"RecoveryModule\",\"lifecycle\":[\"onInstall\",\"onUninstall\",\"configure\"],\"moduleType\":\"recovery\",\"profileVersion\":1}";
 
         private static readonly byte[] Prefix_Recovery = new byte[] { 0x01 };
         private static readonly byte[] Prefix_Nonce = new byte[] { 0x02 };
         private static readonly byte[] Prefix_Policy = new byte[] { 0x03 };
 
-        // Recovery record layout (StdLib.Serialize of an object[]). The
-        // trailing authorityEpochAtInit is the R-12-05 snapshot: the authority
-        // epoch the account held when the recovery began, re-verified at
-        // execution so a recovery proposed against an old permission epoch
-        // cannot execute against a new one.
+        private const int MaxGuardians = 10;
+        private const long RecoveryTimelockMinMs = 7L * 24 * 60 * 60 * 1000;
+        private const long RecoveryTimelockMaxMs = 90L * 24 * 60 * 60 * 1000;
+
         private const int FieldNonce = 0;
-        private const int FieldCustodian = 1;
+        private const int FieldInitiator = 1;
         private const int FieldStartedAt = 2;
         private const int FieldExecutableAt = 3;
         private const int FieldStatus = 4;
         private const int FieldNewCustody = 5;
         private const int FieldAuthorityEpochAtInit = 6;
-        private const int RecordFields = 7;
+        private const int FieldConfigurationNonceAtInit = 7;
+        private const int FieldPolicyDigest = 8;
+        private const int FieldPolicyRevision = 9;
+        private const int FieldAccountId = 10;
+        private const int FieldModuleId = 11;
+        private const int RecordFields = 12;
+
+        private const int FieldGuardians = 0;
+        private const int FieldThreshold = 1;
+        private const int FieldTimelock = 2;
+        private const int FieldAuthority = 3;
+        private const int FieldRevision = 4;
+        private const int PolicyFields = 5;
 
         private const int StatusNone = 0;
         private const int StatusPending = 1;
         private const int StatusExecuted = 2;
 
+        // The recovered composition is the account's installed set captured before the reset: the core removes every
+        // instance, so the same transaction reinstalls the reviewed contracts under fresh module ids, credential
+        // generations and the advanced authority epoch. Native state (account id, proxy, allocator) is untouched and
+        // module-private policy rows stay unreachable under the retired instance ids. The landing is one
+        // applyConfigurationActions call, so the composition is bounded by the core's per-batch action limit; when a
+        // pathological account holds more instances than that, the recovery seat and the governance-capable validators
+        // are restored first so the account stays recoverable and governable.
+        private const int ActionInstallModule = 1;
+        private const int CompositionPageLimit = 32;    // core MaxEnumerationLimit
+        private const int CompositionActionLimit = 16;  // core MaxConfigurationActions
+
         public delegate void RecoveryStartedHandler(UInt160 accountId, BigInteger nonce, BigInteger executableAt);
-
         public delegate void RecoveryCancelledHandler(UInt160 accountId, BigInteger nonce);
-
-        public delegate void RecoveryExecutedHandler(UInt160 accountId, BigInteger nonce, UInt160 recoveryAuthority);
+        public delegate void RecoveryExecutedHandler(UInt160 accountId, BigInteger nonce, UInt160 newCustody);
+        public delegate void RecoveryPolicyUpdatedHandler(UInt160 accountId, BigInteger revision);
 
         [DisplayName("RecoveryStarted")]
         public static event RecoveryStartedHandler OnRecoveryStarted = default!;
-
         [DisplayName("RecoveryCancelled")]
         public static event RecoveryCancelledHandler OnRecoveryCancelled = default!;
-
         [DisplayName("RecoveryExecuted")]
         public static event RecoveryExecutedHandler OnRecoveryExecuted = default!;
+        [DisplayName("RecoveryPolicyUpdated")]
+        public static event RecoveryPolicyUpdatedHandler OnRecoveryPolicyUpdated = default!;
 
         public static void _deploy(object data, bool update) => ModuleSupport.Initialize(data, update);
-
-        // ---- module admission (spec §7.3/§12, core AssertCallbackAbi) ----
-
-        /// <summary><c>getModuleProfile()</c>: the canonical capability profile this deployment publishes.</summary>
-        [Safe]
-        public static string GetModuleProfile() => ModuleProfileJson;
-
-        [Safe]
-        public static UInt160 AuthorizedCore() => ModuleSupport.Core();
-
+        [Safe] public static string GetModuleProfile() => ModuleProfileJson;
+        [Safe] public static UInt160 AuthorizedCore() => ModuleSupport.Core();
         public static void SetAuthorizedCore(UInt160 coreContract) => ModuleSupport.SetAuthorizedCore(coreContract);
 
-        // ---- lifecycle dispatched by the core (spec §9, Table 10) ----
+        // ---- lifecycle ----
 
-        /// <summary><c>onInstall(accountId, moduleId, moduleType, initData)</c>: a recovery module carries no install-time policy.</summary>
+        /// <summary><c>initData</c> must be empty; the policy arrives through a governed configure.</summary>
         public static void OnInstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] initData)
         {
             ModuleSupport.RequireCore();
-            ExecutionEngine.Assert(initData.Length == 0, ModuleProtocol.ErrOperationMalformed);
+            ExecutionEngine.Assert(ModuleSupport.RequireConfigurationInstance(accountId) == moduleId,
+                ModuleProtocol.ErrUnauthorized);
+            ExecutionEngine.Assert(moduleType == ModuleProtocol.ModuleTypeRecovery, ModuleProtocol.ErrOperationMalformed);
+            ExecutionEngine.Assert(initData == null || initData.Length == 0, ModuleProtocol.ErrOperationMalformed);
+            ModuleSupport.BindInstance(accountId, moduleId);
         }
 
-        /// <summary><c>onUninstall(accountId, moduleId, moduleType, deInitData)</c>: an unfinished recovery leaves with the instance.</summary>
+        /// <summary><c>configData</c> is <c>[guardians[], threshold, timelockMs]</c>
+        /// or <c>[guardians[], threshold, timelockMs, authority]</c>.</summary>
+        public static void Configure(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] configData)
+        {
+            ModuleSupport.RequireCore();
+            ExecutionEngine.Assert(ModuleSupport.RequireConfigurationInstance(accountId) == moduleId,
+                ModuleProtocol.ErrUnauthorized);
+            ExecutionEngine.Assert(moduleType == ModuleProtocol.ModuleTypeRecovery, ModuleProtocol.ErrOperationMalformed);
+            ApplyPolicy(accountId, moduleId, configData);
+        }
+
         public static void OnUninstall(UInt160 accountId, BigInteger moduleId, BigInteger moduleType, object[] deInitData)
         {
             ModuleSupport.RequireCore();
-            Storage.Delete(Storage.CurrentContext, ModuleSupport.Key(Prefix_Recovery, accountId));
-            Storage.Delete(Storage.CurrentContext, ModuleSupport.Key(Prefix_Nonce, accountId));
-            Storage.Delete(Storage.CurrentContext, ModuleSupport.Key(Prefix_Policy, accountId));
+            ExecutionEngine.Assert(ModuleSupport.RequireConfigurationInstance(accountId) == moduleId,
+                ModuleProtocol.ErrUnauthorized);
+            ModuleSupport.DeleteInstancePrefix(Prefix_Recovery, accountId, moduleId);
+            ModuleSupport.DeleteInstancePrefix(Prefix_Nonce, accountId, moduleId);
+            ModuleSupport.DeleteInstancePrefix(Prefix_Policy, accountId, moduleId);
+            ModuleSupport.ReleaseInstance(accountId, moduleId);
         }
 
-        // ---- §12 recovery lifecycle ----
+        // ---- recovery lifecycle ----
 
-        /// <summary>
-        /// <c>beginRecovery(accountId, newCustody)</c>: the custodian, or the
-        /// recovery authority the account recorded in the core (R-12-02 —
-        /// read through <see cref="ModuleSupport.RecoveryAuthority"/>, so a
-        /// policy the core's <c>setRecoveryPolicy</c> landed is the one that
-        /// witnesses). A non-zero <paramref name="newCustody"/> — the custody
-        /// the matured reset will rotate to — must itself witness (R-12-02); a
-        /// zero value keeps the current custody and needs no extra witness.
-        /// The delay is the account's own recovery timelock, read from the core
-        /// at the moment the recovery starts. Both that value and the current
-        /// recovery authority are snapshotted beside the record; execution
-        /// requires the live core policy to still match. A later authority or
-        /// timelock change therefore retires the running request instead of
-        /// silently changing what the old witnesses approved.
-        ///
-        /// R-12-14 (frozen escape): the begin gate accepts <c>Active</c> or
-        /// <c>Frozen</c> — freezing must never seal an account shut, and a
-        /// frozen account is exactly the one that needs recovery;
-        /// <c>MigrationRequired</c> is refused (<c>SA_ACCOUNT_STATUS</c>),
-        /// because a recovery reset must not buy execution capability past the
-        /// migration gate. R-12-05: the record snapshots the account's current
-        /// <c>authorityEpoch</c> as <c>authorityEpochAtInit</c>, which
-        /// <see cref="ExecuteRecovery"/> re-verifies before the reset.
-        /// </summary>
+        /// <summary>Starts a request after custody, the configured authority or the guardian quorum approves.</summary>
         public static BigInteger BeginRecovery(UInt160 accountId, UInt160 newCustody)
         {
             ModuleSupport.RequireActiveOrFrozenAccount(accountId);
-            ModuleSupport.RequireCustodyOrRecovery(accountId);
+            BigInteger moduleId = RequireInstalledSeat(accountId);
+            object[] policy = RequirePolicy(accountId, moduleId);
+            RequireRecoveryAuthority(accountId, policy);
             if (newCustody != UInt160.Zero)
             {
                 ExecutionEngine.Assert(newCustody.IsValid, ModuleProtocol.ErrOperationMalformed);
                 ExecutionEngine.Assert(Runtime.CheckWitness(newCustody), ModuleProtocol.ErrUnauthorized);
             }
 
-            object[] existing = LoadRecord(accountId);
-            ExecutionEngine.Assert((int)(BigInteger)existing[FieldStatus] != StatusPending,
+            object[] existing = LoadRecord(accountId, moduleId);
+            ExecutionEngine.Assert((BigInteger)existing[FieldStatus] != StatusPending,
                 ModuleProtocol.ErrRecoveryPending);
-
             BigInteger nonce = (BigInteger)existing[FieldNonce] + 1;
             BigInteger startedAt = Runtime.Time;
-            BigInteger executableAt = startedAt + ModuleSupport.RecoveryTimelockMs(accountId);
-
+            BigInteger executableAt = startedAt + (BigInteger)policy[FieldTimelock];
             object[] record = new object[RecordFields];
             record[FieldNonce] = nonce;
-            record[FieldCustodian] = ModuleSupport.Custody(accountId);
+            record[FieldInitiator] = Runtime.CallingScriptHash;
             record[FieldStartedAt] = startedAt;
             record[FieldExecutableAt] = executableAt;
             record[FieldStatus] = StatusPending;
             record[FieldNewCustody] = newCustody;
             record[FieldAuthorityEpochAtInit] = ModuleSupport.AccountAuthorityEpoch(accountId);
-            Storage.Put(Storage.CurrentContext, ModuleSupport.Key(Prefix_Recovery, accountId), StdLib.Serialize(record));
-
-            object[] policy = new object[2];
-            policy[0] = ModuleSupport.RecoveryAuthority(accountId);
-            policy[1] = ModuleSupport.RecoveryTimelockMs(accountId);
-            Storage.Put(Storage.CurrentContext, ModuleSupport.Key(Prefix_Policy, accountId), StdLib.Serialize(policy));
-
+            record[FieldConfigurationNonceAtInit] = ModuleSupport.AccountConfigurationNonce(accountId);
+            record[FieldPolicyDigest] = PolicyDigest(policy);
+            record[FieldPolicyRevision] = policy[FieldRevision];
+            record[FieldAccountId] = accountId;
+            record[FieldModuleId] = moduleId;
+            Storage.Put(Storage.CurrentContext, RecordKey(accountId, moduleId), StdLib.Serialize(record));
             OnRecoveryStarted(accountId, nonce, executableAt);
             return nonce;
         }
 
-        /// <summary>
-        /// <c>cancelRecovery(accountId)</c>: the custodian, or the recovery
-        /// authority the account recorded. A pending recovery is the only one
-        /// that can be cancelled. R-12-14: the cancel gate accepts
-        /// <c>Active</c> or <c>Frozen</c> and refuses <c>MigrationRequired</c>.
-        /// </summary>
+        /// <summary>Withdraws a pending request after the same authority approves.</summary>
         public static void CancelRecovery(UInt160 accountId)
         {
             ModuleSupport.RequireActiveOrFrozenAccount(accountId);
-            ModuleSupport.RequireCustodyOrRecovery(accountId);
-            object[] record = RequirePending(accountId);
-            BigInteger nonce = (BigInteger)record[FieldNonce];
+            BigInteger moduleId = RequireInstalledSeat(accountId);
+            object[] policy = RequirePolicy(accountId, moduleId);
+            RequireRecoveryAuthority(accountId, policy);
+            object[] record = RequirePending(accountId, moduleId);
             record[FieldStatus] = StatusNone;
-            Storage.Put(Storage.CurrentContext, ModuleSupport.Key(Prefix_Recovery, accountId), StdLib.Serialize(record));
-            OnRecoveryCancelled(accountId, nonce);
+            Storage.Put(Storage.CurrentContext, RecordKey(accountId, moduleId), StdLib.Serialize(record));
+            OnRecoveryCancelled(accountId, (BigInteger)record[FieldNonce]);
         }
 
-        /// <summary>
-        /// <c>executeRecovery(accountId)</c>: permissionless once the account's
-        /// recovery timelock has elapsed. Waiting is the only thing that can
-        /// authorize it, which is why the caller needs no witness at all.
-        /// R-12-05: the account's current <c>authorityEpoch</c> must still
-        /// equal the <c>authorityEpochAtInit</c> the record snapshotted at
-        /// begin time — a freeze, thaw or recovery in between advanced the
-        /// epoch, meaning the configuration this recovery was proposed
-        /// against is gone, so the recovery must be restarted
-        /// (<c>SA_EPOCH_STALE</c>). The recovery authority and timelock snapshotted
-        /// at begin must also still equal the core's live policy; replacing the
-        /// authority (revocation), changing the delay (delay-only rewrite) or
-        /// any other effective policy change retires the pending request. An
-        /// idempotent rewrite of the same values leaves it intact. R-12-14: the
-        /// gate accepts <c>Active</c> or <c>Frozen</c>; <c>MigrationRequired</c>
-        /// is refused.
-        /// The matured decision lands through the core's §12.5
-        /// <c>resetAccount(accountId, newCustody)</c>: this contract's installed
-        /// recovery seat is the one caller the core's reset entry accepts
-        /// (R-12-12), which is what makes the permissionless trigger safe —
-        /// anyone may finish a reset the control subjects already proposed,
-        /// nobody but the seat can start one. The reset removes every module
-        /// instance of the account (this seat included, without onUninstall),
-        /// so the local record written here survives only as inert history
-        /// (R-12-13: a residual module key is no installation fact).
-        /// </summary>
+        /// <summary>Permissionless completion of a matured, unchanged request.</summary>
         public static void ExecuteRecovery(UInt160 accountId)
         {
             ModuleSupport.RequireActiveOrFrozenAccount(accountId);
-            object[] record = RequirePending(accountId);
+            BigInteger moduleId = RequireInstalledSeat(accountId);
+            object[] record = RequirePending(accountId, moduleId);
             ExecutionEngine.Assert(Runtime.Time >= (BigInteger)record[FieldExecutableAt],
                 ModuleProtocol.ErrRecoveryLocked);
-
-            // R-12-05: the epoch the recovery was proposed against must still
-            // be the account's current epoch.
-            ExecutionEngine.Assert(
-                ModuleSupport.AccountAuthorityEpoch(accountId) == (BigInteger)record[FieldAuthorityEpochAtInit],
+            ExecutionEngine.Assert(StdLib.MemoryCompare((ByteString)record[FieldAccountId],
+                (ByteString)(byte[])accountId) == 0
+                && (BigInteger)record[FieldModuleId] == moduleId, ModuleProtocol.ErrProofInvalid);
+            ExecutionEngine.Assert(ModuleSupport.AccountAuthorityEpoch(accountId)
+                == (BigInteger)record[FieldAuthorityEpochAtInit], ModuleProtocol.ErrEpochStale);
+            ExecutionEngine.Assert(ModuleSupport.AccountConfigurationNonce(accountId)
+                == (BigInteger)record[FieldConfigurationNonceAtInit], ModuleProtocol.ErrConfigurationNonceStale);
+            object[] policy = RequirePolicy(accountId, moduleId);
+            ExecutionEngine.Assert((BigInteger)policy[FieldRevision] == (BigInteger)record[FieldPolicyRevision],
                 ModuleProtocol.ErrEpochStale);
-
-            // The decision was made under the policy the core recorded at begin.
-            // A new guardian or a different waiting period is a new decision;
-            // writing the same values again is not.
-            RequirePolicyUnchanged(accountId);
+            ExecutionEngine.Assert(StdLib.MemoryCompare(PolicyDigest(policy),
+                (ByteString)record[FieldPolicyDigest]) == 0, ModuleProtocol.ErrEpochStale);
 
             BigInteger nonce = (BigInteger)record[FieldNonce];
-            UInt160 recoveryAuthority = ModuleSupport.RecoveryAuthority(accountId);
-            ExecutionEngine.Assert(recoveryAuthority != UInt160.Zero && recoveryAuthority.IsValid,
-                ModuleProtocol.ErrAccountStatus);
-
+            UInt160 newCustody = (UInt160)record[FieldNewCustody];
+            // Capture the composition while the descriptors are still readable; the reset deletes every instance.
+            object[] composition = ComposeResetActions(accountId);
             record[FieldStatus] = StatusExecuted;
-            Storage.Put(Storage.CurrentContext, ModuleSupport.Key(Prefix_Recovery, accountId), StdLib.Serialize(record));
-            Storage.Put(Storage.CurrentContext, ModuleSupport.Key(Prefix_Nonce, accountId), nonce);
-
-            // The operative transition: the core's six-step §12.5 reset (every
-            // instance removed, nonce channels and migration state cleared,
-            // custody rotated to the declared target, registration defaults
-            // restored, epoch/nonce/revision advanced, AccountReset notified).
-            // Any fault inside it reverts this whole transaction with the
-            // module-side writes above (R-12-08).
-            ModuleSupport.ResetAccount(accountId, (UInt160)record[FieldNewCustody]);
-
-            OnRecoveryExecuted(accountId, nonce, recoveryAuthority);
+            Storage.Put(Storage.CurrentContext, RecordKey(accountId, moduleId), StdLib.Serialize(record));
+            Storage.Put(Storage.CurrentContext, NonceKey(accountId, moduleId), nonce);
+            // The only native landing this module may reach. The core re-checks
+            // that the caller is the installed, code-bound recovery seat and
+            // removes every instance in the same frame.
+            ModuleSupport.ResetAccount(accountId, newCustody);
+            // The reset retired every instance id, so each reinstalled module adopts its stale per-account pointer
+            // (BindInstance accepts an id that is no longer installed). Land the install-only composition inside the
+            // same transaction and the same reset epoch; a fault in any install rolls back the reset with the whole
+            // transaction.
+            ModuleSupport.ApplyConfigurationActions(accountId, composition);
+            ModuleSupport.DeleteInstancePrefix(Prefix_Policy, accountId, moduleId);
+            OnRecoveryExecuted(accountId, nonce, newCustody);
         }
 
-        /// <summary>
-        /// <c>getRecoveryStatus(accountId) → [nonce, custodian, startedAt,
-        /// executableAt, status, newCustody, authorityEpochAtInit]</c>, or an
-        /// empty array when no recovery was ever started. The trailing
-        /// newCustody is the custody the matured reset would rotate to (zero
-        /// keeps the current one); authorityEpochAtInit is the R-12-05 epoch
-        /// snapshot the execution re-verifies.
-        /// </summary>
+        /// <summary>Rebuilds the account's installed module set as install-only core actions.</summary>
+        private static object[] ComposeResetActions(UInt160 accountId)
+        {
+            object[] actions = new object[CompositionActionLimit];
+            int at = AppendInstallActions(accountId, "recovery", actions, 0, -1);
+            at = AppendInstallActions(accountId, "validator", actions, at, 1);
+            at = AppendInstallActions(accountId, "validator", actions, at, 0);
+            at = AppendInstallActions(accountId, "hook", actions, at, -1);
+            object[] composed = new object[at];
+            for (int i = 0; i < at; i++) composed[i] = actions[i];
+            return composed;
+        }
+
+        /// <summary>Appends install actions for one module kind, advancing the getModules cursor so more instances
+        /// than one page still reach the composition. <paramref name="governanceFilter"/> selects every instance
+        /// (-1), governance-capable validators only (1) or plain validators only (0).</summary>
+        private static int AppendInstallActions(UInt160 accountId, string moduleType, object[] actions, int at,
+            int governanceFilter)
+        {
+            BigInteger cursor = BigInteger.Zero;
+            while (at < CompositionActionLimit)
+            {
+                object[] page = ModuleSupport.InstalledModulePage(accountId, moduleType, cursor,
+                    CompositionPageLimit);
+                object[] ids = (object[])page[0];
+                if (ids.Length == 0) return at;
+                for (int i = 0; i < ids.Length && at < CompositionActionLimit; i++)
+                {
+                    object[] descriptor = ModuleSupport.ModuleDescriptor(accountId, (BigInteger)ids[i]);
+                    if (governanceFilter >= 0
+                        && (bool)descriptor[ModuleSupport.FieldModuleGovernance] != (governanceFilter == 1))
+                        continue;
+                    actions[at++] = new object[]
+                    {
+                        ActionInstallModule,
+                        (BigInteger)descriptor[ModuleSupport.FieldModuleType],
+                        (UInt160)descriptor[ModuleSupport.FieldModuleContractHash],
+                        (ByteString)descriptor[ModuleSupport.FieldModuleProfileHash],
+                        new object[0],
+                    };
+                }
+                BigInteger next = (BigInteger)page[1];
+                if (next == 0) return at;
+                cursor = next;
+            }
+            return at;
+        }
+
+        // ---- reads ----
+
+        /// <summary>Returns the twelve-field request record, or empty when none exists.</summary>
         [Safe]
         public static object[] GetRecoveryStatus(UInt160 accountId)
         {
-            object[] record = LoadRecord(accountId);
-            if ((int)(BigInteger)record[FieldStatus] == StatusNone) return new object[0];
-            return new object[]
-            {
-                record[FieldNonce], record[FieldCustodian], record[FieldStartedAt],
-                record[FieldExecutableAt], record[FieldStatus], record[FieldNewCustody],
-                record[FieldAuthorityEpochAtInit],
-            };
+            BigInteger moduleId = ResolveSeat(accountId);
+            if (moduleId < 1) return new object[0];
+            object[] record = LoadRecord(accountId, moduleId);
+            return (BigInteger)record[FieldStatus] == StatusNone ? new object[0] : record;
         }
 
-        /// <summary>
-        /// <c>getRecoveryPolicySnapshot(accountId)</c> → <c>[authority, timelockMs]</c>,
-        /// or an empty array when no request is recorded. Clients compare this with
-        /// the core's live policy to tell whether a pending request is still
-        /// executable; a mismatch faults completion with <c>SA_EPOCH_STALE</c>.
-        /// </summary>
+        /// <summary>Returns <c>[guardians[], threshold, timelockMs, authority, revision, digest]</c>, or empty.</summary>
         [Safe]
         public static object[] GetRecoveryPolicySnapshot(UInt160 accountId)
         {
-            ByteString? data = Storage.Get(Storage.CurrentContext, ModuleSupport.Key(Prefix_Policy, accountId));
-            if (data == null) return new object[0];
-            object[] policy = (object[])StdLib.Deserialize(data!);
-            ExecutionEngine.Assert(policy.Length == 2, ModuleProtocol.ErrOperationMalformed);
-            return policy;
+            BigInteger moduleId = ResolveSeat(accountId);
+            if (moduleId < 1) return new object[0];
+            object[] policy = LoadPolicy(accountId, moduleId);
+            if (policy.Length == 0) return new object[0];
+            return new object[]
+            {
+                policy[FieldGuardians], policy[FieldThreshold], policy[FieldTimelock],
+                policy[FieldAuthority], policy[FieldRevision], PolicyDigest(policy),
+            };
         }
 
-        // Bind a reviewed transaction to this instance's record and current core
-        // configuration. A cancellation/replacement or reinstallation must force a new review.
-        public static void CancelReviewedRecovery(UInt160 accountId, BigInteger nonce, BigInteger configurationNonce)
-        {
-            RequireReviewedRecord(accountId, nonce, configurationNonce);
-            CancelRecovery(accountId);
-        }
-
-        public static void ExecuteReviewedRecovery(UInt160 accountId, BigInteger nonce, BigInteger configurationNonce)
-        {
-            RequireReviewedRecord(accountId, nonce, configurationNonce);
-            ExecuteRecovery(accountId);
-        }
-
-        private static void RequireReviewedRecord(UInt160 accountId, BigInteger nonce, BigInteger configurationNonce)
-        {
-            ExecutionEngine.Assert(ModuleSupport.AccountConfigurationNonce(accountId) == configurationNonce,
-                ModuleProtocol.ErrEpochStale);
-            ExecutionEngine.Assert((BigInteger)RequirePending(accountId)[FieldNonce] == nonce, ModuleProtocol.ErrEpochStale);
-        }
-
-        /// <summary>The nonce of the last executed recovery, or 0.</summary>
         [Safe]
         public static BigInteger GetExecutedRecoveryNonce(UInt160 accountId)
         {
-            ByteString? data = Storage.Get(Storage.CurrentContext, ModuleSupport.Key(Prefix_Nonce, accountId));
+            BigInteger moduleId = ResolveSeat(accountId);
+            if (moduleId < 1) return BigInteger.Zero;
+            ByteString? data = Storage.Get(Storage.CurrentContext, NonceKey(accountId, moduleId));
             return data == null ? BigInteger.Zero : (BigInteger)data!;
         }
 
-        // ---- internals ----
+        // ---- policy ----
 
-        private static object[] LoadRecord(UInt160 accountId)
+        private static void ApplyPolicy(UInt160 accountId, BigInteger moduleId, object[] data)
         {
-            ByteString? data = Storage.Get(Storage.CurrentContext, ModuleSupport.Key(Prefix_Recovery, accountId));
+            ExecutionEngine.Assert(data != null, ModuleProtocol.ErrOperationMalformed);
+            ExecutionEngine.Assert(data!.Length == 3 || data.Length == 4, ModuleProtocol.ErrOperationMalformed);
+            object[] guardians = ModuleSupport.Copy((object[])data[0]);
+            ExecutionEngine.Assert(guardians.Length >= 1 && guardians.Length <= MaxGuardians,
+                ModuleProtocol.ErrModuleLimitMembers);
+            ExecutionEngine.Assert(data[1] is BigInteger && data[2] is BigInteger,
+                ModuleProtocol.ErrOperationMalformed);
+            BigInteger threshold = (BigInteger)data[1];
+            BigInteger timelock = (BigInteger)data[2];
+            ExecutionEngine.Assert(threshold >= 1 && threshold <= guardians.Length,
+                ModuleProtocol.ErrModuleLimitThreshold);
+            ExecutionEngine.Assert(timelock >= (BigInteger)RecoveryTimelockMinMs
+                && timelock <= (BigInteger)RecoveryTimelockMaxMs, ModuleProtocol.ErrOperationMalformed);
+
+            for (int i = 0; i < guardians.Length; i++)
+            {
+                ExecutionEngine.Assert(guardians[i] is ByteString, ModuleProtocol.ErrOperationMalformed);
+                UInt160 guardian = (UInt160)guardians[i];
+                ExecutionEngine.Assert(guardian != UInt160.Zero && guardian.IsValid,
+                    ModuleProtocol.ErrOperationMalformed);
+                for (int j = 0; j < i; j++)
+                    ExecutionEngine.Assert((UInt160)guardians[j] != guardian, ModuleProtocol.ErrOperationMalformed);
+            }
+
+            UInt160 authority = UInt160.Zero;
+            if (data.Length == 4)
+            {
+                ExecutionEngine.Assert(data[3] is ByteString, ModuleProtocol.ErrOperationMalformed);
+                authority = (UInt160)data[3];
+                ExecutionEngine.Assert(authority == UInt160.Zero || authority.IsValid,
+                    ModuleProtocol.ErrOperationMalformed);
+            }
+
+            BigInteger revision = LoadRevision(accountId, moduleId) + 1;
+            object[] policy = new object[] { guardians, threshold, timelock, authority, revision };
+            Storage.Put(Storage.CurrentContext, PolicyKey(accountId, moduleId), StdLib.Serialize(policy));
+            OnRecoveryPolicyUpdated(accountId, revision);
+        }
+
+        private static void RequireRecoveryAuthority(UInt160 accountId, object[] policy)
+        {
+            UInt160 custody = ModuleSupport.Custody(accountId);
+            if (custody != UInt160.Zero && custody.IsValid && Runtime.CheckWitness(custody)) return;
+            UInt160 authority = (UInt160)policy[FieldAuthority];
+            if (authority != UInt160.Zero && authority.IsValid && Runtime.CheckWitness(authority)) return;
+            object[] guardians = (object[])policy[FieldGuardians];
+            BigInteger threshold = (BigInteger)policy[FieldThreshold];
+            int approved = 0;
+            for (int i = 0; i < guardians.Length; i++)
+                if (Runtime.CheckWitness((UInt160)guardians[i])) approved++;
+            ExecutionEngine.Assert((BigInteger)approved >= threshold, ModuleProtocol.ErrUnauthorized);
+        }
+
+        private static object[] RequirePolicy(UInt160 accountId, BigInteger moduleId)
+        {
+            object[] policy = LoadPolicy(accountId, moduleId);
+            ExecutionEngine.Assert(policy.Length == PolicyFields,
+                ModuleProtocol.ErrOperationMalformed + " recovery policy not configured");
+            return policy;
+        }
+
+        private static object[] LoadPolicy(UInt160 accountId, BigInteger moduleId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, PolicyKey(accountId, moduleId));
+            if (data == null) return new object[0];
+            object[] policy = (object[])StdLib.Deserialize(data!);
+            ExecutionEngine.Assert(policy.Length == PolicyFields, ModuleProtocol.ErrOperationMalformed);
+            return policy;
+        }
+
+        private static BigInteger LoadRevision(UInt160 accountId, BigInteger moduleId)
+        {
+            object[] policy = LoadPolicy(accountId, moduleId);
+            return policy.Length == 0 ? BigInteger.Zero : (BigInteger)policy[FieldRevision];
+        }
+
+        private static ByteString PolicyDigest(object[] policy) =>
+            CryptoLib.Sha256(StdLib.Serialize(policy));
+
+        // ---- records ----
+
+        private static object[] RequirePending(UInt160 accountId, BigInteger moduleId)
+        {
+            object[] record = LoadRecord(accountId, moduleId);
+            ExecutionEngine.Assert((BigInteger)record[FieldStatus] == StatusPending,
+                ModuleProtocol.ErrRecoveryPending);
+            return record;
+        }
+
+        private static object[] LoadRecord(UInt160 accountId, BigInteger moduleId)
+        {
+            ByteString? data = Storage.Get(Storage.CurrentContext, RecordKey(accountId, moduleId));
             if (data == null) return EmptyRecord();
             object[] record = (object[])StdLib.Deserialize(data!);
             ExecutionEngine.Assert(record.Length == RecordFields, ModuleProtocol.ErrOperationMalformed);
@@ -359,38 +424,56 @@ namespace SmartAccount.Modules
         {
             object[] record = new object[RecordFields];
             record[FieldNonce] = BigInteger.Zero;
-            record[FieldCustodian] = UInt160.Zero;
+            record[FieldInitiator] = UInt160.Zero;
             record[FieldStartedAt] = BigInteger.Zero;
             record[FieldExecutableAt] = BigInteger.Zero;
             record[FieldStatus] = StatusNone;
             record[FieldNewCustody] = UInt160.Zero;
             record[FieldAuthorityEpochAtInit] = BigInteger.Zero;
+            record[FieldConfigurationNonceAtInit] = BigInteger.Zero;
+            record[FieldPolicyDigest] = new byte[0];
+            record[FieldPolicyRevision] = BigInteger.Zero;
+            record[FieldAccountId] = UInt160.Zero;
+            record[FieldModuleId] = BigInteger.Zero;
             return record;
         }
 
-        private static object[] RequirePending(UInt160 accountId)
+        // ---- instance binding ----
+
+        /// <summary>The account's current seat, asserted to be this contract's live, bound instance.</summary>
+        private static BigInteger RequireInstalledSeat(UInt160 accountId)
         {
-            object[] record = LoadRecord(accountId);
-            ExecutionEngine.Assert((int)(BigInteger)record[FieldStatus] == StatusPending,
-                ModuleProtocol.ErrRecoveryPending);
-            return record;
+            BigInteger moduleId = ModuleSupport.RequireInstanceBinding(accountId);
+            object[] descriptor = ModuleSupport.ModuleDescriptor(accountId, moduleId);
+            ExecutionEngine.Assert((UInt160)descriptor[ModuleSupport.FieldModuleContractHash]
+                == Runtime.ExecutingScriptHash, ModuleProtocol.ErrUnauthorized);
+            ExecutionEngine.Assert((BigInteger)descriptor[ModuleSupport.FieldModuleType]
+                == ModuleProtocol.ModuleTypeRecovery, ModuleProtocol.ErrUnauthorized);
+            ModuleSupport.RequireLiveCodeBinding(Runtime.ExecutingScriptHash, descriptor);
+            return moduleId;
         }
 
-        /// <summary>
-        /// The begin-time policy must still be the core's policy. Authority
-        /// replacement revokes old requests, a timelock change retires them,
-        /// and an idempotent rewrite of both values leaves them executable.
-        /// </summary>
-        private static void RequirePolicyUnchanged(UInt160 accountId)
+        /// <summary>Non-throwing seat resolution for public reads.</summary>
+        private static BigInteger ResolveSeat(UInt160 accountId)
         {
-            ByteString? data = Storage.Get(Storage.CurrentContext, ModuleSupport.Key(Prefix_Policy, accountId));
-            ExecutionEngine.Assert(data != null, ModuleProtocol.ErrOperationMalformed);
-            object[] policy = (object[])StdLib.Deserialize(data!);
-            ExecutionEngine.Assert(policy.Length == 2, ModuleProtocol.ErrOperationMalformed);
-            ExecutionEngine.Assert(
-                (UInt160)policy[0] == ModuleSupport.RecoveryAuthority(accountId) &&
-                (BigInteger)policy[1] == ModuleSupport.RecoveryTimelockMs(accountId),
-                ModuleProtocol.ErrEpochStale);
+            BigInteger moduleId = ModuleSupport.Instance(accountId);
+            if (moduleId < 1) return BigInteger.Zero;
+            object[]? descriptor = ModuleSupport.TryModuleDescriptor(accountId, moduleId);
+            if (descriptor == null) return BigInteger.Zero;
+            if ((UInt160)descriptor![ModuleSupport.FieldModuleContractHash] != Runtime.ExecutingScriptHash)
+                return BigInteger.Zero;
+            if ((BigInteger)descriptor[ModuleSupport.FieldModuleType] != ModuleProtocol.ModuleTypeRecovery)
+                return BigInteger.Zero;
+            return moduleId;
         }
+
+        private static byte[] RecordKey(UInt160 accountId, BigInteger moduleId) =>
+            ModuleSupport.Key(Prefix_Recovery, accountId, moduleId);
+
+        private static byte[] NonceKey(UInt160 accountId, BigInteger moduleId) =>
+            ModuleSupport.Key(Prefix_Nonce, accountId, moduleId);
+
+        private static byte[] PolicyKey(UInt160 accountId, BigInteger moduleId) =>
+            ModuleSupport.Key(Prefix_Policy, accountId, moduleId);
     }
 }

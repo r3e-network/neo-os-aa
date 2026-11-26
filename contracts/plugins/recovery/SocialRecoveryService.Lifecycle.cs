@@ -128,7 +128,9 @@ namespace Neo.SmartContract.Examples
             if (requestType == "neodid_recovery_ticket")
             {
                 OracleRecoveryRequest context = GetOracleRecoveryRequest(requestId);
-                ExecutionEngine.Assert(context.AccountId != null && context.AccountId.Length > 0, "Unknown recovery oracle request");
+                // An unknown request id deserializes to the default record (AccountId zero);
+                // UInt160 is always 20 bytes, so a length test could never detect it.
+                ExecutionEngine.Assert(context.AccountId != UInt160.Zero, "Unknown recovery oracle request");
                 ExecutionEngine.Assert(Runtime.CallingScriptHash == GetMorpheusOracle(context.AccountId), "Unauthorized oracle");
 
                 DeleteOracleRecoveryRequest(requestId);
@@ -151,7 +153,7 @@ namespace Neo.SmartContract.Examples
             if (requestType == "neodid_action_ticket")
             {
                 OracleActionRequest context = GetOracleActionRequest(requestId);
-                ExecutionEngine.Assert(context.AccountId != null && context.AccountId.Length > 0, "Unknown action oracle request");
+                ExecutionEngine.Assert(context.AccountId != UInt160.Zero, "Unknown action oracle request");
                 ExecutionEngine.Assert(Runtime.CallingScriptHash == GetMorpheusOracle(context.AccountId), "Unauthorized oracle");
 
                 DeleteOracleActionRequest(requestId);

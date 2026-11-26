@@ -2,7 +2,6 @@
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
-import os
 from pathlib import Path
 import secrets
 import shutil
@@ -71,7 +70,7 @@ class RecordingHandler(BaseHTTPRequestHandler):
             else:
                 body = {"result": {"state": "FAULT", "gasconsumed": "1000",
                                    "exception": "local regression refusal", "stack": []}}
-        elif method == "invokefunction" and profile == "source":
+        elif method == "invokefunction" and profile == "proxy":
             body = {"result": {"state": "HALT", "gasconsumed": "1", "stack": [{"type": "Integer", "value": "0"}]}}
         elif method == "invokefunction" and profile == "wallet":
             body = {"result": {"state": "HALT", "gasconsumed": "1", "stack": [{"type": "Hash160", "value": "0x" + "0" * 40}]}}
@@ -95,7 +94,7 @@ class ProbeIsolationTest(unittest.TestCase):
         self.workdir = Path(self.temp.name)
 
     def env(self, **overrides):
-        env = {key: os.environ[key] for key in ("PATH", "HOME", "TMPDIR", "LANG") if key in os.environ}
+        env = suite._isolated_node_env()
         env["NODE_ENV"] = "test"
         env.update(overrides)
         return env
@@ -160,27 +159,6 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
         self.assertEqual(done.returncode, 0, "could not derive the disposable account script hash")
         return "0x" + done.stdout.strip()
 
-    def source_fixture(self, rpc_url, private_key):
-        base = self.relay_fixture(rpc_url)
-        operation = {"type": "Struct", "value": [
-            {"type": "Hash160", "value": base["target"]}, {"type": "String", "value": "transfer"},
-            {"type": "Array", "value": base["methodArgs"]}, {"type": "Integer", "value": "0"},
-            {"type": "Integer", "value": base["deadline"]},
-            {"type": "ByteArray", "value": "0x" + base["signatureHex"]},
-        ]}
-        direct = {"scriptHash": base["core"], "operation": "executeUserOp",
-                  "args": [{"type": "Hash160", "value": base["accountId"]}, operation]}
-        invalid = json.loads(json.dumps(direct))
-        invalid["args"][1]["value"][-1]["value"] = "0x" + "00" * 64
-        sponsored = {"scriptHash": base["core"], "operation": "executeSponsoredUserOp", "args": [
-            *direct["args"], {"type": "Hash160", "value": base["sponsored"]["paymaster"]},
-            {"type": "Hash160", "value": base["sponsored"]["sponsor"]}, {"type": "Integer", "value": "1"},
-        ]}
-        return {"rpcUrl": rpc_url, "core": base["core"], "accountId": base["accountId"],
-                "proxy": base["methodArgs"][0]["value"], "buyer": base["methodArgs"][1]["value"],
-                "owner": base["otherHash"], "relay": self.neo_script_hash(private_key), "gas": base["target"],
-                "paymaster": base["sponsored"]["paymaster"], "sponsor": base["sponsored"]["sponsor"], "amount": "1",
-                "invocations": {"invalidSignature": invalid, "direct": direct, "sponsored": sponsored}}
 
     def wallet_request(self, rpc_url, private_key):
         base = self.relay_fixture(rpc_url)
@@ -222,7 +200,7 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
             "http://127.0.0.1:80",
             "http://[::1]:80",
         ]
-        for script in ("relay_probe.mjs", "source_proxy_relay_probe.mjs", "wallet_shim_sign_proxy_transfer.mjs"):
+        for script in ("relay_probe.mjs", "wallet_shim_sign_proxy_transfer.mjs"):
             for url in rejected:
                 with self.subTest(script=script, url=url):
                     env = self.env(RELAY_PRIVATE_KEY_HEX="not-a-private-key")
@@ -232,7 +210,7 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
                     self.assertTrue(LOOPBACK_ERROR in output, "URL guard did not run before key/DER loading")
 
     def test_production_context_fails_before_secret_reads(self):
-        for script in ("relay_probe.mjs", "source_proxy_relay_probe.mjs", "wallet_shim_sign_proxy_transfer.mjs"):
+        for script in ("relay_probe.mjs", "wallet_shim_sign_proxy_transfer.mjs"):
             for name in ("NODE_ENV", "VERCEL_ENV"):
                 with self.subTest(script=script, variable=name):
                     env = self.env(RELAY_PRIVATE_KEY_HEX="not-a-private-key", **{name: " Production "})
@@ -245,26 +223,23 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
     def test_missing_or_malformed_relay_key_fails_before_any_post(self):
         cases = [("missing", None), ("empty", ""), ("short", "0" * 63), ("long", "0" * 65),
                  ("prefixed", "0x" + "0" * 64), ("non-hex", "g" * 64), ("whitespace", " " + "0" * 64)]
-        for script in ("relay_probe.mjs", "source_proxy_relay_probe.mjs"):
-            fixture_key = secrets.token_hex(32)
-            for label, private_key in cases:
-                with self.subTest(script=script, key=label):
-                    rpc, rpc_url = self.start_server(is_rpc=True)
-                    fixture = self.relay_fixture(rpc_url) if script == "relay_probe.mjs" \
-                        else self.source_fixture(rpc_url, fixture_key)
-                    env = self.env()
-                    if private_key is not None:
-                        env["RELAY_PRIVATE_KEY_HEX"] = private_key
-                    done = self.run_entry(script, fixture, env)
-                    output = done.stdout + done.stderr
-                    self.assertNotEqual(done.returncode, 0, "missing or malformed relay key was accepted")
-                    self.assertTrue("RELAY_PRIVATE_KEY_HEX must be exactly 64 hexadecimal characters" in output,
-                                    "strict key validation did not run before SDK/account initialization")
-                    self.assert_no_requests(rpc, "missing or malformed relay key reached the RPC POST trap")
+        for label, private_key in cases:
+            with self.subTest(key=label):
+                rpc, rpc_url = self.start_server(is_rpc=True)
+                fixture = self.relay_fixture(rpc_url)
+                env = self.env()
+                if private_key is not None:
+                    env["RELAY_PRIVATE_KEY_HEX"] = private_key
+                done = self.run_entry("relay_probe.mjs", fixture, env)
+                output = done.stdout + done.stderr
+                self.assertNotEqual(done.returncode, 0, "missing or malformed relay key was accepted")
+                self.assertTrue("RELAY_PRIVATE_KEY_HEX must be exactly 64 hexadecimal characters" in output,
+                                "strict key validation did not run before SDK/account initialization")
+                self.assert_no_requests(rpc, "missing or malformed relay key reached the RPC POST trap")
 
     def test_literal_loopback_urls_pass_the_guard(self):
         for url in ("http://127.0.0.1:20000", "http://[::1]:20000/path"):
-            for script in ("relay_probe.mjs", "source_proxy_relay_probe.mjs", "wallet_shim_sign_proxy_transfer.mjs"):
+            for script in ("relay_probe.mjs", "wallet_shim_sign_proxy_transfer.mjs"):
                 with self.subTest(script=script, url=url):
                     env = self.env(RELAY_PRIVATE_KEY_HEX="not-a-private-key")
                     done = self.run_entry(script, {"rpcUrl": url, "feePayerKeyDer": str(self.workdir / "absent.der")}, env)
@@ -297,28 +272,6 @@ process.stdout.write(new wallet.Account(process.env.LOCALCHAIN_TEST_PRIVATE_KEY)
         self.assertTrue("invokescript" in rpc.rpc_methods, "the relay route never reached the loopback RPC node")
         self.assertFalse("sendrawtransaction" in rpc.rpc_methods, "the refusing RPC stub unexpectedly broadcast")
         self.assertFalse(trap.requests, "inherited SA/MORPHEUS/UPSTASH/VITE configuration was used externally")
-
-    def test_source_clears_inherited_external_configuration(self):
-        rpc, rpc_url = self.start_server(is_rpc=True, profile="source")
-        trap, trap_url = self.start_server()
-        private_key = secrets.token_hex(32)
-        env = self.env(
-            RELAY_PRIVATE_KEY_HEX=private_key,
-            UPSTASH_REDIS_REST_URL=trap_url,
-            UPSTASH_REDIS_REST_TOKEN="local-upstash-token",
-            SA_RELAY_MAINNET_RPC_URL=trap_url,
-            MORPHEUS_PAYMASTER_ENDPOINT=trap_url,
-            MORPHEUS_PAYMASTER_API_TOKEN="local-paymaster-token",
-            VITE_SA_RELAY_RPC_URL=trap_url,
-            VITE_NEO_RPC_URL=trap_url,
-        )
-        done = self.run_entry("source_proxy_relay_probe.mjs", self.source_fixture(rpc_url, private_key), env)
-        stderr = suite._redact_relay_stderr(done.stderr, private_key)
-        self.assertEqual(done.returncode, 0, stderr[-500:])
-        proof = json.loads(done.stdout)
-        self.assertEqual([row["name"] for row in proof["cases"]], ["invalidSignature", "direct", "sponsored"])
-        self.assertTrue("invokefunction" in rpc.rpc_methods, "the source probe never reached its loopback RPC")
-        self.assert_no_requests(trap, "source probe used inherited external configuration")
 
     def test_wallet_does_not_use_inherited_external_configuration(self):
         rpc, rpc_url = self.start_server(is_rpc=True, profile="wallet")
@@ -382,16 +335,14 @@ process.exit(0);
 
     def test_localchain_direct_rpc_rejects_307_308(self):
         for status in (307, 308):
-            for script in ("source_proxy_relay_probe.mjs", "wallet_shim_sign_proxy_transfer.mjs",
+            for script in ("wallet_shim_sign_proxy_transfer.mjs",
                            "sdk_proxy_builder_fixture.mjs"):
                 with self.subTest(status=status, script=script):
                     private_key = secrets.token_hex(32)
-                    profile = "wallet" if script.startswith("wallet_") else "source"
+                    profile = "wallet" if script.startswith("wallet_") else "proxy"
                     source, source_url, target = self.redirect_pair(status, is_rpc=True, profile=profile)
                     env = self.env(RELAY_PRIVATE_KEY_HEX=private_key)
-                    if script.startswith("source_"):
-                        request = self.source_fixture(source_url, private_key)
-                    elif script.startswith("wallet_"):
+                    if script.startswith("wallet_"):
                         request = self.wallet_request(source_url, private_key)
                     else:
                         base = self.relay_fixture(source_url)

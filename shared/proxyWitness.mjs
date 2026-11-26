@@ -5,16 +5,19 @@
  * CALL core.verify`) carries no secret: the witness has an empty invocation
  * script and nothing to sign. The chain accepts it only because the script
  * calls `core.verify(accountId)`, which in the Verification trigger requires
- * the whole transaction to be a single `executeUserOp` / `executeUserOps` call
- * on that core for that account (contracts/native/SmartAccount/SmartAccount.cs,
- * F-1). The proxy witness therefore has exactly one safe construction and it
- * lives here, so the SDK, the relay route and the wallet frontend cannot each
- * grow their own:
+ * the whole transaction to be a single `executeUserOp` call on that core for
+ * that account (contracts/native/SmartAccount/SmartAccount.cs, F-1). The proxy
+ * witness therefore has exactly one safe construction and it lives here, so the
+ * SDK, the relay route and the wallet frontend cannot each grow their own:
  *
  * - the transaction script is one shaped v4 call — nothing else;
- * - every operation inside it is a 13-field envelope;
+ * - the single argument is one complete 13-field envelope, never a list;
  * - the proxy signer's rule is exactly one Allow/CalledByContract(core);
  * - the proxy is never the fee payer.
+ *
+ * The v4.0 `executeUserOps` batch entry (and the sponsored entries of the
+ * retired custom wallet) are refused by name: this path preflights and
+ * broadcasts, so a batch invocation cannot be downgraded onto it.
  *
  * The v3 verify-scope target and the Or(core, target) witness rule are gone:
  * the operation's own 13-field target is the only authorized target, and it is
@@ -30,7 +33,10 @@
 import { encodeDynamicCall, hashValue, nativeProxyVerificationScript } from './nativeSmartAccount.mjs';
 
 const OPERATION_FIELDS = 13;
-const ACCOUNT_ENTRYPOINTS = ['executeUserOp', 'executeUserOps'];
+/** The only application entrypoint a v4.1 proxy witness may authorize. */
+const ACCOUNT_ENTRYPOINT = 'executeUserOp';
+// Named so the refusal is explicit instead of a generic "unknown invocation".
+const RETIRED_BATCH_ENTRYPOINTS = ['executeUserOps', 'executeSponsoredUserOps', 'executeSponsoredUserOp'];
 const FEE_PAYER_SCOPES = ['None', 'CalledByEntry', 'CustomContracts', 'Global'];
 const MAX_CUSTOM_CONTRACTS = 16;
 /** The native kernel's proxy address binds CallFlags.ReadOnly (5). */
@@ -93,27 +99,37 @@ function createProxyWitness({
 }
 
 function operationFields(op, name) {
-  const fields = ['Struct', 'Array'].includes(op?.type) ? op.value : null;
+  // The client's codec emits the envelope as an Array value; a Struct or a list
+  // of operations is a different byte string and is refused rather than
+  // re-spelled, so the witness authorizes exactly the plan's operation.
+  const fields = op?.type === 'Array' ? op.value : null;
   if (!Array.isArray(fields) || fields.length !== OPERATION_FIELDS) {
-    throw new Error(`${name} must be a ${OPERATION_FIELDS}-field user operation`);
+    throw new Error(
+      `${name} must be a ${OPERATION_FIELDS}-field user operation Array; the batch list is retired in v4.1`,
+    );
   }
   return fields;
 }
 
 /**
  * The one application call the proxy witness may authorize:
- * core.executeUserOp(accountId, op) or core.executeUserOps(accountId, ops),
- * exactly two arguments, nothing else in the script. Any other entrypoint, a
- * second call, another core or another account is refused here rather than
- * left for the node's verifier to reject.
+ * core.executeUserOp(accountId, operation), exactly two arguments, nothing else
+ * in the script. Any other entrypoint, a batch list, a second call, another
+ * core or another account is refused here rather than left for the node's
+ * verifier to reject.
  */
 function buildExecuteUserOpScript({ coreHash, accountId, invocation }) {
   const core = hash160(coreHash, 'coreHash');
   const account = hash160(accountId, 'accountId');
   if (!invocation || typeof invocation !== 'object') throw new Error('invocation required');
   const operation = String(invocation.operation || '');
-  if (!ACCOUNT_ENTRYPOINTS.includes(operation)) {
-    throw new Error(`proxy witness requires an executeUserOp or executeUserOps invocation, not ${operation || 'nothing'}`);
+  if (RETIRED_BATCH_ENTRYPOINTS.includes(operation)) {
+    throw new Error(
+      `protocol-incompatible: ${operation} is retired in v4.1; the proxy witness authorizes executeUserOp only`,
+    );
+  }
+  if (operation !== ACCOUNT_ENTRYPOINT) {
+    throw new Error(`proxy witness requires an executeUserOp invocation, not ${operation || 'nothing'}`);
   }
   if (hash160(invocation.scriptHash, 'invocation.scriptHash') !== core) {
     throw new Error('invocation names a different core');
@@ -128,14 +144,13 @@ function buildExecuteUserOpScript({ coreHash, accountId, invocation }) {
   if (!namesAccount(args[0], accountArgument)) {
     throw new Error(`${operation} does not name this account`);
   }
-  const batch = operation === 'executeUserOps';
-  const ops = batch ? (args[1]?.type === 'Array' ? args[1].value : null) : [args[1]];
-  if (!Array.isArray(ops) || ops.length === 0) throw new Error(`${operation} requires at least one user operation`);
-  ops.forEach((op, index) => operationFields(op, `user operation ${index}`));
+  // The envelope is rebuilt from its validated fields as one Array value, so a
+  // Struct spelling of the same 13 fields cannot change the authorized bytes.
+  const fields = operationFields(args[1], `${operation} operation`);
   return encodeDynamicCall(
     core,
-    operation,
-    [accountArgument, batch ? { type: 'Array', value: ops } : ops[0]],
+    ACCOUNT_ENTRYPOINT,
+    [accountArgument, { type: 'Array', value: fields }],
     INVOCATION_CALL_FLAGS,
   );
 }
@@ -180,7 +195,7 @@ function feePayerSigner({ feePayer, feePayerScope, feePayerAllowedContracts }) {
 
 /**
  * The complete proxy-witness account transaction: the shape-bound
- * executeUserOp(s) script, the fee-paying signer, the restricted WitnessRules
+ * executeUserOp script, the fee-paying signer, the restricted WitnessRules
  * proxy signer and the proxy verification witness.
  *
  * `proxyHash` must be the address the submitting core derives for `accountId`.

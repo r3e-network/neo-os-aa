@@ -75,14 +75,6 @@
       ]
     },
     {
-      "error": "SA_GAS_BUDGET_EXCEEDED",
-      "input": "callback burning past its Plan B budget in Verification, and again in Application",
-      "observable": "throw",
-      "status": "uncovered",
-      "coveringTestFiles": [],
-      "note": "a callback that burns past its Plan B budget needs the gas probe harness; the budget suite asserts gas outcomes, not the code"
-    },
-    {
       "error": "SA_HOOK_DATA_TOO_LARGE",
       "input": "hook returning 513 bytes of hookData",
       "observable": "throw",

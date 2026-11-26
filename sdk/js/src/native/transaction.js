@@ -14,7 +14,7 @@
  * - index 0 is the fee payer (never the account proxy);
  * - for an execution plan index 1 is the account proxy, whose witness carries
  *   no signature and is accepted only because the script is one shaped
- *   `executeUserOp(s)` call (rule Allow/CalledByContract(core));
+ *   `executeUserOp` call (rule Allow/CalledByContract(core));
  * - every other signer is an authority the plan names (custody, or recovery for
  *   the two recovery entry points), at scope None.
  *
@@ -34,7 +34,7 @@ const {
   createNativeTransactionArtifactTools,
   validateNativeSignedPreflight,
 } = require("../../../../shared/nativeTransactionArtifact.mjs");
-const { parseNativeRpcFee, parseNativeRpcFees } = require("./client");
+const { parseNativeRpcFee } = require("./client");
 
 const fail = (message) => {
   throw new Error(`Native transaction: ${message}`);
@@ -140,7 +140,9 @@ function createNativeTransactionTools(c) {
 
   /** Resolve the witnesses for the independently rebuilt plan. */
   async function requiredWitnesses(client, plan) {
-    if (plan.kind === "recovery" || plan.method === "setRecoveryPolicy" || plan.method === "applyConfigurationActions")
+    // A module-targeted plan (recovery seat, governance module) names its own
+    // witnesses; so does a direct custody batch.
+    if (plan.kind === "recovery" || plan.kind === "governance" || plan.method === "applyConfigurationActions")
       return { all: [...plan.signers], any: [] };
     if (plan.kind === "registration")
       return { all: [c.hex(required(plan.custodyAddress, "registration custody"), 20)], any: [] };
@@ -159,8 +161,8 @@ function createNativeTransactionTools(c) {
     if (recipe.method === "buildExecutionScript")
       return client.buildExecutionScript(recipe.input);
     if (recipe.method === "buildRecoveryModulePlan") return client.buildRecoveryModulePlan(recipe.input);
+    if (recipe.method === "buildGovernanceModulePlan") return client.buildGovernanceModulePlan(recipe.input);
     if (recipe.method === "buildConfigurationBatchPlan") return client.buildConfigurationBatchPlan(recipe.input);
-    if (recipe.method === "buildRecoveryPolicyPlan") return client.buildRecoveryPolicyPlan(recipe.input);
     if (recipe.method === "buildAccountActionScript")
       return client.buildAccountActionScript(recipe.input);
     fail(`unsupported review recipe ${String(recipe.method)}`);
@@ -199,20 +201,24 @@ function createNativeTransactionTools(c) {
       rebuilt.accountId !== plan.accountId ||
       rebuilt.script !== plan.script ||
       rebuilt.method !== plan.method ||
-      ((rebuilt.kind === "recovery" || rebuilt.method === "setRecoveryPolicy" || rebuilt.method === "applyConfigurationActions") &&
+      ((rebuilt.kind === "recovery" || rebuilt.kind === "governance" || rebuilt.method === "applyConfigurationActions") &&
         (JSON.stringify(rebuilt.signers) !== JSON.stringify(plan.signers) ||
          rebuilt.targetContract !== plan.targetContract || rebuilt.configurationNonce !== plan.configurationNonce ||
-         rebuilt.nefSha256 !== plan.nefSha256 || rebuilt.moduleId !== plan.moduleId)) ||
-      (plan.kind === "execution" &&
-        (rebuilt.batch !== plan.batch ||
-          rebuilt.proxyCallFlags !== plan.proxyCallFlags))
+         rebuilt.nefSha256 !== plan.nefSha256 || rebuilt.moduleId !== plan.moduleId ||
+         rebuilt.intentId !== plan.intentId)) ||
+      (plan.kind === "execution" && rebuilt.proxyCallFlags !== plan.proxyCallFlags)
     )
       fail("review recipe does not rebuild the plan that will be signed");
     client.prepare(plan);
     await client.revalidatePlan(plan);
 
     const needs = await requiredWitnesses(client, rebuilt);
-    const scope = rebuilt.kind === "recovery" ? rebuilt.targetContract : client.contractHash;
+    // The witness scope is the contract the plan calls: the module for a
+    // module-targeted plan, the core for everything else.
+    const scope =
+      rebuilt.kind === "recovery" || rebuilt.kind === "governance"
+        ? rebuilt.targetContract
+        : client.contractHash;
     const payerAccount = c.hex(required(feePayer?.account, "fee payer account"), 20);
     const payer = wallet(feePayer, "fee payer", { contracts: needs.all.includes(payerAccount) ? [scope] : [] });
     const extras = [];
@@ -277,27 +283,16 @@ function createNativeTransactionTools(c) {
       );
     if (simulation.incompleteTransfers.length)
       fail("a simulated token transfer did not return Boolean true");
-    const validatedFees = parseNativeRpcFees({
-      gasconsumed: simulation.gasConsumed,
-      minimumrequiredfee:
-        simulation.minimumRequiredFee === null
-          ? undefined
-          : simulation.minimumRequiredFee,
-    });
-    const minimum =
-      validatedFees.minimumRequiredFee === null
-        ? null
-        : BigInt(validatedFees.minimumRequiredFee);
-    if (systemFee === undefined && minimum === null)
-      fail(
-        "node does not report minimumrequiredfee; supply an explicit system fee budget",
-      );
+    // Plain Neo: the declared system fee is the transaction's only gas limit and
+    // the node burns the whole declared amount, so the transaction declares
+    // exactly the gas this script consumed in its simulation. No budget-derived
+    // minimum and no margin is added. A caller-supplied `systemFee` is an
+    // explicit declaration and must still cover the consumption.
+    const consumed = parseNativeRpcFee(simulation.gasConsumed, "gasconsumed");
     const system =
-      systemFee === undefined ? minimum : c.unsigned(systemFee, 63, "system fee");
-    if (system < BigInt(validatedFees.gasConsumed))
+      systemFee === undefined ? consumed : c.unsigned(systemFee, 63, "system fee");
+    if (system < consumed)
       fail("system fee is below actual simulated consumption");
-    if (minimum !== null && system < minimum)
-      fail("system fee is below bounded-call admission requirement");
     if (system > caps.system) fail("system fee exceeds approved cap");
 
     const height = await client.rpc.send("getblockcount", []);
@@ -358,7 +353,6 @@ function createNativeTransactionTools(c) {
       simulation: {
         state: simulation.state,
         gasConsumed: simulation.gasConsumed,
-        minimumRequiredFee: simulation.minimumRequiredFee,
       },
     });
     reviews.add(review);
@@ -373,8 +367,8 @@ function createNativeTransactionTools(c) {
       signData: canonical.signData,
       systemFee: transaction.systemFee,
       networkFee: transaction.networkFee,
-      systemFeeSource:
-        systemFee === undefined ? "minimumrequiredfee" : "explicit-budget",
+      // "simulation": the declared fee is the simulated consumption itself.
+      systemFeeSource: systemFee === undefined ? "simulation" : "explicit",
       simulation,
       wallets: [payer, ...extras],
       proxy,

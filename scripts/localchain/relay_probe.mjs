@@ -1,5 +1,8 @@
 // Drives the SA frontend's real relay route handler (frontend/api/relay-transaction.js) against a local chain.
 // usage: node relay_probe.mjs <fixture.json>   (env: RELAY_PRIVATE_KEY_HEX = throwaway dev-chain key, never printed)
+// Target: the retired custom v4 wallet kernel on a disposable chain; the executeSponsoredUserOp wire
+// shape below is that kernel's ABI and is not in the v4.1 native IDL
+// (docs/proposals/smartaccount-v4.1.idl.json).
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import http from 'node:http';

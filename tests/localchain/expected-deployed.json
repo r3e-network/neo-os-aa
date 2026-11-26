@@ -1,7 +1,7 @@
 {
   "variant": "deployed",
   "totals": {
-    "checks": 161,
+    "checks": 160,
     "executedTransactions": 101,
     "simulatedFaults": 30,
     "nodeRefusals": 6
@@ -238,7 +238,6 @@
         "the SDK builder derives the proxy script and the core agrees",
         "the SDK's proxy signer carries the single restricted rule the node verifies",
         "the SDK script is byte-identical to the node's own assembler",
-        "the SDK batch script is byte-identical to the node's own assembler",
         "the SDK signing request expresses the throwaway fee payer in a custom scope",
         "the SDK transaction signs with exactly the fee payer and the proxy, in that order",
         "the SDK-built proxy-witness transaction HALTed and moved the signed amount",

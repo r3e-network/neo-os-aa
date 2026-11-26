@@ -163,7 +163,9 @@ export function prepareScratch() {
   return scratch;
 }
 
-/** Replays contracts/compile.sh against the scratch copy. */
+/** Replays contracts/compile.sh against the scratch copy. The recipe was deleted with
+ *  the custom track; only the unit test's fixture scratch supplies a compile.sh, and no
+ *  gate calls this against the repository tree. */
 export function compileScratch(scratch) {
   try {
     execFileSync("bash", [path.join(scratch, "contracts", "compile.sh")], {

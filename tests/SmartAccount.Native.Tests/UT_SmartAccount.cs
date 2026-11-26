@@ -45,10 +45,13 @@ namespace Neo.UnitTests.SmartContract.Native
         {
             Hardforks = TestProtocolSettings.Default.Hardforks.SetItem(Hardfork.HF_SmartAccountV1, 0)
         };
-        internal static DataCache Snapshot()
+        internal static DataCache Snapshot(ProtocolSettings settings = null)
         {
+            // The persisted native state must be the one the engine's hardfork
+            // table produces.
             var snapshot = TestBlockchain.GetTestSnapshotCache();
-            snapshot.AddContract(NativeContract.SmartAccount.Hash, NativeContract.SmartAccount.GetContractState(Settings, 1));
+            snapshot.AddContract(NativeContract.SmartAccount.Hash,
+                NativeContract.SmartAccount.GetContractState(settings ?? Settings, 1));
             return snapshot;
         }
         private static Block Block(ulong time) => new()
@@ -98,10 +101,20 @@ namespace Neo.UnitTests.SmartContract.Native
             var engine = ApplicationEngine.Create(trigger, tx, snapshot, Block(time), settings ?? Settings, gas: gas);
             engine.LoadScript(tx.Script); engine.Execute(); return engine;
         }
-        internal static StackItem Success(DataCache snapshot, string method, object[] args, ulong time = 1000,
-            UInt160[] signers = null, UInt160 target = null)
+        /// <summary>
+        /// Runs a transaction prepared by the test itself, so a scenario can
+        /// supply the exact signer set a client builds: signer order, scopes,
+        /// witness rules and witness scripts, as the node would receive them.
+        /// </summary>
+        internal static ApplicationEngine Invoke(DataCache snapshot, Transaction tx, ulong time = 1000, long gas = 10_000_000_000)
         {
-            using var engine = Invoke(snapshot, method, args, time, signers, target: target);
+            var engine = ApplicationEngine.Create(TriggerType.Application, tx, snapshot, Block(time), Settings, gas: gas);
+            engine.LoadScript(tx.Script); engine.Execute(); return engine;
+        }
+        internal static StackItem Success(DataCache snapshot, string method, object[] args, ulong time = 1000,
+            UInt160[] signers = null, UInt160 target = null, ProtocolSettings settings = null)
+        {
+            using var engine = Invoke(snapshot, method, args, time, signers, target: target, settings: settings);
             Assert.AreEqual(VMState.HALT, engine.State, engine.FaultException?.ToString());
             var result = engine.ResultStack.Pop(); engine.SnapshotCache.Commit(); return result;
         }
@@ -122,14 +135,15 @@ namespace Neo.UnitTests.SmartContract.Native
         internal static UInt160 Register(DataCache snapshot)
         {
             UInt160 id = SmartAccountProtocol.GetAccountId(Custody, Salt);
-            Success(snapshot, "createAccount", [id, Custody, Salt, 0, new object[0]]);
+            Success(snapshot, "createAccount", [id, Custody, Salt, new object[0]]);
             return id;
         }
-        private static Array Account(DataCache snapshot, UInt160 id) => (Array)Success(snapshot, "getAccount", [id]);
+        private static Array Account(DataCache snapshot, UInt160 id, ProtocolSettings settings = null) =>
+            (Array)Success(snapshot, "getAccount", [id], settings: settings);
 
         /// <summary>The current packed nonce of the account's built-in channel.</summary>
-        private static BigInteger Nonce(DataCache snapshot, UInt160 id) =>
-            Success(snapshot, "getNonce", [id, 0, new byte[32]]).GetInteger();
+        private static BigInteger Nonce(DataCache snapshot, UInt160 id, ProtocolSettings settings = null) =>
+            Success(snapshot, "getNonce", [id, 0, new byte[32]], settings: settings).GetInteger();
 
         /// <summary>The 64-bit sequence of a packed nonce (the 191-bit channel is the high half).</summary>
         private static BigInteger Sequence(BigInteger nonce) => nonce & ((BigInteger.One << 64) - 1);
@@ -141,30 +155,60 @@ namespace Neo.UnitTests.SmartContract.Native
         /// </summary>
         internal static object[] Operation(DataCache snapshot, UInt160 id, UInt160 target, string method, object[] args,
             BigInteger? nonce = null, BigInteger? deadline = null, bool sign = true,
-            BigInteger? validatorId = null, BigInteger? credentialGeneration = null)
+            BigInteger? validatorId = null, BigInteger? credentialGeneration = null,
+            BigInteger? configurationNonce = null, bool prehashed = true, ProtocolSettings settings = null)
         {
-            Array control = Account(snapshot, id);
+            Array control = Account(snapshot, id, settings);
             object[] operation =
             [
                 (BigInteger)SmartAccountModuleProtocol.ModuleProtocolVersion, target, method, args,
-                nonce ?? Nonce(snapshot, id), new byte[32], deadline ?? int.MaxValue,
+                nonce ?? Nonce(snapshot, id, settings), new byte[32], deadline ?? int.MaxValue,
                 validatorId ?? BigInteger.Zero, credentialGeneration ?? BigInteger.One,
-                control[4].GetInteger(), control[5].GetInteger(),
+                control[3].GetInteger(), configurationNonce ?? control[4].GetInteger(),
                 new byte[] { 0x01 }, new object[0],
             ];
-            if (sign) operation[SmartAccountModuleProtocol.OpSignature] = Signature(snapshot, id, operation);
+            if (sign) operation[SmartAccountModuleProtocol.OpSignature] = Signature(snapshot, id, operation, prehashed, settings);
             return operation;
         }
 
         /// <summary>The §8 built-in signature envelope over the operation digest.</summary>
-        private static byte[] Signature(DataCache snapshot, UInt160 id, object[] operation)
+        private static byte[] Signature(DataCache snapshot, UInt160 id, object[] operation, bool prehashed = true,
+            ProtocolSettings settings = null)
         {
-            byte[] digest = Success(snapshot, "getOperationDigest", [id, operation]).GetSpan().ToArray();
-            return SignatureOver(id, digest);
+            byte[] digest = Success(snapshot, "getOperationDigest", [id, operation], settings: settings).GetSpan().ToArray();
+            return SignatureOver(id, digest, prehashed);
         }
-        private static byte[] SignatureOver(UInt160 id, byte[] digest)
+        /// <summary>
+        /// Signs an already-hashed 32-byte digest with the P-256 custody key in
+        /// the same IEEE P1363 shape the core verifies with VerifyHash. A key
+        /// created from the public point alone cannot sign, so the signer is
+        /// built from the private scalar plus the public point.
+        /// </summary>
+        internal static byte[] SignPrehashed(Neo.Wallets.KeyPair key, byte[] digest)
         {
-            byte[] signature = Neo.Cryptography.Crypto.Sign(digest, CustodyKey, Neo.Cryptography.HashAlgorithm.SHA256);
+            byte[] buffer = key.PublicKey.EncodePoint(false);
+            using var ecdsa = System.Security.Cryptography.ECDsa.Create(
+                new System.Security.Cryptography.ECParameters
+                {
+                    Curve = System.Security.Cryptography.ECCurve.NamedCurves.nistP256,
+                    D = key.PrivateKey.ToArray(),
+                    Q = new System.Security.Cryptography.ECPoint
+                    {
+                        X = buffer[1..33],
+                        Y = buffer[33..],
+                    },
+                });
+            return ecdsa.SignHash(digest);
+        }
+
+        internal static byte[] SignatureOver(UInt160 id, byte[] digest, bool prehashed = true)
+        {
+            // The core verifies the built-in route prehashed: the P-256 key signs
+            // the 32-byte operation digest exactly once. The historical
+            // hash-then-sign shape is not a v4 signature.
+            byte[] signature = prehashed
+                ? SignPrehashed(CustodyKey, digest)
+                : Neo.Cryptography.Crypto.Sign(digest, CustodyKey, Neo.Cryptography.HashAlgorithm.SHA256);
             byte[] script = Contract.CreateSignatureRedeemScript(CustodyKey.PublicKey).ToArray();
             return BinarySerializer.Serialize(new Array([
                 new Integer(SmartAccountModuleProtocol.ModuleProtocolVersion),
@@ -226,14 +270,33 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.AreEqual(SmartAccountProtocol.ServiceHash, native.Hash);
             Assert.AreEqual(NativeContract.TemporaryStorage.Id - 1, native.Id);
             Assert.IsFalse(native.IsActive(TestProtocolSettings.Default, uint.MaxValue));
-            // The ABI carries no method-level hardfork gates: the contract-level
-            // Activations gate (IsActive above) is decisive, so the method surface
-            // is identical whether or not HF_SmartAccountV1 is configured.
-            Assert.AreSequenceEqual(
-                native.GetContractState(Settings, 1).Manifest.Abi.Methods.Select(m => m.Name).ToArray(),
-                native.GetContractState(TestProtocolSettings.Default, 1).Manifest.Abi.Methods.Select(m => m.Name).ToArray());
-
+            // There is one ABI, independent of the activation height: exactly the
+            // 26-entry IDL. The retired native message entry is gone, not merely
+            // unmarked, so it is neither in the manifest nor dispatchable.
             ContractState state = native.GetContractState(Settings, 1);
+            Assert.HasCount(26, state.Manifest.Abi.Methods, "the ABI must be exactly the IDL");
+            Assert.DoesNotContain("isValidSignature", state.Manifest.Abi.Methods.Select(m => m.Name).ToArray());
+
+            using (var retired = Invoke(Snapshot(), "isValidSignature",
+                [Custody, new byte[32], new object[0]], signers: [], settings: Settings))
+            {
+                Assert.AreEqual(VMState.FAULT, retired.State);
+                Assert.Contains("doesn't exist in the contract",
+                    retired.FaultException.GetBaseException().Message);
+            }
+            using (var batch = Invoke(Snapshot(), "executeUserOps",
+                [Custody, new object[0]], signers: [], settings: Settings))
+            {
+                Assert.AreEqual(VMState.FAULT, batch.State);
+                Assert.Contains("doesn't exist in the contract",
+                    batch.FaultException.GetBaseException().Message);
+            }
+            // The wallet discovery fixture is regenerable evidence: set
+            // SMARTACCOUNT_MANIFEST_FIXTURE to a writable path and run this test
+            // to pin the manifest emitted by the native build.
+            string manifestExport = Environment.GetEnvironmentVariable("SMARTACCOUNT_MANIFEST_FIXTURE");
+            if (!string.IsNullOrEmpty(manifestExport))
+                System.IO.File.WriteAllText(manifestExport, state.Manifest.ToJson().ToString());
             var fixture = System.IO.Path.Combine(AppContext.BaseDirectory, "native-smartaccount.manifest.json");
             Assert.IsTrue(System.Text.Json.Nodes.JsonNode.DeepEquals(
                 System.Text.Json.Nodes.JsonNode.Parse(state.Manifest.ToJson().ToString()),
@@ -242,12 +305,12 @@ namespace Neo.UnitTests.SmartContract.Native
             string[] methods = state.Manifest.Abi.Methods.Select(m => m.Name).ToArray();
             string[] specifiedMethods =
             {
-                "createAccount", "createAccounts", "executeUserOp", "executeUserOps", "validateUserOp",
-                "getMessageSubjects", "getThresholdPolicy", "isValidSignature", "getOperationDigest", "verify", "getNonce", "getNonceSequence",
+                "createAccount", "createAccounts", "executeUserOp", "validateUserOp",
+                "validateMember", "getOperationDigest", "verify", "getNonce", "getNonceSequence",
                 "getAccount", "getAccountAddress", "getProtocolInfo", "getAccountImplementationId",
                 "getModules", "getModule", "isModuleInstalled", "getAuthorizedModuleId",
-                "freezeAccount", "unfreezeAccount", "installModule", "removeModule",
-                "setRecoveryPolicy", "setBuiltinAuthorization", "applyConfigurationActions", "revokeModuleCredentials", "resetAccount",
+                "freezeAccount", "unfreezeAccount", "installModule", "removeModule", "configureModule",
+                "setBuiltinAuthorization", "applyConfigurationActions", "revokeModuleCredentials", "resetAccount",
             };
             Assert.AreSequenceEqual(specifiedMethods.Order(StringComparer.Ordinal).ToArray(), methods.Order(StringComparer.Ordinal).ToArray(), "The active ABI must export exactly the specified entries.");
             // The advanced features live in user-space modules now; their ABI is
@@ -259,6 +322,8 @@ namespace Neo.UnitTests.SmartContract.Native
                 "getPendingConfiguration", "getPendingConfigurationIntentIds",
                 "getHookOrder", "revokeCredentials", "supportsModuleType", "supportsExecutionMode",
                 "beginRecovery", "cancelRecovery", "executeRecovery", "getRecoveryStatus",
+                "setRecoveryPolicy", "getMessageSubjects", "getThresholdPolicy",
+                "executeUserOps", "isValidSignature",
             })
                 Assert.DoesNotContain(removed, methods, removed);
 
@@ -278,11 +343,11 @@ namespace Neo.UnitTests.SmartContract.Native
                 ContractParameterType.Hash160, ContractParameterType.Integer,
                 ContractParameterType.Array,
             }), "removeModule(accountId, moduleId, deInitData)");
-            Assert.IsTrue(Signature(state, "setRecoveryPolicy").SequenceEqual(new[]
+            Assert.IsTrue(Signature(state, "configureModule").SequenceEqual(new[]
             {
-                ContractParameterType.Hash160, ContractParameterType.Hash160,
-                ContractParameterType.Integer, ContractParameterType.Boolean,
-            }), "setRecoveryPolicy(accountId, recoveryAuthority, recoveryTimelockMs, ownerOnlyRecovery)");
+                ContractParameterType.Hash160, ContractParameterType.Integer,
+                ContractParameterType.Array,
+            }), "configureModule(accountId, moduleId, data)");
             Assert.IsTrue(Signature(state, "setBuiltinAuthorization").SequenceEqual(new[]
             {
                 ContractParameterType.Hash160, ContractParameterType.Boolean,
@@ -323,7 +388,6 @@ namespace Neo.UnitTests.SmartContract.Native
             long[] prices = [8, 1, 2048, 1, 8, 8, 32768, 1, 32768];
             var charges = prices.Select(p => checked(p * factor)).ToArray();
             long total = charges.Sum();
-            Assert.AreEqual(total, baseline.MinimumRequiredFee);
             Assert.AreEqual(total, baseline.FeeConsumed);
             var cases = new List<object>();
             var limits = new SortedSet<long> { 0, total + 1 };
@@ -358,7 +422,7 @@ namespace Neo.UnitTests.SmartContract.Native
                 signers: [], flags: CallFlags.ReadStates, gas: budget, settings: huyao);
             using var quote = Metered(10_000_000);
             Assert.AreEqual(VMState.HALT, quote.State, quote.FaultException?.ToString());
-            long minimum = quote.MinimumRequiredFee;
+            long minimum = quote.FeeConsumed;
             // Huyao charges after each executed opcode; the caller's implicit return has no opcode.
             long[] coefficients = [1685, 2187, 173 + 2649, 2187, 1685, 1685, 32768_000, 2187, 32768_000, 1085];
             long picoFactor = (long)quote.ExecFeePicoFactor;
@@ -452,6 +516,7 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.HasCount(methods.Length * pattern.Length, script);
             var rows = new List<object>();
             int refused = 0;
+            int expectedRefusals = 0;
             var snapshot = Snapshot();
             foreach (var (descriptor, index) in methods.Select((m, i) => (m, i)))
             {
@@ -470,10 +535,13 @@ namespace Neo.UnitTests.SmartContract.Native
                     _ => descriptor.Safe ? CallFlags.ReadStates : CallFlags.All
                 };
                 Assert.AreEqual(flags, method.RequiredCallFlags);
+                expectedRefusals += Enumerable.Range(0, (int)CallFlags.All + 1)
+                    .Count(bits => !((CallFlags)bits).HasFlag(flags));
                 Assert.AreEqual(32768L, method.CpuFee);
                 Assert.AreEqual(0L, method.StorageFee);
                 Assert.IsNull(method.ActiveIn);
-                Assert.IsNull(method.DeprecatedIn);
+                Assert.IsNull(method.DeprecatedIn,
+                    "no active entry is retired: the surface is the current one only");
                 for (int bits = 0; bits <= (int)CallFlags.All; bits++)
                 {
                     var requested = (CallFlags)bits;
@@ -493,7 +561,8 @@ namespace Neo.UnitTests.SmartContract.Native
                     handlerReturn = method.Handler.ReturnType.ToString(),
                     injectEngine = method.NeedApplicationEngine, injectSnapshot = method.NeedSnapshot });
             }
-            Assert.AreEqual(311, refused);
+            Assert.AreEqual(expectedRefusals, refused,
+                "every flag set that does not carry the declared requirement is refused exactly once");
             string export = Environment.GetEnvironmentVariable("SMARTACCOUNT_DISPATCH_EVIDENCE");
             if (!string.IsNullOrEmpty(export))
                 System.IO.File.WriteAllText(export, System.Text.Json.JsonSerializer.Serialize(new
@@ -540,26 +609,26 @@ namespace Neo.UnitTests.SmartContract.Native
             var protocol = (Array)Success(snapshot, "getProtocolInfo", []);
             Assert.AreEqual(SmartAccountProtocol.Version, protocol[0].GetInteger());
             Assert.HasCount(1, protocol);
-            Assert.HasCount(15, Account(snapshot, id));
+            Assert.HasCount(9, Account(snapshot, id),
+                "getAccount is the found flag plus the eight generic control fields");
 
             Array account = Account(snapshot, id);
             Assert.IsTrue(account[0].GetBoolean());
             Assert.AreEqual((int)SmartAccountStatus.Active, account[1].GetInteger());
             Assert.AreEqual(Custody, new UInt160(account[2].GetSpan()));
-            Assert.AreEqual(UInt160.Zero, new UInt160(account[3].GetSpan()));
-            Assert.AreEqual(BigInteger.One, account[4].GetInteger(), "authorityEpoch");
-            Assert.AreEqual(BigInteger.Zero, account[5].GetInteger(), "configurationNonce");
-            Assert.IsTrue(account[7].GetBoolean(), "defaultOperationAuthorization");
-            Assert.IsTrue(account[8].GetBoolean(), "defaultMessageAuthorization");
-            Assert.IsFalse(account[9].GetBoolean(), "ownerOnlyRecovery");
-            Assert.IsFalse(account[12].GetBoolean(), "recoveryPending");
+            Assert.AreEqual(BigInteger.One, account[3].GetInteger(), "authorityEpoch");
+            Assert.AreEqual(BigInteger.Zero, account[4].GetInteger(), "configurationNonce");
+            Assert.IsTrue(account[5].GetBoolean(), "defaultOperationAuthorization");
+            Assert.IsTrue(account[6].GetBoolean(), "defaultMessageAuthorization");
+            Assert.AreEqual(BigInteger.Zero, account[7].GetInteger(), "requiredValidatorId");
+            Assert.AreEqual(BigInteger.One, account[8].GetInteger(), "controlRevision");
 
-            using (var duplicate = Invoke(snapshot, "createAccount", [id, Custody, Salt, 0, new object[0]]))
+            using (var duplicate = Invoke(snapshot, "createAccount", [id, Custody, Salt, new object[0]]))
                 Assert.AreEqual(VMState.FAULT, duplicate.State);
             UInt160 foreign = SmartAccountProtocol.GetAccountId(NextCustody, Salt);
-            using (var unauthorized = Invoke(snapshot, "createAccount", [foreign, NextCustody, Salt, 0, new object[0]]))
+            using (var unauthorized = Invoke(snapshot, "createAccount", [foreign, NextCustody, Salt, new object[0]]))
                 Assert.AreEqual(VMState.FAULT, unauthorized.State, "A foreign custody signature cannot create an account.");
-            using (var mismatched = Invoke(snapshot, "createAccount", [id, Custody, new byte[32], 0, new object[0]]))
+            using (var mismatched = Invoke(snapshot, "createAccount", [id, Custody, new byte[32], new object[0]]))
                 Assert.AreEqual(VMState.FAULT, mismatched.State, "The account id must equal the derived id of its own salt.");
 
             Assert.AreEqual(BigInteger.Zero, Sequence(Nonce(snapshot, id)));
@@ -581,8 +650,8 @@ namespace Neo.UnitTests.SmartContract.Native
         {
             var snapshot = Snapshot();
             UInt160 id = Register(snapshot), address = SmartAccountProtocol.GetAccountAddress(id);
-            var rosterKey = new StorageKey { Id = NativeContract.SmartAccount.Id, Key = SmartAccountProtocol.GetMessageSubjectKey(id) };
-            Assert.IsFalse(snapshot.TryGet(rosterKey, out _), "A basic account has no stored signing policy.");
+            var roster = (Array)Success(snapshot, "getModules", [id, "validator", 0, 8]);
+            Assert.HasCount(0, (Array)roster[0], "A basic account has no installed signing subject.");
             UInt160 funder = Contract.GetBFTAddress(Settings.StandbyValidators);
             UInt160 token = asset == "GAS" ? NativeContract.GAS.Hash : NativeContract.NEO.Hash;
             BigInteger Balance(UInt160 owner) => Success(snapshot, "balanceOf", [owner], target: token).GetInteger();
@@ -647,9 +716,7 @@ namespace Neo.UnitTests.SmartContract.Native
             // Plant the exhaustion sentinel as the channel cursor — exactly the
             // record ConsumeOperationNonce would have written after consuming
             // sequence 2^64 - 1.
-            snapshot.Add(new StorageKey { Id = NativeContract.SmartAccount.Id,
-                    Key = SmartAccountProtocol.GetNonceCursorKey(id,
-                        SmartAccountProtocol.ChannelFromNonce(packed)) },
+            snapshot.Add(NativeContract.SmartAccount.Key(SmartAccountModuleProtocol.PrefixNonceCursor).Add(id).Add(SmartAccountProtocol.EncodeChannel(packed >> 64)),
                 new StorageItem(BinarySerializer.Serialize(
                     new Integer(BigInteger.One << 64), 32, 8)));
 
@@ -668,6 +735,170 @@ namespace Neo.UnitTests.SmartContract.Native
                     dead.FaultException!.Message);
             }
         }
+
+        [TestMethod]
+        public void TheExhaustionSentinelIsTheSameAnswerOnEveryNonceEntry()
+        {
+            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
+            BigInteger packed = Nonce(snapshot, id);
+            BigInteger channel = packed >> 64;
+            PlantCursor(snapshot, id, channel, BigInteger.One << 64);
+
+            // Both public nonce queries answer with the raw sentinel: 2^64 is a
+            // cursor, not an encodable sequence, so it is never packed.
+            Assert.AreEqual(BigInteger.One << 64, Nonce(snapshot, id),
+                "getNonce answers the exhaustion sentinel unmodified");
+            Assert.AreEqual(BigInteger.One << 64,
+                Success(snapshot, "getNonceSequence", [id, channel]).GetInteger(),
+                "getNonceSequence answers the same sentinel for the same channel");
+
+            // The verified preview is the read-only entry: a dead channel is a
+            // rejection, not a fault, and it still writes nothing.
+            object[] previewed = Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7],
+                nonce: channel << 64);
+            var preview = (Array)Success(snapshot, "validateUserOp", [id, previewed]);
+            Assert.IsFalse(preview[0].GetBoolean(), "a dead channel never previews as accepted");
+            Assert.AreEqual(BigInteger.One << 64, Nonce(snapshot, id), "the preview consumed nothing");
+
+            // The execution entry refuses the dead channel on its own path.
+            using (var dead = Invoke(snapshot, "executeUserOp",
+                [id, Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7],
+                    nonce: channel << 64)]))
+            {
+                Assert.AreEqual(VMState.FAULT, dead.State);
+                Assert.Contains(SmartAccountModuleProtocol.ErrorNonceExhausted, dead.FaultException!.Message);
+            }
+        }
+
+        /// <summary>
+        /// The cursor record domain is exactly [0, 2^64]: a stored negative value
+        /// or a value past the sentinel is a corrupt row, and every entry that reads
+        /// that channel fails closed instead of decoding it as a sequence. Both
+        /// record formats read the same cursor key, so the bound is format-independent.
+        /// </summary>
+        [TestMethod]
+        [DataRow("-1")]
+        [DataRow("18446744073709551617")]
+        public void AMalformedNonceCursorFailsClosedOnEveryRead(string stored)
+        {
+            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
+            BigInteger packed = Nonce(snapshot, id);
+            BigInteger channel = packed >> 64;
+            PlantCursor(snapshot, id, channel, BigInteger.Parse(stored));
+
+            foreach (object[] call in new object[][]
+                     {
+                         ["getNonceSequence", new object[] { id, channel }],
+                         ["getNonce", new object[] { id, 0, new byte[32] }],
+                     })
+            {
+                using var read = Invoke(snapshot, (string)call[0], (object[])call[1]);
+                Assert.AreEqual(VMState.FAULT, read.State, $"{(string)call[0]} decoded a corrupt cursor");
+                Assert.Contains("nonce cursor record is malformed", read.FaultException!.ToString());
+            }
+            using (var execute = Invoke(snapshot, "executeUserOp",
+                [id, Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7], nonce: packed)]))
+            {
+                Assert.AreEqual(VMState.FAULT, execute.State);
+                Assert.Contains("nonce cursor record is malformed", execute.FaultException!.ToString());
+            }
+        }
+
+        /// <summary>
+        /// The cursor row has exactly one canonical encoding: a trailing byte, or an
+        /// Integer that re-encodes to fewer bytes, is corruption and fails closed.
+        /// </summary>
+        [TestMethod]
+        [DataRow("trailing")]
+        [DataRow("nonminimal")]
+        public void ANoncanonicalNonceCursorFailsClosed(string defect)
+        {
+            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
+            BigInteger packed = Nonce(snapshot, id);
+            byte[] channel = SmartAccountProtocol.EncodeChannel(packed >> 64);
+            byte[] stored = defect switch
+            {
+                // Integer(1) is [0x21, 0x01, 0x01]; a trailing byte changes the row.
+                "trailing" => [.. BinarySerializer.Serialize(new Integer(BigInteger.One), 32, 8), 0x00],
+                // A two-byte little-endian 1 decodes to the same Integer, non-minimally.
+                "nonminimal" => [0x21, 0x02, 0x01, 0x00],
+                _ => throw new ArgumentException(defect),
+            };
+            snapshot.Add(NativeContract.SmartAccount.Key(SmartAccountModuleProtocol.PrefixNonceCursor).Add(id).Add(channel), new StorageItem(stored));
+
+            using var read = Invoke(snapshot, "getNonceSequence", [id, packed >> 64]);
+            Assert.AreEqual(VMState.FAULT, read.State, "a noncanonical cursor row was decoded");
+            Assert.Contains("nonce cursor record is malformed", read.FaultException!.ToString());
+        }
+
+        /// <summary>
+        /// Consumption writes the next sequence as the one canonical Integer, and the
+        /// consumed operation can never execute twice.
+        /// </summary>
+        [TestMethod]
+        public void NonceConsumptionStoresTheCanonicalCursorAndReplayFaults()
+        {
+            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
+            BigInteger packed = Nonce(snapshot, id);
+            byte[] channel = SmartAccountProtocol.EncodeChannel(packed >> 64);
+            object[] operation = Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7]);
+            using (var accepted = Invoke(snapshot, "executeUserOp", [id, operation]))
+            {
+                Assert.AreEqual(VMState.HALT, accepted.State, accepted.FaultException?.ToString());
+                accepted.SnapshotCache.Commit();
+            }
+
+            byte[] expected = BinarySerializer.Serialize(new Integer(BigInteger.One), 32, 8);
+            Assert.IsTrue(snapshot.TryGet(NativeContract.SmartAccount.Key(SmartAccountModuleProtocol.PrefixNonceCursor).Add(id).Add(channel), out StorageItem cursor));
+            Assert.AreSequenceEqual(expected, cursor!.Value.ToArray(),
+                "the consumed cursor is the canonical Integer of the next sequence");
+            Assert.AreEqual(BigInteger.One, Sequence(Nonce(snapshot, id)));
+
+            using var replay = Invoke(snapshot, "executeUserOp", [id, operation]);
+            Assert.AreEqual(VMState.FAULT, replay.State, "a consumed sequence never executes twice");
+            Assert.Contains(SmartAccountModuleProtocol.ErrorNonceInvalid, replay.FaultException!.Message);
+        }
+
+        /// <summary>
+        /// Sequence 2^64 - 1 is the last admissible step: consuming it writes the
+        /// exhaustion sentinel, announces the death of the channel and never wraps.
+        /// The very next attempt is an explicit SA_NONCE_EXHAUSTED fault.
+        /// </summary>
+        [TestMethod]
+        public void TheLastSequenceConsumesIntoTheSentinelAndKillsTheChannel()
+        {
+            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
+            BigInteger packed = Nonce(snapshot, id);
+            BigInteger channel = packed >> 64;
+            BigInteger last = (BigInteger.One << 64) - 1;
+            PlantCursor(snapshot, id, channel, last);
+
+            object[] operation = Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7],
+                nonce: (channel << 64) | last);
+            using (var accepted = Invoke(snapshot, "executeUserOp", [id, operation]))
+            {
+                Assert.AreEqual(VMState.HALT, accepted.State, accepted.FaultException?.ToString());
+                Assert.HasCount(1, accepted.Notifications.Where(n => n.EventName == "NonceChannelExhausted"),
+                    "the last step announces the exhausted channel");
+                accepted.SnapshotCache.Commit();
+            }
+            Assert.AreEqual(BigInteger.One << 64,
+                Success(snapshot, "getNonceSequence", [id, channel]).GetInteger(),
+                "the cursor is the sentinel, never 0 and never a wrap");
+            Assert.AreEqual(BigInteger.One << 64, Nonce(snapshot, id));
+
+            using (var next = Invoke(snapshot, "executeUserOp",
+                [id, Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7],
+                    nonce: channel << 64)]))
+            {
+                Assert.AreEqual(VMState.FAULT, next.State, "a dead channel never executes its low sequence again");
+                Assert.Contains(SmartAccountModuleProtocol.ErrorNonceExhausted, next.FaultException!.Message);
+            }
+        }
+
+        /// <summary>Plants one 0x56 cursor row exactly as the core would serialize it.</summary>
+        private static void PlantCursor(DataCache snapshot, UInt160 id, BigInteger channel, BigInteger cursor) =>
+            snapshot.Add(NativeContract.SmartAccount.Key(SmartAccountModuleProtocol.PrefixNonceCursor).Add(id).Add(SmartAccountProtocol.EncodeChannel(channel)), new StorageItem(BinarySerializer.Serialize(new Integer(cursor), 32, 8)));
 
         [TestMethod]
         public void ValidateUserOpPreviewsTheDigestWithoutChangingState()
@@ -690,34 +921,32 @@ namespace Neo.UnitTests.SmartContract.Native
                 Assert.AreEqual(VMState.FAULT, unknown.State);
         }
 
+        /// <summary>
+        /// The single-operation entrypoint is the only one: the removed batch
+        /// entrypoint is not dispatchable, and one failed operation writes
+        /// nothing at all.
+        /// </summary>
         [TestMethod]
-        public void BatchEnvelopeIsAtomicAndSucceedsInOrder()
+        public void SingleOperationIsTheOnlyEntrypoint()
         {
             var snapshot = Snapshot(); UInt160 id = Register(snapshot);
             UInt160 target = NativeContract.StdLib.Hash;
             BigInteger cursor = Nonce(snapshot, id);
 
-            var broken = new object[]
-            {
-                Operation(snapshot, id, target, "serialize", [7], nonce: cursor),
-                Operation(snapshot, id, target, "serialize", [8], nonce: cursor + 1, sign: false),
-            };
-            using (var failed = Invoke(snapshot, "executeUserOps", [id, broken]))
+            using (var batch = Invoke(snapshot, "executeUserOps",
+                [id, new object[] { Operation(snapshot, id, target, "serialize", [7]) }]))
+                Assert.AreEqual(VMState.FAULT, batch.State, "the batch entrypoint no longer exists");
+
+            object[] forged = Operation(snapshot, id, target, "serialize", [7], nonce: cursor, sign: false);
+            forged[SmartAccountModuleProtocol.OpSignature] = new byte[] { 0x01 };
+            using (var failed = Invoke(snapshot, "executeUserOp", [id, forged]))
                 Assert.AreEqual(VMState.FAULT, failed.State);
-            Assert.AreEqual(cursor, Nonce(snapshot, id), "A batch fault rolls back every nonce.");
+            Assert.AreEqual(cursor, Nonce(snapshot, id), "a faulted operation rolls back its nonce.");
 
-            var batch = new object[]
-            {
-                Operation(snapshot, id, target, "serialize", [7], nonce: cursor),
-                Operation(snapshot, id, target, "serialize", [8], nonce: cursor + 1),
-            };
-            var results = (Array)Success(snapshot, "executeUserOps", [id, batch]);
-            Assert.HasCount(2, results);
-            Assert.IsInstanceOfType<ByteString>(results[0]);
-            Assert.AreEqual(cursor + 2, Nonce(snapshot, id));
-
-            using (var empty = Invoke(snapshot, "executeUserOps", [id, new object[0]]))
-                Assert.AreEqual(VMState.FAULT, empty.State);
+            var executed = Success(snapshot, "executeUserOp", [id,
+                Operation(snapshot, id, target, "serialize", [7], nonce: cursor)]);
+            Assert.IsInstanceOfType<ByteString>(executed);
+            Assert.AreEqual(cursor + 1, Nonce(snapshot, id));
         }
 
         [TestMethod]
@@ -767,41 +996,51 @@ namespace Neo.UnitTests.SmartContract.Native
         }
 
         [TestMethod]
-        public void FreezeAndUnfreezeAreCustodyGatedAndAdvanceTheEpoch()
+        public void FreezeIsImmediateAndThawBelongsToTheGovernanceInstance()
         {
-            var snapshot = Snapshot(); UInt160 id = Register(snapshot);
+            var snapshot = Snapshot();
+            UInt160 id = UT_SmartAccountGovernance.Register(snapshot, 984, out ContractState governor);
+            Array before = Account(snapshot, id);
 
             using (var foreign = Invoke(snapshot, "freezeAccount", [id], signers: [NextCustody]))
                 Assert.AreEqual(VMState.FAULT, foreign.State, "Only the custody key can freeze the account.");
             Success(snapshot, "freezeAccount", [id], signers: [Custody]);
-            Assert.AreEqual((int)SmartAccountStatus.Frozen, Account(snapshot, id)[1].GetInteger());
-            Assert.AreEqual(new BigInteger(2), Account(snapshot, id)[4].GetInteger(), "authorityEpoch");
-            using (var frozen = Invoke(snapshot, "executeUserOp",
+            Array frozen = Account(snapshot, id);
+            Assert.AreEqual((int)SmartAccountStatus.Frozen, frozen[1].GetInteger());
+            Assert.AreEqual(before[3].GetInteger() + 1, frozen[3].GetInteger(), "authorityEpoch");
+            Assert.AreEqual(before[4].GetInteger() + 1, frozen[4].GetInteger(),
+                "the emergency freeze advances the configuration nonce");
+            using (var frozenOp = Invoke(snapshot, "executeUserOp",
                 [id, Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7])]))
-                Assert.AreEqual(VMState.FAULT, frozen.State, "A frozen account executes nothing.");
+                Assert.AreEqual(VMState.FAULT, frozenOp.State, "A frozen account executes nothing.");
 
-            // The minimal core holds no thaw timelock: a custody witness ends the
-            // freeze directly. A user-space governance module owns any delay.
+            // The minimal core holds no thaw timelock and grants no custody thaw:
+            // the bound governance instance alone ends the freeze. A user-space
+            // governance module owns any delay.
+            using (var custodyThaw = Invoke(snapshot, "unfreezeAccount", [id], signers: [Custody]))
+                Assert.AreEqual(VMState.FAULT, custodyThaw.State,
+                    "The custody witness is not an administration principal.");
             using (var foreignThaw = Invoke(snapshot, "unfreezeAccount", [id], signers: [NextCustody]))
-                Assert.AreEqual(VMState.FAULT, foreignThaw.State, "Only the custody key can thaw the account.");
+                Assert.AreEqual(VMState.FAULT, foreignThaw.State, "Only the governance instance thaws the account.");
             Assert.AreEqual((int)SmartAccountStatus.Frozen, Account(snapshot, id)[1].GetInteger(),
                 "A refused thaw never moves the account.");
 
-            Success(snapshot, "unfreezeAccount", [id], signers: [Custody]);
-            Assert.AreEqual((int)SmartAccountStatus.Active, Account(snapshot, id)[1].GetInteger());
-            Assert.AreEqual(new BigInteger(3), Account(snapshot, id)[4].GetInteger(),
+            UT_SmartAccountGovernance.Land(snapshot, governor, UT_SmartAccountGovernance.GovThaw, [id]);
+            Array thawed = Account(snapshot, id);
+            Assert.AreEqual((int)SmartAccountStatus.Active, thawed[1].GetInteger());
+            Assert.AreEqual(frozen[3].GetInteger() + 1, thawed[3].GetInteger(),
                 "The thaw advances the authority epoch, killing pre-freeze signatures.");
-            Assert.AreEqual(new BigInteger(3), Account(snapshot, id)[11].GetInteger(),
+            Assert.AreEqual(frozen[8].GetInteger() + 1, thawed[8].GetInteger(),
                 "The freeze and the thaw each advance the control revision once.");
-            Assert.AreEqual(new BigInteger(2), Account(snapshot, id)[5].GetInteger(),
+            Assert.AreEqual(frozen[4].GetInteger() + 1, thawed[4].GetInteger(),
                 "Freeze and thaw each advance the configuration nonce, so pre-freeze configurations are stale.");
-            Assert.IsFalse(Account(snapshot, id)[12].GetBoolean(), "the recovery slot stays inactive");
 
             // The thawed account executes again under the new authority epoch.
             Assert.IsInstanceOfType<ByteString>(Success(snapshot, "executeUserOp",
                 [id, Operation(snapshot, id, NativeContract.StdLib.Hash, "serialize", [7])]));
 
-            using (var secondThaw = Invoke(snapshot, "unfreezeAccount", [id], signers: [Custody]))
+            using (var secondThaw = UT_SmartAccountGovernance.TryLand(snapshot, governor,
+                UT_SmartAccountGovernance.GovThaw, [id]))
                 Assert.AreEqual(VMState.FAULT, secondThaw.State, "Only a frozen account can be thawed.");
             using (var unknown = Invoke(snapshot, "unfreezeAccount", [NextCustody], signers: [Custody]))
                 Assert.AreEqual(VMState.FAULT, unknown.State, "An unregistered account has nothing to thaw.");

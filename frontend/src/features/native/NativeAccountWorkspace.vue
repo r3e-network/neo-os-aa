@@ -156,8 +156,8 @@
                 <dl>
                   <dt>{{ L("Account ID", "账户 ID") }}</dt><dd class="mono">0x{{ snapshot.account.accountId }}</dd>
                   <dt>{{ L("Custody", "托管钱包") }}</dt><dd class="mono">0x{{ snapshot.account.custodyAddress }}</dd>
-                  <dt>{{ L("Recovery wallet", "恢复钱包") }}</dt><dd class="mono">{{ snapshot.account.recoveryAuthority === ZERO_HASH ? L("Not configured", "未配置") : "0x" + snapshot.account.recoveryAuthority }}</dd>
-                  <dt>{{ L("Recovery delay", "恢复等待时间") }}</dt><dd>{{ timelockText(snapshot.account.recoveryTimelockMs) }}</dd>
+                  <dt>{{ L("Recovery wallet", "恢复钱包") }}</dt><dd class="mono">{{ snapshot.account.recoverySeat?.policy?.authority ? "0x" + snapshot.account.recoverySeat.policy.authority : L("Not configured", "未配置") }}</dd>
+                  <dt>{{ L("Recovery delay", "恢复等待时间") }}</dt><dd>{{ snapshot.account.recoverySeat?.policy ? durationText(snapshot.account.recoverySeat.policy.timelockMs, L) : L("None", "无") }}</dd>
                   <dt>{{ L("Account status", "账户状态") }}</dt><dd>{{ snapshot.account.statusName }}</dd>
                   <dt>{{ L("Chain time", "链上时间") }}</dt><dd>{{ time(snapshot.chainTime) }}</dd>
                   <dt>{{ L("Configuration version", "配置版本") }}</dt><dd>{{ snapshot.account.configurationNonce }}</dd>
@@ -176,13 +176,13 @@
                   :key="item.value"
                   :value="item.value"
                 >
-                  {{ item.label }}
+                  {{ L(item.label, item.labelZh) }}
                 </option>
               </select></label
             >
-            <p class="callout">{{ selectedAction.detail }}</p>
+            <p class="callout">{{ L(selectedAction.detail, selectedAction.detailZh) }}</p>
             <p v-if="action === 'freezeAccount'" class="callout" data-testid="native-freeze-risk">
-              {{ L("Freezing advances the authority epoch: every pending signed operation and every pending configuration intent from before becomes invalid. Installed modules stay; custody can unfreeze through the custody route alone.", "冻结会推进权限代际：此前所有已签操作与待生效配置意图都会失效。已安装模块保留；托管方可通过托管通道单独解冻。") }}
+              {{ L("Freezing advances the authority epoch: every pending signed operation and every pending configuration intent from before becomes invalid. Installed modules stay; unfreezing needs the installed governance module and its delay, so custody cannot thaw the account alone.", "冻结会推进权限代际：此前所有已签操作与待生效配置意图都会失效。已安装模块保留；解冻须经已安装的治理模块及其延迟，托管方无法单独解冻。") }}
             </p>
             <p v-if="action === 'executeRecovery'" class="small">
               {{ L("Completing recovery removes every module, pending intent and nonce cursor, advances the epoch and re-enables the built-in route. Any fee payer can submit it once mature.", "完成恢复会移除所有模块、待生效意图与 nonce 游标，推进权限代际并重新启用内置通道。成熟后任何付费者都可提交。") }}
@@ -322,14 +322,25 @@
             <p class="small" data-testid="native-module-admin">
               {{
                 L(
-                  "The core methods are installModule and removeModule. Direct module changes take effect when the transaction succeeds. The 24-hour delay applies to proposals made through the governance module.",
-                  "核心入口为 installModule 与 removeModule。直接管理在交易成功时生效；24 小时等待期适用于通过治理模块提交的提案。",
+                  "The core entries are installModule, removeModule, configureModule, setBuiltinAuthorization and applyConfigurationActions. Under the v4.1 record format a module change is a configuration landing: it must come from the account's governance module and takes effect only after that module's delay. Before the gate, custody administers modules directly.",
+                  "核心入口为 installModule、removeModule、configureModule、setBuiltinAuthorization 与 applyConfigurationActions。v4.1 记录格式下模块变更属配置落地：必须由账户的治理模块发起，并在其等待期之后生效；门控启用前由托管方直接管理。",
                 )
               }}
             </p>
             <h3>{{ L("Installed modules", "已安装模块") }}</h3>
             <button v-if="!roster" class="secondary" :disabled="busy" @click="loadRoster">{{ L("Load module details", "读取模块详情") }}</button>
             <p v-if="roster" data-testid="native-module-counts">{{ roster.validators.length }} {{ L("validators", "验证模块") }} · {{ roster.hooks.length }} {{ L("hooks", "策略模块") }} · {{ roster.recovery.length }} {{ L("recovery seats", "恢复席位") }}</p>
+            <dl v-if="roster?.governance" data-testid="native-governance-schedule">
+              <dt>{{ L("Governance delay", "治理等待时间") }}</dt>
+              <dd>{{ roster.governance.governanceDelayMs !== null ? durationText(roster.governance.governanceDelayMs, L) : L("This governance module cannot be verified", "此治理模块无法核验") }}</dd>
+              <dt>{{ L("Pending configuration intents", "待确认配置提案") }}</dt>
+              <dd>
+                {{ roster.governance.intents.length }}<template v-for="intent in roster.governance.intents" :key="intent.intentId"> · #{{ intent.intentId }} ({{ intentKindText(intent.kind) }}, {{ actionCountText(intent.actionCount) }}, {{ L("mature at", "成熟于") }} {{ time(intent.matureAt) }})</template>
+              </dd>
+            </dl>
+            <p v-else-if="roster" class="small" data-testid="native-governance-absent">
+              {{ L("No governance module is installed: a module change takes effect when its transaction succeeds.", "未安装治理模块：模块变更在交易成功时立即生效。") }}
+            </p>
             <p v-if="roster && !installedModules.length" class="small">
               {{ L("No module is installed on this account.", "该账户没有安装任何模块。") }}
             </p>
@@ -454,8 +465,8 @@
             {{ L("Fill the envelope skeleton from chain state", "按链上状态填充信封骨架") }}
           </button>
           <label
-            >{{ L("Operations (JSON array, 1–32)", "操作（JSON 数组，1–32 个）")
-            }}<textarea v-model="operation.operations" rows="14" spellcheck="false" />
+            >{{ L("Operation (one JSON object, 13 fields)", "操作（单个 JSON 对象，13 个字段）")
+            }}<textarea v-model="operation.operation" rows="14" spellcheck="false" />
           </label>
           <p class="small">
             {{
@@ -476,8 +487,8 @@
           <p class="small">
             {{
               L(
-                "Bounds: 32 operations per envelope · 64 arguments · 4,096 serialized bytes · 8,192 proof bytes · depth 8 · deadline within 1 hour.",
-                "边界：每个信封 32 个操作 · 64 个参数 · 序列化 4,096 字节 · 证明 8,192 字节 · 深度 8 · 截止时间 1 小时内。",
+                "Bounds: one operation per transaction · 13 fields · 64 arguments · 4,096 serialized bytes · 8,192 proof bytes · depth 8 · deadline within 1 hour.",
+                "边界：每笔交易一个操作 · 13 个字段 · 64 个参数 · 序列化 4,096 字节 · 证明 8,192 字节 · 深度 8 · 截止时间 1 小时内。",
               )
             }}
           </p>
@@ -554,7 +565,7 @@
             <dt>{{ L("Account ID", "账户 ID") }}</dt>
             <dd class="mono">0x{{ review.plan.accountId }}</dd>
             <template v-if="review.plan.targetContract">
-              <dt>{{ L("Recovery module", "恢复模块") }}</dt>
+              <dt>{{ review.plan.kind === "governance" ? L("Governance module", "治理模块") : L("Recovery module", "恢复模块") }}</dt>
               <dd class="mono">0x{{ review.plan.targetContract }}</dd>
             </template>
             <dt>{{ L("Fee payer", "付费者") }}</dt>
@@ -570,9 +581,13 @@
             <template v-if="review.intentId">
               <dt>{{ L("Intent", "意图") }}</dt>
               <dd data-testid="native-reviewed-intent">
-                #{{ review.intentId }} ·
-                {{ (review.intentActions ?? []).length }} {{ L("actions", "个操作") }}
+                #{{ review.intentId }}<template v-if="review.intentKind"> · {{ intentKindText(review.intentKind) }}</template> ·
+                {{ actionCountText((review.intentActions ?? []).length) }}
               </dd>
+            </template>
+            <template v-if="review.estimatedConfirmAt !== undefined">
+              <dt>{{ L("Earliest confirmation (estimate)", "最早可确认时间（估算）") }}</dt>
+              <dd data-testid="native-estimated-confirmation">{{ time(review.estimatedConfirmAt) }}</dd>
             </template>
             <dt>{{ L("Required authorities", "所需权限") }}</dt>
             <dd class="mono" data-testid="native-required-authorities">
@@ -604,19 +619,19 @@
             <dd data-testid="native-application-consumption">
               {{ formatGas(review.simulation.gasConsumed) }}
             </dd>
-            <dt>{{ L("Minimum system fee budget", "最低系统费预算") }}</dt>
-            <dd data-testid="native-minimum-system-fee">{{ formatGas(review.simulation.minimumRequiredFee) }}</dd>
+            <dt>{{ L("System fee (the consumed gas, declared as is)", "系统费（按消耗原样声明）") }}</dt>
+            <dd data-testid="native-system-fee">{{ formatGas(review.simulation.gasConsumed) }}</dd>
             <dt>{{ L("Network fee", "网络费") }}</dt>
             <dd>{{ signedTransaction ? formatGas(signedTransaction.fees.network) : L("Not quoted; confirm in wallet or SDK", "尚未报价；请在钱包或 SDK 核对") }}</dd>
             <dt>{{ L("Script bytes", "脚本字节数") }}</dt>
             <dd>{{ review.plan.script.length / 2 }}</dd>
           </dl>
-          <p class="small">{{ L("Consumption is not the admission budget or total transaction fee. Bounded module callbacks can require a larger system fee budget. Confirm final system and network fees before signing.", "执行消耗并非准入预算或交易总费用。有限额的模块回调可能要求更高系统费预算；签名前请核对最终系统费与网络费。") }}</p>
-          <div v-if="review.plan.operations" class="small mono">
-            <p v-for="(entry, index) in review.plan.operations" :key="index">
-              {{ entry.method }} · 0x{{ entry.targetContract
-              }}<br />Nonce {{ entry.nonce }} ·
-              {{ time(entry.deadline) }}
+          <p class="small">{{ L("The transaction declares exactly this consumption as its system fee and nothing is added on top; Neo burns the whole declared amount. The network fee is quoted separately. Confirm final system and network fees before signing.", "交易按该消耗原样声明系统费，不额外加价；Neo 会燃烧全部所声明数额。网络费另行报价。签名前请核对最终系统费与网络费。") }}</p>
+          <div v-if="review.plan.operation" class="small mono">
+            <p>
+              {{ review.plan.operation.method }} · 0x{{ review.plan.operation.targetContract
+              }}<br />Nonce {{ review.plan.operation.nonce }} ·
+              {{ time(review.plan.operation.deadline) }}
             </p>
           </div>
           <div v-if="review.simulationError" role="alert" class="notice error">
@@ -767,11 +782,11 @@ import {
   ZERO_HASH,
   NATIVE_ACTIONS,
   NATIVE_PROXY_CALL_FLAGS,
-  MAX_OPERATIONS_PER_ENVELOPE,
   actionBlockReason,
   buildRecoveryDescriptor,
   readRecoveryDescriptor,
   describeConfigurationAction,
+  durationText,
   installModuleAction,
   parseModuleInstallData,
   uninstallModuleAction,
@@ -837,12 +852,13 @@ const draft = reactive({
 });
 const draftActions = ref([]);
 const operation = reactive({
-  operations: "[]",
+  operation: "{}",
 });
 const action = ref("freezeAccount"),
   actionAddress = ref(""), policyDays = ref("");
 const workspace = createNativeWorkspace({
   wallet: createNativeWalletAdapter(walletService),
+  translate: L,
 });
 const transferSignature = ref("");
 watch(preparedTransfer, () => { transferSignature.value = ""; }, { flush: "sync" });
@@ -863,13 +879,13 @@ const actionBlocked = computed(() =>
 const recoveryReadiness = computed(() => {
   const a = snapshot.value?.account;
   if (!a) return "";
-  if (a.recoveryAuthority === ZERO_HASH) return L("Not configured: no recovery wallet", "未设置：尚未指定恢复钱包");
   if (a.recoveryCheckFailed) return L("Could not verify recovery. Refresh to check again.", "暂时无法核验恢复设置，请刷新后重试。");
-  if (!a.recoverySeat) return L("Incomplete: no recovery module installed", "未完成：尚未安装恢复模块");
+  if (!a.recoverySeat) return L("Not configured: no recovery module installed", "未设置：尚未安装恢复模块");
   if (!a.recoverySeat.supported) return L("This wallet cannot verify the installed recovery module", "此钱包无法核验已安装的恢复模块");
   if (a.pendingRecovery && a.pendingRecovery.authorityEpochAtInit !== a.authorityEpoch)
     return L("Pending request is outdated. Check recovery before proceeding.", "待处理的恢复请求已失效，请先核对恢复设置。");
-  return L("Standard recovery configured · " + timelockText(a.recoveryTimelockMs), "已配置标准恢复 · 等待 " + timelockText(a.recoveryTimelockMs));
+  const timelock = a.recoverySeat.policy?.timelockMs;
+  return L("Standard recovery configured · " + durationText(timelock, L), "已配置标准恢复 · 等待 " + durationText(timelock, L));
 });
 const derived = computed(() => {
   try {
@@ -891,10 +907,18 @@ function addressOf(hash) {
     return "";
   }
 }
-function timelockText(value) {
-  const days = Number(value) / 86400000;
-  if (!Number.isFinite(days)) return String(value) + " ms";
-  return L(`${days} days`, `${days} 天`);
+// A governance intent is a configuration landing or the account thaw; its
+// kind is module state, so an unknown kind is shown as read.
+const INTENT_KINDS = {
+  configure: ["configuration", "配置"],
+  unfreeze: ["unfreeze", "解冻"],
+};
+function intentKindText(kind) {
+  const [en, zh] = INTENT_KINDS[kind] ?? [kind, kind];
+  return L(en, zh);
+}
+function actionCountText(count) {
+  return L(`${count} action${count === 1 ? "" : "s"}`, `${count} 个操作`);
 }
 function formatGas(value) {
   if (typeof value !== "string" || !/^[0-9]+$/.test(value))
@@ -1073,7 +1097,7 @@ async function previewTransfer() {
     if (!draft) return;
     setReview(await workspace.operation({
       accountId: draft.accountId, feePayer: feePayer.value,
-      operations: [{ ...draft.operation, signature: nativeCodec.hex(transferSignature.value) }],
+      operation: { ...draft.operation, signature: nativeCodec.hex(transferSignature.value) },
     }));
   });
 }
@@ -1129,7 +1153,6 @@ async function reviewRegistration() {
       await workspace.registration({
         custodyAddress: registration.custodyAddress,
         salt: registration.salt,
-        recoveryTimelockDays: registration.recoveryTimelockDays,
         actions,
         submission: signingPath.value,
         feePayer: feePayer.value,
@@ -1187,27 +1210,30 @@ function reviewModuleAction() {
 }
 async function reviewOperation() {
   await run(async () => {
-    let operations;
+    let operationInput;
     try {
-      operations = JSON.parse(operation.operations);
+      operationInput = JSON.parse(operation.operation);
     } catch {
-      throw Error(L("Operations must be a JSON array.", "操作必须是 JSON 数组。"));
+      throw Error(L("The operation must be a JSON object.", "操作必须是 JSON 对象。"));
     }
-    if (
-      !Array.isArray(operations) ||
-      !operations.length ||
-      operations.length > MAX_OPERATIONS_PER_ENVELOPE
-    )
+    if (Array.isArray(operationInput) || operationInput?.operations !== undefined)
       throw Error(
         L(
-          `An execution envelope carries 1 to ${MAX_OPERATIONS_PER_ENVELOPE} operations.`,
-          `执行信封包含 1 到 ${MAX_OPERATIONS_PER_ENVELOPE} 个操作。`,
+          "protocol-incompatible: executeUserOps is retired in v4.1. Review one complete 13-field operation per transaction.",
+          "协议不兼容：v4.1 已删除 executeUserOps。每笔交易请审核一个完整的 13 字段操作。",
+        ),
+      );
+    if (!operationInput || typeof operationInput !== "object" || !operationInput.method)
+      throw Error(
+        L(
+          "The operation must be one complete 13-field JSON object.",
+          "操作必须是一个完整的 13 字段 JSON 对象。",
         ),
       );
     setReview(
       await workspace.operation({
         accountId: accountId.value,
-        operations,
+        operation: operationInput,
         feePayer: feePayer.value,
       }),
     );
@@ -1225,25 +1251,23 @@ async function fillEnvelope() {
     error.value = L("No available signing route.", "没有可用的签名方式。");
     return;
   }
-  operation.operations = JSON.stringify(
-    [
-      {
-        targetContract: "00".repeat(20),
-        method: "transfer",
-        args: [],
-        nonce: "1",
-        nonceSubkey: "00".repeat(32),
-        deadline: String(snapshot.value.chainTime + 3600000),
-        validatorId: validator ? String(validator.moduleId) : "0",
-        credentialGeneration: validator
-          ? String(validator.credentialGeneration)
-          : "1",
-        authorityEpoch: account.authorityEpoch,
-        configurationNonce: account.configurationNonce,
-        signature: "",
-        hookProofs: [],
-      },
-    ],
+  operation.operation = JSON.stringify(
+    {
+      targetContract: "00".repeat(20),
+      method: "transfer",
+      args: [],
+      nonce: "1",
+      nonceSubkey: "00".repeat(32),
+      deadline: String(snapshot.value.chainTime + 3600000),
+      validatorId: validator ? String(validator.moduleId) : "0",
+      credentialGeneration: validator
+        ? String(validator.credentialGeneration)
+        : "1",
+      authorityEpoch: account.authorityEpoch,
+      configurationNonce: account.configurationNonce,
+      signature: "",
+      hookProofs: [],
+    },
     null,
     2,
   );

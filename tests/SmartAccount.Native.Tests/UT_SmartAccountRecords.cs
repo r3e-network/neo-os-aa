@@ -23,10 +23,9 @@ using Boolean = Neo.VM.Types.Boolean;
 namespace Neo.UnitTests.SmartContract.Native
 {
     /// <summary>
-    /// Canonical record codec of the v4 native kernel (spec §7.2/§7.3): every
-    /// record is a positional Array whose only legal encoding is the one it
-    /// re-encodes to, and every record is validated back into the protocol
-    /// domain on decode.
+    /// Canonical record codec of the minimized v4 native kernel: every record is
+    /// a positional Array whose only legal encoding is the one it re-encodes to,
+    /// and every record is validated back into the protocol domain on decode.
     /// </summary>
     [TestClass]
     public class UT_SmartAccountRecords
@@ -43,8 +42,7 @@ namespace Neo.UnitTests.SmartContract.Native
         private static void Malformed(Array record, Func<ReadOnlyMemory<byte>, object> decode) =>
             Assert.ThrowsExactly<FormatException>(() => decode(Encode(record)));
 
-        private static AccountControl Control() =>
-            AccountControl.Create(Address(1), AccountControl.RecoveryTimelockMinMs);
+        private static AccountControl Control() => AccountControl.Create(Address(1));
 
         private static ModuleInstance Module(byte type = (byte)SmartAccountModuleProtocol.ModuleTypeCodeValidator) => new()
         {
@@ -66,25 +64,20 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.AreEqual(BigInteger.One, control.AllocateModuleId());
             Assert.AreEqual(new BigInteger(2), control.AllocateModuleId());
             control.Advance();
-            control.HookOrderRevision += 1;
-            control.OwnerOnlyRecovery = true;
+            control.RequiredValidatorId = 9;
 
             byte[] encoded = control.Serialize();
             var decoded = AccountControl.Decode(encoded);
-            Assert.AreEqual(14, SmartAccountRecordCodec.Decode(encoded).Count);
+            Assert.AreEqual(11, SmartAccountRecordCodec.Decode(encoded).Count);
             Assert.AreEqual(control.Status, decoded.Status);
             Assert.AreEqual(control.Custody, decoded.Custody);
-            Assert.AreEqual(control.RecoveryAuthority, decoded.RecoveryAuthority);
             Assert.AreEqual(control.AuthorityEpoch, decoded.AuthorityEpoch);
             Assert.AreEqual(control.ConfigurationNonce, decoded.ConfigurationNonce);
             Assert.AreEqual(control.NextModuleId, decoded.NextModuleId);
-            Assert.AreEqual(control.NextIntentId, decoded.NextIntentId);
-            Assert.IsTrue(decoded.DefaultOperationAuthorization);
-            Assert.IsTrue(decoded.DefaultMessageAuthorization);
-            Assert.AreEqual(control.RecoveryTimelockMs, decoded.RecoveryTimelockMs);
-            Assert.AreEqual(control.HookOrderRevision, decoded.HookOrderRevision);
+            Assert.AreEqual(control.DefaultOperationAuthorization, decoded.DefaultOperationAuthorization);
+            Assert.AreEqual(control.DefaultMessageAuthorization, decoded.DefaultMessageAuthorization);
+            Assert.AreEqual(control.RequiredValidatorId, decoded.RequiredValidatorId);
             Assert.AreEqual(control.ControlRevision, decoded.ControlRevision);
-            Assert.IsTrue(decoded.OwnerOnlyRecovery);
             Assert.AreSequenceEqual(encoded, decoded.Serialize());
         }
 
@@ -93,22 +86,20 @@ namespace Neo.UnitTests.SmartContract.Native
         {
             foreach (var (index, value) in new (int, StackItem)[]
             {
-                (0, new Integer(3)),                       // undefined status
-                (1, new ByteString(UInt160.Zero.ToArray())), // zero custody
-                (3, new Integer(0)),                       // epoch below one
-                (5, new Integer(0)),                       // module id allocator reset
-                (6, new Integer(0)),                       // intent id allocator reset
-                (9, new Integer(1)),                       // timelock below the floor
-                (12, new Integer(0)),                      // control revision reset
+                (2, new Integer(3)),                       // undefined status
+                (3, new ByteString(UInt160.Zero.ToArray())), // zero custody
+                (4, new Integer(0)),                       // epoch below one
+                (6, new Integer(0)),                       // module id allocator reset
+                (10, new Integer(0)),                      // control revision reset
             })
             {
                 var record = Control().ToStackItem();
                 record[index] = value;
-                Malformed(record, AccountControl.Decode);
+                Malformed(record, bytes => AccountControl.Decode(bytes));
             }
             var shortRecord = Control().ToStackItem();
             shortRecord.Add(new Integer(1));
-            Malformed(shortRecord, AccountControl.Decode);
+            Malformed(shortRecord, bytes => AccountControl.Decode(bytes));
         }
 
         [TestMethod]
@@ -132,22 +123,21 @@ namespace Neo.UnitTests.SmartContract.Native
             var control = Control();
             control.NextModuleId = ulong.MaxValue;
             Assert.ThrowsExactly<InvalidOperationException>(() => control.AllocateModuleId());
-            // A configuration transition advances both counters by exactly one;
-            // intent ids are user-space now, so the intent allocator is inert.
+            // A configuration transition advances the nonce and revision by one.
             control.Advance();
             Assert.AreEqual(1UL, control.ConfigurationNonce);
             Assert.AreEqual(2UL, control.ControlRevision);
-            Assert.AreEqual(1UL, control.NextIntentId, "the reserved intent slot is never advanced");
         }
 
         [TestMethod]
-        public void ModuleInstanceRoundTripsAndKeepsItsRoleAndPolicyBackPointer()
+        public void ModuleInstanceRoundTripsThroughTheCanonicalCodec()
         {
             var module = Module();
-            module.ActivePolicyId = new BigInteger(9);
             module.MessageCapability = true;
+            module.Governance = true;
+            module.HookPlanner = false;
             var decoded = ModuleInstance.Decode(module.Serialize());
-            Assert.AreEqual(12, SmartAccountRecordCodec.Decode(module.Serialize()).Count);
+            Assert.AreEqual(16, SmartAccountRecordCodec.Decode(module.Serialize()).Count);
             Assert.IsTrue(module.IsValidator);
             Assert.IsFalse(module.IsHook);
             Assert.AreEqual(module.ContractHash, decoded.ContractHash);
@@ -157,7 +147,8 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.AreSequenceEqual(module.ProfileSha256, decoded.ProfileSha256);
             Assert.AreEqual(module.CredentialGeneration, decoded.CredentialGeneration);
             Assert.IsTrue(decoded.MessageCapability);
-            Assert.AreEqual(module.ActivePolicyId, decoded.ActivePolicyId);
+            Assert.IsTrue(decoded.Governance);
+            Assert.IsFalse(decoded.HookPlanner);
             Assert.AreSequenceEqual(module.Serialize(), decoded.Serialize());
 
             var hook = Module((byte)SmartAccountModuleProtocol.ModuleTypeCodeHook);
@@ -169,33 +160,29 @@ namespace Neo.UnitTests.SmartContract.Native
         public void ModuleInstanceRejectsUnknownTypesAndOutOfDomainFields()
         {
             var unknownType = Module().ToStackItem();
-            unknownType[0] = new Integer(99);
-            Malformed(unknownType, ModuleInstance.Decode);
+            unknownType[2] = new Integer(99);
+            Malformed(unknownType, bytes => ModuleInstance.Decode(bytes));
 
             var zeroContract = Module().ToStackItem();
-            zeroContract[1] = new ByteString(UInt160.Zero.ToArray());
-            Malformed(zeroContract, ModuleInstance.Decode);
+            zeroContract[3] = new ByteString(UInt160.Zero.ToArray());
+            Malformed(zeroContract, bytes => ModuleInstance.Decode(bytes));
 
             var zeroRevision = Module().ToStackItem();
-            zeroRevision[6] = new Integer(0);
-            Malformed(zeroRevision, ModuleInstance.Decode);
+            zeroRevision[8] = new Integer(0);
+            Malformed(zeroRevision, bytes => ModuleInstance.Decode(bytes));
 
             var zeroGeneration = Module().ToStackItem();
-            zeroGeneration[7] = new Integer(0);
-            Malformed(zeroGeneration, ModuleInstance.Decode);
+            zeroGeneration[9] = new Integer(0);
+            Malformed(zeroGeneration, bytes => ModuleInstance.Decode(bytes));
 
             var shortNef = Module().ToStackItem();
-            shortNef[4] = new ByteString(new byte[31]);
-            Malformed(shortNef, ModuleInstance.Decode);
+            shortNef[6] = new ByteString(new byte[31]);
+            Malformed(shortNef, bytes => ModuleInstance.Decode(bytes));
         }
 
         /// <summary>
-        /// H-3 internal readiness (R-11-13/R-14-11): an immediate credential
-        /// revocation advances the instance's CredentialGeneration in place —
-        /// the instance record, its storage and its hook order all survive, so
-        /// the record codec must round-trip every incremented generation the
-        /// native advancement path (whose authorized entry is still to be
-        /// defined by the spec) will ever write.
+        /// Credential revocation advances the instance's CredentialGeneration in
+        /// place; the record codec must round-trip every incremented generation.
         /// </summary>
         [TestMethod]
         public void ModuleInstanceCarriesEveryIncrementedCredentialGeneration()
@@ -211,26 +198,22 @@ namespace Neo.UnitTests.SmartContract.Native
         }
 
         /// <summary>
-        /// H-4 internal readiness (§12.1/R-12-02): the recovery model needs the
-        /// account control record to carry a non-zero recovery authority (set
-        /// by a governance action-8 restricted write whose native entry is
-        /// still to be defined by the spec) alongside the 7—90 day timelock
-        /// domain the decoder already enforces on both ends.
+        /// The generic mandatory-validator route is the only policy routing state
+        /// in the native record; threshold, message and recovery policy are not.
         /// </summary>
         [TestMethod]
-        public void AccountControlCarriesARecoveryAuthorityAndTheFullTimelockDomain()
+        public void AccountControlCarriesOnlyTheGenericMandatoryRoute()
         {
             var control = Control();
-            control.RecoveryAuthority = Address(9);
-            control.RecoveryTimelockMs = AccountControl.RecoveryTimelockMaxMs;
+            control.RequiredValidatorId = 7;
             var decoded = AccountControl.Decode(control.Serialize());
-            Assert.AreEqual(Address(9), decoded.RecoveryAuthority);
-            Assert.AreEqual(AccountControl.RecoveryTimelockMaxMs, decoded.RecoveryTimelockMs);
+            Assert.AreEqual(7UL, decoded.RequiredValidatorId);
+            Assert.AreEqual(0UL, decoded.NextModuleId - 1);
             Assert.AreSequenceEqual(control.Serialize(), decoded.Serialize());
 
-            var aboveMax = Control().ToStackItem();
-            aboveMax[9] = new Integer(new BigInteger(AccountControl.RecoveryTimelockMaxMs) + 1);
-            Malformed(aboveMax, AccountControl.Decode);
+            var excessiveValidatorId = Control().ToStackItem();
+            excessiveValidatorId[9] = new Integer(BigInteger.One << 64);
+            Malformed(excessiveValidatorId, bytes => AccountControl.Decode(bytes));
         }
 
         [TestMethod]
@@ -270,10 +253,6 @@ namespace Neo.UnitTests.SmartContract.Native
             Assert.AreEqual(Address(1), SmartAccountRecordCodec.Address(new ByteString(Address(1).ToArray())));
             Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Address(new ByteString(new byte[19])));
             Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Fixed(new ByteString(new byte[33]), 32));
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Bytes(new ByteString(new byte[9]), 8));
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Text(new ByteString(new byte[] { 0xFF }), 8));
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Exact(new Array([new Integer(1)]), 2));
-            Assert.ThrowsExactly<FormatException>(() => SmartAccountRecordCodec.Integers(new Array([new ByteString(new byte[1])]), 4));
         }
     }
 }
